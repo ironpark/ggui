@@ -388,6 +388,10 @@ func (l *ReorderableWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.
 	return l.list.Layout(c, env)
 }
 
+// Baseline implements Baseliner: the first row's that has one, as a
+// Column's, so a heading beside the list lines up with its first row.
+func (l *ReorderableWidget[T, K]) Baseline() (float64, bool) { return l.list.Baseline() }
+
 func (l *ReorderableWidget[T, K]) gap() float64 { return l.list.gapFor(l.env) }
 
 // index returns the row keyed k's index, or -1.
