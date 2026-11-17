@@ -89,3 +89,24 @@ func TestCommandRankOrdersAsCmdkSorts(t *testing.T) {
 		}
 	}
 }
+
+// Korean is found as it is typed: a syllable still being composed, lone
+// initials, and English typed with the input method left on Korean.
+func TestCommandScoreReadsKoreanAsTyped(t *testing.T) {
+	for _, tc := range []struct{ text, query string }{
+		{"세션 닫기", "셋"},       // 세션's final, before the vowel after moves it on
+		{"세션 닫기", "ㅅㅅ"},      // initials
+		{"세션 닫기", "세션 다"},    // the last syllable begun
+		{"Settings", "ㄴㄷㅅ샤"}, // "setti" on the 2-set layout
+	} {
+		if commandScore(tc.text, tc.query) <= 0 {
+			t.Errorf("%q does not find %q", tc.query, tc.text)
+		}
+	}
+	if commandScore("세션 닫기", "사") != 0 {
+		t.Error("another vowel finds the syllable")
+	}
+	if exact, typed := commandScore("세션", "세션"), commandScore("세션", "셋"); typed >= exact {
+		t.Errorf("a syllable being typed scores %v, the word itself %v", typed, exact)
+	}
+}

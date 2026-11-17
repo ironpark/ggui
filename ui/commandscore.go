@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+
+	"github.com/ironpark/ggui/pkg/hangul"
 )
 
 // The weights of commandScore, those of the command-score cmdk ranks its
@@ -20,6 +22,9 @@ const (
 	penaltySkipped    = .999
 	penaltyCase       = .9999
 	penaltyIncomplete = .99 // the text goes on after the query ends
+	// penaltyJamo is for a Hangul letter of the query that finds a
+	// syllable by its keys, not as itself: see hangul.Match.
+	penaltyJamo = .99
 )
 
 // commandScore is how well query abbreviates text, from 0 for not at all
@@ -27,12 +32,56 @@ const (
 // their order, and score more the more of them run together or start a
 // word. "tdt" finds "Toggle dark theme", and "dark" ranks it above
 // "Drag marker".
+//
+// Korean is matched as it is typed: the query's last syllable, maybe
+// still being composed, finds what its keys begin, and a lone consonant
+// a syllable it begins, so "셋" and "ㅅㅅ" find "세션" (see hangul.Match).
+// And a query typed in Hangul with the input method left on Korean finds
+// what its keys spell on the 2-set layout, "ㄴㄷㅅ샤" finding "Settings".
 func commandScore(text, query string) float64 {
 	if text == "" {
 		return 0
 	}
+	score := commandScoreOf(text, query)
+	if keys, ok := hangul.Qwerty(query); ok {
+		score = max(score, commandScoreOf(text, keys))
+	}
+	return score
+}
+
+// commandScoreOf is commandScore for query as it is.
+func commandScoreOf(text, query string) float64 {
 	s, q := []rune(text), []rune(query)
-	return commandScoreFrom(s, q, lowerRunes(s), lowerRunes(q), 0, 0, map[[2]int]float64{})
+	lq := lowerRunes(q)
+	var last []rune
+	if len(lq) > 0 {
+		last = hangul.Keys([]rune{}, lq[len(lq)-1])
+	}
+	m := scorer{s: s, q: q, ls: lowerRunes(s), lq: lq, last: last, memo: map[[2]int]float64{}}
+	return m.from(0, 0)
+}
+
+// scorer is one text scored against one query.
+type scorer struct {
+	s, q, ls, lq []rune
+	last         []rune // the keys of the query's last rune
+	memo         map[[2]int]float64
+}
+
+// take is how many runes of the text from at the query's rune qi takes: 1
+// for itself, as Hangul by its keys maybe 2, and 0 for none.
+func (m *scorer) take(at, qi int) int {
+	if m.ls[at] == m.lq[qi] {
+		return 1
+	}
+	if !hangul.IsHangul(m.lq[qi]) {
+		return 0
+	}
+	var last []rune
+	if qi == len(m.lq)-1 {
+		last = m.last
+	}
+	return hangul.Match(m.ls, at, m.lq[qi], last)
 }
 
 // commandText is what an entry is scored on, as cmdk builds it: the label
@@ -78,8 +127,9 @@ func countRunes(s []rune, is func(rune) bool) int {
 	return n
 }
 
-// commandScoreFrom scores q[qi:] against s[si:].
-func commandScoreFrom(s, q, ls, lq []rune, si, qi int, memo map[[2]int]float64) float64 {
+// from scores q[qi:] against s[si:].
+func (m *scorer) from(si, qi int) float64 {
+	s, q, ls, lq, memo := m.s, m.q, m.ls, m.lq, m.memo
 	if qi == len(q) {
 		if si == len(s) {
 			return scoreContinue
@@ -92,10 +142,14 @@ func commandScoreFrom(s, q, ls, lq []rune, si, qi int, memo map[[2]int]float64) 
 	}
 	high := 0.0
 	for at := si; at < len(s); at++ {
-		if ls[at] != lq[qi] {
+		n := m.take(at, qi)
+		if n == 0 {
 			continue
 		}
-		score := commandScoreFrom(s, q, ls, lq, at+1, qi+1, memo)
+		score := m.from(at+n, qi+1)
+		if n > 1 || ls[at] != lq[qi] {
+			score *= penaltyJamo
+		}
 		if score > high {
 			switch {
 			case at == si:
@@ -130,7 +184,7 @@ func commandScoreFrom(s, q, ls, lq []rune, si, qi int, memo map[[2]int]float64) 
 		}
 		if qi+1 < len(q) &&
 			(score < scoreTransposed && before == lq[qi+1] || lq[qi+1] == lq[qi] && before != lq[qi]) {
-			if swapped := commandScoreFrom(s, q, ls, lq, at+1, qi+2, memo) * scoreTransposed; swapped > score {
+			if swapped := m.from(at+1, qi+2) * scoreTransposed; swapped > score {
 				score = swapped
 			}
 		}
