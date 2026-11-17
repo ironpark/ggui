@@ -6,8 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
+	"github.com/ironpark/ggui/cmd/ggui/internal/watch"
 )
 
 // WatchSet returns the paths a change to which should rebuild the app: the files of
@@ -17,11 +19,12 @@ import (
 // package's directory, so that a file added to it is seen, the go.mod and
 // go.sum of those modules, the go.work in effect, and extra, which is
 // ggui.toml and the paths dev.watch names, a directory standing for every
-// file below it.
+// file below it. Below a directory dev.watch names, what ig ignores is
+// left out; the directory itself, named on purpose, is kept.
 //
 // The set follows the build: GOOS, GOARCH and the tags decide which files
 // a package is made of, so the listing is made with the dev build's.
-func WatchSet(ctx context.Context, lo gotool.ListOptions, pkg string, extra []string) ([]string, error) {
+func WatchSet(ctx context.Context, lo gotool.ListOptions, pkg string, extra []string, ig *watch.Ignore) ([]string, error) {
 	pkgs, err := gotool.Deps(ctx, lo, pkg)
 	if err != nil {
 		return nil, err
@@ -55,7 +58,7 @@ func WatchSet(ctx context.Context, lo gotool.ListOptions, pkg string, extra []st
 		}
 	}
 	for _, e := range extra {
-		for _, p := range expand(e) {
+		for _, p := range expand(e, ig) {
 			add(p)
 		}
 	}
@@ -64,13 +67,13 @@ func WatchSet(ctx context.Context, lo gotool.ListOptions, pkg string, extra []st
 }
 
 // expand returns path and, when it is a directory, every directory and
-// file below it, skipping hidden ones such as .git.
-func expand(path string) []string {
+// file below it, skipping hidden ones such as .git and those ig ignores.
+func expand(path string, ig *watch.Ignore) []string {
 	fi, err := os.Stat(path)
 	if err != nil || !fi.IsDir() {
 		return []string{path}
 	}
-	var out []string
+	var all []string
 	filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -81,8 +84,21 @@ func expand(path string) []string {
 			}
 			return nil
 		}
-		out = append(out, p)
+		all = append(all, p)
 		return nil
 	})
+	// Asked all at once: git answers for a whole tree in one run.
+	ignored := ig.Filter(all[1:])
+	out := all[:1]
+	var skip []string
+	for i, p := range all[1:] {
+		if ignored[i] {
+			skip = append(skip, p)
+			continue
+		}
+		if !slices.ContainsFunc(skip, func(d string) bool { return strings.HasPrefix(p, d+string(filepath.Separator)) }) {
+			out = append(out, p)
+		}
+	}
 	return out
 }

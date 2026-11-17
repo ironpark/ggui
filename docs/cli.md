@@ -78,7 +78,8 @@ quiet, rebuilds, and when the build succeeds stops the running app and
 starts the new one.
 
 - **A failed build** prints the compiler's errors, in the
-  `file:line:col` form editors follow, and leaves the running app alone.
+  `file:line:col` form editors follow, and leaves the running app alone;
+  so does a syntax error, found before the build.
 - **An app that exits by itself**, or crashes, is reported, and the next
   change that builds starts it again.
 - **Stopping the app** sends it a request to exit, `SIGTERM` on Unix and
@@ -191,14 +192,73 @@ the read-only module cache are left out. With them it watches each such
 package's directory, so a new file is seen, the files the packages embed
 with `//go:embed`, the `go.mod`, `go.sum` and `go.work` in effect,
 `ggui.toml`, and anything `dev.watch` names. The list is made again after
-each change, as an edit may have added an import.
+each change, as an edit may have added an import, and whenever a watched
+directory gains or loses a file.
 
-Watching polls modification times, a few times a second. A program is
-built from a few hundred to a few thousand files, and checking them costs
-far less than a millisecond, so polling needs no dependency and no
-per-platform code, holds no file descriptor per file, and sees every way
-an editor saves, including writing a new file and renaming it over the
-old one.
+What decides that something changed is a scan: a `stat` of every watched
+file, compared with the last, which costs well under a millisecond for a
+few thousand files and sees every way an editor saves, a write in place,
+a new file renamed over the old one, or a delete and a create. The
+operating system's notifications only wake the scan up: FSEvents on
+macOS, on the roots of the modules being edited; inotify on Linux, on
+each watched directory and those made in them; `ReadDirectoryChangesW`
+on Windows, on the module roots. A save is seen some 20 ms after it is
+written, and the build starts 50 ms later if nothing else changes. A scan
+also runs every 2 seconds whatever is said, for a notification that never
+came, as on some network file systems. Where there are no notifications,
+or when inotify runs out of watches (`fs.inotify.max_user_watches`), dev
+says so in one line and scans four times a second instead;
+`GGUI_WATCH=poll` in the environment asks for that, for a file system
+whose notifications are not to be trusted. ggui needs no cgo for any of
+this.
+
+### What rebuilds, and what does not
+
+- **A real change** to a Go file, an embedded file, `go.mod`, `go.sum`,
+  `go.work` or `ggui.toml`, or a Go file appearing or going, rebuilds
+  once the sources have been quiet for 50 ms, 200 ms after a save-all or
+  a branch switch that touched many files, and never later than 500 ms
+  after the first change, so that a stream of changes cannot hold the
+  build off. A formatter that rewrites a file just saved is in the same
+  build.
+- **A change during a build** cancels it, the go command and its
+  compilers with it, and builds again after the same wait; the build
+  cache keeps what was compiled. Before the app is replaced, dev looks at
+  the sources once more, and a build that is already out of date is
+  thrown away rather than started.
+- **Comments and layout.** An edit that leaves a Go file's tokens as they
+  were, a comment, indentation, blank lines, spacing, rebuilds nothing,
+  and dev says `comments only; not restarted — line numbers in traces now
+  lag the source`: the running app was built from the file as it was, so
+  the line numbers in its stack traces and logs point where the code used
+  to be until the next real change rebuilds it. Comments that change a
+  build count as code: `//go:build` and `// +build` lines, `//go:`
+  directives such as `//go:embed`, `//go:linkname` and `//go:noinline`
+  (but not `//go:generate`), `//line` directives, `//export`, and the C
+  preamble above `import "C"`.
+- **Tests and files outside the build.** `_test.go` files and files a
+  build constraint leaves out are not in the build, so creating, editing
+  or deleting one rebuilds nothing, silently. A Go file whose edited build
+  constraint now takes it in is found by listing the packages again.
+- **Ignored paths.** Changes under `.git`, under the `[build] output`
+  directory (`build/` by default), and, in a git work tree with `git` on
+  `PATH`, to anything `.gitignore` ignores, as `git check-ignore` says,
+  do not wake the scan; without git, `node_modules` is ignored. A file the
+  app is built from always counts, ignored or not, as a generated file
+  the app embeds. Below the directories `dev.watch` names, ignored files
+  are not watched.
+- **A syntax error** in a changed Go file is shown at once, without
+  running the go command, in the terminal and over the app in the viewer,
+  and the app keeps running. A file that does not parse is read again
+  100 ms later before its errors are shown, in case it was caught
+  half-written. The check is skipped when the Go that built ggui is older
+  than the project's toolchain, whose newer syntax it might reject; type
+  errors are always the build's to report. With `--web` the build reports
+  syntax errors too, over the page.
+
+`--verbose`, or `GGUI_VERBOSE=1`, prints each of these decisions with the
+time: what the system reported, what a scan found, what was passed over
+and why, and builds started, cancelled and thrown away.
 
 ### Flags
 
@@ -207,6 +267,7 @@ old one.
 | `--tags a,b` | Build tags, replacing `dev.tags`. `--tags ""` builds with none. |
 | `--no-watch` | Build and run once; dev exits when the app does. |
 | `--stop-timeout 3s` | How long the app has to exit when asked before it is killed. |
+| `--verbose` | Print the watcher's and the rebuild loop's decisions, timed. `GGUI_VERBOSE=1` does the same. |
 | `--display remote` | Where the window shows: `remote`, in the viewer, the default on macOS, Linux and Windows, or `window`, the app's own. Replaces `dev.display`. |
 | `--config file` | Read this file instead of the `ggui.toml` found from the package or the working directory. |
 | `-- args` | Arguments for the app, after `dev.args`. |

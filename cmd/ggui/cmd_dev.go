@@ -27,8 +27,9 @@ ggui.toml, ggui_inspector and ggui_debug by default) and runs it. It
 watches the Go files the app is built from in the modules being edited,
 the files it embeds, ggui.toml and the paths dev.watch names; on a
 change it rebuilds and, when the build succeeds, stops the app and
-starts the new one. A failed build prints the compiler's errors and
-leaves the running app alone. An app that exits is started again by
+starts the new one. A change to comments or layout alone, a test file
+and what git ignores rebuild nothing. A failed build, or a Go file that
+does not parse, prints the errors and leaves the running app alone. An app that exits is started again by
 the next change. Ctrl-C stops the app and ggui; a second Ctrl-C kills
 the app at once.
 
@@ -61,6 +62,7 @@ which keeps running the last build that succeeded.`,
 		host := fs.String("host", "localhost", "with --web, the `address` to listen on; 0.0.0.0 reaches the server from other devices, such as a phone")
 		wasmOpt := fs.String("wasm-opt", "", "with --web, wasm-opt `flags` such as -O2; empty skips the pass, which takes seconds")
 		base := fs.String("base", "", "with --web, the `path` to serve the app below, replacing web.base")
+		verbose := fs.Bool("verbose", false, "print each decision of the watcher and the rebuild loop, timed: what changed, what was passed over and why, builds started and cancelled; GGUI_VERBOSE=1 does the same")
 		return func(ctx context.Context, pos, rest []string) error {
 			if len(pos) > 1 {
 				fmt.Fprintln(os.Stderr, "ggui dev: takes one package")
@@ -85,6 +87,13 @@ which keeps running the last build that succeeded.`,
 			}
 			for _, w := range cfg.Dev.Watch {
 				extra = append(extra, proj.Path(w))
+			}
+			outDir := proj.Path(cfg.Build.Output)
+			var tracef func(string, ...any)
+			if *verbose || os.Getenv("GGUI_VERBOSE") != "" {
+				tracef = func(format string, args ...any) {
+					fmt.Fprintf(os.Stderr, "ggui: %s "+format+"\n", append([]any{time.Now().Format("15:04:05.000")}, args...)...)
+				}
 			}
 			lo := gotool.ListOptions{Tags: devTags}
 			if *webMode {
@@ -113,7 +122,8 @@ which keeps running the last build that succeeded.`,
 					LDFlags: "-s -w", WasmOpt: *wasmOpt,
 					Title: title, Base: b,
 					Addr:  net.JoinHostPort(*host, strconv.Itoa(*port)),
-					Extra: extra, Watch: !*noWatch, Log: os.Stderr,
+					Extra: extra, OutDir: outDir, Watch: !*noWatch, Log: os.Stderr,
+					Tracef: tracef,
 				}
 				return w.Run(ctx)
 			}
@@ -133,9 +143,10 @@ which keeps running the last build that succeeded.`,
 				Dir: proj.Root, Package: main.Package, Tags: devTags,
 				Args:  append(slices.Clone(cfg.Dev.Args), rest...),
 				Env:   cfg.Dev.Env,
-				Extra: extra, Watch: !*noWatch,
+				Extra: extra, OutDir: outDir, Watch: !*noWatch,
 				StopTimeout: *stopTimeout, Force: force,
 				Log: os.Stderr, Stdout: os.Stdout, Stderr: os.Stderr,
+				Tracef: tracef,
 			}
 			mode := cfg.Dev.Display
 			if isSet(fs, "display") {

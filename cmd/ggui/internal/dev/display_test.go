@@ -168,7 +168,7 @@ func TestRemoteLoop(t *testing.T) {
 	v := d.viewer(0)
 
 	writeMsg(t, dir, "v2 broken\"")
-	waitFor(t, &log, "build failed; the app keeps running")
+	waitFor(t, &log, "; the app keeps running the last build that succeeded")
 	waitUntil(t, "build-failed", func() bool { return v.lastOf(viewer.BuildFailed) != nil })
 	if c := v.lastOf(viewer.BuildFailed); !strings.Contains(c.Output, "msg.go") {
 		t.Errorf("build-failed carries %q, not the compiler's output", c.Output)

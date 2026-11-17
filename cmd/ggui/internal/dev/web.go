@@ -30,8 +30,12 @@ type Web struct {
 	Base    string
 	Addr    string // host:port to listen on
 	Extra   []string
+	OutDir  string // where ggui build writes, never watched
 	Watch   bool
 	Log     io.Writer
+	// Tracef, when set, is told each decision the watcher and the loop
+	// make.
+	Tracef func(format string, args ...any)
 }
 
 func (w *Web) logf(format string, args ...any) {
@@ -70,29 +74,24 @@ func (w *Web) Run(ctx context.Context) error {
 
 	if w.Watch {
 		lo := gotool.ListOptions{Dir: w.Dir, Tags: w.Tags, GOOS: "js", GOARCH: "wasm"}
-		set, err := WatchSet(ctx, lo, w.Package, w.Extra)
+		ig := watch.NewIgnore(w.OutDir)
+		list := func(ctx context.Context) ([]string, error) {
+			return WatchSet(ctx, lo, w.Package, w.Extra, ig)
+		}
+		set, err := list(ctx)
 		if err != nil {
 			hs.Close()
 			return err
 		}
-		wt := watch.New(set)
-		changes := make(chan []string)
+		wt := watch.New(set, watch.Options{
+			List: list, Ignore: ig,
+			Settle: settleTime, Poll: pollInterval, SafetyNet: safetyNetInterval,
+			Logf: w.logf, Tracef: w.Tracef,
+		})
+		changes := make(chan watch.Change)
 		go wt.Run(ctx, changes)
 		w.logf("watching %d files; the page reloads itself after each build", wt.Len())
-		go func() {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case batch := <-changes:
-					w.logf("%s changed, rebuilding", describe(w.Dir, batch))
-					srv.Rebuild()
-					if set, err := WatchSet(ctx, lo, w.Package, w.Extra); err == nil {
-						wt.Set(set)
-					}
-				}
-			}
-		}()
+		go w.loop(ctx, changes, srv)
 	} else {
 		w.logf("not watching: request %s_rebuild, or reload the page after a failed build, to build again", srv.Base())
 	}
@@ -106,6 +105,38 @@ func (w *Web) Run(ctx context.Context) error {
 			return nil
 		}
 		return err
+	}
+}
+
+// loop rebuilds on each real change, after the same wait for quiet as
+// the desktop loop. The server cancels a build still running when the
+// next starts, and the page loads only the build that finished last; the
+// syntax is left to the build, whose errors the page shows.
+func (w *Web) loop(ctx context.Context, changes <-chan watch.Change, srv *web.Server) {
+	var p plan
+	due := time.NewTimer(time.Hour)
+	defer due.Stop()
+	for {
+		var dueC <-chan time.Time
+		if t, ok := p.due(); ok {
+			due.Reset(time.Until(t))
+			dueC = due.C
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case c := <-changes:
+			if len(c.Real) > 0 {
+				p.change(c.At, c.Real)
+			} else if len(c.Cosmetic) > 0 && p.idle() {
+				w.logf("%s: comments only; not rebuilt — line numbers in traces now lag the source", describe(w.Dir, c.Cosmetic))
+			}
+		case <-dueC:
+			id, batch, _ := p.start()
+			p.done(id)
+			w.logf("%s changed, rebuilding", describe(w.Dir, batch))
+			srv.Rebuild()
+		}
 	}
 }
 
