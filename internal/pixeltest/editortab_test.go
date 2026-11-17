@@ -129,3 +129,36 @@ func changed(a, b *image.RGBA, r ggui.Rect) bool {
 	}
 	return false
 }
+
+// clipTo paints its child only within clip, as a frame painted in part
+// does.
+type clipTo struct {
+	child ggui.Widget
+	clip  ggui.Rect
+}
+
+func (c *clipTo) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size { return c.child.Layout(cs, env) }
+func (c *clipTo) Paint(dst *ggui.Canvas, r ggui.Rect)                { dst.Clip(c.clip).Paint(c.child, r) }
+
+// A group's label keeps to the Scroll's window, not to the part of a frame
+// painted: repainting a tab far from the label, as the pointer over it
+// does, draws there what a whole frame does, not the label come to it.
+func TestTabGroupLabelKeepsToTheWindowInAFramePaintedInPart(t *testing.T) {
+	size := ggui.Sz(400, 40)
+	bar := func() ggui.Widget {
+		var tabs []ggui.Widget
+		for _, n := range []string{"one", "two", "three", "four"} {
+			tabs = append(tabs, ui.EditorTab(n, func() {}))
+		}
+		g := ui.TabGroup(tabs...).Label(widget.Text("group")).Tint(color.NRGBA{0x6a, 0xa7, 0xff, 0xff})
+		return widget.Box(widget.Scroll(widget.Row(g)).Horizontal().Bar(color.Transparent)).Fill(color.NRGBA{25, 25, 25, 255})
+	}
+	whole := ggui.NewProbe(theme.With(theme.Dark(), bar()), size)
+	defer whole.Close()
+	part := ggui.Rct(ggui.Pt(250, 0), ggui.Sz(150, 40))
+	clipped := ggui.NewProbe(theme.With(theme.Dark(), &clipTo{child: bar(), clip: part}), size)
+	defer clipped.Close()
+	if changed(ggtest.Render(whole, size, 1), ggtest.Render(clipped, size, 1), part) {
+		t.Fatal("the part painted differs from the whole frame's: the label followed the clip")
+	}
+}
