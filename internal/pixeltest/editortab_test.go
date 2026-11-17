@@ -22,10 +22,12 @@ func TestMain(m *testing.M) { ggtest.Main(m) }
 func TestEditorTabShowsItsCloseButtonOnHover(t *testing.T) {
 	size := ggui.Sz(200, 40)
 	p := ggui.NewProbe(widget.Row(
-		ui.EditorTab("main.go", func() {}).OnClose(func() {}),
+		// Wide enough that its label ends well before its close button.
+		ui.EditorTab("main.go", func() {}).OnClose(func() {}).MinWidth(120),
 		ui.EditorTab("go.mod", func() {}).Selected(true),
-	), size)
+	), ggui.Sz(260, 40))
 	defer p.Close()
+	size = ggui.Sz(260, 40)
 	away := ggtest.Render(p, size, 1)
 	closeAt, ok := p.Find("Close main.go")
 	if !ok {
