@@ -2,8 +2,10 @@ github.com/BurntSushi/toml v1.6.0 h1:dRaEfpa2VI55EwlIW72hMRHdWouJeRF7TPYhI+AUQjk
 github.com/BurntSushi/toml v1.6.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
 github.com/ebitengine/purego v0.11.1 h1:2zpWRSQNVKN4eKsKO9eM1ILDgWfYMY9GwqRmK6XeQ/0=
 github.com/ebitengine/purego v0.11.1/go.mod h1:DCHPP08djqhNSoTfImcnHYQRZmd0qhakvrozqaEYhGQ=
-github.com/ironpark/zapp v1.6.0 h1:y/095vMTbUhZ3772ZyNdYor7jjmaMaiUfb5Y6FmqDFQ=
-github.com/ironpark/zapp v1.6.0/go.mod h1:gM7j4+ORpeyOUzSM33CKQBeHCPTzAhSStEmHE5lAfCc=
+github.com/ironpark/zapp v1.7.0 h1:6rfCF47iOtBp0EiovU9PIy4mAKW/35Uov+0emEecDPA=
+github.com/ironpark/zapp v1.7.0/go.mod h1:GCytrfiMnAcWaOaQnsA7ZEhPv4NCr8XwSaESlCXVE7o=
+github.com/ironpark/zapp/pkg/signing/rcodesign/lib v1.0.0 h1:9ZBzXcK8yxUwR51Bw2ttZvZ9L2x0CQw6IxBgNrok69E=
+github.com/ironpark/zapp/pkg/signing/rcodesign/lib v1.0.0/go.mod h1:nX5QPbz8vtK7GltHgkJfPnpPUsrH1xnC6vawQUEepMs=
 golang.org/x/crypto v0.57.0 h1:3ZVCjf8Ggz7zneR/EHRVx68Ctf+2pmIMP2UFhh9cC6M=
 golang.org/x/crypto v0.57.0/go.mod h1:Fdz0i5U6CoizGwLda9DttjSk6qlZo25zYNtR+ycvuZA=
 golang.org/x/sys v0.48.0 h1:bbX/i/6MgT9BVLM9RT1thmxL04yeTAhbEz4SyadbXoo=
