@@ -247,7 +247,9 @@ func TestRun(t *testing.T) {
 		}
 
 		// Deleted.
-		os.Remove(extra)
+		if err := os.Remove(extra); err != nil {
+			t.Fatal(err)
+		}
 		c = next(t, out, "a deleted Go file")
 		if !slices.Contains(c.Real, extra) {
 			t.Errorf("a deleted Go file: %+v", c)

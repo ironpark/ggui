@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/gosrc"
+	"github.com/ironpark/ggui/cmd/ggui/internal/shared"
 )
 
 // stamp is what a scan compares: a file that differs in any of these has
@@ -188,7 +189,7 @@ func (w *Watcher) Set(paths []string) (added []string) {
 func (w *Watcher) fingerprint(files []string) {
 	for _, p := range files {
 		before := stat(p)
-		src, err := os.ReadFile(p)
+		src, err := shared.ReadFile(p)
 		if err != nil || stat(p) != before {
 			continue
 		}
@@ -296,7 +297,7 @@ func (w *Watcher) classify(ds []delta) (real, cosmetic, dirs []string) {
 func (w *Watcher) sameTokens(d delta) bool {
 	for range 3 {
 		before := stat(d.path)
-		src, err := os.ReadFile(d.path)
+		src, err := shared.ReadFile(d.path)
 		after := stat(d.path)
 		if err != nil {
 			break
