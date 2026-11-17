@@ -80,6 +80,10 @@ type BuildOptions struct {
 	GOOS     string // empty for the go command's default
 	GOARCH   string
 	Env      []string // more environment, KEY=value
+	// TmpDir, when set, is where the go command makes its work
+	// directory, GOTMPDIR. A build that is cancelled is killed, and
+	// leaves its work directory behind for the caller to remove.
+	TmpDir string
 }
 
 // Args returns the go command line for o, without the program name.
@@ -105,14 +109,20 @@ func (o BuildOptions) env() []string {
 	if o.GOARCH != "" {
 		env = append(env, "GOARCH="+o.GOARCH)
 	}
+	if o.TmpDir != "" {
+		env = append(env, "GOTMPDIR="+o.TmpDir)
+	}
 	return env
 }
 
-// String is the build as a person would type it, for logs.
+// String is the build as a person would type it, for logs, without the
+// work directory, which only ggui cares where it is.
 func (o BuildOptions) String() string {
 	var b strings.Builder
 	for _, e := range o.env() {
-		b.WriteString(e + " ")
+		if !strings.HasPrefix(e, "GOTMPDIR=") {
+			b.WriteString(e + " ")
+		}
 	}
 	b.WriteString("go")
 	for _, a := range o.Args() {
@@ -141,9 +151,12 @@ func (e *BuildError) Unwrap() error { return e.Err }
 
 // Build runs go build. A failure is a *BuildError holding the compiler's
 // output, which the caller shows as it is: the go command already prints
-// file:line:col positions an editor can follow.
+// file:line:col positions an editor can follow. When ctx is done the build
+// is killed, with the compilers it started, and Build returns once they
+// are gone.
 func Build(ctx context.Context, o BuildOptions) error {
 	cmd := command(ctx, o.Dir, o.env(), o.Args()...)
+	killTree(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		if errors.Is(err, exec.ErrNotFound) {

@@ -40,6 +40,9 @@ type BuildOptions struct {
 	Out string
 	// Logf reports progress and anything skipped; nil is silent.
 	Logf func(format string, args ...any)
+	// TmpDir, when set, is where the go command makes its work directory;
+	// a build that is cancelled leaves it behind.
+	TmpDir string
 }
 
 // Result is a finished build.
@@ -64,6 +67,7 @@ func Build(ctx context.Context, o BuildOptions) (*Result, error) {
 	bo := gotool.BuildOptions{
 		Dir: o.Dir, Package: o.Package, Output: o.Out, Tags: o.Tags,
 		LDFlags: o.LDFlags, Trimpath: o.Trimpath, GOOS: "js", GOARCH: "wasm",
+		TmpDir: o.TmpDir,
 	}
 	logf("%s", bo)
 	if err := gotool.Build(ctx, bo); err != nil {
