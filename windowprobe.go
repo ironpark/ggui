@@ -169,8 +169,8 @@ func (p *WindowProbe) Run(d time.Duration, most int) []WindowFrame {
 
 // Idle runs the frames a window with no input runs over span: a refresh d
 // after a frame that asks for the next, at the Wake of one that asks for
-// none, or a millisecond on when that has passed, and none after one that
-// asks for neither. It returns what each did; a window at rest returns
+// none, however near, or a millisecond on when that has passed, and none
+// after one that asks for neither. It returns what each did; a window at rest returns
 // none.
 func (p *WindowProbe) Idle(d, span time.Duration) []WindowFrame {
 	var out []WindowFrame
@@ -181,7 +181,11 @@ func (p *WindowProbe) Idle(d, span time.Duration) []WindowFrame {
 			if last.Wake.IsZero() {
 				break
 			}
-			step = max(last.Wake.Sub(last.At), time.Millisecond)
+			// A window's timer fires at the wake, so a wake still ahead is
+			// met at its instant; one already passed runs a millisecond on.
+			if step = last.Wake.Sub(last.At); step <= 0 {
+				step = time.Millisecond
+			}
 		}
 		if passed += step; passed > span {
 			break
