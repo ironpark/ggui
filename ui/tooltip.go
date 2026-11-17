@@ -20,6 +20,7 @@ type TooltipWidget struct {
 	hint         string        // what Shortcut set, before the child's chord
 	text         func() string // the text, asked as the tip opens; nil keeps tip's
 	delay        time.Duration
+	delaySet     bool // Delay was called; otherwise the theme's TooltipDelay
 	pad          ggui.EdgeInsets
 	arrow        bool
 	side         widget.PopupSide
@@ -57,6 +58,18 @@ const (
 	// tooltipGap is the room between a tip's body and its anchor, which
 	// the arrow, when there is one, stands in.
 	tooltipGap = 4
+	// tooltipSkipDelay is how soon after a tip was last open another
+	// opens without its delay: running the cursor along a toolbar shows
+	// each button's tip at once. shadcn/ui's skipDelayDuration.
+	tooltipSkipDelay = 300 * time.Millisecond
+)
+
+// tooltipWarm is when a tip of the window was last open, retained under
+// a key of its own and kept by every tooltip painted; see tooltipSkipDelay.
+var (
+	tooltipWarmKey  byte
+	tooltipWarm     = ggui.Anchor{ID: &tooltipWarmKey}
+	tooltipWarmSlot = ggui.NewSlot[time.Time]("tooltip last open")
 )
 
 // tooltipEscape closes an open tip.
@@ -137,10 +150,12 @@ func (t *TooltipWidget) AlignOffset(v float64) *TooltipWidget {
 	return t
 }
 
-// Delay sets how long the cursor must rest before the tip appears.
+// Delay sets how long the cursor must rest before the tip appears. Unset,
+// it is the theme's TooltipDelay. Once a tip has opened, the next opens at
+// once if the cursor comes to it soon after.
 func (t *TooltipWidget) Delay(d time.Duration) *TooltipWidget {
 	defer property.Watch(&t.props, &t.delay)()
-	t.delay = d
+	t.delay, t.delaySet = d, true
 	return t
 }
 
@@ -210,8 +225,16 @@ func (t *TooltipWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		state.reveal.MoveTo(0, now, 0)
 	}
 	hovered := ok && r.Contains(p)
+	delay := t.delay
+	if !t.delaySet {
+		delay = t.theme.TooltipDelay
+	}
+	warm, _ := dst.Retained(tooltipWarm, tooltipWarmSlot)
 	if hovered && state.since.IsZero() {
 		state.since = now
+		if !warm.IsZero() && now.Sub(warm) < tooltipSkipDelay {
+			state.since = now.Add(-delay) // another tip was just open
+		}
 	}
 	if !hovered {
 		state.since, state.dismissed = time.Time{}, false
@@ -226,7 +249,13 @@ func (t *TooltipWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		*state.escape, escaped = false, false
 	}
 	t.escaped = escaped
-	open := !t.disabled && !escaped && (focused || (hovered && !state.dismissed && now.Sub(state.since) >= t.delay))
+	open := !t.disabled && !escaped && (focused || (hovered && !state.dismissed && now.Sub(state.since) >= delay))
+	if open {
+		warm = now
+	}
+	if !warm.IsZero() {
+		dst.Retain(tooltipWarm, tooltipWarmSlot, warm)
+	}
 	if open {
 		if state.escape == nil {
 			state.escape = new(bool)
@@ -235,7 +264,7 @@ func (t *TooltipWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Shortcut(tooltipEscape, func() { *escape = true; ggui.Invalidate(t.env) })
 	}
 	if hovered && !open {
-		ggui.WakeAt(state.since.Add(t.delay))
+		ggui.WakeAt(state.since.Add(delay))
 	}
 	progress := state.reveal.Toggle(open, now, t.env.Motion(t.theme.MotionFast))
 	// Kept only while it has something to keep: every tooltip on screen

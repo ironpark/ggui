@@ -586,13 +586,40 @@ func (s *ScrollWidget) HandlePointer(ev ggui.PointerEvent) bool {
 		by = ggui.Pt(ev.Scroll.X*s.speed, ev.Scroll.Y*s.speed)
 	}
 	delta := gem.Pick(s.horizontal, by.X, by.Y)
+	// The fingers lifting, or their momentum stopping, comes with no
+	// movement, or with the frame's last.
+	lift := ev.ScrollPixels && (ev.ScrollPhase == ggui.ScrollPhaseEnded || ev.ScrollPhase == ggui.ScrollPhaseMomentumEnded)
+	if delta == 0 && lift {
+		return s.lift(ev.ScrollPhase == ggui.ScrollPhaseMomentumEnded)
+	}
 	if delta == 0 || s.maxOffset() == 0 {
 		return false
 	}
 	if ev.ScrollStep && !ev.ScrollMomentum {
 		return s.wheelStep(delta)
 	}
-	return s.wheel(delta, ev.ScrollMomentum, ev.ScrollPixels && ev.ScrollPhase != ggui.ScrollPhaseNone)
+	used := s.wheel(delta, ev.ScrollMomentum, ev.ScrollPixels && ev.ScrollPhase != ggui.ScrollPhaseNone)
+	if lift {
+		s.lift(ev.ScrollPhase == ggui.ScrollPhaseMomentumEnded)
+	}
+	return used
+}
+
+// lift settles a trackpad's gesture as its fingers lift, or as its
+// momentum stops, without waiting for the pause that settles a scroll from
+// a wheel: content pulled past an end springs back as the fingers leave
+// it, as a browser's does, and the momentum the lift goes on with is let
+// go, not pushed further past the end. It reports whether there was a
+// scroll to settle.
+func (s *ScrollWidget) lift(momentumEnded bool) bool {
+	p := &s.phys
+	if !p.settle {
+		return false
+	}
+	p.lifted = true
+	p.released = !momentumEnded && p.over != 0
+	ggui.Now() // a frame to settle in
+	return true
 }
 
 // wheelStep moves the content by d as a wheel's notch does: eased, over
@@ -649,9 +676,9 @@ const (
 
 const (
 	// scrollSettleDelay is how long input must pause before an overscroll
-	// springs back and a snapping scroll settles. ggfx reports neither a
-	// lifted finger on a trackpad nor the end of a wheel gesture, so a
-	// pause is the signal.
+	// springs back and a snapping scroll settles. A wheel reports no end
+	// to its gesture, so a pause is the signal; a trackpad's fingers
+	// lifting settle it at once, where the platform reports them.
 	scrollSettleDelay = 120 * time.Millisecond
 	scrollSpringBack  = 350 * time.Millisecond
 	// scrollWheelEase is how long a wheel's notch takes; see wheelStep. It
@@ -685,6 +712,8 @@ type scrollMotionState struct {
 	from       float64 // the offset when the gesture began
 	dir        float64 // the sign of the last movement
 	settle     bool    // waiting for input to pause
+	lifted     bool    // the fingers lifted, or their momentum stopped: settle now
+	released   bool    // they lifted past an end; the momentum after is let go
 	anim       ggui.Motion
 	animating  bool
 	stepping   bool // anim is a wheel's notch easing; see wheelStep
@@ -726,7 +755,7 @@ func (p *scrollPhysics) input(s *ScrollWidget) {
 	if p.lastInput.IsZero() || now.Sub(p.lastInput) >= scrollSettleDelay {
 		p.from = s.position()
 	}
-	p.lastInput = now
+	p.lastInput, p.lifted, p.released = now, false, false
 	p.animating, p.stepping, p.relaxing = false, false, false
 	p.settle = p.mode != OverscrollClamp || p.snap > 0 || p.paging
 	if p.settle {
@@ -762,6 +791,9 @@ func (s *ScrollWidget) wheel(d float64, momentum, gesture bool) bool {
 
 func (s *ScrollWidget) wheelBy(d float64, momentum, gesture bool) bool {
 	p := &s.phys
+	if momentum && p.released {
+		return true // the fingers let go past the end: it springs back instead
+	}
 	p.input(s)
 	before, over := s.position(), p.over
 	if p.mode == OverscrollClamp {
@@ -780,7 +812,11 @@ func (s *ScrollWidget) wheelBy(d float64, momentum, gesture bool) bool {
 		ggui.Now() // a frame for the content pulled past its end
 	}
 	if momentum && math.Abs(p.over) >= s.extent(s.viewport)/8 {
-		return false // a fling that reached the end stops there and bounces back
+		// A fling that reached the end stops there and bounces back, now,
+		// letting go of the rest of its momentum.
+		p.lifted, p.released = true, true
+		ggui.Now()
+		return false
 	}
 	return !momentum && !gesture || s.position() != before || p.over != over
 }
@@ -843,11 +879,11 @@ func (p *scrollPhysics) paint(s *ScrollWidget) {
 	if !p.settle || s.dragging || p.animating && p.stepping {
 		return
 	}
-	if wait := p.lastInput.Add(scrollSettleDelay); now.Before(wait) {
+	if wait := p.lastInput.Add(scrollSettleDelay); now.Before(wait) && !p.lifted {
 		ggui.WakeAt(wait)
 		return
 	}
-	p.settle = false
+	p.settle, p.lifted = false, false
 	if p.over != 0 {
 		p.overMotion = ggui.Motion{}
 		p.overMotion.MoveTo(p.over, now, 0)
