@@ -86,12 +86,19 @@ platform's monospaced font: SF Mono on macOS, Cascadia Mono or Consolas on
 Windows, fontconfig's `monospace` on Linux. `SetDefaultMonoFont` replaces
 it; where there is none it draws in the text font.
 
-Text has no italic style of its own. A widget that draws italics, such as a
-terminal, can choose `SystemItalicFonts()`: the italics of the interface and
-monospaced fonts with their weights, SF Pro Italic and SF Mono Italic on
-macOS, Segoe UI Italic and Cascadia Mono Italic or Consolas Italic on
-Windows, fontconfig's italic `sans-serif` and `monospace` on Linux, or nil
-where there is none.
+`Text(...).Italic()`, `TextSpan.Italic()` and `TextStyle.Italic` draw text
+in its font's italic, which an ancestor's style passes down. The interface
+and monospaced fonts an App draws in by default have theirs:
+`SystemItalicFonts()`, with their weights, SF Pro Italic and SF Mono Italic
+on macOS, Segoe UI Italic and Cascadia Mono Italic or Consolas Italic on
+Windows, fontconfig's italic `sans-serif` and `monospace` on Linux. A font
+of your own takes its italic with `WithItalic`; one with none, as the
+built-in Go Regular, is drawn upright.
+
+```go
+inter := ggui.MustFont(interRegular).WithItalic(ggui.MustFont(interItalic))
+widget.Text("draft").Italic()
+```
 
 The built-in Go Regular has no other weights, so in a browser or a `Probe`
 text asking for one is drawn regular. For bold text there, or for the same

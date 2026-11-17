@@ -17,7 +17,8 @@ import (
 // text renders with the built-in Latin font on a machine that has a CJK
 // font installed.
 type Font struct {
-	f *fontsys.Font // the engine's font; see internal/fontsys
+	f      *fontsys.Font // the engine's font; see internal/fontsys
+	italic *Font         // drawn for text styled Italic; see WithItalic
 }
 
 // wrapFont is the Font that draws f, nil for nil. Each call makes a new
@@ -116,6 +117,45 @@ func (f *Font) WithWeight(w FontWeight, face *Font) *Font {
 	return f
 }
 
+// WithItalic sets face as f's italic: text in f styled Italic is drawn
+// in it, at the weight the style asks for among face's own. The
+// platform's interface fonts, as an App draws in by default, have theirs
+// already (see SystemItalicFonts); text styled Italic in a font with none
+// is drawn upright.
+//
+//	inter := ggui.MustFont(interRegular).WithItalic(ggui.MustFont(interItalic))
+func (f *Font) WithItalic(face *Font) *Font {
+	reactive.CheckUIThread("Font.WithItalic")
+	f.italic = face
+	if face != nil && face.italic == nil {
+		face.italic = face // its own italic, so that styling it again keeps it
+	}
+	return f
+}
+
+// italicFace is the face f draws text styled Italic in: the one WithItalic
+// set, the italic of the platform's interface font f is, or else f.
+func (f *Font) italicFace() *Font {
+	if f == nil {
+		return nil
+	}
+	if f.italic != nil {
+		return f.italic
+	}
+	sans, mono := systemUIFonts()
+	switch f {
+	case sans:
+		if i, _ := systemItalicFonts(); i != nil {
+			return i
+		}
+	case mono, defaultMono:
+		if _, i := systemItalicFonts(); i != nil {
+			return i
+		}
+	}
+	return f
+}
+
 // Fallback appends fonts to draw the glyphs f lacks, in order of
 // preference. A Font with none set falls back to SystemFonts.
 func (f *Font) Fallback(fonts ...*Font) *Font {
@@ -168,7 +208,13 @@ func SystemItalicFonts() (sans, mono *Font) { return systemItalicFonts() }
 
 var systemItalicFonts = sync.OnceValues(func() (sans, mono *Font) {
 	s, m := fontsys.SystemItalic()
-	return wrapFont(s), wrapFont(m)
+	sans, mono = wrapFont(s), wrapFont(m)
+	for _, f := range []*Font{sans, mono} {
+		if f != nil {
+			f.italic = f
+		}
+	}
+	return sans, mono
 })
 
 // DefaultTextSize is the size Text uses until Size is set.

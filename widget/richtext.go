@@ -41,6 +41,9 @@ func (s TextSpan) Color(c color.Color) TextSpan { s.style.Color = c; return s }
 // Font sets the span's face; nil inherits.
 func (s TextSpan) Font(f *ggui.Font) TextSpan { s.style.Font = f; return s }
 
+// Italic draws the span in its font's italic.
+func (s TextSpan) Italic() TextSpan { s.style.Italic = true; return s }
+
 // Weight sets the span's font weight; zero inherits.
 func (s TextSpan) Weight(w ggui.FontWeight) TextSpan { s.style.Weight = w; return s }
 
