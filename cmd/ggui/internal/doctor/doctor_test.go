@@ -9,7 +9,47 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ironpark/ggui/cmd/ggui/internal/config"
+	"github.com/ironpark/zapp/pkg/signing/rcodesign"
 )
+
+func TestCheckCertificate(t *testing.T) {
+	m := config.Defaults().MacOS
+	r := &Report{}
+	checkCertificate(r, m, nil)
+	if len(r.Checks) != 0 {
+		t.Errorf("reported a certificate when there is none: %v", r.Checks)
+	}
+	t.Setenv(m.P12Base64Env, "AAAA")
+	t.Setenv(m.P12PasswordEnv, "")
+	checkCertificate(r, m, nil)
+	if len(r.Checks) != 1 || r.Checks[0].Status != Warn || strings.Contains(r.Checks[0].Detail, "AAAA") {
+		t.Errorf("certificate without a password: %v", r.Checks)
+	}
+	m.P12File = filepath.Join(t.TempDir(), "missing.p12")
+	r = &Report{}
+	checkCertificate(r, m, nil)
+	if len(r.Checks) != 1 || r.Checks[0].Status != Fail {
+		t.Errorf("missing certificate file: %v", r.Checks)
+	}
+}
+
+// Away from a Mac, a ggui without cgo has no signer, which matters only
+// when ggui.toml asks for a signature.
+func TestCheckSigningElsewhere(t *testing.T) {
+	if rcodesign.Available() == nil {
+		t.Skip("this build can sign")
+	}
+	m := config.Defaults().MacOS
+	r := &Report{}
+	checkSigningElsewhere(r, m)
+	m.SigningIdentity = "Developer ID Application"
+	checkSigningElsewhere(r, m)
+	if r.Checks[0].Status != OK || r.Checks[1].Status != Fail {
+		t.Errorf("checks = %v", r.Checks)
+	}
+}
 
 func TestCompareVersions(t *testing.T) {
 	for _, tc := range []struct {
