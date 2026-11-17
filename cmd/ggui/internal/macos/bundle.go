@@ -1,6 +1,13 @@
-// Package macos assembles a macOS application bundle around a built
-// program: the Name.app directory, its Info.plist and icon, and the code
-// signature.
+// Package macos makes what ships a ggui application to Macs: the Name.app
+// bundle around a built program, with its Info.plist and icon; its code
+// signature; and the disk image and installer package made from it,
+// signed, notarized and verified.
+//
+// The work past assembling the bundle is done by zapp's packages
+// (github.com/ironpark/zapp/pkg/...): signing and notarizing through
+// Apple's tools on macOS, or rcodesign elsewhere when it is built in;
+// the disk image and the installer in pure Go; and the checks a release
+// should pass.
 package macos
 
 import (
@@ -18,7 +25,7 @@ import (
 	"strings"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/icns"
-	"github.com/ironpark/ggui/cmd/ggui/internal/plist"
+	"github.com/ironpark/zapp/pkg/plist"
 )
 
 // Info is what goes in the bundle's Info.plist.
@@ -96,7 +103,7 @@ func Assemble(b Bundle) (app string, warnings []string, err error) {
 		return "", nil, err
 	}
 	if b.Icon != "" {
-		skipped, err := writeIcon(filepath.Join(contents, "Resources", iconName+".icns"), b.Icon)
+		skipped, err := WriteIcon(filepath.Join(contents, "Resources", iconName+".icns"), b.Icon)
 		if err != nil {
 			return "", nil, fmt.Errorf("icon %s: %w", b.Icon, err)
 		}
@@ -105,7 +112,7 @@ func Assemble(b Bundle) (app string, warnings []string, err error) {
 		}
 		b.HasIcon = true
 	}
-	data, err := plist.Marshal(b.Plist())
+	data, err := plist.MarshalXML(plistValue(b.Plist()))
 	if err != nil {
 		return "", nil, fmt.Errorf("writing Info.plist: %w", err)
 	}
@@ -131,7 +138,42 @@ func removeBundle(app string) error {
 	return os.RemoveAll(app)
 }
 
-func writeIcon(dst, src string) ([]int, error) {
+// plistValue returns v with every list as []any, the one kind of list
+// zapp's plist writer takes: TOML gives an array of tables as
+// []map[string]any.
+func plistValue(v any) any {
+	switch v := v.(type) {
+	case map[string]any:
+		m := make(map[string]any, len(v))
+		for k, e := range v {
+			m[k] = plistValue(e)
+		}
+		return m
+	case []map[string]any:
+		l := make([]any, len(v))
+		for i, e := range v {
+			l[i] = plistValue(e)
+		}
+		return l
+	case []any:
+		l := make([]any, len(v))
+		for i, e := range v {
+			l[i] = plistValue(e)
+		}
+		return l
+	case []string:
+		l := make([]any, len(v))
+		for i, e := range v {
+			l[i] = e
+		}
+		return l
+	}
+	return v
+}
+
+// WriteIcon writes the .icns made from the PNG src to dst, and returns
+// the pixel sizes it lacks because src is smaller.
+func WriteIcon(dst, src string) ([]int, error) {
 	f, err := os.Open(src)
 	if err != nil {
 		return nil, err
@@ -164,34 +206,6 @@ func copyFile(dst, src string, mode os.FileMode) error {
 		return err
 	}
 	return out.Close()
-}
-
-// CanSign reports whether this host can sign a bundle: codesign is part of
-// macOS and nothing else.
-func CanSign() bool { return runtime.GOOS == "darwin" }
-
-// Sign signs the bundle with identity, "-" for ad hoc. A real identity
-// also gets the hardened runtime and a secure timestamp, which
-// notarization requires; ad hoc signing gets neither, because it is for
-// running on this Mac, and the timestamp needs Apple's server.
-func Sign(ctx context.Context, app, identity, entitlements string) error {
-	args := []string{"--force", "--sign", identity}
-	if identity != "-" {
-		args = append(args, "--options", "runtime", "--timestamp")
-	}
-	if entitlements != "" {
-		args = append(args, "--entitlements", entitlements)
-	}
-	args = append(args, app)
-	out, err := exec.CommandContext(ctx, "codesign", args...).CombinedOutput()
-	if err != nil {
-		msg := strings.TrimSpace(string(out))
-		if strings.Contains(msg, "no identity found") {
-			msg += "\nlist the identities this Mac has with: security find-identity -v -p codesigning"
-		}
-		return fmt.Errorf("codesign: %s (%w)", msg, err)
-	}
-	return nil
 }
 
 // Lipo joins programs built for different architectures into one.

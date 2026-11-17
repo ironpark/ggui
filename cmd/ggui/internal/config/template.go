@@ -66,12 +66,30 @@ version = {{.Version}}
 # minimum_system_version = "13.0"
 # The App Store category, such as "public.app-category.productivity".
 # category = ""
-# The code signing identity, such as "Developer ID Application: Name
-# (TEAMID)". "-" signs ad hoc, which runs on this Mac but not on others
-# without a Gatekeeper prompt. Signing happens only on macOS.
+# The keychain identity to sign with, such as "Developer ID Application"
+# (the first one of that kind) or "Developer ID Application: Name
+# (TEAMID)"; security find-identity -v -p codesigning lists them. "-"
+# signs ad hoc, which runs on this Mac but not on others. An identity
+# also gets the hardened runtime and a secure timestamp, as notarization
+# requires. Same as --identity.
 # signing_identity = "-"
 # An entitlements plist to sign with.
 # entitlements = ""
+# A PKCS#12 (.p12) certificate and key to sign with instead of the
+# keychain, as CI has: a file, or else base64 text in the environment
+# variable p12_base64_env names. Its password is read from
+# p12_password_file, or else from the variable p12_password_env names.
+# signing_identity "-" then means the certificate's Developer ID
+# Application identity. Same as --p12-file and --p12-password-file.
+# p12_file = ""
+# p12_base64_env = "GGUI_P12_BASE64"
+# p12_password_file = ""
+# p12_password_env = "GGUI_P12_PASSWORD"
+# Submit the app, and the disk image and installer, to Apple's notary
+# service with the credentials in [macos.notary], and staple the ticket,
+# so Gatekeeper opens them on any Mac. It takes minutes and a Developer
+# ID identity. Same as --notarize.
+# notarize = false
 # Build for both Apple silicon and Intel and join the two with lipo.
 # Needs macOS with the Xcode command line tools. Same as --universal.
 # universal = false
@@ -79,6 +97,60 @@ version = {{.Version}}
 # Extra Info.plist keys, written over the generated ones.
 # [macos.plist]
 # NSCameraUsageDescription = "Scans documents."
+
+# How to reach the notary service: a notarytool keychain profile (made
+# once with xcrun notarytool store-credentials NAME), an App Store
+# Connect API key, or an Apple ID with an app-specific password, which is
+# read from the variable password_env names. The first given is used.
+# Same as --notary-profile, --api-key-file, --apple-id and --team-id.
+# [macos.notary]
+# profile = ""
+# The key as JSON: {"issuer_id", "key_id", "private_key"}, the last the
+# .p8 file's contents, as rcodesign encode-app-store-connect-api-key
+# writes it.
+# api_key_file = ""
+# apple_id = ""
+# team_id = ""
+# password_env = "GGUI_NOTARY_PASSWORD"
+# Attach the ticket, so Gatekeeper need not reach Apple to check it.
+# staple = true
+# How long to wait for Apple's verdict.
+# timeout = "1h"
+
+# The table asks for a disk image, Name.dmg, beside the bundle on every
+# macOS build: the app and a link to /Applications to drag it onto.
+# --dmg makes one without the table, --dmg=false skips it.
+# [macos.dmg]
+# The volume's name. Default: app.name.
+# title = ""
+# The volume's icon, a PNG or .icns. Default: the app's icon.
+# icon = ""
+# The window's background image, drawn at its top left in points.
+# background = ""
+# window = { width = 640, height = 480 }
+# icon_size = 128
+# label_size = 14
+# The centre of each icon, [x, y] in points from the window's top left.
+# Default: side by side across the middle of the window.
+# app_position = []
+# applications_position = []
+# The volume's file system: "hfsplus", "apfs" or "apfs-case-sensitive".
+# fs = "hfsplus"
+# "udzo" (zlib), which every macOS opens, or "ulfo" (lzfse), smaller.
+# format = "udzo"
+
+# The table asks for an installer package, Name.pkg, beside the bundle on
+# every macOS build. --pkg makes one without the table.
+# [macos.pkg]
+# The installer identity, which differs from the app's. Default: the
+# Developer ID Installer identity of the keychain or the certificate.
+# The package is left unsigned when the app is signed ad hoc.
+# signing_identity = ""
+# install_location = "/Applications"
+# A directory with preinstall and postinstall scripts.
+# scripts = ""
+# A plain-text license the installer shows and asks to accept.
+# license = ""
 
 [web]
 # The page title. Default: app.name.

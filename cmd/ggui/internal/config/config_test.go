@@ -188,6 +188,96 @@ wasm_opt = "O2"
 	}
 }
 
+func TestMacOSDistribution(t *testing.T) {
+	cfg, err := Parse("ggui.toml", []byte(`[macos]
+signing_identity = "Developer ID Application"
+notarize = true
+p12_base64_env = "CI_P12"
+
+[macos.notary]
+profile = "ggui"
+
+[macos.dmg]
+
+[macos.dmg.window]
+width = 700
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := cfg.MacOS
+	if !m.Notarize || m.Notary.Profile != "ggui" || !m.Notary.Staple || m.Notary.Timeout != "1h" {
+		t.Errorf("notarization = %v %+v", m.Notarize, m.Notary)
+	}
+	if m.P12Base64Env != "CI_P12" || m.P12PasswordEnv != "GGUI_P12_PASSWORD" {
+		t.Errorf("certificate variables = %q, %q", m.P12Base64Env, m.P12PasswordEnv)
+	}
+	// An empty table asks for a disk image; the window keeps the default
+	// height when only its width is set.
+	if !m.DMG.Make || m.DMG.Window != (Window{700, DefaultDMGHeight}) || m.DMG.IconSize != DefaultDMGIconSize {
+		t.Errorf("dmg = %+v", m.DMG)
+	}
+	if m.PKG.Make {
+		t.Error("an installer was asked for without [macos.pkg]")
+	}
+	if d := Defaults().MacOS; d.DMG.Make || d.PKG.Make || d.Notarize {
+		t.Error("the defaults ask for a disk image, an installer or notarization")
+	}
+}
+
+func TestMacOSValidation(t *testing.T) {
+	src := `[macos]
+p12_password_env = "MY PASSWORD"
+
+[macos.notary]
+apple_id = "me@example.com"
+timeout = "soon"
+
+[macos.dmg]
+background = "bg.gif"
+icon_size = 8
+app_position = [10]
+fs = "fat32"
+format = "zip"
+
+[macos.pkg]
+install_location = "Applications"
+`
+	es := errorsOf(t, src)
+	want := map[int]string{
+		2:  "macos.p12_password_env",
+		5:  "macos.notary.apple_id",
+		6:  "macos.notary.timeout",
+		9:  "macos.dmg.background",
+		10: "macos.dmg.icon_size",
+		11: "macos.dmg.app_position",
+		12: "macos.dmg.fs",
+		13: "macos.dmg.format",
+		16: "macos.pkg.install_location",
+	}
+	if len(es) != len(want) {
+		t.Fatalf("got %d errors, want %d:\n%v", len(es), len(want), es)
+	}
+	for _, e := range es {
+		if !strings.HasPrefix(e.Msg, want[e.Line]) {
+			t.Errorf("line %d: %q, want a message about %s", e.Line, e.Msg, want[e.Line])
+		}
+	}
+
+	es = errorsOf(t, "[macos.notary]\napple_id = \"me@example.com\"\nteam_id = \"abc\"\n")
+	if len(es) != 1 || es[0].Line != 3 || !strings.HasPrefix(es[0].Msg, "macos.notary.team_id") {
+		t.Errorf("bad team ID: %v", es)
+	}
+	es = errorsOf(t, "[macos.dmg]\nbackgrund = \"bg.png\"\n")
+	if len(es) != 1 || es[0].Line != 2 || !strings.Contains(es[0].Msg, `did you mean "macos.dmg.background"`) {
+		t.Errorf("misspelt dmg key: %v", es)
+	}
+	es = errorsOf(t, "[macos.plist]\nRatio = nan\n")
+	if len(es) != 1 || es[0].Line != 2 {
+		t.Errorf("NaN in Info.plist: %v", es)
+	}
+}
+
 // The file init writes must parse, to the values it was given and the
 // defaults otherwise, and must mention every key of the schema.
 func TestTemplate(t *testing.T) {
@@ -201,10 +291,10 @@ func TestTemplate(t *testing.T) {
 	if !reflect.DeepEqual(cfg, want) {
 		t.Errorf("template parses to %+v, want %+v", cfg, want)
 	}
-	for _, table := range []string{"app", "build", "dev", "macos", "web"} {
-		for _, key := range knownKeys([]string{table}) {
+	for _, table := range []string{"app", "build", "dev", "macos", "macos.notary", "macos.dmg", "macos.pkg", "web"} {
+		for _, key := range knownKeys(strings.Split(table, ".")) {
 			if !strings.Contains(string(data), "\n"+key+" =") && !strings.Contains(string(data), "\n# "+key+" =") &&
-				!strings.Contains(string(data), "[macos."+key+"]") {
+				!strings.Contains(string(data), "["+table+"."+key+"]") {
 				t.Errorf("template does not document %s.%s", table, key)
 			}
 		}
