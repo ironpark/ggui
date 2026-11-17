@@ -14,10 +14,11 @@ import (
 	"go/scanner"
 	"go/token"
 	"go/version"
-	"os"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/ironpark/ggui/cmd/ggui/internal/shared"
 )
 
 // Sum is a Fingerprint.
@@ -164,7 +165,7 @@ func CanParse(goVersion string) bool {
 func CheckFiles(ctx context.Context, files []string, name func(string) string, wait time.Duration) error {
 	check := func(fs []string) (bad []string, errs []error) {
 		for _, f := range fs {
-			src, err := os.ReadFile(f)
+			src, err := shared.ReadFile(f)
 			if err != nil {
 				continue
 			}
