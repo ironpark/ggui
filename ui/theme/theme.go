@@ -107,6 +107,10 @@ type Theme struct {
 	MotionSlow    time.Duration // disclosures and sheets
 	MotionOverlay time.Duration // dialog and popup entrances/exits
 	MotionDrawer  time.Duration // a drawer sliding in or out
+	// TooltipDelay is how long the cursor rests on something before its
+	// tooltip opens, where the tooltip's Delay does not say. Unset, as in
+	// shadcn/ui, a tip opens at once.
+	TooltipDelay time.Duration
 	// Ease is the curve a control's transitions run on: a hover, focus or
 	// checked fill, a tab's indicator, a switch's thumb, a sheet sliding
 	// in. Unset, it is Tailwind's default transition-timing-function,

@@ -1293,3 +1293,43 @@ func TestATrackpadsGestureStaysWithTheScrollThatTookIt(t *testing.T) {
 		t.Fatalf("inner at %v, outer at %v; want a gesture begun at the inner's end to move the outer", inner.Offset(), outer.Offset())
 	}
 }
+
+func TestScrollBounceSpringsBackAsTheFingersLift(t *testing.T) {
+	t.Parallel()
+	var painted [3]ggui.Rect
+	s := Scroll(tall(nil, &painted)).Speed(1).Overscroll(OverscrollBounce)
+	p := ggui.NewProbe(s, ggui.Sz(100, 120))
+	defer p.Close()
+	p.Frame()
+	pull := ggui.PointerEvent{Kind: ggui.PointerScroll, Scroll: ggui.Pt(0, 40), ScrollPixels: true, ScrollPhase: ggui.ScrollPhaseChanged}
+	s.HandlePointer(pull)
+	p.Frame()
+	pulled := s.phys.over
+	if pulled == 0 {
+		t.Fatal("a pull at the top did not overscroll")
+	}
+	s.HandlePointer(ggui.PointerEvent{Kind: ggui.PointerScroll, ScrollPixels: true, ScrollPhase: ggui.ScrollPhaseEnded})
+	p.Frame() // the frame the lift asks for
+	p.Advance(40 * time.Millisecond) // well inside the pause a wheel waits for
+	if s.phys.over == 0 || math.Abs(s.phys.over) >= math.Abs(pulled) {
+		t.Fatalf("40ms after the lift: over %v from %v; want it springing back", s.phys.over, pulled)
+	}
+	// The momentum the lift goes on with does not pull it out again.
+	s.HandlePointer(ggui.PointerEvent{Kind: ggui.PointerScroll, Scroll: ggui.Pt(0, 30), ScrollPixels: true, ScrollMomentum: true, ScrollPhase: ggui.ScrollPhaseMomentum})
+	if !s.phys.relaxing {
+		t.Fatal("momentum after the lift stopped the spring back")
+	}
+	p.Advance(time.Second)
+	if s.phys.over != 0 || painted[0].Origin.Y != 0 {
+		t.Fatalf("a second after the lift: over %v, first row at %v", s.phys.over, painted[0])
+	}
+
+	// A wheel, which reports no lift, still waits for its pause.
+	s.HandlePointer(ggui.PointerEvent{Kind: ggui.PointerScroll, Scroll: ggui.Pt(0, 40), ScrollPixels: true})
+	p.Frame()
+	pulled = s.phys.over
+	p.Advance(40 * time.Millisecond)
+	if s.phys.over != pulled {
+		t.Fatalf("a wheel's pull moved %v → %v within its pause", pulled, s.phys.over)
+	}
+}

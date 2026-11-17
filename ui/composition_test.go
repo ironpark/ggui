@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
 
@@ -437,5 +438,40 @@ func TestTooltipTextIsAskedWhileShown(t *testing.T) {
 	p.Frame()
 	if _, ok := p.Semantics().Find(ggui.RoleText, "later"); !ok {
 		t.Fatalf("the tip kept its old text:\n%s", p.Semantics().String())
+	}
+}
+
+// A theme's TooltipDelay holds a tip back until the cursor rests, and a
+// tip the cursor runs on to from another just open opens without it.
+func TestTooltipWaitsForTheThemesDelay(t *testing.T) {
+	t.Parallel()
+	th := uitheme.Default()
+	th.TooltipDelay = 500 * time.Millisecond
+	a := ui.Tooltip(widget.Box().Size(50, 50), "first")
+	b := ui.Tooltip(widget.Box().Size(50, 50), "second")
+	p := ggui.NewProbe(uitheme.With(th, widget.Column(a, b, widget.Spacer())), ggui.Sz(100, 200))
+	defer p.Close()
+	shown := func(s string) bool {
+		_, ok := p.Semantics().Find(ggui.RoleText, s)
+		return ok
+	}
+	p.Move(ggui.Pt(10, 10))
+	p.Advance(200 * time.Millisecond)
+	if shown("first") {
+		t.Fatal("tip up 200ms into a 500ms delay")
+	}
+	p.Advance(400 * time.Millisecond)
+	if !shown("first") {
+		t.Fatal("tip not up after the delay")
+	}
+	p.Move(ggui.Pt(10, 60))
+	if !shown("second") {
+		t.Fatal("the next tip waited though the first was just open")
+	}
+	p.Move(ggui.Pt(10, 150))
+	p.Advance(time.Second)
+	p.Move(ggui.Pt(10, 10))
+	if shown("first") {
+		t.Fatal("a tip came back at once a second after the last closed")
 	}
 }
