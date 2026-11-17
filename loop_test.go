@@ -749,6 +749,11 @@ func (w waiter) Paint(*Canvas, Rect) {
 // A look that changes every half second costs a window one frame each
 // time, at the instant it asked for.
 func TestAWindowWakesOnceForEachWake(t *testing.T) {
+	// The clock starts a fraction of a millisecond before a wake, where a
+	// run on the wall clock once started: the first wake is then nearer
+	// than a millisecond, and still the instant to wake at.
+	now := time.Date(2026, 1, 1, 0, 0, 0, int(500*time.Millisecond-300*time.Microsecond), time.UTC)
+	defer SetClock(func() time.Time { return now })()
 	p := NewWindowProbe(func() Widget { return waiter{500 * time.Millisecond} }, Sz(40, 40))
 	defer p.Close()
 	p.Step(0)
