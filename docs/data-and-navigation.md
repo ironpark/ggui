@@ -27,6 +27,7 @@ See [example conventions](README.md#start-here) before copying snippets.
 | Control | Behavior |
 | --- | --- |
 | `ui.Tabs(selected, ui.Tab("One", page), ...)` | Displays the selected index, with an animated segmented selection. Arrows move focus; Enter/Space activates. `.ActivateOnFocus(true)` opts into automatic selection; `.Line()` uses an underline. Only the active page is laid out. `Tab(...).Header(widget)` draws an icon, count or badge in place of the label's text, which still names the tab; `Tab(...).Tooltip(text)` explains it. |
+| `ui.EditorTab("main.go", show)` | One tab of an editor's own tab bar, not a page of one control: a rounded box, raised while `.Selected(true)` and ringed more strongly with `.Current(true)`, tinted under the pointer. `.OnClose(fn)` adds a close button that shows while the pointer is over the tab or the focus is in it; `.Dirty(true)` puts a dot in its place, `.Preview(true)` sets the label in italics, `.Icon(w)` goes before it. `ui.TabGroup(header, tabs...).Tint(c)` holds a run of them in a capsule of its color, the tabs ringed in it, as a browser's tab groups. The bar, scrolling, reordering and splitting stay the app's. |
 | `ui.Collapsible(open, "Title", content)` | A titled section whose content eases open and closed, as `widget.Reveal` does. `ui.CollapsibleOf(open, trigger, content)` takes a header of your own, painted as it is, all of which toggles the content. |
 | `ui.Card(child)` | Adds a surface, foreground/10 outline, radius and padding; `.Shadow(...)` opts into elevation. Given `CardHeader`, `CardContent` and `CardFooter` sections it lays them out as shadcn's card does; see [composition helpers](feedback-and-composition.md#composition-helpers). |
 | `ui.Badge("new")` | Displays a small label; `.Secondary()`, `.Outline()`, `.Ghost()`, `.Link()` and `.Destructive()` change its look, and `.Icon(role)` or `.TrailingIcon(role)` add an icon. |
@@ -434,6 +435,12 @@ Menu panels default to the theme's `MenuWidth` (224 logical pixels) rather
 than stretching across the window. `Menu(...).Width(w)` overrides this. Menubars inset their triggers and
 show a focus outline only for keyboard focus; pointer hover and the open menu
 use the shared muted surface.
+
+Command matches Korean as it is typed: the query's last syllable, still
+being composed, finds what its keys begin ("셋" finds "세션"), a lone
+consonant finds a syllable it begins, and Hangul typed with the input method
+left on Korean finds what its keys spell on the 2-set layout ("ㄴㄷㅅ샤" finds
+"Settings"). `pkg/hangul` has the same matching for a search of your own.
 
 Command uses an integrated search header and divider. For a dialog palette,
 `.Borderless().Height(144).StableHeight().Hints()` avoids nested panel borders,
