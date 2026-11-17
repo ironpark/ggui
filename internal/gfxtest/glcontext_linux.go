@@ -108,6 +108,12 @@ func (c *eglContext) MakeContextCurrent() error {
 	return nil
 }
 
+// Close lets go of the context and the display. It leaves libEGL loaded:
+// unloading it can take the driver with it while threads of the driver's
+// own, such as a software rasterizer's, are still running, and the next of
+// them to wake jumps into unmapped code. That is the segmentation fault a
+// Linux test binary sometimes died of after it had passed. The process ends
+// right after anyway.
 func (c *eglContext) Close() {
 	if c.display != 0 {
 		c.makeCurrent(c.display, 0, 0, 0)
@@ -119,5 +125,4 @@ func (c *eglContext) Close() {
 		}
 		c.terminate(c.display)
 	}
-	purego.Dlclose(c.lib)
 }
