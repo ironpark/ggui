@@ -2,6 +2,8 @@ package ui
 
 import (
 	"image/color"
+	"math"
+	"time"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
@@ -119,9 +121,12 @@ func (t *EditorTabWidget) build() ggui.Widget {
 	if name == "" {
 		name = t.label
 	}
-	btn := ButtonOf(content, t.onSelect).Ghost().Pad(0, right, 0, 10).Radius(EditorTabRadius).Name(name)
+	// The tab draws its hover itself, over all of it, close button too: a
+	// button's own would come and go as the pointer crossed to the close
+	// button, over the tab's.
+	btn := ButtonOf(content, t.onSelect).Variant(editorTabButton).Pad(0, right, 0, 10).Radius(EditorTabRadius).Name(name)
 	box := ggui.View(hover, func(h bool) ggui.Widget {
-		return &editorTabBox{child: btn, tint: t.tint, hovered: h, selected: t.selected, current: t.current}
+		return &editorTabBox{child: btn, button: btn, tint: t.tint, hovered: h, selected: t.selected, current: t.current}
 	})
 	return widget.Box(widget.Within(box).OnHover(hover.Set).OnFocus(focus.Set)).Pad(0, 2)
 }
@@ -161,6 +166,16 @@ func (t *EditorTabWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements Widget.
 func (t *EditorTabWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(t.tree, r) }
 
+// editorTabButton is the look of a tab's button: its label alone, the tab
+// drawing the rest.
+var editorTabButton = NewVariant("editor tab", func(t theme.Theme) ButtonStyle {
+	return ButtonStyle{Label: t.Fg, HoverLabel: t.Fg}
+})
+
+// editorTabHoverSlot keeps how far a tab is into its hover, which eases in
+// and out as a button's does.
+var editorTabHoverSlot = ggui.NewSlot[*ggui.Motion]("editor tab hover")
+
 // tabTintKey is the tint of the TabGroup the tabs under it are in.
 var tabTintKey = ggui.NewEnvKey[color.Color]("editor tab tint")
 
@@ -168,9 +183,12 @@ var tabTintKey = ggui.NewEnvKey[color.Color]("editor tab tint")
 // selected tab and its ring, or the tint of one the pointer is over.
 type editorTabBox struct {
 	child                      ggui.Widget
+	button                     *ButtonWidget // what the hover's easing is kept by
 	tint                       color.Color
 	hovered, selected, current bool
 	fill, ring, wash           color.Color // under the theme the tab was laid out in
+	theme                      *theme.Theme
+	motion                     time.Duration
 }
 
 func (b *editorTabBox) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
@@ -182,6 +200,8 @@ func (b *editorTabBox) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		tint = theme.Ring
 	}
 	tint = ggui.ResolveColor(tint, env)
+	b.theme = theme.Of(env)
+	b.motion = env.Motion(b.theme.MotionFast)
 	b.wash, b.fill, b.ring = withAlpha(tint, 0x44), nil, nil
 	if b.selected {
 		b.fill = ggui.ResolveColor(theme.Muted, env)
@@ -195,15 +215,16 @@ func (b *editorTabBox) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 }
 
 func (b *editorTabBox) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	switch {
-	case b.fill != nil:
+	hover := ease(dst, b.theme, b.button.Anchor(r), editorTabHoverSlot, pick(b.hovered, 1.0, 0.0), b.motion)
+	if b.fill != nil {
 		dst.FillRoundRect(r, EditorTabRadius, b.fill)
-		if b.hovered {
-			dst.FillRoundRect(r, EditorTabRadius, withAlpha(b.wash, 0x80))
-		}
+	}
+	if hover > 0 {
+		wash := withAlpha(b.wash, uint8(math.Round(hover*pick(b.fill != nil, 128.0, 255.0))))
+		dst.FillRoundRect(r, EditorTabRadius, wash)
+	}
+	if b.ring != nil {
 		dst.StrokeRoundRect(r.Grow(-0.5), EditorTabRadius-0.5, 1, b.ring)
-	case b.hovered:
-		dst.FillRoundRect(r, EditorTabRadius, b.wash)
 	}
 	dst.Paint(b.child, r)
 }
