@@ -93,7 +93,8 @@ and monospaced fonts an App draws in by default have theirs:
 on macOS, Segoe UI Italic and Cascadia Mono Italic or Consolas Italic on
 Windows, fontconfig's italic `sans-serif` and `monospace` on Linux. A font
 of your own takes its italic with `WithItalic`; one with none, as the
-built-in Go Regular, is drawn upright.
+built-in Go Regular, is drawn upright. `gofont.EnableItalic()` gives the Go
+fonts theirs, for about 850 KB more.
 
 ```go
 inter := ggui.MustFont(interRegular).WithItalic(ggui.MustFont(interItalic))

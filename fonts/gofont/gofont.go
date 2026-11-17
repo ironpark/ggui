@@ -13,9 +13,14 @@ import (
 
 	"github.com/ironpark/ggui"
 	"golang.org/x/image/font/gofont/gobold"
+	"golang.org/x/image/font/gofont/gobolditalic"
+	"golang.org/x/image/font/gofont/goitalic"
 	"golang.org/x/image/font/gofont/gomedium"
+	"golang.org/x/image/font/gofont/gomediumitalic"
 	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/gofont/gomonobold"
+	"golang.org/x/image/font/gofont/gomonobolditalic"
+	"golang.org/x/image/font/gofont/gomonoitalic"
 	"golang.org/x/image/font/gofont/goregular"
 )
 
@@ -43,3 +48,17 @@ func Enable() {
 	ggui.SetDefaultFont(Font())
 	ggui.SetDefaultMonoFont(Mono())
 }
+
+// EnableItalic gives Font and Mono their italics, Go Italic with Go Medium
+// Italic and Go Bold Italic, and Go Mono Italic with Go Mono Bold Italic,
+// for text styled Italic (see ggui.TextStyle.Italic), which is otherwise
+// drawn upright in them. The italics add about 850 KB more to the binary,
+// only where it is called.
+func EnableItalic() { enableItalic() }
+
+var enableItalic = sync.OnceFunc(func() {
+	sans().WithItalic(ggui.MustFont(goitalic.TTF).
+		WithWeight(ggui.WeightMedium, ggui.MustFont(gomediumitalic.TTF)).
+		WithWeight(ggui.WeightBold, ggui.MustFont(gobolditalic.TTF)))
+	mono().WithItalic(ggui.MustFont(gomonoitalic.TTF).WithWeight(ggui.WeightBold, ggui.MustFont(gomonobolditalic.TTF)))
+})
