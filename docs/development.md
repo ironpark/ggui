@@ -264,9 +264,13 @@ git push origin cmd/ggui/v0.2.0
 
 The tag runs `.github/workflows/release-cli.yml`: GoReleaser builds the
 command for macOS, Linux and Windows (`cmd/ggui/.goreleaser.yaml`), the
-archives become the tag's GitHub release, and the formula goes to the
+archives become the tag's GitHub release, and a formula goes to the
 Homebrew tap [ironpark/homebrew-tap](https://github.com/ironpark/homebrew-tap),
-from which `brew install ironpark/tap/ggui` installs it. Writing to the tap
+from which `brew install ironpark/tap/ggui` installs it. The formula
+(`cmd/ggui/release/formula.sh` writes it) builds the command from its module
+zip on the Go module proxy, as formulae are meant to build from source; the
+tap's own workflow installs and tests every formula pushed to it on macOS
+and Linux. Writing to the tap
 takes the repository secret `TAP_GITHUB_TOKEN`, a fine-grained token with
 Contents read and write on that repository only. To try a release without
 publishing it:

@@ -11,7 +11,7 @@ module cache.
 brew install ironpark/tap/ggui
 ```
 
-Homebrew installs Go with it. Without Homebrew, or for a version between
+Homebrew builds it from source with Go, which it installs too. Without Homebrew, or for a version between
 releases:
 
 ```sh

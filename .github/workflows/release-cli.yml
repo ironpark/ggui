@@ -2,13 +2,14 @@ name: Release the ggui command
 
 # A tag cmd/ggui/vX.Y.Z releases the ggui command: GoReleaser builds it for
 # macOS, Linux and Windows, the archives become the tag's GitHub release,
-# and the formula goes to the Homebrew tap ironpark/homebrew-tap.
+# and a formula that builds the tag from source goes to the Homebrew tap
+# ironpark/homebrew-tap (cmd/ggui/release/formula.sh writes it).
 #
 # The command is a module of its own, so Go wants its tags prefixed with its
-# directory, which GoReleaser OSS does not take: it is given the version,
-# builds and writes the formula without publishing, and this workflow
-# publishes. Pushing to the tap needs TAP_GITHUB_TOKEN, a token that may
-# write to ironpark/homebrew-tap; the workflow's own token may not.
+# directory, which GoReleaser OSS does not take: it is given the version and
+# builds without publishing, and this workflow publishes. Pushing to the tap
+# needs TAP_GITHUB_TOKEN, a token that may write to ironpark/homebrew-tap;
+# the workflow's own token may not.
 on:
   push:
     tags: ['cmd/ggui/v*']
@@ -35,7 +36,7 @@ jobs:
         with:
           distribution: goreleaser
           version: '~> v2'
-          # validate would look for a tag vX.Y.Z; publish is done below.
+          # validate would look for a tag vX.Y.Z; publishing is done below.
           args: release --clean --skip=publish,validate -f cmd/ggui/.goreleaser.yaml
         env:
           GOWORK: 'off'
@@ -57,9 +58,12 @@ jobs:
             echo "::error::TAP_GITHUB_TOKEN is not set; the release is out, the tap is not updated"
             exit 1
           fi
+          # The formula fetches the module from the Go module proxy, which
+          # learns of the tag on the first request; formula.sh makes it.
+          cmd/ggui/release/formula.sh "$VERSION" > ggui.rb
           git clone "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/ironpark/homebrew-tap.git" tap
           mkdir -p tap/Formula
-          cp dist/homebrew/Formula/ggui.rb tap/Formula/ggui.rb
+          cp ggui.rb tap/Formula/ggui.rb
           cd tap
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
