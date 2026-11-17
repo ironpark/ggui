@@ -25,6 +25,8 @@ type Color struct {
 	// fade is how much opacity Alpha has taken away, so that the zero
 	// value is the color as the theme has it.
 	fade float32
+	// or is what it paints under a theme with no color by its name; see Or.
+	or color.Color
 }
 
 // The theme's colors as Color tokens: one for every color field of Theme,
@@ -55,7 +57,7 @@ var (
 //
 //	warning := theme.Var("warning")
 //
-// A name the theme has no color for paints nothing.
+// A name the theme has no color for paints nothing, or what Or gives.
 func Var(name string) Color { return Color{name: name, field: colorField[name]} }
 
 // otherColors are the Theme fields no CSS variable sets.
@@ -97,6 +99,19 @@ func (t *Theme) colorAt(field int) color.Color {
 	return *(*color.Color)(unsafe.Add(unsafe.Pointer(t), colorOffsets[field-1]))
 }
 
+// Or is the color, or fallback under a theme with no color by its name,
+// as an app's own Var is under a theme the app did not make: the default
+// one a Probe lays a tree out under, say. A fallback that is a token is
+// the color the same theme has for it.
+//
+//	accent := theme.Var("accent-bright").Or(theme.Primary)
+//
+// Alpha fades the fallback as it fades the color.
+func (c Color) Or(fallback color.Color) Color {
+	c.or = fallback
+	return c
+}
+
 // Alpha is the color at alpha times its opacity, from 0 to 1.
 func (c Color) Alpha(alpha float64) Color {
 	c.fade = 1 - (1-c.fade)*float32(min(max(alpha, 0), 1))
@@ -114,6 +129,13 @@ func (c Color) In(t Theme) color.Color {
 		}
 	} else {
 		v, _ = t.Get(CSSColor(c.name))
+	}
+	if v == nil && c.or != nil {
+		if fallback, ok := c.or.(Color); ok {
+			v = fallback.In(t)
+		} else {
+			v = c.or
+		}
 	}
 	if c.fade != 0 {
 		v = Fade(v, float64(1-c.fade))
