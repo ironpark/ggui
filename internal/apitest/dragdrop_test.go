@@ -713,3 +713,26 @@ func TestAReorderableRowWithASliderStillReorders(t *testing.T) {
 		t.Fatalf("after the drop items %v, want a moved down", got)
 	}
 }
+
+// A Reorderable has its first row's baseline, as a Column does, so a
+// heading beside it lines up with that row and not with what follows.
+func TestReorderableHasItsFirstRowsBaseline(t *testing.T) {
+	t.Parallel()
+	items := ggui.State([]string{"a", "b"})
+	l := widget.Reorderable(items, func(s string) string { return s }, func(it widget.EachItem[string]) ggui.Widget {
+		return widget.Box(widget.Text(it.Item)).Pad(7, 0)
+	})
+	col := widget.Column(l, widget.Box(widget.Text("after")).Pad(40, 0))
+	p := ggui.NewProbe(col, ggui.Sz(200, 200))
+	defer p.Close()
+	p.Frame()
+	got, ok := ggui.BaselineOf(col)
+	if !ok {
+		t.Fatal("no baseline")
+	}
+	// The first row's text, under its padding of 7, not the text after
+	// the list, under a padding of 40.
+	if got <= 7 || got >= 40 {
+		t.Fatalf("baseline %v, not the first row's", got)
+	}
+}
