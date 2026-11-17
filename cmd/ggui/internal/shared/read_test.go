@@ -3,10 +3,12 @@ package shared
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
-// A file being read can be deleted and renamed over, on every system.
+// A file being read can be deleted on every system, and renamed over
+// wherever the system allows it of an open file: not on Windows.
 func TestReadFileSharesDeletion(t *testing.T) {
 	dir := t.TempDir()
 	name := filepath.Join(dir, "a.go")
@@ -34,8 +36,10 @@ func TestReadFileSharesDeletion(t *testing.T) {
 	if err := os.WriteFile(tmp, []byte("package c\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Rename(tmp, name); err != nil {
-		t.Errorf("renaming over a file being read: %v", err)
+	if runtime.GOOS != "windows" {
+		if err := os.Rename(tmp, name); err != nil {
+			t.Errorf("renaming over a file being read: %v", err)
+		}
 	}
 	if err := os.Remove(name); err != nil {
 		t.Errorf("deleting a file being read: %v", err)
