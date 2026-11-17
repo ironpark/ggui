@@ -11,26 +11,35 @@ import (
 func TestRubberFollowsInsideAndResistsPast(t *testing.T) {
 	t.Parallel()
 	const lo, hi, extent = 0.0, 1000.0, 400.0
+	const reach = extent * RubberReach
 	if got := Rubber(500, 30, lo, hi, extent, false); got != 530 {
 		t.Fatalf("inside the range moved to %v, want 530", got)
 	}
-	// Past an end, half the movement at the end itself.
-	if got := Rubber(1000, 40, lo, hi, extent, false); got != 1020 {
-		t.Fatalf("pulled from the end to %v, want half of 40 past it", got)
+	// Past an end, a little over half the movement at the end itself.
+	if got := Rubber(1000, 1, lo, hi, extent, false) - 1000; math.Abs(got-rubberGive) > 0.01 {
+		t.Fatalf("pulled 1 from the end went %v past it, want about %v", got, rubberGive)
 	}
 	// Further past, less of it; momentum less again.
-	near, far := Rubber(1010, 10, lo, hi, extent, false)-1010, Rubber(1200, 10, lo, hi, extent, false)-1200
+	near, far := Rubber(1010, 10, lo, hi, extent, false)-1010, Rubber(1060, 10, lo, hi, extent, false)-1060
 	if !(far < near && near < 10) {
 		t.Fatalf("resistance does not grow past the end: %v near, %v far", near, far)
 	}
 	if fling := Rubber(1010, 10, lo, hi, extent, true) - 1010; fling >= near {
 		t.Fatalf("momentum met %v, a finger %v: want less for momentum", fling, near)
 	}
-	// A whole extent past, it moves no further; back toward the range,
-	// freely.
-	if got := Rubber(hi+extent, 50, lo, hi, extent, false); got != hi+extent {
-		t.Fatalf("an extent past the end moved to %v", got)
+	// However far the input goes, the content nears reach and stays short
+	// of it; pulled in steps, as far as pulled at once.
+	raw := hi
+	for range 400 {
+		raw = Rubber(raw, 10, lo, hi, extent, false)
 	}
+	if once := Rubber(hi, 4000, lo, hi, extent, false); raw-hi >= reach || raw-hi < reach*0.9 || math.Abs(once-raw) > 1e-6 {
+		t.Fatalf("pulled 4000 past the end in steps to %v, at once to %v; want the same, short of %v", raw-hi, once-hi, reach)
+	}
+	if got := Rubber(-1, -1000, lo, hi, extent, false); got <= -reach || got >= -1 {
+		t.Fatalf("pulled before the start to %v; want within %v", got, -reach)
+	}
+	// Back toward the range, freely.
 	if got := Rubber(-100, 30, lo, hi, extent, false); got != -70 {
 		t.Fatalf("moving back from before the start went to %v, want -70", got)
 	}
