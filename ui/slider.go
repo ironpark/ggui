@@ -244,6 +244,10 @@ func (s *SliderWidget) HandleKey(ev ggui.KeyEvent) {
 // CaptureTouchDrag keeps slider gestures from being taken by a parent scroll.
 func (s *SliderWidget) CaptureTouchDrag() bool { return !s.IsInert() }
 
+// CaptureDrag implements ggui.DragCapturer: a slider in a row that drags
+// keeps its own drag.
+func (s *SliderWidget) CaptureDrag() bool { return !s.IsInert() }
+
 // HandlePointer implements PointerHandler: a left press jumps to the
 // pointer and a drag from there follows it, past the ends included.
 func (s *SliderWidget) HandlePointer(ev ggui.PointerEvent) bool {

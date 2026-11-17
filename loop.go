@@ -537,11 +537,15 @@ func (l *frameLoop) paint(p paintPass) (bool, error) {
 	// Adopter handoff, and input keeps routing to them until the paint is
 	// done. The buffer of the frame before takes the new regions: input
 	// keeps copies of the regions it follows, never a pointer into it.
-	spare := f.prev
+	spare, spareWithins := f.prev, f.prevWithins
 	f.prev, f.hits = f.hits, spare[:0]
+	f.prevWithins, f.withins = f.withins, spareWithins[:0]
 	// A frame that ends before painting leaves the buffers as they were,
 	// so the one input routes to is never painted into.
-	unswap := func() { f.hits, f.prev = f.prev, spare }
+	unswap := func() {
+		f.hits, f.prev = f.prev, spare
+		f.withins, f.prevWithins = f.prevWithins, spareWithins
+	}
 	f.logical = p.size
 	f.traceState.reset(p.tracing)
 	f.inputView.take(in)
@@ -560,7 +564,7 @@ func (l *frameLoop) paint(p paintPass) (bool, error) {
 		p.hooks.settled()
 	}
 	l.paintTree(c)
-	in.setRegions(f.hits, f.found)
+	in.setRegions(f.hits, f.withins, f.found)
 	in.observers = f.inputObservers
 	in.painted = f.shortcuts
 	in.refreshFocused()
@@ -593,6 +597,7 @@ func (l *frameLoop) beginPaint(c *Canvas) *frameState {
 	f.clock = &l.world().frame
 	f.startMotion()
 	f.backdrop = false
+	f.cur = regionCursor{}
 	return f
 }
 

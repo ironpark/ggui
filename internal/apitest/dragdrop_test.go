@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/widget"
 )
 
@@ -565,5 +566,150 @@ func BenchmarkReorderableFrame(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		p.Frame()
+	}
+}
+
+// A button in a source clicks when it is clicked, and the source drags
+// when the press moves: the button hears its release and no tap.
+func TestAButtonInASourceClicksOrDrags(t *testing.T) {
+	t.Parallel()
+	clicks := 0
+	source := widget.DragSource(widget.Row(widget.Box().Size(60, 40), ui.Button("Close", func() { clicks++ })), 1)
+	p := ggui.NewProbe(widget.Column(source), ggui.Sz(200, 100))
+	defer p.Close()
+	x, ok := p.FindRole(ggui.RoleButton, "Close")
+	if !ok {
+		t.Fatal("no button")
+	}
+	p.Click(x.Center())
+	if clicks != 1 || source.Dragging() {
+		t.Fatalf("a click: %d clicks, dragging %v", clicks, source.Dragging())
+	}
+	p.Press(x.Center())
+	p.Move(x.Center().Add(ggui.Pt(0, 30)))
+	if !source.Dragging() {
+		t.Fatal("a press on the button that moved did not drag the source")
+	}
+	p.Release(x.Center().Add(ggui.Pt(0, 30)))
+	p.Click(ggui.Pt(150, 90))
+	if clicks != 1 {
+		t.Fatalf("the drag clicked the button: %d clicks", clicks)
+	}
+}
+
+// A press that falls through a source's bare area to a wrapper around it
+// that takes taps still drags the source: the source is inside the
+// pressed region.
+func TestAPressThatFallsThroughASourceStillDragsIt(t *testing.T) {
+	t.Parallel()
+	taps := 0
+	source := widget.DragSource(widget.Box().Size(100, 40), 1)
+	p := ggui.NewProbe(widget.Column(widget.Pointer(source).OnTap(func() { taps++ })), ggui.Sz(200, 100))
+	defer p.Close()
+	p.Click(ggui.Pt(20, 20))
+	if taps != 1 {
+		t.Fatalf("taps %d, want the wrapper's", taps)
+	}
+	p.Press(ggui.Pt(20, 20))
+	p.Move(ggui.Pt(20, 60))
+	if !source.Dragging() {
+		t.Fatal("a press taken by the wrapper around the source did not drag it")
+	}
+	p.Release(ggui.Pt(20, 60))
+}
+
+// A press on a popup painted over a source by a widget that is not part
+// of it drags nothing: the popup's regions are inside no region of the
+// source.
+func TestAPressOnAPopupOverASourceDragsNothing(t *testing.T) {
+	t.Parallel()
+	picked := 0
+	menu := widget.Popup(widget.Box().Size(20, 20), ui.Button("Pick", func() { picked++ })).Modal(false)
+	source := widget.DragSource(widget.Box().Size(200, 200), 1)
+	p := ggui.NewProbe(widget.Stack(source, menu), ggui.Sz(300, 300))
+	defer p.Close()
+	menu.Show()
+	p.Frame()
+	x, ok := p.FindRole(ggui.RoleButton, "Pick")
+	if !ok || x.Rect.Origin.Y+x.Rect.Size.H > 200 {
+		t.Fatalf("the popup's button is at %v, %v; want it over the source", x, ok)
+	}
+	p.Press(x.Center())
+	p.Move(x.Center().Add(ggui.Pt(0, 40)))
+	if source.Dragging() {
+		t.Fatal("a press on the popup dragged the source beneath it")
+	}
+	p.Release(x.Center().Add(ggui.Pt(0, 40)))
+	// The source's own area still drags.
+	p.Press(ggui.Pt(150, 150))
+	p.Move(ggui.Pt(150, 190))
+	if !source.Dragging() {
+		t.Fatal("the source no longer drags")
+	}
+	p.Release(ggui.Pt(150, 190))
+}
+
+// A slider in a source keeps its drag: the knob moves and the source
+// never starts.
+func TestADragCapturerInASourceKeepsItsDrag(t *testing.T) {
+	t.Parallel()
+	value := ggui.State(50.0)
+	slider := ui.Slider(value, 0, 100).Name("Volume")
+	source := widget.DragSource(widget.Box(slider).Size(200, 40), 1)
+	p := ggui.NewProbe(widget.Column(source), ggui.Sz(300, 100))
+	defer p.Close()
+	x, ok := p.FindRole(ggui.RoleSlider, "Volume")
+	if !ok {
+		t.Fatal("no slider")
+	}
+	at := x.Center()
+	p.Press(at)
+	p.Move(at.Add(ggui.Pt(20, 0)))
+	p.Move(at.Add(ggui.Pt(40, 0)))
+	if source.Dragging() {
+		t.Fatal("the source took the slider's drag")
+	}
+	p.Release(at.Add(ggui.Pt(40, 0)))
+	if value.Get() <= 50 {
+		t.Fatalf("the slider stayed at %v, want it moved right", value.Get())
+	}
+}
+
+// A row of a Reorderable that holds a slider still reorders when dragged
+// by its other parts, and its slider still slides.
+func TestAReorderableRowWithASliderStillReorders(t *testing.T) {
+	t.Parallel()
+	items := ggui.State([]string{"a", "b", "c"})
+	values := map[string]*ggui.StateValue[float64]{"a": ggui.State(50.0), "b": ggui.State(50.0), "c": ggui.State(50.0)}
+	l := widget.Reorderable(items, func(s string) string { return s }, func(it widget.EachItem[string]) ggui.Widget {
+		return widget.Row(widget.Box().Size(60, 30), widget.Box(ui.Slider(values[it.Item], 0, 100).Name("Slide "+it.Item)).Size(120, 30))
+	})
+	p := ggui.NewProbe(l, ggui.Sz(200, 200))
+	defer p.Close()
+	p.Frame()
+	x, ok := p.FindRole(ggui.RoleSlider, "Slide a")
+	if !ok {
+		t.Fatal("no slider")
+	}
+	p.Press(x.Center())
+	p.Move(x.Center().Add(ggui.Pt(20, 0)))
+	p.Move(x.Center().Add(ggui.Pt(40, 0)))
+	if l.Dragging() {
+		t.Fatal("the slider's drag dragged the row")
+	}
+	p.Release(x.Center().Add(ggui.Pt(40, 0)))
+	if values["a"].Get() <= 50 {
+		t.Fatalf("the slider stayed at %v", values["a"].Get())
+	}
+	p.Press(ggui.Pt(20, 15))
+	p.Move(ggui.Pt(20, 25))
+	p.Move(ggui.Pt(20, 80))
+	p.Frame()
+	if !l.Dragging() {
+		t.Fatal("dragging the row by its other part did not drag it")
+	}
+	p.Release(ggui.Pt(20, 80))
+	if got := ggui.Peek(items); !slices.Equal(got, []string{"b", "c", "a"}) && !slices.Equal(got, []string{"b", "a", "c"}) {
+		t.Fatalf("after the drop items %v, want a moved down", got)
 	}
 }

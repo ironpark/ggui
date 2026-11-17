@@ -85,13 +85,43 @@ func (c *Canvas) HitDrag(r Rect, d Draggable) {
 	c.add(c.region(r, nil, hitRegion{drag: d}))
 }
 
-// pressDrag notes the drag source under a press, if there is one.
-func (in *inputState) pressDrag(at Point) {
-	r := in.topmost(func(r *hitRegion) bool { return r.drag != nil && r.contains(at) })
+// pressDrag notes the drag source a press may pick up: the topmost drag
+// region under at that pressed, the region that took the press, is inside
+// of, as a button in a draggable tab is, or that is inside pressed, as a
+// source under a wrapper that takes taps is; or any when nothing took the
+// press. A press taken by a region painted over a source by a widget that
+// is not part of it, a popup or a layer above, drags nothing.
+func (in *inputState) pressDrag(at Point, pressed *hitRegion) {
+	p := int32(-1)
+	if pressed != nil {
+		p = in.indexOf(pressed)
+	}
+	r := in.topmost(func(r *hitRegion) bool {
+		if r.drag == nil || !r.contains(at) {
+			return false
+		}
+		if p < 0 {
+			return true
+		}
+		s := in.indexOf(r)
+		return in.inside(p, s) || in.inside(s, p)
+	})
 	in.drag = nil
 	if r != nil {
 		in.drag = &appDrag{candidate: keep(r), from: at}
 	}
+}
+
+// inside reports whether the region at i is the one at outer or is inside
+// it.
+func (in *inputState) inside(i, outer int32) bool {
+	// A region's parent is always before it, so the walk can stop there.
+	for ; i >= outer && i >= 0; i = in.regions[i].parent - 1 {
+		if i == outer {
+			return true
+		}
+	}
+	return false
 }
 
 // updateAppDrag moves the drag in progress: it starts one when a press on a
@@ -110,6 +140,12 @@ func (in *inputState) updateAppDrag(f frameInput) {
 			if released {
 				in.drag = nil
 			}
+			return
+		}
+		if in.pressCapturesDrag() {
+			// The control under the press drags by itself: a slider's knob,
+			// a selection. The source never starts.
+			in.drag = nil
 			return
 		}
 		src := d.candidate.drag
@@ -145,6 +181,23 @@ func (in *inputState) updateAppDrag(f frameInput) {
 	}
 	in.drag = nil
 	d.source.DragEnded(dropped)
+}
+
+// pressCapturesDrag reports whether the handler holding the press keeps
+// its drags as a DragCapturer.
+func (in *inputState) pressCapturesDrag() bool {
+	if in.pressed == nil {
+		return false
+	}
+	if _, ok := in.pressed.pointer.(DragCapturer); !ok {
+		return false
+	}
+	cur := in.findPointer(in.pressed)
+	if cur == nil {
+		return false
+	}
+	c, ok := cur.pointer.(DragCapturer)
+	return ok && c.CaptureDrag()
 }
 
 // cancelAppDrag ends a drag in progress without a drop, as Escape does, and

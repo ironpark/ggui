@@ -468,6 +468,7 @@ func (h scrollThumb) HandlePointer(ev ggui.PointerEvent) bool {
 	return h.scroll.HandlePointer(ev)
 }
 func (h scrollThumb) CaptureTouchDrag() bool { return h.scroll.dragging }
+func (h scrollThumb) CaptureDrag() bool      { return h.scroll.dragging }
 func (h scrollThumb) HitID() any {
 	s := h.scroll
 	// The ID is boxed once, not on each of the frame's calls, until the
@@ -486,6 +487,10 @@ func (h scrollThumb) HitID() any {
 
 // CaptureTouchDrag keeps a thumb drag from becoming content panning.
 func (s *ScrollWidget) CaptureTouchDrag() bool { return s.dragging }
+
+// CaptureDrag implements ggui.DragCapturer: a thumb dragged in a scroll
+// inside a drag source scrolls.
+func (s *ScrollWidget) CaptureDrag() bool { return s.dragging }
 
 // Reveal implements Revealer: the window moves the least it must for
 // target, in window coordinates, to be inside it. Focus moved by the
@@ -567,7 +572,7 @@ func (s *ScrollWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	if ev.ScrollStep && !ev.ScrollMomentum {
 		return s.wheelStep(delta)
 	}
-	return s.wheel(delta, ev.ScrollMomentum)
+	return s.wheel(delta, ev.ScrollMomentum, ev.ScrollPixels && ev.ScrollPhase != ggui.ScrollPhaseNone)
 }
 
 // wheelStep moves the content by d as a wheel's notch does: eased, over
@@ -590,7 +595,7 @@ func (s *ScrollWidget) wheelStep(d float64) bool {
 	}
 	to := heading - d
 	if ease <= 0 || p.over != 0 || p.mode != OverscrollClamp && (to < 0 || to > s.maxOffset()) {
-		return s.wheel(d, false)
+		return s.wheel(d, false, false)
 	}
 	to = gem.Clamp(to, 0, s.maxOffset())
 	if to == heading {
@@ -710,27 +715,32 @@ func (p *scrollPhysics) input(s *ScrollWidget) {
 }
 
 // wheel moves the content by d along the axis, as the wheel, a trackpad or
-// a touch pan asks, and reports whether the event was used.
+// a touch pan asks, and reports whether the event was used. A trackpad's
+// gesture, which input keeps with the view that took it as it began,
+// reports whether it moved anything, so that one begun over a view at its
+// end goes to the view around it; any other scroll that is not momentum
+// is used, so that a pan or a run of a wheel's notches stays with the view
+// it began in.
 //
 // The move is contained, as contain says; so is pulling the content past
 // an end, which moves it with the offset where it is. A wheel that moves
 // nothing, at an end, notes no viewport, which would have the next frame
 // painted for it: what it writes is contained, and the viewport is noted
 // once something moved, by contain or here.
-func (s *ScrollWidget) wheel(d float64, momentum bool) bool {
+func (s *ScrollWidget) wheel(d float64, momentum, gesture bool) bool {
 	if !s.hold.Placed() {
-		return s.wheelBy(d, momentum)
+		return s.wheelBy(d, momentum, gesture)
 	}
 	var used bool
 	over := s.phys.over
-	reactive.Contained(func() { used = s.wheelBy(d, momentum) })
+	reactive.Contained(func() { used = s.wheelBy(d, momentum, gesture) })
 	if s.phys.over != over {
 		s.moved()
 	}
 	return used
 }
 
-func (s *ScrollWidget) wheelBy(d float64, momentum bool) bool {
+func (s *ScrollWidget) wheelBy(d float64, momentum, gesture bool) bool {
 	p := &s.phys
 	p.input(s)
 	before, over := s.position(), p.over
@@ -752,7 +762,7 @@ func (s *ScrollWidget) wheelBy(d float64, momentum bool) bool {
 	if momentum && math.Abs(p.over) >= s.extent(s.viewport)/8 {
 		return false // a fling that reached the end stops there and bounces back
 	}
-	return !momentum || s.position() != before || p.over != over
+	return !momentum && !gesture || s.position() != before || p.over != over
 }
 
 // rubber moves raw, the offset the content shows at, by d, with movement

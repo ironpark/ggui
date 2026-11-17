@@ -225,6 +225,7 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 	for i, item := range a.items {
 		h := a.headers[i]
 		rect := ggui.Rct(ggui.Pt(r.Origin.X, y), ggui.Sz(r.Size.W, a.heights[i]))
+		h.at = rect
 		h.Hit(dst, rect, h, ggui.CursorShapeDefault)
 		top := y + t.BorderWidth + 1.25*t.Space // of the header's text
 		// The chevron sits level with the header's first line, as shadcn's
@@ -297,6 +298,7 @@ type accordionHeader struct {
 	index int
 	text  *widget.TextWidget
 	size  ggui.Size
+	at    ggui.Rect // where the header was last painted
 	// lined is the title again with every line underlined, painted in
 	// text's place under the pointer.
 	lined     *widget.RichTextWidget
@@ -338,6 +340,9 @@ func (h *accordionHeader) Act(a ggui.Action) bool {
 }
 
 func (h *accordionHeader) HandlePointer(ev ggui.PointerEvent) bool {
+	if beyond(ev, h.at) {
+		return false // the section's content, which is not the header
+	}
 	if ev.Kind == ggui.PointerDown && ev.Button == ggui.MouseButtonLeft {
 		h.owner.active = h.index
 	}

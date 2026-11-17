@@ -1260,3 +1260,36 @@ func TestScrollFollowsATouchPan(t *testing.T) {
 		t.Fatalf("a drag across the scroll moved it to %v and reached its control %d times, want 0 and 1", across.position(), drags)
 	}
 }
+
+// A trackpad's gesture stays with the scroll that took it: one that runs
+// the inner scroll to its end, momentum and all, leaves the outer where it
+// was, and the next gesture, begun over the inner at its end, moves the
+// outer.
+func TestATrackpadsGestureStaysWithTheScrollThatTookIt(t *testing.T) {
+	inner, outer := &ScrollController{}, &ScrollController{}
+	p := ggui.NewWindowProbe(func() ggui.Widget {
+		in := Box(Scroll(Box().Size(100, 150)).Controller(inner)).Size(100, 100)
+		return Scroll(Column(in, Box().Size(100, 2000))).Controller(outer)
+	}, ggui.Sz(200, 100))
+	defer p.Close()
+	p.Run(frameTime, 10)
+	at := ggui.Pt(50, 50)
+	step := func(px ggui.Point, phase ggui.ScrollPhase) {
+		p.TrackpadGesture(at, px, phase)
+		p.Step(frameTime)
+	}
+	step(ggui.Pt(0, -30), ggui.ScrollPhaseBegan)
+	step(ggui.Pt(0, -30), ggui.ScrollPhaseChanged)
+	step(ggui.Pt(0, -30), ggui.ScrollPhaseChanged)
+	step(ggui.Point{}, ggui.ScrollPhaseEnded)
+	step(ggui.Pt(0, -20), ggui.ScrollPhaseMomentum)
+	step(ggui.Pt(0, -10), ggui.ScrollPhaseMomentumEnded)
+	if inner.Offset() != 50 || outer.Offset() != 0 {
+		t.Fatalf("inner at %v, outer at %v; want the gesture to run the inner to its end and stop there", inner.Offset(), outer.Offset())
+	}
+	step(ggui.Pt(0, -30), ggui.ScrollPhaseBegan)
+	step(ggui.Pt(0, -30), ggui.ScrollPhaseChanged)
+	if inner.Offset() != 50 || outer.Offset() != 60 {
+		t.Fatalf("inner at %v, outer at %v; want a gesture begun at the inner's end to move the outer", inner.Offset(), outer.Offset())
+	}
+}

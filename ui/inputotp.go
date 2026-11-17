@@ -506,7 +506,11 @@ func (o *InputOTPWidget) HandleTick() bool                 { return o.input.Hand
 func (o *InputOTPWidget) ConsumesKey(e ggui.KeyEvent) bool { return o.input.ConsumesKey(e) }
 func (o *InputOTPWidget) ClaimsChord(e ggui.KeyEvent) bool { return o.input.ClaimsChord(e) }
 func (o *InputOTPWidget) CaptureTouchDrag() bool           { return !o.disabled }
-func (o *InputOTPWidget) Act(a ggui.Action) bool           { return o.input.Act(a) }
+
+// CaptureDrag implements ggui.DragCapturer: a selection dragged across the
+// slots is not a drag source's around it.
+func (o *InputOTPWidget) CaptureDrag() bool      { return !o.disabled }
+func (o *InputOTPWidget) Act(a ggui.Action) bool { return o.input.Act(a) }
 func (o *InputOTPWidget) Adopt(prev any) {
 	o.Interactive.Adopt(prev)
 	if p, ok := prev.(*InputOTPWidget); ok {

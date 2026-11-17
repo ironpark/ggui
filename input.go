@@ -18,9 +18,9 @@ const (
 	PointerDown   PointerKind = iota // a button went down inside the region
 	PointerUp                        // a button came up inside the region
 	PointerTap                       // down and up happened inside the same region
-	PointerMove                      // the cursor is inside the region this frame
-	PointerEnter                     // the region became the hovered one
-	PointerExit                      // the region stopped being the hovered one
+	PointerMove                      // the cursor is over the region this frame, or over a region painted inside it
+	PointerEnter                     // the cursor came over the region, or over a region painted inside it
+	PointerExit                      // the cursor left the region and everything painted inside it
 	PointerScroll                    // the wheel moved over the region
 	PointerDrag                      // a button that went down inside the region is still held, wherever the cursor is now
 )
@@ -48,11 +48,28 @@ type PointerEvent struct {
 	// Mods are the modifiers held, for a press, release, tap or wheel: a
 	// Shift-click that extends a selection, a ⌘-click that toggles one.
 	Mods Mods
+	// Inner is set on a PointerMove or PointerEnter that reaches a region
+	// because the pointer is over a region painted inside it, which claimed
+	// the move, rather than over the region itself. A control that should
+	// look hovered only where a click would land on it ignores an enter
+	// with Inner set and clears its look on a move with it.
+	Inner bool
 }
 
 // PointerHandler receives pointer events whose position fell inside the
 // region it was registered with. Returning true consumes the event; false
 // lets the region beneath see it, so a tap target does not block scrolling.
+//
+// A PointerMove is claimed rather than consumed. The topmost region that
+// returns true for it is the one the pointer is over; regions beneath it
+// that it is not painted inside hear nothing, and each region it is painted
+// inside is offered the move in turn, with Inner set, and is hovered with it
+// if it returns true as well. A hovered region hears PointerEnter once as
+// that begins and PointerExit once as it ends, however the pointer moves
+// among the regions inside it: a row stays hovered over its own buttons, as
+// an element does under CSS's :hover. A region is inside another when the
+// widget that registered it was painted, through any number of widgets, by
+// the one that registered the other.
 //
 // A region that consumed PointerDown captures the pointer: until the button
 // comes up it receives PointerDrag every frame and then PointerUp, even when
@@ -66,6 +83,48 @@ type PointerHandler interface {
 // allowing an enclosing scroll region to take over the gesture.
 type TouchDragCapturer interface {
 	CaptureTouchDrag() bool
+}
+
+// DragCapturer is a PointerHandler that keeps the drags of a press it took,
+// instead of letting a drag source around it pick its child up: a slider's
+// knob in a row that drags, a selection in a text field in a tab. Input
+// asks the handler holding the press as the pointer moves far enough to
+// start a drag; while CaptureDrag reports true the press stays the
+// handler's and no drag starts. TouchDragCapturer is the same question for
+// a touch's pan.
+type DragCapturer interface {
+	CaptureDrag() bool
+}
+
+// PointerWithinHandler is the handler of a HitWithin region that is offered
+// each press and each scroll of the wheel headed for the region or for one
+// painted inside it, before any of those hears of it, and after the within
+// handlers of the regions it is inside itself. Returning false lets the
+// event go on. Returning true takes it: nothing inside hears it, and a
+// press taken belongs to the region, whose PointerHandler, if it has one,
+// receives the PointerDrag, PointerUp and PointerTap that follow.
+type PointerWithinHandler interface {
+	HandlePointerWithin(ev PointerEvent) bool
+}
+
+// KeyWithinHandler is the handler of a HitWithin region that is offered key
+// presses while focus is in the region or inside it, where a shortcut would
+// run: a press with a modifier other than Shift before the focused widget
+// and the window's shortcuts, unless the widget claims the chord; a bare key
+// after the focused widget, when it did not consume it, before a focus
+// trap's Escape and the bare-key shortcuts. The handler nearest the focus is
+// offered a press first, and returning true takes it from the rest. Tab,
+// which moves focus, is not offered.
+type KeyWithinHandler interface {
+	HandleKeyWithin(ev KeyEvent) bool
+}
+
+// FocusWithinHandler is the handler of a HitWithin region that is told when
+// keyboard focus comes to a region painted inside its own, or to its own,
+// and when it has left them all. It is not told as focus moves from one
+// region inside to another.
+type FocusWithinHandler interface {
+	HandleFocusWithin(within bool)
 }
 
 // Mods are the modifier keys held during a KeyEvent. Cmd reports the
@@ -338,12 +397,22 @@ type hitRegion struct {
 	pointer PointerHandler
 	key     KeyHandler
 	cursor  CursorShape
-	shaped  bool        // the region asks for cursor, the default arrow included
-	scope   *focusScope // the focus trap the region was painted in, if any
-	role    Role        // from a Semantic handler
-	label   string
-	group   any       // set by Group: the EachKeyed entry that painted it
-	drag    Draggable // a DragSource beneath its child; see drag.go
+	shaped  bool // the region asks for cursor, the default arrow included
+	// within marks a region registered with HitWithin, whose handler is
+	// kept beside the list, in inputState.withins: see withinOf.
+	within bool
+	// parent is the index, plus one, in the same list of the region this
+	// one is inside, 0 for none: see parentFor. It is always below the
+	// region's own index plus one, so a scan from the end of the list
+	// reaches a region before any it is inside. A copy kept past its frame
+	// has it cleared, as the list it indexes is gone. It sits beside shaped,
+	// in what would be padding.
+	parent int32
+	scope  *focusScope // the focus trap the region was painted in, if any
+	role   Role        // from a Semantic handler
+	label  string
+	group  any       // set by Group: the EachKeyed entry that painted it
+	drag   Draggable // a DragSource beneath its child; see drag.go
 
 	space  *paintSpace // the space it was painted in, nil for the window's
 	local  Rect        // rect in that space, clipped there; see contains
@@ -357,7 +426,8 @@ func (r *hitRegion) merge(o hitRegion) bool {
 		o.drag != nil || r.drag != nil ||
 		(o.pointer != nil && r.pointer != nil) ||
 		(o.key != nil && r.key != nil) ||
-		(o.shaped && r.shaped) {
+		(o.shaped && r.shaped) ||
+		(o.within && r.within) {
 		return false
 	}
 	if o.pointer != nil {
@@ -369,6 +439,7 @@ func (r *hitRegion) merge(o hitRegion) bool {
 	if o.shaped {
 		r.cursor, r.shaped = o.cursor, true
 	}
+	r.within = r.within || o.within
 	if o.id != nil {
 		r.id = o.id
 	}
@@ -416,13 +487,29 @@ func (r *hitRegion) pointerAt(ev PointerEvent) PointerEvent {
 	return ev
 }
 
-// keep returns a copy of r that outlives the regions buffer.
+// keep returns a copy of r that outlives the regions buffer. The copy
+// knows no parent: the list its link indexes is rebuilt by the next paint.
 func keep(r *hitRegion) *hitRegion {
 	if r == nil {
 		return nil
 	}
 	c := *r
+	c.unlink()
 	return &c
+}
+
+// unlink clears what r knows of the list it was registered in, for a copy
+// that outlives it: following a kept copy's link then finds nothing rather
+// than a region of another frame.
+func (r *hitRegion) unlink() { r.parent = 0 }
+
+// parentOf returns the region r is inside, or nil. r must point into
+// in.regions: a kept copy has no parent, the list it indexed being gone.
+func (in *inputState) parentOf(r *hitRegion) *hitRegion {
+	if r == nil || r.parent == 0 || int(r.parent) > len(in.regions) {
+		return nil
+	}
+	return &in.regions[r.parent-1]
 }
 
 // regionSlot keeps a region the input follows every frame, as keep does,
@@ -445,6 +532,7 @@ func (s *regionSlot) keep(r *hitRegion) *hitRegion {
 		return nil
 	}
 	s.buf[s.cur] = *r
+	s.buf[s.cur].unlink()
 	return &s.buf[s.cur]
 }
 
@@ -476,20 +564,41 @@ type inputState struct {
 
 	// These are copies: regions is rebuilt every frame in a reused buffer,
 	// so a pointer into it would soon describe a different region.
-	hovered    *hitRegion
 	pressed    *hitRegion
 	pressedBtn MouseButton
 	focused    *hitRegion
-	// The slots hovered and focused are kept in: they are kept again
-	// every frame, which a slot does without allocating.
-	hoverSlot, focusSlot regionSlot
-	focusVisible         bool        // focused moved there with the keyboard
-	cursor               CursorShape // what the hovered region asked for
-	dragTarget           *hitRegion  // the region files are being dragged over
-	drag                 *appDrag    // a drag inside the app; see drag.go
-	touchPan             kinetics.Pan
-	touchScroll          *hitRegion // what took the pan
-	touchMotion          touchMotion
+	// The slot focused is kept in: it is kept again every frame, which a
+	// slot does without allocating.
+	focusSlot regionSlot
+	// hover is the hover path, the hot region first and the regions around
+	// it that claimed the move after it; hoverAt is the buffer this frame's
+	// is found in, as indices into regions. See updateHover.
+	hover   regionPath
+	hoverAt []int32
+	// withins are the handlers of the HitWithin regions of regions, by
+	// index; see withinOf. offered are the regions whose within handlers
+	// the event being sent was offered; see offerWithin.
+	withins []withinEntry
+	offered []int32
+	// focusWithin is the focus path: the regions with a FocusWithinHandler
+	// on the focused region's chain, the innermost first; focusAt is the
+	// buffer this frame's is found in. See updateFocusWithin.
+	focusWithin withinPath
+	focusAt     []int32
+
+	focusVisible bool        // focused moved there with the keyboard
+	cursor       CursorShape // what the hovered region asked for
+	dragTarget   *hitRegion  // the region files are being dragged over
+	drag         *appDrag    // a drag inside the app; see drag.go
+	// latched is, per axis, x then y, the region that took the trackpad
+	// gesture under way, kept in latch; lifted, that the fingers of the
+	// last gesture lifted. See sendGesture.
+	latch       [2]regionSlot
+	latched     [2]*hitRegion
+	lifted      bool
+	touchPan    kinetics.Pan
+	touchScroll *hitRegion // what took the pan
+	touchMotion touchMotion
 
 	shortcuts []func(KeyEvent) bool // App.OnKey handlers, tried before the focused widget
 	chords    []*ShortcutHandle     // App.Shortcut handlers
@@ -578,36 +687,6 @@ func (in *inputState) notifyObservers(f frameInput) {
 	}
 }
 
-// updateHover moves hover to the topmost region that claims PointerMove,
-// sending the exit before the enter so the two never overlap.
-func (in *inputState) updateHover(f frameInput) {
-	move := PointerEvent{Kind: PointerMove, Pos: f.pos, Mods: f.mods}
-	in.moved = !in.movedOnce || f.pos != in.lastMove
-	in.lastMove, in.movedOnce = f.pos, true
-	now := in.send(move)
-	if !in.continues(now, in.hovered) {
-		if in.hovered != nil {
-			// The exit goes to the handler holding the region now: one
-			// rebuilt since it was entered has taken over its hover.
-			left := in.hovered
-			if cur := in.findPointer(left); cur != nil {
-				left = cur
-			}
-			in.deliver(left, PointerEvent{Kind: PointerExit, Pos: f.pos})
-		}
-		if now != nil {
-			in.deliver(now, PointerEvent{Kind: PointerEnter, Pos: f.pos})
-		}
-	} else if now != nil && now.pointer != nil && !gem.Same(now.pointer, in.hovered.pointer) {
-		// Rebuilt under the pointer, the region is a new handler, with a
-		// hover state of its own that never heard the enter: a row of a
-		// list redrawn for a change elsewhere would show itself left. The
-		// one it replaced is gone, and hears no exit.
-		in.deliver(now, PointerEvent{Kind: PointerEnter, Pos: f.pos})
-	}
-	in.hovered = in.hoverSlot.keep(now)
-}
-
 // updateDrag moves the drag target to the topmost region taking DragOver,
 // sending the exit to the old one first. With no drag it only sends the
 // exit, which is how a drop or an abandoned drag ends the target's hover.
@@ -644,12 +723,16 @@ func (in *inputState) updateCursor(pos Point) {
 // region that took a press keeps the drag and the release wherever the
 // cursor goes, and gets a tap only if the release landed back inside it.
 func (in *inputState) dispatchPointer(f frameInput) {
+	if len(f.down) > 0 {
+		in.unlatch() // a press ends a gesture
+	}
 	for _, b := range f.down {
 		ev := PointerEvent{Kind: PointerDown, Pos: f.pos, Button: b, Mods: f.mods}
+		pressed := in.send(ev)
 		if b == MouseButtonLeft {
-			in.pressDrag(f.pos)
+			in.pressDrag(f.pos, pressed)
 		}
-		in.pressed, in.pressedBtn = keep(in.send(ev)), b
+		in.pressed, in.pressedBtn = keep(pressed), b
 		in.setFocus(in.findKey(f.pos))
 	}
 	if in.pressed != nil && len(f.down) == 0 && len(f.up) == 0 {
@@ -676,11 +759,15 @@ func (in *inputState) dispatchPointer(f frameInput) {
 	// a gesture's lift, which moves nothing, goes as the trackpad's.
 	lifted := f.phase == ScrollPhaseEnded || f.phase == ScrollPhaseMomentumEnded
 	momentum := f.phase == ScrollPhaseMomentum || f.phase == ScrollPhaseMomentumEnded
+	in.gesture(f.phase)
 	if f.wheel != (Point{}) {
 		in.sendScroll(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheel, scrollBy: f.wheelBy, ScrollStep: f.wheelBy != (Point{}), Mods: f.mods, ScrollMomentum: momentum, ScrollPhase: f.phase})
 	}
 	if f.wheelPx != (Point{}) || lifted && f.wheel == (Point{}) {
 		in.sendScroll(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheelPx, ScrollPixels: true, Mods: f.mods, ScrollMomentum: momentum, ScrollPhase: f.phase})
+	}
+	if f.phase == ScrollPhaseMomentumEnded {
+		in.unlatch()
 	}
 }
 
@@ -689,16 +776,19 @@ func (in *inputState) dispatchPointer(f frameInput) {
 // scrolls its way: a diagonal swipe over a vertical list inside a
 // horizontal one moves both, where a single event would stop at the first
 // to use either part of it.
+//
+// A trackpad's gesture stays, an axis each, with the view that took it as
+// it began: see sendGesture.
 func (in *inputState) sendScroll(ev PointerEvent) {
 	if ev.Scroll.X == 0 || ev.Scroll.Y == 0 {
-		in.send(ev)
+		in.sendGesture(ev)
 		return
 	}
 	x, y := ev, ev
 	x.Scroll.Y, x.scrollBy.Y = 0, 0
 	y.Scroll.X, y.scrollBy.X = 0, 0
-	in.send(x)
-	in.send(y)
+	in.sendGesture(x)
+	in.sendGesture(y)
 }
 
 // dispatchKeys hands the remaining keys and text to the focused widget, then
@@ -725,6 +815,8 @@ func (in *inputState) dispatchKeys(f frameInput) {
 		}
 	}
 	in.focused = in.focusSlot.keep(cur)
+	// A rebuild may have painted the focused widget under other regions.
+	in.updateFocusWithin(cur)
 	if th, ok := cur.key.(TickHandler); ok && th.HandleTick() {
 		releaseKeys(cur.key, f)
 		return
@@ -821,6 +913,7 @@ type regionIndex struct {
 	n       int
 	scopeAt int  // the topmost region with a focus scope, or -1
 	cursors bool // a region asks for a cursor
+	within  bool // a region was registered with HitWithin
 	// The last key and pointer handlers looked up, and where.
 	key, pointer handlerHint
 }
@@ -840,10 +933,11 @@ func (x *regionIndex) describes(rs []hitRegion) bool {
 	return len(rs) == 0 || x.base == &rs[0]
 }
 
-// setRegions hands input the regions a paint registered, and what the
-// paint learned of them as it did.
-func (in *inputState) setRegions(rs []hitRegion, found regionIndex) {
-	in.regions, in.ix = rs, found
+// setRegions hands input the regions a paint registered, the handlers of
+// those it registered with HitWithin, and what the paint learned of them as
+// it did.
+func (in *inputState) setRegions(rs []hitRegion, withins []withinEntry, found regionIndex) {
+	in.regions, in.withins, in.ix = rs, withins, found
 	in.ix.made, in.ix.n, in.ix.base = true, len(rs), nil
 	if len(rs) > 0 {
 		in.ix.base = &rs[0]
@@ -868,6 +962,9 @@ func (in *inputState) index() *regionIndex {
 		}
 		if r.shaped {
 			x.cursors = true
+		}
+		if r.within {
+			x.within = true
 		}
 	}
 	return x
@@ -934,12 +1031,17 @@ func (in *inputState) deliver(r *hitRegion, ev PointerEvent) bool {
 	if ev.Kind == PointerMove && (!took || !in.moved) {
 		return took
 	}
+	in.touch(r)
+	return took
+}
+
+// touch notes that an event reached r, for the frame to paint it again.
+func (in *inputState) touch(r *hitRegion) {
 	if r.space != nil {
 		in.touchedUnplaced = true
 	} else {
 		in.touched = append(in.touched, r.rect)
 	}
-	return took
 }
 
 // RepaintAll has the frame that follows the input being handled paint the
@@ -955,11 +1057,13 @@ func (in *inputState) deliver(r *hitRegion, ev PointerEvent) bool {
 func RepaintAll() { activeWorld().delivered++ }
 
 // send offers ev to regions under it from the top down until one consumes it
-// and returns that region, or nil.
+// and returns that region, or nil. A press or a wheel is offered first to
+// the within handlers around each region it reaches; see sendAt.
 func (in *inputState) send(ev PointerEvent) *hitRegion {
-	return in.topmost(func(r *hitRegion) bool {
-		return r.pointer != nil && r.contains(ev.Pos) && in.deliver(r, ev)
-	})
+	if i := in.sendAt(ev); i >= 0 {
+		return &in.regions[i]
+	}
+	return nil
 }
 
 // findKey returns the topmost region with a KeyHandler under p.
@@ -1027,6 +1131,7 @@ func (in *inputState) focus(r *hitRegion, keyboard bool) {
 		// visible if the keyboard moved it there.
 		in.focused = in.focusSlot.keep(r)
 		in.focusVisible = in.focusVisible || keyboard
+		in.updateFocusWithin(r)
 		return
 	}
 	if in.focused != nil && in.focused.key != nil {
@@ -1043,6 +1148,7 @@ func (in *inputState) focus(r *hitRegion, keyboard bool) {
 	}
 	in.focused = in.focusSlot.keep(r)
 	in.focusVisible = keyboard
+	in.updateFocusWithin(r)
 }
 
 // reveal asks every Revealer painted to scroll target into view; each

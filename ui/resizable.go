@@ -235,6 +235,10 @@ func (r *ResizableWidget) HandleKey(ev ggui.KeyEvent) {
 // CaptureTouchDrag keeps divider drags from panning an enclosing scroller.
 func (r *ResizableWidget) CaptureTouchDrag() bool { return !r.IsInert() }
 
+// CaptureDrag implements ggui.DragCapturer: a divider dragged in a panel
+// that drags keeps its own drag.
+func (r *ResizableWidget) CaptureDrag() bool { return !r.IsInert() }
+
 // HandlePointer implements ggui.PointerHandler; captures drag past the divider.
 func (r *ResizableWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	if r.IsInert() {

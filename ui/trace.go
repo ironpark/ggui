@@ -327,8 +327,14 @@ func (r *traceRow) Act(a ggui.Action) bool {
 // HandleKey implements KeyHandler: Space or Enter opens, closes or acts.
 func (r *traceRow) HandleKey(ev ggui.KeyEvent) { r.Keyboard(ev, r.activate) }
 
-// HandlePointer implements PointerHandler.
-func (r *traceRow) HandlePointer(ev ggui.PointerEvent) bool { return r.Pointer(ev, r.activate) }
+// HandlePointer implements PointerHandler. Its details and the steps under
+// it are not its line: a move over a control or a step there passes.
+func (r *traceRow) HandlePointer(ev ggui.PointerEvent) bool {
+	if beyond(ev, r.header) {
+		return false
+	}
+	return r.Pointer(ev, r.activate)
+}
 
 func (r *traceRow) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	r.Sync()

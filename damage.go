@@ -52,13 +52,16 @@ const mostMotionRegions = 6
 type paintScope struct {
 	bounds      Rect
 	start, kids uint64
-	placed      bool // drawn in window coordinates, not under a Transform or a shape clip
-	pointer     bool // it read the pointer in its own Paint
+	placed      bool         // drawn in window coordinates, not under a Transform or a shape clip
+	pointer     bool         // it read the pointer in its own Paint
+	cur         regionCursor // the region cursor as the scope opened, restored as it closes
 }
 
-// openScope begins a widget's scope at r.
+// openScope begins a widget's scope at r. The regions the widget registers
+// are inside the last one the widget painting it registered.
 func (f *frameState) openScope(c *Canvas, r Rect, marks uint64) {
-	f.scopes = append(f.scopes, paintScope{bounds: r, start: marks, placed: c.space == nil})
+	f.scopes = append(f.scopes, paintScope{bounds: r, start: marks, placed: c.space == nil, cur: f.cur})
+	f.cur.outer = f.cur.at
 }
 
 // closeScope ends the widget's scope: a widget that read the time itself
@@ -69,6 +72,7 @@ func (f *frameState) closeScope(w Widget, marks uint64) {
 	// next scope opens.
 	s := &f.scopes[len(f.scopes)-1]
 	f.scopes = f.scopes[:len(f.scopes)-1]
+	f.cur = s.cur
 	total := marks - s.start
 	if total-s.kids > 0 {
 		if s.placed && !s.bounds.Empty() {

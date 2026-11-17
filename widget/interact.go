@@ -44,7 +44,8 @@ func (p *PointerWidget) OnDown(fn func(ggui.PointerEvent)) *PointerWidget { p.on
 // OnUp fires when a button comes up inside the child.
 func (p *PointerWidget) OnUp(fn func(ggui.PointerEvent)) *PointerWidget { p.onUp = fn; return p }
 
-// OnMove fires every frame the cursor is inside the child.
+// OnMove fires every frame the cursor is over the child, or over a region
+// painted inside it that claims the move, the event's Inner set then.
 func (p *PointerWidget) OnMove(fn func(ggui.PointerEvent)) *PointerWidget { p.onMove = fn; return p }
 
 // OnDrag fires every frame a button pressed inside the child is still held,
@@ -61,13 +62,18 @@ func (p *PointerWidget) Cursor(shape ggui.CursorShape) *PointerWidget {
 	return p
 }
 
-// OnEnter fires when the cursor enters the child.
+// OnEnter fires when the cursor comes over the child, or over anything
+// painted inside it that takes the hover, such as a button.
 func (p *PointerWidget) OnEnter(fn func()) *PointerWidget { p.onEnter = fn; return p }
 
-// OnExit fires when the cursor leaves the child.
+// OnExit fires when the cursor has left the child and everything painted
+// inside it.
 func (p *PointerWidget) OnExit(fn func()) *PointerWidget { p.onExit = fn; return p }
 
 // OnHover fires with true on enter and false on exit; hover.Set fits it.
+// The pointer over a control inside the child, such as a row's button,
+// keeps it hovered: a button built from the signal it sets stays while the
+// pointer is over it.
 func (p *PointerWidget) OnHover(fn func(bool)) *PointerWidget {
 	return p.OnEnter(func() { fn(true) }).OnExit(func() { fn(false) })
 }
@@ -119,6 +125,10 @@ func (p *PointerWidget) HandleDrop(ev ggui.DropEvent) bool {
 	p.onDrop(ev)
 	return true
 }
+
+// CaptureDrag implements ggui.DragCapturer: a Pointer with OnDrag keeps the
+// drags of a press it took from a drag source around it.
+func (p *PointerWidget) CaptureDrag() bool { return p.onDrag != nil }
 
 // HandlePointer implements PointerHandler.
 func (p *PointerWidget) HandlePointer(ev ggui.PointerEvent) bool {

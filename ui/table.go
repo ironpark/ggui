@@ -645,7 +645,14 @@ func (r *tableRow[T, K]) HandlePointer(ev ggui.PointerEvent) bool {
 		return false
 	}
 	if !r.table.selectable() {
+		// It takes no press, but claims the hover, as its fill shows it: on
+		// the hover path it hears the pointer leave, over a button in a cell
+		// too, where a row that passed the move kept its fill for good.
 		r.Pointer(ev, nil)
+		switch ev.Kind {
+		case ggui.PointerMove, ggui.PointerEnter, ggui.PointerExit:
+			return true
+		}
 		return false
 	}
 	return r.Pointer(ev, func() { r.click(ev.Mods) })

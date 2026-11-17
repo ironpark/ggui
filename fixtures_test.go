@@ -220,9 +220,10 @@ func (f *focusable) Paint(dst *Canvas, r Rect) {
 // scroller shows its child under a viewport its constraints' size, moved
 // up by an offset that the scrolls reaching it move, between none and the
 // child's overflow. Like a scroll, it takes a scroll that goes up or down
-// a child that overflows, and of a fling's only one that moves it; and its
-// region lies under its child's, which hears the pointer first. It is the
-// stand-in for Scroll, for a test of how input reaches one.
+// a child that overflows, and of a fling's or a trackpad's gesture only
+// one that moves it; and its region lies under its child's, which hears
+// the pointer first. It is the stand-in for Scroll, for a test of how
+// input reaches one.
 type scroller struct {
 	child    Widget
 	offset   float64
@@ -250,7 +251,7 @@ func (s *scroller) HandlePointer(ev PointerEvent) bool {
 	}
 	before := s.offset
 	s.offset = min(max(s.offset-dy, 0), s.overflow)
-	return !ev.ScrollMomentum || s.offset != before
+	return !ev.ScrollMomentum && ev.ScrollPhase == ScrollPhaseNone || s.offset != before
 }
 
 // readsAtLayout is a leaf 10 square that reads r each time it is laid out,
