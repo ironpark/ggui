@@ -523,6 +523,9 @@ func (s *StateValue[T]) store(sc *scope, v T) {
 	}
 	s.val = v
 	sc.stateGen = genSeq.Add(1)
+	if sc.writes != nil {
+		noteWrite(sc.writes)
+	}
 	s.version++
 	sc.layoutGen = sc.stateGen
 	if sc.contained == 0 {

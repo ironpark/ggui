@@ -27,10 +27,11 @@ type scope struct {
 	layoutGen       uint64 // see RequestLayout
 	stateGen        uint64 // see StateGen
 	loop            any
-	contained       int    // depth of Contained
-	freeGen         uint64 // see FreeGen
-	onFree          func() // see WatchFree
-	region          *bool  // see InRegion
+	contained       int       // depth of Contained
+	freeGen         uint64    // see FreeGen
+	onFree          func()    // see WatchFree
+	region          *bool     // see InRegion
+	writes          *[]string // where each write was made, while traced; see TraceWrites
 
 	// base is the runtime what this goroutine creates with no owner
 	// belongs to; see Base.
