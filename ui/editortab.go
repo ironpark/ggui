@@ -423,6 +423,7 @@ const (
 	tabGroupGap    = 2  // between its label and its first tab
 	tabGroupPadY   = 5  // above and below its tabs; the line is in the lower
 	tabGroupLine   = 2  // the line's thickness
+	tabGroupLineUp = 2  // how far the line is lifted off the group's bottom
 	tabGroupStick  = 4  // how far in from a scrolled bar's start a label sticks
 	tabGroupFadeIn = 22 // how far tabs passing behind a stuck label fade in
 )
@@ -474,7 +475,7 @@ func (g *TabGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	tint = ggui.ResolveColor(tint, env)
 	g.fill, g.hoverFill, g.line = withAlpha(tint, 0x29), withAlpha(tint, 0x42), withAlpha(tint, 0xbf)
-	g.edge, g.edgeTop = withAlpha(tint, 0x2e), withAlpha(mix(tint, color.White, .45), 0xa6)
+	g.edge, g.edgeTop = withAlpha(tint, 0x1f), withAlpha(mix(tint, color.White, .25), 0x52)
 	loose := ggui.Constraints{MaxW: ggui.Unbounded, MaxH: c.MaxH}
 	g.rowSize = g.row.Layout(loose, env)
 	w, h := 2*tabGroupMargin+g.rowSize.W, max(EditorTabHeight, g.rowSize.H)
@@ -491,7 +492,8 @@ func (g *TabGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (g *TabGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	x0, mid := r.Origin.X+tabGroupMargin, r.Origin.Y+r.Size.H/2
 	// The line runs under all of the group, its label too.
-	line := ggui.Rct(ggui.Pt(x0, r.Origin.Y+r.Size.H-tabGroupLine),
+	// Lifted off the bottom, clear of whatever edges the bar under it.
+	line := ggui.Rct(ggui.Pt(x0, r.Origin.Y+r.Size.H-tabGroupLineUp-tabGroupLine),
 		ggui.Sz(max(r.Size.W-2*tabGroupMargin, 0), tabGroupLine))
 	dst.FillRoundRect(line, tabGroupLine/2, g.line)
 	rowX := x0
@@ -529,7 +531,7 @@ func (g *TabGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// The hairline, faint all round and brighter at the top, fading down
 	// its sides.
 	dst.StrokeRoundRect(chipAt, tabGroupRadius, 1, g.edge)
-	dst.Clip(chipAt).FadeEdges(chipAt, false, 0, chipAt.Size.H*.8, func(dst *ggui.Canvas) {
+	dst.Clip(chipAt).FadeEdges(chipAt, false, 0, chipAt.Size.H*.6, func(dst *ggui.Canvas) {
 		dst.StrokeRoundRect(chipAt, tabGroupRadius, 1, g.edgeTop)
 	})
 	dst.Paint(g.chip, chipAt)
