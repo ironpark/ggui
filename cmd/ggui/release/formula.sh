@@ -6,8 +6,10 @@
 # to; a release's prebuilt binaries would be a cask's. It fetches the
 # command's module zip from the Go module proxy rather than the whole
 # repository: the command is a module of its own, about 160 KB, where
-# the repository is 20 MB of fonts, icons and examples. Go is a
-# dependency at run time too, since the command builds applications.
+# the repository is 20 MB of fonts, icons and examples; the build then
+# downloads its dependencies, zapp's module zip, about 40 MB, the most
+# of them. Go is a dependency at run time too, since the command builds
+# applications.
 set -eu
 version=$1
 url="https://proxy.golang.org/github.com/ironpark/ggui/cmd/ggui/@v/${version}.zip"
@@ -31,6 +33,10 @@ class Ggui < Formula
     # The module zip holds the module below its path and version.
     cd "ironpark/ggui/cmd/ggui@v#{version}" do
       ENV["GOWORK"] = "off"
+      # Built as the release binaries are. With cgo, a Linux build would
+      # link zapp's static rcodesign library, 30 MB of Rust, with whatever
+      # C compiler the machine has, to sign macOS apps away from a Mac.
+      ENV["CGO_ENABLED"] = "0"
       system "go", "build", *std_go_args(ldflags: "-s -w -X main.releaseVersion=v#{version}")
     end
   end
