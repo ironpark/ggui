@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ironpark/ggui/cmd/ggui/internal/gosrc"
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
 	"github.com/ironpark/ggui/cmd/ggui/internal/proc"
 	"github.com/ironpark/ggui/cmd/ggui/internal/viewer"
@@ -40,6 +41,9 @@ type Native struct {
 	// Extra are paths to watch besides the Go sources: ggui.toml and
 	// dev.watch, absolute.
 	Extra []string
+	// OutDir is where ggui build writes, whose changes never wake the
+	// watcher.
+	OutDir string
 	// Watch rebuilds on change; without it the loop builds and runs once.
 	Watch bool
 	// StopTimeout is how long the app has to exit when asked before it is
@@ -57,6 +61,9 @@ type Native struct {
 	Log    io.Writer // ggui's own messages
 	Stdout io.Writer // the app's
 	Stderr io.Writer
+	// Tracef, when set, is told each decision the watcher and the loop
+	// make: ggui dev --verbose.
+	Tracef func(format string, args ...any)
 
 	tmp  string
 	seq  int
@@ -64,6 +71,12 @@ type Native struct {
 	exe  string // the build app is running, or the last that built
 	w    *watch.Watcher
 	list gotool.ListOptions
+
+	plan    plan
+	results chan buildResult
+	cancel  context.CancelFunc // the running build's
+	goVer   chan string        // go env GOVERSION, once known
+	parse   *bool              // whether this program parses the project's Go
 
 	viewer  Viewer
 	tail    *tail     // the end of what the running app wrote to stderr
@@ -78,10 +91,26 @@ func (n *Native) logf(format string, args ...any) {
 	fmt.Fprintf(n.Log, "ggui: "+format+"\n", args...)
 }
 
+func (n *Native) tracef(format string, args ...any) {
+	if n.Tracef != nil {
+		n.Tracef(format, args...)
+	}
+}
+
 // startResult is a viewer that started, or why none did.
 type startResult struct {
 	v   Viewer
 	err error
+}
+
+// buildResult is a build that ended.
+type buildResult struct {
+	id     int
+	batch  []string // the changes it is of
+	exe    string
+	err    error
+	syntax bool // err is from parsing, before the build ran
+	took   time.Duration
 }
 
 // Run builds and runs the app, and with Watch rebuilds and restarts it on
@@ -90,6 +119,8 @@ type startResult struct {
 // change that builds. Without Watch it returns when the app exits. With a
 // Display, it also returns when the viewer's window is closed.
 func (n *Native) Run(ctx context.Context) error {
+	ctx, stopAll := context.WithCancel(ctx)
+	defer stopAll() // the watcher, and a build in flight
 	tmp, err := os.MkdirTemp("", "ggui-dev-")
 	if err != nil {
 		return err
@@ -99,7 +130,7 @@ func (n *Native) Run(ctx context.Context) error {
 	// The app stops first, then its viewer.
 	defer n.dropViewer()
 	defer n.stop()
-	n.changed, n.cause = time.Now(), "ggui dev started"
+	n.results = make(chan buildResult)
 
 	// The viewer starts, which may take a build of it, while the app
 	// builds.
@@ -114,36 +145,43 @@ func (n *Native) Run(ctx context.Context) error {
 	}
 	n.list = gotool.ListOptions{Dir: n.Dir, Tags: n.Tags}
 
-	var changes chan []string
+	var changes chan watch.Change
 	if n.Watch {
-		set, err := WatchSet(ctx, n.list, n.Package, n.Extra)
+		ig := watch.NewIgnore(n.OutDir)
+		list := func(ctx context.Context) ([]string, error) {
+			return WatchSet(ctx, n.list, n.Package, n.Extra, ig)
+		}
+		set, err := list(ctx)
 		if err != nil {
 			if viewerReady != nil {
 				n.useViewer(<-viewerReady)
 			}
 			return err
 		}
-		n.w = watch.New(set)
-		changes = make(chan []string)
+		n.w = watch.New(set, watch.Options{
+			List: list, Ignore: ig,
+			Settle: settleTime, Poll: pollInterval, SafetyNet: safetyNetInterval,
+			Logf: n.logf, Tracef: n.Tracef,
+		})
+		changes = make(chan watch.Change)
 		go n.w.Run(ctx, changes)
 		n.logf("watching %d files", n.w.Len())
+
+		n.goVer = make(chan string, 1)
+		go func() {
+			env, _ := gotool.Env(ctx, n.Dir, nil, "GOVERSION")
+			n.goVer <- env["GOVERSION"]
+		}()
 	}
 
-	exe, err := n.build(ctx)
+	id, _, _ := n.plan.start()
+	n.changed, n.cause = time.Now(), "ggui dev started"
+	n.launch(ctx, id, nil)
 	if viewerReady != nil {
 		n.useViewer(<-viewerReady)
 	}
-	if ctx.Err() != nil {
-		return nil
-	}
-	if err != nil {
-		n.buildFailed(err)
-		if !n.Watch {
-			return err
-		}
-	} else {
-		n.restart(exe)
-	}
+	due := time.NewTimer(time.Hour)
+	defer due.Stop()
 	for {
 		var exited <-chan struct{}
 		if n.app != nil {
@@ -153,14 +191,26 @@ func (n *Native) Run(ctx context.Context) error {
 		if n.viewer != nil {
 			events = n.viewer.Events()
 		}
+		var dueC <-chan time.Time
+		if t, ok := n.plan.due(); ok {
+			due.Reset(time.Until(t))
+			dueC = due.C
+		}
 		select {
 		case <-ctx.Done():
 			return nil
-		case batch := <-changes:
-			n.changed, n.cause = time.Now(), "the change"
+		case c := <-changes:
+			n.change(c)
+		case <-dueC:
+			id, batch, since := n.plan.start()
+			n.changed, n.cause = since, "the change"
 			n.logf("%s changed, rebuilding", describe(n.Dir, batch))
-			n.rebuild(ctx, batch)
-			n.refresh(ctx)
+			n.send(viewer.Command{Type: viewer.Building})
+			n.launch(ctx, id, batch)
+		case r := <-n.results:
+			if err := n.finish(ctx, r); err != nil {
+				return err
+			}
 		case <-exited:
 			msg := n.app.Exited()
 			err := n.app.Err()
@@ -198,6 +248,158 @@ func (n *Native) Run(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+// change takes what the watcher found. A real change waits for the plan,
+// and cancels a build that runs; a change to comments or layout alone
+// builds nothing, which is said when nothing else is under way.
+func (n *Native) change(c watch.Change) {
+	if len(c.Real) > 0 {
+		if n.plan.change(c.At, c.Real) {
+			n.tracef("%s changed during build %d: cancelling it", describe(n.Dir, c.Real), n.plan.id)
+			n.cancel()
+		}
+		return
+	}
+	if len(c.Cosmetic) > 0 && n.plan.idle() {
+		n.logf("%s: comments only; not restarted — line numbers in traces now lag the source", describe(n.Dir, c.Cosmetic))
+	}
+}
+
+// launch starts build id of the changes in batch. The Go files among them
+// are parsed first, when this program can parse the project's Go, so that
+// a syntax error is shown at once rather than after the go command has
+// loaded the packages. The result comes on n.results.
+func (n *Native) launch(ctx context.Context, id int, batch []string) {
+	n.seq++
+	exe := filepath.Join(n.tmp, fmt.Sprintf("app-%d", n.seq))
+	if runtime.GOOS == "windows" {
+		exe += ".exe"
+	}
+	work := filepath.Join(n.tmp, fmt.Sprintf("work-%d", n.seq))
+	var check []string
+	for _, p := range batch {
+		if strings.HasSuffix(p, ".go") {
+			check = append(check, p)
+		}
+	}
+	if len(check) > 0 && !n.canParse() {
+		check = nil
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	n.cancel = cancel
+	n.tracef("build %d starts", id)
+	go func() {
+		defer cancel()
+		r := buildResult{id: id, batch: batch}
+		if len(check) > 0 {
+			if err := gosrc.CheckFiles(ctx, check, displayPath, syntaxRetry); err != nil {
+				r.err, r.syntax = err, true
+			}
+		}
+		if r.err == nil {
+			start := time.Now()
+			r.err = os.MkdirAll(work, 0o755)
+			if r.err == nil {
+				r.err = gotool.Build(ctx, gotool.BuildOptions{
+					Dir: n.Dir, Package: n.Package, Output: exe, Tags: n.Tags, TmpDir: work,
+				})
+				// A cancelled build is killed, and leaves the go command's
+				// work directory behind.
+				os.RemoveAll(work)
+			}
+			r.took = time.Since(start)
+			if r.err == nil {
+				r.exe = exe
+			}
+		}
+		select {
+		case n.results <- r:
+		case <-ctx.Done():
+			// Cancelled: nobody waits for this build any more.
+			os.Remove(exe)
+		}
+	}()
+}
+
+// finish takes a build that ended. One cancelled, or of sources that
+// changed since it started, is thrown away; a failure is shown; a success
+// restarts the app on it, after a last look at the sources. Without Watch
+// a failed build is Run's error.
+func (n *Native) finish(ctx context.Context, r buildResult) error {
+	if r.err == nil && n.w != nil && n.plan.building && n.plan.id == r.id {
+		// A save in the last moments of the build may not have been
+		// reported yet: scan now, so that the app does not restart into a
+		// build older than the sources.
+		n.change(n.w.Sync(ctx))
+	}
+	if !n.plan.done(r.id) {
+		n.tracef("build %d is of sources that changed since; thrown away", r.id)
+		if r.exe != "" {
+			os.Remove(r.exe)
+		}
+		return nil
+	}
+	if ctx.Err() != nil {
+		return nil
+	}
+	if r.err != nil {
+		what := "build failed"
+		if r.syntax {
+			what = "syntax error"
+		}
+		if n.app != nil {
+			n.logf("%s; the app keeps running the last build that succeeded:", what)
+		} else {
+			n.logf("%s:", what)
+		}
+		// As the compiler wrote it, in the file:line:col form terminals
+		// and editors make links of; indenting would break them.
+		fmt.Fprintln(n.Log, r.err.Error())
+		n.send(viewer.Command{Type: viewer.BuildFailed, Output: r.err.Error()})
+		if !n.Watch {
+			return r.err
+		}
+		return nil
+	}
+	n.built = r.took
+	n.logf("built in %s", n.built.Round(time.Millisecond))
+	if len(r.batch) > 0 && n.viewer != nil && n.Display.Stale(ctx, r.batch) {
+		n.logf("the viewer's dependencies changed; restarting it, and its window with it")
+		n.stop()
+		n.dropViewer()
+		v, err := n.Display.Start(ctx)
+		n.useViewer(startResult{v, err})
+	}
+	n.restart(r.exe)
+	return nil
+}
+
+// canParse reports whether the go/parser this program was built with
+// knows the Go of the toolchain that builds the app. One older may reject
+// what the newer added, which the build would accept; then the syntax is
+// left to the build.
+func (n *Native) canParse() bool {
+	if n.parse == nil {
+		v := <-n.goVer
+		ok := gosrc.CanParse(v)
+		n.parse = &ok
+		if !ok {
+			n.tracef("ggui was built with %s and the app is built with %q: no syntax check before a build", runtime.Version(), v)
+		}
+	}
+	return *n.parse
+}
+
+// displayPath names a file in a message as the go command does: relative
+// to the working directory, with ./, when it is below it.
+func displayPath(path string) string {
+	if wd, err := os.Getwd(); err == nil {
+		if rel, err := filepath.Rel(wd, path); err == nil && filepath.IsLocal(rel) {
+			return "." + string(filepath.Separator) + rel
+		}
+	}
+	return path
 }
 
 // closeGrace is how long an app that exited cleanly is given for its
@@ -271,66 +473,6 @@ func (n *Native) send(c viewer.Command) {
 	}
 }
 
-// rebuild builds the code as it is now and, if it built, restarts the app
-// on it. The errors of a failed build are printed as the compiler wrote
-// them, and the app keeps running the build before. A change that makes
-// another viewer restarts the viewer too.
-func (n *Native) rebuild(ctx context.Context, changed []string) {
-	n.send(viewer.Command{Type: viewer.Building})
-	exe, err := n.build(ctx)
-	if ctx.Err() != nil {
-		return
-	}
-	if err != nil {
-		n.buildFailed(err)
-		return
-	}
-	if n.viewer != nil && n.Display.Stale(ctx, changed) {
-		n.logf("the viewer's dependencies changed; restarting it, and its window with it")
-		n.stop()
-		n.dropViewer()
-		v, err := n.Display.Start(ctx)
-		n.useViewer(startResult{v, err})
-	}
-	n.restart(exe)
-}
-
-// build builds the app into a new file and returns its path. A failure is
-// printed as the compiler wrote it.
-func (n *Native) build(ctx context.Context) (string, error) {
-	n.seq++
-	exe := filepath.Join(n.tmp, fmt.Sprintf("app-%d", n.seq))
-	if runtime.GOOS == "windows" {
-		exe += ".exe"
-	}
-	start := time.Now()
-	err := gotool.Build(ctx, gotool.BuildOptions{
-		Dir: n.Dir, Package: n.Package, Output: exe, Tags: n.Tags,
-	})
-	if ctx.Err() != nil {
-		return "", ctx.Err()
-	}
-	if err != nil {
-		if n.app != nil {
-			n.logf("build failed; the app keeps running the last build that succeeded:")
-		} else {
-			n.logf("build failed:")
-		}
-		// As the compiler wrote it, in the file:line:col form terminals
-		// and editors make links of; indenting would break them.
-		fmt.Fprintln(n.Log, err.Error())
-		return "", err
-	}
-	n.built = time.Since(start)
-	n.logf("built in %s", n.built.Round(time.Millisecond))
-	return exe, nil
-}
-
-// buildFailed shows a failed build in the viewer's window too.
-func (n *Native) buildFailed(err error) {
-	n.send(viewer.Command{Type: viewer.BuildFailed, Output: err.Error()})
-}
-
 // restart replaces the running app, if any, with one running exe.
 //
 // This is where a development channel to the app would attach, when ggui
@@ -399,22 +541,6 @@ func (n *Native) stop() {
 	if err := app.Stop(n.StopTimeout); errors.Is(err, proc.ErrKilled) {
 		n.logf("the app %s after %s", err, n.StopTimeout)
 	}
-}
-
-// refresh lists the sources again, since an edit may have added or
-// dropped an import.
-func (n *Native) refresh(ctx context.Context) {
-	if n.w == nil {
-		return
-	}
-	set, err := WatchSet(ctx, n.list, n.Package, n.Extra)
-	if err != nil {
-		if ctx.Err() == nil {
-			n.logf("could not list the sources to watch: %v", err)
-		}
-		return
-	}
-	n.w.Set(set)
 }
 
 // describe names the changed files briefly, relative to dir.

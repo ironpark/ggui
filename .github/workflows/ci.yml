@@ -51,6 +51,15 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y fonts-nanum libegl1 libegl-mesa0 libgl1 libgl1-mesa-dri
       - name: Test
         run: go test ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/... ./cmd/ggui/...
+      # The ggui command's watcher once more, scanning without the
+      # system's notifications, and, where cgo is the default, without cgo:
+      # on macOS FSEvents calls back into Go on a thread of its own, which
+      # purego's fakecgo then makes possible.
+      - name: Test the ggui command's watcher by polling and without cgo
+        shell: bash
+        run: |
+          GGUI_WATCH=poll go test ./cmd/ggui/internal/watch/... ./cmd/ggui/internal/dev/...
+          CGO_ENABLED=0 go test ./cmd/ggui/internal/watch/...
       - name: Test with the inspector
         run: go test -tags ggui_inspector . ./widget
       - name: Test the debug build

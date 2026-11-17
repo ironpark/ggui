@@ -64,7 +64,7 @@ func writeMsg(t *testing.T, dir, msg string) {
 func TestWatchSet(t *testing.T) {
 	dir := module(t, "v1")
 	extra := filepath.Join(dir, "ggui.toml")
-	set, err := WatchSet(t.Context(), gotool.ListOptions{Dir: dir}, ".", []string{extra})
+	set, err := WatchSet(t.Context(), gotool.ListOptions{Dir: dir}, ".", []string{extra}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,10 +143,29 @@ func TestNativeLoop(t *testing.T) {
 	}
 	waitFor(t, &out, "v2 env 2")
 
+	// A syntax error is found before the go command runs, when ggui's
+	// parser is as new as the toolchain, as it is in a test.
 	writeMsg(t, dir, "v3 broken\"")
-	waitFor(t, &log, "build failed; the app keeps running")
+	waitFor(t, &log, "syntax error; the app keeps running the last build that succeeded")
 	if strings.Contains(out.String(), "stopped v2") {
 		t.Error("a failed build stopped the running app")
+	}
+
+	// A comment changes nothing the compiler acts on.
+	writeMsg(t, dir, "v2")
+	for deadline := time.Now().Add(60 * time.Second); strings.Count(out.String(), "v2 env 2") < 2; {
+		if time.Now().After(deadline) {
+			t.Fatalf("not started again after the fix:\n%s", out.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	p := filepath.Join(dir, "msg", "msg.go")
+	src, _ := os.ReadFile(p)
+	os.WriteFile(p, append(src, "\n// A comment.\n"...), 0o644)
+	waitFor(t, &log, filepath.Join("msg", "msg.go")+": comments only; not restarted")
+	time.Sleep(300 * time.Millisecond)
+	if n := strings.Count(out.String(), "v2 env 2"); n != 2 {
+		t.Errorf("started %d times on v2, want 2: a comment restarted the app", n)
 	}
 
 	cancel()
