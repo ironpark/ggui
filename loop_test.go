@@ -811,3 +811,34 @@ func TestAppLaysOutOnlyWhenSomethingChanged(t *testing.T) {
 		t.Fatal("a signal write must lay out")
 	}
 }
+
+// stateWritingLayout writes a StateValue each time it is laid out, which
+// asks for another layout, so a frame never settles.
+type stateWritingLayout struct{ n *StateValue[int] }
+
+func (w stateWritingLayout) Layout(c Constraints, env Env) Size {
+	w.n.Set(Untrack(w.n.Get) + 1)
+	return Size{}
+}
+func (stateWritingLayout) Paint(*Canvas, Rect) {}
+
+// A layout that writes state on every pass settles no frame: the error
+// says which code wrote it, as no effect is stuck to name.
+func TestCycleNamesALayoutThatWritesState(t *testing.T) {
+	t.Parallel()
+	n := State(0)
+	p := ProbeBuilder(func() Widget { return Reactive(func() Widget { n.Get(); return stateWritingLayout{n} }) }, Sz(10, 10))
+	defer p.Close()
+	defer func() {
+		r := recover()
+		err, ok := r.(error)
+		if !ok || !errors.Is(err, ErrCycle) {
+			t.Fatalf("recovered %v, want an error matching ErrCycle", r)
+		}
+		if !strings.Contains(err.Error(), "stateWritingLayout.Layout") {
+			t.Fatalf("the error does not name the layout that wrote state: %v", err)
+		}
+	}()
+	p.Frame()
+	t.Fatal("frame returned")
+}

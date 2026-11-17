@@ -46,7 +46,7 @@ func (e *cycleError) Unwrap() error { return ErrCycle }
 
 // cycle describes the effects a flush just gave up on. It is built only on
 // that path, so a settled frame pays nothing for it.
-func cycle(rt *reactive.Runtime) error {
+func cycle(rt *reactive.Runtime, writes ...string) error {
 	stuck, total := rt.Unsettled()
 	var b strings.Builder
 	b.WriteString(ErrCycle.Error())
@@ -64,8 +64,17 @@ func cycle(rt *reactive.Runtime) error {
 			b.WriteString(" (a derived value)")
 		}
 	}
-	if named == 0 {
+	if named == 0 && len(stuck) > 0 {
 		b.WriteString("\n  Build with -tags ggui_debug to see where each was created.")
+	}
+	if len(writes) > 0 {
+		// The effects settled, but the layout after them kept writing
+		// state, each pass starting another.
+		fmt.Fprintf(&b, "\n  state written in the last pass, by:")
+		for _, w := range writes {
+			b.WriteString("\n    -")
+			b.WriteString(w)
+		}
 	}
 	return &cycleError{msg: b.String()}
 }
@@ -610,13 +619,23 @@ func endPaint(f *frameState) {
 
 // settle completes structural work, including mounts discovered by layout,
 // before running user effects. Both App and Probe use this exact ordering.
-func (l *frameLoop) settle(size Size) error {
+func (l *frameLoop) settle(size Size) (err error) {
 	setRunning(l)
 	l.settles++
 	rt := l.runtime()
-	for range reactive.MaxFlushPasses {
+	for pass := range reactive.MaxFlushPasses {
 		if l.closed {
 			return nil
+		}
+		if pass == reactive.MaxFlushPasses-1 {
+			// About to give up: the last pass notes what writes state, for
+			// the error to say.
+			stop := reactive.TraceWrites()
+			defer func() {
+				if writes := stop(); err != nil {
+					err = cycle(rt, writes...)
+				}
+			}()
 		}
 		if !rt.Flush() {
 			return cycle(rt)

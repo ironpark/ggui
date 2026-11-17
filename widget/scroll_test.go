@@ -1309,7 +1309,7 @@ func TestScrollBounceSpringsBackAsTheFingersLift(t *testing.T) {
 		t.Fatal("a pull at the top did not overscroll")
 	}
 	s.HandlePointer(ggui.PointerEvent{Kind: ggui.PointerScroll, ScrollPixels: true, ScrollPhase: ggui.ScrollPhaseEnded})
-	p.Frame() // the frame the lift asks for
+	p.Frame()                        // the frame the lift asks for
 	p.Advance(40 * time.Millisecond) // well inside the pause a wheel waits for
 	if s.phys.over == 0 || math.Abs(s.phys.over) >= math.Abs(pulled) {
 		t.Fatalf("40ms after the lift: over %v from %v; want it springing back", s.phys.over, pulled)
