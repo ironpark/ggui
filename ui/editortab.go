@@ -335,6 +335,7 @@ type TabGroupWidget struct {
 	line      color.Color
 	theme     *theme.Theme
 	motion    time.Duration
+	env       ggui.Env // the last layout's, for the Scroll around the group
 }
 
 const (
@@ -342,7 +343,6 @@ const (
 	tabGroupGap    = 2  // between its label and its first tab
 	tabGroupPadY   = 5  // above and below its tabs; the line is in the lower
 	tabGroupLine   = 2  // the line's thickness
-	tabGroupInset  = 6  // how far in from the group's ends the line stops
 	tabGroupStick  = 4  // how far in from a scrolled bar's start a label sticks
 	tabGroupFadeIn = 22 // how far tabs passing behind a stuck label fade in
 )
@@ -386,7 +386,7 @@ func (g *TabGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		}
 	}
 	t := theme.Of(env)
-	g.theme, g.motion = t, env.Motion(t.MotionFast)
+	g.theme, g.motion, g.env = t, env.Motion(t.MotionFast), env
 	tint := g.tint
 	if tint == nil {
 		tint = theme.Ring
@@ -408,8 +408,9 @@ func (g *TabGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements Widget.
 func (g *TabGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	x0, mid := r.Origin.X+tabGroupMargin, r.Origin.Y+r.Size.H/2
-	line := ggui.Rct(ggui.Pt(x0+tabGroupInset, r.Origin.Y+r.Size.H-tabGroupLine),
-		ggui.Sz(max(r.Size.W-2*(tabGroupMargin+tabGroupInset), 0), tabGroupLine))
+	// The line runs under all of the group, its label too.
+	line := ggui.Rct(ggui.Pt(x0, r.Origin.Y+r.Size.H-tabGroupLine),
+		ggui.Sz(max(r.Size.W-2*tabGroupMargin, 0), tabGroupLine))
 	dst.FillRoundRect(line, tabGroupLine/2, g.line)
 	rowX := x0
 	if g.chip != nil {
@@ -423,8 +424,8 @@ func (g *TabGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// Scrolled past the group's start, the label sticks at the start of
 	// what shows, as far as the group's end lets it.
 	chipX := x0
-	if clip, ok := dst.ClipBounds(); ok {
-		chipX = max(x0, min(clip.Origin.X+tabGroupStick, r.Origin.X+r.Size.W-tabGroupMargin-g.chipSize.W))
+	if window, ok := widget.ScrollWindowOf(g.env); ok {
+		chipX = max(x0, min(window.Origin.X+tabGroupStick, r.Origin.X+r.Size.W-tabGroupMargin-g.chipSize.W))
 	}
 	if chipX > x0+.5 {
 		// The tabs behind it are hidden, and fade in after it.

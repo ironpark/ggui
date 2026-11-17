@@ -961,6 +961,21 @@ func scrollPortAlong(env ggui.Env, horizontal bool) *ScrollWidget {
 	return s
 }
 
+// ScrollWindowOf returns the window of the nearest Scroll around a widget
+// laid out under env, where the Scroll shows its content, in the
+// coordinates the content paints in, as the Scroll last painted it: what
+// of the content shows, for a widget keeping a part of itself in sight as
+// its content scrolls, as a ui.TabGroup's label does. It is read at Paint;
+// ok is false outside a Scroll. A Canvas's ClipBounds is no stand-in: a
+// frame painted in part clips to the part.
+func ScrollWindowOf(env ggui.Env) (r ggui.Rect, ok bool) {
+	s := scrollPortOf(env)
+	if s == nil {
+		return ggui.Rect{}, false
+	}
+	return s.rect, true
+}
+
 // scrollPortOf returns the nearest enclosing Scroll in env, if any.
 func scrollPortOf(env ggui.Env) *ScrollWidget {
 	s, _ := env.Get(scrollPortKey)
