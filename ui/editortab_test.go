@@ -2,6 +2,7 @@ package ui_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
@@ -39,14 +40,19 @@ func TestEditorTabSelectsAndCloses(t *testing.T) {
 }
 
 // A tab is no narrower than its MinWidth, and its label no wider than
-// MaxLabelWidth; a Status keeps its room whether set or not.
+// MaxLabelWidth; a Status has its room only while there is one, and while
+// StatusWhile says it shows; a close button takes none.
 func TestEditorTabWidths(t *testing.T) {
 	long := "a label far longer than any tab would draw it whole"
+	shown := false
 	p := ggui.NewProbe(widget.Column(
 		ui.EditorTab("a", func() {}),
 		ui.EditorTab(long, func() {}).Name("long"),
-		ui.EditorTab(long, func() {}).Name("marked").Status(nil),
-	), ggui.Sz(600, 200))
+		ui.EditorTab(long, func() {}).Name("closing").OnClose(func() {}),
+		ui.EditorTab(long, func() {}).Name("unmarked").Status(nil),
+		ui.EditorTab(long, func() {}).Name("marked").Status(widget.Box().Size(7, 7)),
+		ui.EditorTab(long, func() {}).Name("resting").Status(widget.Box().Size(7, 7)).StatusWhile(func() bool { return shown }),
+	), ggui.Sz(600, 300))
 	defer p.Close()
 	p.Frame()
 	width := func(name string) float64 {
@@ -62,8 +68,24 @@ func TestEditorTabWidths(t *testing.T) {
 	if w := width("long"); w > 10+170+10 {
 		t.Fatalf("a long tab is %v wide, past its label's cap", w)
 	}
+	if d := width("closing") - width("long"); d != 0 {
+		t.Fatalf("a close button takes %v", d)
+	}
+	if d := width("unmarked") - width("long"); d != 0 {
+		t.Fatalf("no status takes %v", d)
+	}
 	if d := width("marked") - width("long"); d <= 0 {
 		t.Fatalf("a status's room adds %v", d)
+	}
+	if d := width("resting") - width("long"); d != 0 {
+		t.Fatalf("a status at rest takes %v", d)
+	}
+	shown = true
+	p.Frame()                        // the paint that sees it come
+	p.Advance(10 * time.Millisecond) // the layout it asks for, opening the room
+	p.Advance(time.Second)
+	if d := width("resting") - width("marked"); d != 0 {
+		t.Fatalf("a status come is %v off a status's room", d)
 	}
 }
 

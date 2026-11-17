@@ -29,12 +29,21 @@ import (
 const (
 	EditorTabHeight   = 28
 	EditorTabRadius   = 7
-	EditorTabMinWidth = 92
+	EditorTabMinWidth = 72
 )
 
 const (
-	tabStatusSize = 7  // the room of a tab's status mark, before its icon
+	tabPadLeft    = 8  // before a tab's status, icon or label
+	tabPadRight   = 10 // after its label: its close button goes over the end
+	tabIconGap    = 6  // between its icon and its label
+	tabStatusSize = 7  // a tab's status mark, before its icon
+	tabStatusGap  = 4  // between the mark and the icon
 	tabLabelFade  = 18 // how far a label cut short fades out at its end
+	tabCoverFade  = 10 // how far one fades out before the close button
+	tabCloseInset = 4  // from the close button to the tab's end
+	// tabCloseCover is how much of a label's end the close button, or the
+	// dot of a dirty tab, covers: the label fades out before it.
+	tabCloseCover = 12
 )
 
 // EditorTabWidget is one tab of an editor's tab bar. Build one with
@@ -43,7 +52,7 @@ type EditorTabWidget struct {
 	label, name, closeName string
 	onSelect, onClose      func()
 	icon, status           ggui.Widget
-	statused               bool // the tab has a status's room, set or not
+	statusShown            func() bool // whether status shows; nil while it is set
 	maxLabel, minWidth     float64
 	selected, current      bool
 	dirty, preview         bool
@@ -54,10 +63,11 @@ type EditorTabWidget struct {
 // onSelect. It is a rounded box: raised while it is the tab its pane shows
 // (Selected), the more brightly, and lifted, in the pane that has the
 // focus (Current), and washed while the pointer is over it. Its close
-// button (OnClose) shows while the pointer is over the tab or the focus is
-// in it, and is there all the while, in the Tab order and to screen
-// readers. A label longer than MaxLabelWidth fades out at its end, and
-// shows whole in a tooltip.
+// button (OnClose) shows over the tab's end, the label fading out before
+// it, while the pointer is over the tab or the focus is in it, and is
+// there all the while, in the Tab order and to screen readers; it takes no
+// room of its own. A label longer than MaxLabelWidth fades out at its end,
+// and shows whole in a tooltip.
 func EditorTab(label string, onSelect func()) *EditorTabWidget {
 	return &EditorTabWidget{label: label, onSelect: onSelect, maxLabel: 170, minWidth: EditorTabMinWidth}
 }
@@ -67,10 +77,19 @@ func (t *EditorTabWidget) Icon(w ggui.Widget) *EditorTabWidget { t.icon = w; ret
 
 // Status puts w before the icon, in a room of its own the size of a dot:
 // what the tab's content is doing, as an agent at work or waiting on the
-// user. The room stays with w nil, so a tab keeps its width, and its icon
-// its place, as its status comes and goes.
+// user. With w nil there is no room, and the tab starts closer to its
+// icon.
 func (t *EditorTabWidget) Status(w ggui.Widget) *EditorTabWidget {
-	t.status, t.statused = w, true
+	t.status = w
+	return t
+}
+
+// StatusWhile gives the status its room only while shown reports true, as
+// a mark that shows nothing at rest has none: the room opens as the status
+// comes and closes as it goes, the icon and label easing along. shown is
+// asked as the tab is laid out and painted, and is cheap.
+func (t *EditorTabWidget) StatusWhile(shown func() bool) *EditorTabWidget {
+	t.statusShown = shown
 	return t
 }
 
@@ -85,7 +104,7 @@ func (t *EditorTabWidget) Current(v bool) *EditorTabWidget { t.current = v; retu
 // OnClose gives the tab a close button that calls fn.
 func (t *EditorTabWidget) OnClose(fn func()) *EditorTabWidget { t.onClose = fn; return t }
 
-// Dirty marks unsaved changes with a dot in the close button's place,
+// Dirty marks unsaved changes with a dot where the close button goes,
 // which the button takes while it shows, as editors mark them.
 func (t *EditorTabWidget) Dirty(v bool) *EditorTabWidget { t.dirty = v; return t }
 
@@ -120,30 +139,17 @@ func (t *EditorTabWidget) build() ggui.Widget {
 	}
 	label.tip = Tooltip(label, t.label)
 	var parts []ggui.Widget
-	left := 10.0
-	lead := t.icon
-	if t.statused {
-		mark := t.status
-		if mark == nil {
-			mark = widget.Box()
-		}
-		slot := widget.Box(widget.Center(mark)).Size(tabStatusSize, tabStatusSize)
-		lead = slot
-		if t.icon != nil {
-			lead = widget.Row(slot, t.icon).Gap(4).Align(widget.AlignCenter)
-		}
-		left = 6
+	if t.icon != nil {
+		parts = append(parts, t.icon)
 	}
-	if lead != nil {
-		parts = append(parts, lead)
+	var row ggui.Widget = widget.Row(append(parts, label.tip)...).Gap(tabIconGap).Align(widget.AlignCenter)
+	// The status's room holds its gap, so that none is left with it shut.
+	var status *editorTabStatus
+	if t.status != nil {
+		status = &editorTabStatus{mark: t.status, shown: t.statusShown}
+		row = widget.Row(status, row).Align(widget.AlignCenter)
 	}
-	parts = append(parts, label.tip)
-	right := 10.0
-	if t.onClose != nil {
-		parts = append(parts, t.closeButton(hover, focus))
-		right = 4
-	}
-	content := widget.Box(widget.Row(parts...).Gap(8).Align(widget.AlignCenter)).Height(EditorTabHeight)
+	content := widget.Box(row).Height(EditorTabHeight)
 	name := t.name
 	if name == "" {
 		name = t.label
@@ -151,9 +157,14 @@ func (t *EditorTabWidget) build() ggui.Widget {
 	// The tab draws its hover itself, over all of it, close button too: a
 	// button's own would come and go as the pointer crossed to the close
 	// button, over the tab's.
-	btn := ButtonOf(content, t.onSelect).Variant(editorTabButton).Pad(0, right, 0, left).Radius(EditorTabRadius).Name(name)
+	btn := ButtonOf(content, t.onSelect).Variant(editorTabButton).Pad(0, tabPadRight, 0, tabPadLeft).Radius(EditorTabRadius).Name(name)
+	var closer ggui.Widget
+	if t.onClose != nil {
+		closer = t.closeButton(hover, focus)
+	}
 	box := ggui.View(hover, func(h bool) ggui.Widget {
-		return &editorTabBox{child: btn, button: btn, label: label, minWidth: t.minWidth, hovered: h, selected: t.selected, current: t.current}
+		return &editorTabBox{child: btn, button: btn, label: label, closer: closer, status: status, focus: focus, dirty: t.dirty,
+			minWidth: t.minWidth, hovered: h, selected: t.selected, current: t.current}
 	})
 	return widget.Box(widget.Within(box).OnHover(hover.Set).OnFocus(focus.Set)).Pad(0, 2)
 }
@@ -182,6 +193,45 @@ func (t *EditorTabWidget) closeButton(hover, focus *ggui.StateValue[bool]) ggui.
 	return widget.Stack(widget.Opacity(dot, 1).BindOpacity(hidden), btn)
 }
 
+// editorTabStatus is a tab's status mark, in a room that opens as the
+// status shows and closes as it goes; see StatusWhile.
+type editorTabStatus struct {
+	mark  ggui.Widget
+	shown func() bool
+	open  ggui.Motion
+	laid  bool // shown, as of the last layout
+	share float64
+	env   ggui.Env
+}
+
+func (s *editorTabStatus) showing() bool { return s.shown == nil || s.shown() }
+
+func (s *editorTabStatus) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	s.env, s.laid = env, s.showing()
+	s.mark.Layout(ggui.Loose(ggui.Sz(tabStatusSize, tabStatusSize)), env)
+	s.share = s.open.LayoutTo(env, pick(s.laid, 1.0, 0.0), theme.Of(env).MotionFast)
+	return ggui.Sz(s.share*(tabStatusSize+tabStatusGap), tabStatusSize)
+}
+
+// check lays the tab out again for a status come or gone since its layout.
+func (s *editorTabStatus) check() {
+	if s.showing() != s.laid {
+		ggui.Invalidate(s.env)
+	}
+}
+
+func (s *editorTabStatus) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	if s.share <= 0 {
+		return
+	}
+	at := ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+(r.Size.H-tabStatusSize)/2), ggui.Sz(tabStatusSize, tabStatusSize))
+	if s.share >= 1 {
+		dst.Paint(s.mark, at)
+		return
+	}
+	dst.Layer(ggui.LayerOptions{Fade: 1 - s.share}, func(dst *ggui.Canvas) { dst.Paint(s.mark, at) })
+}
+
 // Layout implements Widget.
 func (t *EditorTabWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if t.tree == nil {
@@ -208,12 +258,17 @@ var (
 
 // editorTabBox paints a tab's box under its button: the raised fill of the
 // selected tab, lifted in the pane with the focus, and the wash of one the
-// pointer is over. It holds the tab to its MinWidth, the label taking the
-// room.
+// pointer is over; and over the button's end, its close button. It holds
+// the tab to its MinWidth, the label taking the room.
 type editorTabBox struct {
 	child                      ggui.Widget
 	button                     *ButtonWidget // what the hover's easing is kept by
 	label                      *editorTabLabel
+	closer                     ggui.Widget // the close button, or nil
+	closeSize                  ggui.Size
+	status                     *editorTabStatus // or nil
+	focus                      *ggui.StateValue[bool]
+	dirty                      bool
 	minWidth                   float64
 	hovered, selected, current bool
 	fill, wash                 color.Color // under the theme the tab was laid out in
@@ -244,6 +299,9 @@ func (b *editorTabBox) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		b.label.extra = b.minWidth - size.W
 		size = b.child.Layout(c, env)
 	}
+	if b.closer != nil {
+		b.closeSize = b.closer.Layout(ggui.Loose(size), env)
+	}
 	return size
 }
 
@@ -264,7 +322,21 @@ func (b *editorTabBox) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if hover > 0 {
 		dst.FillRoundRect(r, EditorTabRadius, withAlpha(b.wash, uint8(math.Round(hover*pick(b.fill != nil, 128.0, 255.0)))))
 	}
+	if b.status != nil {
+		b.status.check()
+	}
+	if b.closer == nil {
+		dst.Paint(b.child, r)
+		return
+	}
+	// The label fades out before the close button, as it comes over it.
+	b.label.cover = hover
+	if b.dirty || ggui.Peek(b.focus) {
+		b.label.cover = 1
+	}
 	dst.Paint(b.child, r)
+	at := ggui.Pt(r.Origin.X+r.Size.W-tabCloseInset-b.closeSize.W, r.Origin.Y+(r.Size.H-b.closeSize.H)/2)
+	dst.Paint(b.closer, ggui.Rct(at, b.closeSize))
 }
 
 // editorTabTone is how a tab's label is set: muted at rest, in the foreground
@@ -284,6 +356,7 @@ type editorTabLabel struct {
 	text       *widget.TextWidget
 	tip        *TooltipWidget
 	max, extra float64
+	cover      float64 // how far the close button has come over its end, 0 to 1
 	tone       editorTabTone
 	natural    ggui.Size
 	cut        bool
@@ -307,11 +380,14 @@ func (l *editorTabLabel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 
 func (l *editorTabLabel) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	at := ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+(r.Size.H-l.natural.H)/2), l.natural)
-	if !l.cut {
+	// What shows of it: all of it but what the close button covers.
+	shown := ggui.Rct(r.Origin, ggui.Sz(max(r.Size.W-l.cover*tabCloseCover, 0), r.Size.H))
+	fade := pick(l.cut, float64(tabLabelFade), tabCoverFade)
+	if !l.cut && l.natural.W <= shown.Size.W-pick(l.cover > 0, fade, 0.0) {
 		dst.Paint(l.text, at)
 		return
 	}
-	dst.Clip(r).FadeEdges(r, true, 0, tabLabelFade, func(dst *ggui.Canvas) { dst.Paint(l.text, at) })
+	dst.Clip(shown).FadeEdges(shown, true, 0, fade, func(dst *ggui.Canvas) { dst.Paint(l.text, at) })
 }
 
 // Baseline implements Baseliner: the text's.
@@ -332,6 +408,8 @@ type TabGroupWidget struct {
 	chipSize  ggui.Size
 	fill      color.Color // the label's, at rest and under the pointer
 	hoverFill color.Color
+	edge      color.Color // the label's hairline, and the brighter top of it
+	edgeTop   color.Color
 	line      color.Color
 	theme     *theme.Theme
 	motion    time.Duration
@@ -339,6 +417,8 @@ type TabGroupWidget struct {
 }
 
 const (
+	tabGroupChip   = 24 // the label's height, a little under a tab's
+	tabGroupRadius = 6  // its corners
 	tabGroupMargin = 3  // the room on each side of a group
 	tabGroupGap    = 2  // between its label and its first tab
 	tabGroupPadY   = 5  // above and below its tabs; the line is in the lower
@@ -354,8 +434,9 @@ const (
 // the tabs passing behind it hidden and fading in after it.
 func TabGroup(cells ...ggui.Widget) *TabGroupWidget { return &TabGroupWidget{cells: cells} }
 
-// Label heads the group with w, as its name, on a chip of its color as
-// tall as a tab.
+// Label heads the group with w, as its name, on a chip of its color a
+// little shorter than a tab, edged in a hairline of it that is brightest
+// along the top.
 func (g *TabGroupWidget) Label(w ggui.Widget) *TabGroupWidget { g.label = w; return g }
 
 // OnLabel makes the label a button that calls fn, as one folding the group
@@ -373,9 +454,9 @@ func (g *TabGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if g.row == nil {
 		g.row = widget.Row(g.cells...).Align(widget.AlignCenter)
 		if g.label != nil {
-			content := widget.Box(widget.Row(g.label).Align(widget.AlignCenter)).Height(EditorTabHeight)
+			content := widget.Box(widget.Row(g.label).Align(widget.AlignCenter)).Height(tabGroupChip)
 			if g.onLabel != nil {
-				g.button = ButtonOf(content, g.onLabel).Variant(editorTabButton).Pad(0, 10).Radius(EditorTabRadius)
+				g.button = ButtonOf(content, g.onLabel).Variant(editorTabButton).Pad(0, 10).Radius(tabGroupRadius)
 				if g.labelName != "" {
 					g.button.Name(g.labelName)
 				}
@@ -393,6 +474,7 @@ func (g *TabGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	tint = ggui.ResolveColor(tint, env)
 	g.fill, g.hoverFill, g.line = withAlpha(tint, 0x29), withAlpha(tint, 0x42), withAlpha(tint, 0xbf)
+	g.edge, g.edgeTop = withAlpha(tint, 0x2e), withAlpha(mix(tint, color.White, .45), 0xa6)
 	loose := ggui.Constraints{MaxW: ggui.Unbounded, MaxH: c.MaxH}
 	g.rowSize = g.row.Layout(loose, env)
 	w, h := 2*tabGroupMargin+g.rowSize.W, max(EditorTabHeight, g.rowSize.H)
@@ -443,7 +525,13 @@ func (g *TabGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			fill = mix(g.fill, g.hoverFill, h)
 		}
 	}
-	dst.FillRoundRect(chipAt, EditorTabRadius, fill)
+	dst.FillRoundRect(chipAt, tabGroupRadius, fill)
+	// The hairline, faint all round and brighter at the top, fading down
+	// its sides.
+	dst.StrokeRoundRect(chipAt, tabGroupRadius, 1, g.edge)
+	dst.Clip(chipAt).FadeEdges(chipAt, false, 0, chipAt.Size.H*.8, func(dst *ggui.Canvas) {
+		dst.StrokeRoundRect(chipAt, tabGroupRadius, 1, g.edgeTop)
+	})
 	dst.Paint(g.chip, chipAt)
 }
 
