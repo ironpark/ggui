@@ -4,7 +4,9 @@ package pixeltest
 
 import (
 	"image"
+	"image/color"
 	"testing"
+	"time"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ggtest"
@@ -30,6 +32,8 @@ func TestEditorTabShowsItsCloseButtonOnHover(t *testing.T) {
 	}
 	tabAt, _ := p.Find("main.go")
 	p.Move(tabAt.Center())
+	ggtest.Render(p, size, 1) // the tint sets out from the first paint under the pointer
+	p.Advance(time.Second)
 	over := ggtest.Render(p, size, 1)
 	icon := closeAt.Rect.Grow(-3) // the icon, inside the button's padding
 	if !plain(away, icon) {
@@ -46,6 +50,55 @@ func TestEditorTabShowsItsCloseButtonOnHover(t *testing.T) {
 	selected, _ := p.Find("go.mod")
 	if !changed(over, ggtest.Render(empty, size, 1), ggui.Rct(selected.Rect.Origin, ggui.Sz(6, selected.Rect.Size.H))) {
 		t.Fatal("the selected tab is not raised")
+	}
+}
+
+// A tab's tint under the pointer eases in and out, and holds as the
+// pointer crosses from its label to its close button: the button under
+// the pointer draws no hover of its own over the tab's, to come and go.
+func TestEditorTabTintEasesAndHoldsOverItsCloseButton(t *testing.T) {
+	size := ggui.Sz(200, 40)
+	p := ggui.NewProbe(widget.Box(widget.Row(ui.EditorTab("main.go", func() {}).OnClose(func() {}))).Fill(color.NRGBA{25, 25, 25, 255}), size)
+	defer p.Close()
+	p.Advance(0)
+	tab, _ := p.Find("main.go")
+	closeAt, _ := p.Find("Close main.go")
+	at := func() int {
+		c := ggtest.Render(p, size, 1).RGBAAt(int(tab.Rect.Origin.X)+6, int(tab.Rect.Origin.Y)+3)
+		return int(c.R) + int(c.G) + int(c.B)
+	}
+	rest := at()
+	p.Move(tab.Center())
+	// The tint sets out from the first paint under the pointer, at rest
+	// still: it does not jump part of the way and ease the rest.
+	if first := at(); first != rest {
+		t.Fatalf("the first paint under the pointer: %d, not %d at rest", first, rest)
+	}
+	p.Advance(30 * time.Millisecond)
+	part := at()
+	p.Advance(time.Second)
+	full := at()
+	if !(rest < part && part < full) {
+		t.Fatalf("at rest %d, a moment in %d, in full %d: the tint does not ease in", rest, part, full)
+	}
+	label := tab.Center()
+	for i := range 10 {
+		x := label.X + (closeAt.Center().X-label.X)*float64(i+1)/10
+		p.Move(ggui.Pt(x, label.Y))
+		p.Advance(16 * time.Millisecond)
+		if got := at(); got != full {
+			t.Fatalf("crossing to the close button, at %v: %d, not %d", x, got, full)
+		}
+	}
+	p.Move(ggui.Pt(size.W-2, size.H-2))
+	at()
+	p.Advance(30 * time.Millisecond)
+	if got := at(); got <= rest || got >= full {
+		t.Fatalf("a moment after the pointer left: %d, between %d and %d", got, rest, full)
+	}
+	p.Advance(time.Second)
+	if got := at(); got != rest {
+		t.Fatalf("after the pointer left: %d, not %d", got, rest)
 	}
 }
 
