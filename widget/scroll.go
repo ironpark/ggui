@@ -88,6 +88,10 @@ type ScrollWidget struct {
 	phys scrollPhysics // overscroll, snapping and animated scrolls; see scrollPhysics
 
 	fade float64 // how far in the content fades out at an end with more past it
+	// fadeStart and fadeEnd are fade at the start and the end, apart; see
+	// FadeEnds. fadeApart says they are set.
+	fadeStart, fadeEnd float64
+	fadeApart          bool
 }
 
 // Key gives the scroll an identity, so a rebuilt one that also moved keeps
@@ -134,7 +138,19 @@ func (s *ScrollWidget) Horizontal() *ScrollWidget { s.horizontal = true; return 
 // with more of it past that end, and as the end comes near, the fade
 // narrows to nothing: a hint that the content goes on, without a line or
 // a surface. It paints the content through a layer.
-func (s *ScrollWidget) FadeEdges(width float64) *ScrollWidget { s.fade = max(width, 0); return s }
+func (s *ScrollWidget) FadeEdges(width float64) *ScrollWidget {
+	s.fade, s.fadeApart = max(width, 0), false
+	return s
+}
+
+// FadeEnds is FadeEdges with a width for each end: start, the top or the
+// left, and end. A zero leaves that end unfaded, as where something
+// sticking at the start, a ui.TabGroup's label, stands in for the fade.
+func (s *ScrollWidget) FadeEnds(start, end float64) *ScrollWidget {
+	s.fadeStart, s.fadeEnd, s.fadeApart = max(start, 0), max(end, 0), true
+	s.fade = max(s.fadeStart, s.fadeEnd)
+	return s
+}
 
 // Shrink makes the scroll, along its axis, only as long as its content
 // while that fits, where it would otherwise take all it is offered: a row
@@ -386,7 +402,11 @@ func (s *ScrollWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			return
 		}
 		pos := s.position()
-		lead, trail := min(s.fade, max(pos, 0)), min(s.fade, max(s.maxOffset()-pos, 0))
+		start, end := s.fade, s.fade
+		if s.fadeApart {
+			start, end = s.fadeStart, s.fadeEnd
+		}
+		lead, trail := min(start, max(pos, 0)), min(end, max(s.maxOffset()-pos, 0))
 		clip.FadeEdges(r, s.horizontal, lead, trail, func(dst *ggui.Canvas) { s.paintContent(dst, r) })
 	})
 	s.paintBar(dst, r)

@@ -11,6 +11,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ggtest"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
 
@@ -58,7 +59,8 @@ func TestEditorTabShowsItsCloseButtonOnHover(t *testing.T) {
 // the pointer draws no hover of its own over the tab's, to come and go.
 func TestEditorTabTintEasesAndHoldsOverItsCloseButton(t *testing.T) {
 	size := ggui.Sz(200, 40)
-	p := ggui.NewProbe(widget.Box(widget.Row(ui.EditorTab("main.go", func() {}).OnClose(func() {}))).Fill(color.NRGBA{25, 25, 25, 255}), size)
+	// Dark, as the tab's wash of the foreground shows best on it.
+	p := ggui.NewProbe(theme.With(theme.Dark(), widget.Box(widget.Row(ui.EditorTab("main.go", func() {}).OnClose(func() {}))).Fill(color.NRGBA{25, 25, 25, 255})), size)
 	defer p.Close()
 	p.Advance(0)
 	tab, _ := p.Find("main.go")
