@@ -227,17 +227,30 @@ func (c *Canvas) FadeEdges(r Rect, horizontal bool, lead, trail float64, paint f
 
 const fadeRampLength = 64
 
-// rampImage is the ramp FadeEdges masks with: a row of white from clear to
-// opaque, made once, alpha-only.
+// rampImage is the ramp FadeEdges masks with: fadeRampLength texels of
+// white from clear to opaque along a smoothstep, so the fade eases out of
+// the content with no edge where it starts, made once, alpha-only.
 var rampImage *ggfx.Image
 
+// fadeRamp is the ramp, a region of a larger image whose texels around it
+// repeat its edges: scaled with linear filtering, it then blends with
+// itself at its ends and sides, not with what is outside it. Blended with
+// clear texels, as a lone row of them was, it was half clear along its
+// top and bottom rows and where it meets the content, which showed as a
+// step in a line running into the fade.
 func fadeRamp() *ggfx.Image {
 	if rampImage == nil {
-		src := image.NewAlpha(image.Rect(0, 0, fadeRampLength, 1))
-		for x := range fadeRampLength {
-			src.Pix[x] = uint8((float64(x) + .5) / fadeRampLength * 255)
+		const w, h = fadeRampLength + 2, 3
+		src := image.NewAlpha(image.Rect(0, 0, w, h))
+		for x := range w {
+			t := gem.Clamp(float64(x-1)/(fadeRampLength-1), 0, 1)
+			a := uint8(math.Round(t * t * (3 - 2*t) * 255))
+			for y := range h {
+				src.Pix[y*src.Stride+x] = a
+			}
 		}
-		rampImage = ggfx.NewImageFromImageWithOptions(src, &ggfx.NewImageFromImageOptions{Format: ggfx.PixelFormatAlpha})
+		full := ggfx.NewImageFromImageWithOptions(src, &ggfx.NewImageFromImageOptions{Format: ggfx.PixelFormatAlpha})
+		rampImage = full.SubImage(image.Rect(1, 1, 1+fadeRampLength, 2)).(*ggfx.Image)
 	}
 	return rampImage
 }
