@@ -85,10 +85,32 @@ the platform's events as a window does: `Wheel` turns a wheel by notches,
 trackpad's gesture, which stays with the view that took it.
 
 `Perform` queues the action and runs a frame. Test the resulting binding or
-semantic state. Headless paint does not validate GPU pixels; use the
+semantic state.
+
+## Pixels
+
+A probe on its own paints with no renderer, so a test cannot read what it
+drew. The `ggtest` package gives a package's tests a frame of the renderer
+with no window: a headless OpenGL context on macOS, a surfaceless EGL one on
+Linux. `Render` then paints a probe's frame and reads it back.
+
+```go
+func TestMain(m *testing.M) { ggtest.Main(m) }
+
+func TestTheBadgeIsRed(t *testing.T) {
+	p := ggui.NewProbe(badge(), ggui.Sz(80, 24))
+	defer p.Close()
+	img := ggtest.Render(p, ggui.Sz(80, 24), 2) // 160×48 device pixels
+	_ = img.RGBAAt(80, 24)
+}
+```
+
+Every test under `ggtest.Main` runs in that one frame on the main thread, so
+none of them calls `t.Parallel`. `RenderWindow` reads a `WindowProbe`'s
+screen the same way. Pixels can differ slightly between GPUs: compare with a
+tolerance. For whole catalogs of charts and controls, see the
 [chart](charts.md#complete-reference-catalog-and-visual-validation) and
-[control](carousel-and-otp.md#examples-and-validation) render catalogs for
-visual checks.
+[control](carousel-and-otp.md#examples-and-validation) render catalogs.
 
 See the [counter tests](../examples/counter/main_test.go) for a full app
 example, the [todo tests](../examples/todo/main_test.go) for keyed rows and a
