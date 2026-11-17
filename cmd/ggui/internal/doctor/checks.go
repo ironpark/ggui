@@ -215,7 +215,9 @@ func version(m *gotool.Module) string {
 	}
 }
 
-func checkConfig(r *Report, o Options) {
+// checkConfig checks ggui.toml and returns the project it configures, or
+// nil when it is invalid.
+func checkConfig(r *Report, o Options) *project.Project {
 	proj, err := project.Open(o.Dir, "", o.Config)
 	if err != nil {
 		fix := "fix the file; docs/cli.md lists every key"
@@ -226,16 +228,17 @@ func checkConfig(r *Report, o Options) {
 		} else {
 			r.fail("ggui.toml", err.Error(), fix)
 		}
-		return
+		return nil
 	}
 	if proj.File == "" {
 		r.ok("ggui.toml", "none; the defaults are in effect (ggui init writes one)")
-		return
+		return proj
 	}
 	r.ok("ggui.toml", proj.File)
 	if icon := proj.Config.App.Icon; icon != "" {
 		checkIcon(r, proj.Path(icon))
 	}
+	return proj
 }
 
 func checkIcon(r *Report, path string) {
@@ -272,7 +275,6 @@ func checkTools(ctx context.Context, r *Report, env map[string]string) {
 	}
 
 	if !hostIsDarwin() {
-		r.ok("macOS bundles", "can be built here, but only macOS can sign them; ggui build skips signing")
 		return
 	}
 	if _, err := exec.LookPath("codesign"); err != nil {
