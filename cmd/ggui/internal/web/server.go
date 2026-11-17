@@ -162,10 +162,14 @@ func (s *Server) startLocked() *build {
 		o := s.build
 		o.Out = filepath.Join(dir, WasmName)
 		o.Logf = s.logf
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		// The go command's work directory, which a cancelled build, killed,
+		// leaves behind.
+		o.TmpDir = filepath.Join(dir, "work")
+		if err := os.MkdirAll(o.TmpDir, 0o755); err != nil {
 			b.err = err
 		} else {
 			b.res, b.err = Build(ctx, o)
+			os.RemoveAll(o.TmpDir)
 		}
 		close(b.done)
 
