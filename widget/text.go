@@ -260,6 +260,13 @@ func (t *TextWidget) Weight(w ggui.FontWeight) *TextWidget {
 	return t
 }
 
+// Italic draws the text in its font's italic; see ggui.TextStyle.Italic.
+func (t *TextWidget) Italic() *TextWidget {
+	defer property.Watch(&t.props, &t.style)()
+	t.style.Italic = true
+	return t
+}
+
 // Size sets the font size in pixels.
 func (t *TextWidget) Size(px float64) *TextWidget {
 	defer property.Watch(&t.props, &t.style)()

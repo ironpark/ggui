@@ -269,12 +269,16 @@ type TextStyle struct {
 	// 0.1 a shortcut hint wide. Text is measured, wrapped, hit and drawn
 	// with it. Zero inherits.
 	Tracking float64
+	// Italic draws the text in its font's italic (see Font.WithItalic), as
+	// CSS font-style: italic does. Set, it is inherited; a descendant
+	// cannot set it back.
+	Italic bool
 }
 
 // Equal reports whether s and o draw the same: the same Font, size, line
-// height, weight and tracking, and colors that draw alike.
+// height, weight, tracking and slant, and colors that draw alike.
 func (s TextStyle) Equal(o TextStyle) bool {
-	if s.Font != o.Font || s.Size != o.Size || s.LineHeight != o.LineHeight || s.Weight != o.Weight || s.Tracking != o.Tracking {
+	if s.Font != o.Font || s.Size != o.Size || s.LineHeight != o.LineHeight || s.Weight != o.Weight || s.Tracking != o.Tracking || s.Italic != o.Italic {
 		return false
 	}
 	if s.Color == nil || o.Color == nil {
@@ -307,6 +311,7 @@ func (s TextStyle) Merge(o TextStyle) TextStyle {
 	if o.Tracking != 0 {
 		s.Tracking = o.Tracking
 	}
+	s.Italic = s.Italic || o.Italic
 	return s
 }
 
@@ -314,6 +319,9 @@ func (s TextStyle) Merge(o TextStyle) TextStyle {
 func (s TextStyle) resolved() TextStyle {
 	if s.Font == nil {
 		s.Font = fallbackFont()
+	}
+	if s.Italic {
+		s.Font = s.Font.italicFace()
 	}
 	if s.Size == 0 {
 		s.Size = DefaultTextSize
