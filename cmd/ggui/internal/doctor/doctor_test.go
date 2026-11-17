@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/config"
-	"github.com/ironpark/zapp/pkg/signing/rcodesign"
 )
 
 func TestCheckCertificate(t *testing.T) {
@@ -35,12 +34,9 @@ func TestCheckCertificate(t *testing.T) {
 	}
 }
 
-// Away from a Mac, a ggui without cgo has no signer, which matters only
-// when ggui.toml asks for a signature.
+// Away from a Mac ggui does not sign, which matters only when ggui.toml
+// asks for a signature.
 func TestCheckSigningElsewhere(t *testing.T) {
-	if rcodesign.Available() == nil {
-		t.Skip("this build can sign")
-	}
 	m := config.Defaults().MacOS
 	r := &Report{}
 	checkSigningElsewhere(r, m)

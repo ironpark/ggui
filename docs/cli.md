@@ -417,12 +417,12 @@ before it compiles anything, so a missing identity or password fails at
 once, saying what to do. The paths of the app and of the disk image and
 installer are printed on standard output, one a line.
 
-Away from a Mac, ggui signs with a `.p12` and notarizes with an API key
-only through zapp's signing library, which needs cgo: a ggui installed
-with `CGO_ENABLED=1 go install` and a C compiler (GCC on Linux, LLVM MinGW
-on Windows) on Linux or Windows. The release binaries and the Homebrew
-formula are built without cgo, and stop with a message saying so when
-asked to sign there. Disk images and installers are made anywhere.
+ggui signs, notarizes and verifies on a Mac only, with Apple's tools;
+build releases there, as a macOS runner in CI does. Elsewhere it builds
+the bundle, disk image and installer unsigned, and stops with a message
+when asked to sign. zapp could sign on Linux and Windows through a Rust
+library, but only a cgo build links it, and linking it would ask every
+build of ggui with a C compiler there to link 30 MB it would not use.
 
 ### The web bundle
 

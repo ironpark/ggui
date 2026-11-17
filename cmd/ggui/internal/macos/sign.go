@@ -6,15 +6,21 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 	"time"
-
-	"github.com/ironpark/zapp/pkg/signing"
-	zmacos "github.com/ironpark/zapp/pkg/signing/macos"
-	"github.com/ironpark/zapp/pkg/signing/rcodesign"
 )
+
+// backend signs through one toolchain. On macOS it is one of zapp's
+// signing backends, which drive Apple's tools; elsewhere there is none,
+// since zapp signs there with a Rust library that only a cgo build links,
+// and linking it would ask every Linux or Windows build of ggui with a C
+// compiler to link 30 MB it does not use, which on Windows fails outright
+// with MinGW's GCC. ggui therefore signs with an identity on a Mac only.
+type backend interface {
+	Describe(ctx context.Context, path string) (string, error)
+	Sign(ctx context.Context, path string) error
+}
 
 // Signing says how to sign, gathered from ggui.toml, the flags and the
 // environment.
@@ -107,19 +113,15 @@ func (n Notary) check() error {
 // the build before it starts, and Close it after.
 type Signer struct {
 	s   Signing
-	app signing.Backend // nil when signing ad hoc
-	pkg signing.Backend // made when an installer is first signed
+	app backend // nil when signing ad hoc
+	pkg backend // made when an installer is first signed
 	// Identity is the identity the app is signed with, masked for
 	// printing, once Check has found it.
 	Identity string
 }
 
-// fingerprint matches an identity's SHA-1 hash, as security
-// find-identity prints it.
-var fingerprint = regexp.MustCompile(`^[0-9A-Fa-f]{40}$`)
-
 // NewSigner checks s and, when it signs with an identity, sets up zapp's
-// backend for it: Apple's tools on macOS, rcodesign elsewhere.
+// backend for it, which needs a Mac.
 func NewSigner(s Signing, notarize bool) (*Signer, error) {
 	sg := &Signer{s: s}
 	if s.AdHoc() {
@@ -129,93 +131,16 @@ func NewSigner(s Signing, notarize bool) (*Signer, error) {
 		}
 		return sg, nil
 	}
-	if runtime.GOOS != "darwin" && rcodesign.Available() != nil {
-		return nil, unavailable()
-	}
 	if notarize {
 		if err := s.Notary.check(); err != nil {
 			return nil, err
 		}
-		if runtime.GOOS != "darwin" && s.Notary.APIKeyFile == "" {
-			return nil, fmt.Errorf("notarizing on %s needs an App Store Connect API key (macos.notary.api_key_file or --api-key-file): a notarytool profile and an Apple ID work only on a Mac", runtime.GOOS)
-		}
 	}
-	creds, err := s.credentials(s.Identity, s.Entitlements)
-	if err != nil {
-		return nil, err
-	}
-	if sg.app, err = selectBackend(creds); err != nil {
+	var err error
+	if sg.app, err = newBackend(s, s.Identity, s.Entitlements); err != nil {
 		return nil, fmt.Errorf("signing with %s: %w", s.Describe(), err)
 	}
 	return sg, nil
-}
-
-// credentials translates s for zapp, for signing with identity.
-func (s Signing) credentials(identity, entitlements string) (signing.Credentials, error) {
-	c := signing.Credentials{
-		Entitlements: entitlements,
-		P12File:      s.P12File, P12Base64: s.P12Base64,
-		P12Password: s.P12Password, P12PasswordFile: s.P12PasswordFile,
-		Profile: s.Notary.Profile, APIKeyFile: s.Notary.APIKeyFile,
-		AppleID: s.Notary.AppleID, TeamID: s.Notary.TeamID, Password: s.Notary.Password,
-		NotarizeTimeout: s.Notary.Timeout,
-	}
-	if s.HasCertificate() && identity == "-" {
-		identity = "" // the certificate's Developer ID identity
-	}
-	if runtime.GOOS != "darwin" {
-		// rcodesign has no keychain to pick from and no notarytool to
-		// keep a profile or an Apple ID: it takes the certificate and an
-		// API key, and zapp refuses the others outright.
-		if !s.HasCertificate() {
-			return c, fmt.Errorf("signing on %s needs a certificate, since the keychain identity %q is on a Mac: give a .p12 with macos.p12_file, --p12-file or $GGUI_P12_BASE64, or build on a Mac",
-				runtime.GOOS, s.Identity)
-		}
-		c.Profile, c.AppleID, c.TeamID, c.Password = "", "", "", ""
-		return c, nil
-	}
-	c.Identity = identity
-	if fingerprint.MatchString(identity) && !s.HasCertificate() {
-		// zapp matches identities by name; a hash is turned into the
-		// name of the identity it belongs to.
-		ids, err := zmacos.ListIdentities(context.Background())
-		if err != nil {
-			return c, err
-		}
-		for _, id := range ids {
-			if strings.EqualFold(id.Fingerprint, identity) {
-				c.Identity = id.Description
-			}
-		}
-	}
-	return c, nil
-}
-
-// selectBackend picks zapp's backend, saying what to do when this build
-// of ggui cannot sign at all.
-func selectBackend(c signing.Credentials) (signing.Backend, error) {
-	if runtime.GOOS != "darwin" {
-		if err := rcodesign.Available(); err != nil {
-			return nil, unavailable()
-		}
-	}
-	b, err := signing.Select(c)
-	if errors.Is(err, rcodesign.ErrUnavailable) {
-		return nil, unavailable()
-	}
-	return b, err
-}
-
-// unavailable explains that this ggui has no signer away from a Mac.
-func unavailable() error {
-	switch runtime.GOOS + "/" + runtime.GOARCH {
-	case "linux/amd64", "linux/arm64", "windows/amd64", "windows/arm64":
-	default:
-		return fmt.Errorf("ggui cannot sign macOS apps on %s/%s, which zapp's signing library is not made for: sign on a Mac, or on Linux or Windows", runtime.GOOS, runtime.GOARCH)
-	}
-	return errors.New("this ggui was built without cgo, and away from a Mac signing is done by zapp's rcodesign library, which needs cgo. " +
-		"Build on a Mac, or install a ggui built with cgo and a C compiler (GCC on Linux, LLVM MinGW on Windows): " +
-		"CGO_ENABLED=1 go install github.com/ironpark/ggui/cmd/ggui@latest. The release binaries and the Homebrew formula are built without cgo")
 }
 
 // Check finds the signing identity, importing the certificate when there
@@ -278,13 +203,10 @@ func (sg *Signer) Sign(ctx context.Context, path string) (bool, error) {
 
 // installer returns the backend that signs installer packages, which
 // take an identity of their own.
-func (sg *Signer) installer() (signing.Backend, error) {
+func (sg *Signer) installer() (backend, error) {
 	if sg.pkg == nil {
-		creds, err := sg.s.credentials(sg.s.PKGIdentity, "")
-		if err != nil {
-			return nil, err
-		}
-		if sg.pkg, err = selectBackend(creds); err != nil {
+		var err error
+		if sg.pkg, err = newBackend(sg.s, sg.s.PKGIdentity, ""); err != nil {
 			return nil, err
 		}
 	}
@@ -319,7 +241,7 @@ func (sg *Signer) Notarize(ctx context.Context, path string) error {
 	if sg.app == nil {
 		return errors.New("notarization needs a Developer ID signature")
 	}
-	if err := signing.Notarize(ctx, sg.app, path, sg.s.Notary.Staple); err != nil {
+	if err := notarize(ctx, sg.app, path, sg.s.Notary.Staple); err != nil {
 		return fmt.Errorf("notarizing %s with %s: %w", filepath.Base(path), sg.s.Notary.Describe(), err)
 	}
 	return nil
@@ -332,9 +254,9 @@ func (sg *Signer) Staples() bool { return sg.s.Notary.Staple }
 // was put in for the run.
 func (sg *Signer) Close() error {
 	var errs []error
-	for _, b := range []signing.Backend{sg.app, sg.pkg} {
+	for _, b := range []backend{sg.app, sg.pkg} {
 		if b != nil {
-			errs = append(errs, signing.Close(b))
+			errs = append(errs, closeBackend(b))
 		}
 	}
 	return errors.Join(errs...)

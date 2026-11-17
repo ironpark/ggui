@@ -44,8 +44,8 @@ goes in its web/ subdirectory. --out names the directory instead.
 
 Signing with an identity uses the keychain on macOS, or a certificate:
 --p12-file, macos.p12_file, or base64 text in $GGUI_P12_BASE64, its
-password in --p12-password-file or $GGUI_P12_PASSWORD. Away from a Mac
-only a certificate signs, and only a ggui built with cgo can. Notarizing
+password in --p12-password-file or $GGUI_P12_PASSWORD. Signing and
+notarizing take a Mac; elsewhere the bundle is left unsigned. Notarizing
 uses a notarytool profile, an App Store Connect API key, or an Apple ID
 with its app-specific password in $GGUI_NOTARY_PASSWORD. docs/cli.md
 has the details.`,
@@ -483,7 +483,7 @@ func verifyAll(ctx context.Context, artifacts []string, notarized bool) error {
 	var failed []string
 	for _, a := range artifacts {
 		r, fails := macos.Verify(ctx, a, notarized)
-		fmt.Fprint(os.Stderr, "ggui: verified ", r.String())
+		fmt.Fprint(os.Stderr, "ggui: verified ", r)
 		for _, c := range fails {
 			failed = append(failed, fmt.Sprintf("%s: %s: %s", filepath.Base(a), c.Name, c.Detail))
 		}

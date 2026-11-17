@@ -5,7 +5,7 @@
 //
 // The work past assembling the bundle is done by zapp's packages
 // (github.com/ironpark/zapp/pkg/...): signing and notarizing through
-// Apple's tools on macOS, or rcodesign elsewhere when it is built in;
+// Apple's tools, on a Mac only;
 // the disk image and the installer in pure Go; and the checks a release
 // should pass.
 package macos
