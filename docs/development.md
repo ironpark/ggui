@@ -252,3 +252,25 @@ of size with `LayoutBoundary` and asking for layouts with `Invalidate` and
 `widget`'s tests drive the widgets with a `Probe` or a `WindowProbe`.
 `widget` imports none of `ui`, its theme, icons or fonts, which
 [widget/imports_test.go](../widget/imports_test.go) checks.
+
+## Release the ggui command
+
+The command is a module of its own, released by a tag on its directory:
+
+```sh
+git tag cmd/ggui/v0.2.0
+git push origin cmd/ggui/v0.2.0
+```
+
+The tag runs `.github/workflows/release-cli.yml`: GoReleaser builds the
+command for macOS, Linux and Windows (`cmd/ggui/.goreleaser.yaml`), the
+archives become the tag's GitHub release, and the formula goes to the
+Homebrew tap [ironpark/homebrew-tap](https://github.com/ironpark/homebrew-tap),
+from which `brew install ironpark/tap/ggui` installs it. Writing to the tap
+takes the repository secret `TAP_GITHUB_TOKEN`, a fine-grained token with
+Contents read and write on that repository only. To try a release without
+publishing it:
+
+```sh
+GORELEASER_CURRENT_TAG=v0.2.0 goreleaser release --clean --skip=publish,validate -f cmd/ggui/.goreleaser.yaml
+```

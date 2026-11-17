@@ -1,0 +1,67 @@
+# GoReleaser builds the ggui command for a release and publishes it to the
+# Homebrew tap ironpark/homebrew-tap. It runs from the repository root, as
+# .github/workflows/release-cli.yml does on a tag cmd/ggui/vX.Y.Z:
+#
+#	GORELEASER_CURRENT_TAG=vX.Y.Z goreleaser release --clean -f cmd/ggui/.goreleaser.yaml
+#
+# The command is a module of its own, so Go wants its tags prefixed with
+# its directory; GoReleaser OSS takes the version from the variable instead.
+version: 2
+
+project_name: ggui
+
+builds:
+  - id: ggui
+    dir: cmd/ggui
+    main: .
+    binary: ggui
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.releaseVersion=v{{ .Version }}
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+
+archives:
+  - id: ggui
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "ggui_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - src: LICENSE*
+      - src: cmd/ggui/README*
+
+checksum:
+  name_template: "ggui_{{ .Version }}_checksums.txt"
+
+changelog:
+  disable: true
+
+
+brews:
+  - name: ggui
+    repository:
+      owner: ironpark
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    # The release is the command's tag, cmd/ggui/vX.Y.Z, which the workflow
+    # makes; GoReleaser OSS knows the version only.
+    url_template: "https://github.com/ironpark/ggui/releases/download/cmd/ggui/v{{ .Version }}/{{ .ArtifactName }}"
+    homepage: https://github.com/ironpark/ggui
+    description: Create, run, check and bundle ggui applications
+    commit_author:
+      name: ironpark
+      email: ironpark@users.noreply.github.com
+    commit_msg_template: "Update ggui to v{{ .Version }}"
+    # ggui builds the application it runs with the go command.
+    dependencies:
+      - name: go
+    install: |
+      bin.install "ggui"
+    test: |
+      assert_match "v#{version}", shell_output("#{bin}/ggui version")

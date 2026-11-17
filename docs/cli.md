@@ -8,8 +8,18 @@ builds is what `go build` would build, with your Go version, workspace and
 module cache.
 
 ```sh
+brew install ironpark/tap/ggui
+```
+
+Homebrew installs Go with it. Without Homebrew, or for a version between
+releases:
+
+```sh
 go install github.com/ironpark/ggui/cmd/ggui@latest
 ```
+
+Releases are tagged `cmd/ggui/vX.Y.Z`, since the command is a module of its
+own; `go install github.com/ironpark/ggui/cmd/ggui@vX.Y.Z` installs one.
 
 | Command | Does |
 | --- | --- |
