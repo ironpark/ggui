@@ -222,7 +222,7 @@ those guides as historical measurements; rerun them on your target hardware.
 | Overlays and images | [widget/popup.go](../widget/popup.go) (`Popup`), [overlay.go](../overlay.go) (the window's `Overlay`), [paint.go](../paint.go) (`Canvas.DrawImage`), [widget/image.go](../widget/image.go), [internal/imgcache/](../internal/imgcache/) (the cache `widget.AsyncImage` loads into) |
 | Testing and diagnostics | [probe.go](../probe.go), [inspect/panel/](../inspect/panel) (the panel, build tag `ggui_inspector`), [inspector.go](../inspector.go) (its registration, and the frame built from the trace), [inspect/](../inspect) (the frame model the panel and `App.OnInspect` share, and `ReadFrameStats` and `ReadMotionReport`), [internal/framestats/](../internal/framestats/) (the process's frame counters those read), [overlay.go](../overlay.go) (the Overlay the panel draws as), [widget.go](../widget.go) (Cached) |
 | Runnable applications | [examples/](../examples/) |
-| The ggui command | [cmd/ggui/](../cmd/ggui/): `init`, `dev`, `build` and `doctor`, a module of its own that drives the go command and imports nothing of ggui; its [internal/](../cmd/ggui/internal/) packages keep the watcher, the process runner, the builders, the viewer's launcher and the bundle writers apart |
+| The ggui command | [cmd/ggui/](../cmd/ggui/): `init`, `dev`, `build` and `doctor`, a module of its own that drives the go command and imports nothing of ggui, and signs, notarizes and packages macOS builds with the packages of [zapp](https://github.com/ironpark/zapp); its [internal/](../cmd/ggui/internal/) packages keep the watcher, the process runner, the builders, the viewer's launcher and the bundle writers apart |
 | The dev viewer | [cmd/ggviewer/](../cmd/ggviewer/): the window `ggui dev` shows an app in while it restarts, replaying the app's command stream; [internal/platform/remotedisplay/](../internal/platform/remotedisplay/) is what the app gives up in it |
 
 The module is built in three layers, each importing only those below it:
@@ -272,8 +272,18 @@ zip on the Go module proxy, as formulae are meant to build from source; the
 tap's own workflow installs and tests every formula pushed to it on macOS
 and Linux. Writing to the tap
 takes the repository secret `TAP_GITHUB_TOKEN`, a fine-grained token with
-Contents read and write on that repository only. To try a release without
-publishing it:
+Contents read and write on that repository only.
+
+The command signs and packages macOS builds with zapp's `pkg/` packages,
+and two things follow from that dependency. zapp requires ggui and ggfx itself, for its own window, so an
+older ggui and ggfx stand in the command's module graph without being
+built; in a workspace with `.` they resolve to the checkout, and with
+`GOWORK=off` nothing of them is downloaded. And zapp's module zip, about
+40 MB, carries the static rcodesign libraries that sign on Linux and
+Windows, linked only when cgo is on: the formula's build downloads it, but
+builds with `CGO_ENABLED=0`, as the release archives are, so both sign
+only on macOS, through Apple's tools. To try a release without publishing
+it:
 
 ```sh
 GORELEASER_CURRENT_TAG=v0.2.0 goreleaser release --clean --skip=publish,validate -f cmd/ggui/.goreleaser.yaml
