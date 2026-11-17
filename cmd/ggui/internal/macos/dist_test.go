@@ -31,12 +31,13 @@ func TestNewSignerRefuses(t *testing.T) {
 			}
 		})
 	}
-	// Away from a Mac a keychain identity is no use, and this test binary
-	// has no cgo signer unless built with one.
+	// Away from a Mac nothing signs: neither an identity nor a certificate.
 	if runtime.GOOS != "darwin" {
-		_, err := NewSigner(Signing{Identity: "Developer ID Application"}, false)
-		if err == nil || !strings.Contains(err.Error(), "certificate") && !strings.Contains(err.Error(), "cgo") {
-			t.Errorf("keychain identity away from a Mac: %v", err)
+		for _, s := range []Signing{{Identity: "Developer ID Application"}, {Identity: "-", P12File: "cert.p12"}} {
+			_, err := NewSigner(s, false)
+			if err == nil || !strings.Contains(err.Error(), "on a Mac") {
+				t.Errorf("signing with %s away from a Mac: %v", s.Describe(), err)
+			}
 		}
 	}
 }
