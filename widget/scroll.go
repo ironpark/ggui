@@ -716,7 +716,8 @@ type scrollMotionState struct {
 	released   bool    // they lifted past an end; the momentum after is let go
 	anim       ggui.Motion
 	animating  bool
-	stepping   bool // anim is a wheel's notch easing; see wheelStep
+	steppedAt  time.Time // the frame anim last moved the window in
+	stepping   bool      // anim is a wheel's notch easing; see wheelStep
 }
 
 func (p *scrollPhysics) adopt(q *scrollPhysics) { p.scrollMotionState = q.scrollMotionState }
@@ -828,12 +829,19 @@ func (s *ScrollWidget) rubber(raw, d float64, momentum bool) float64 {
 }
 
 // step advances a programmatic scroll; Layout calls it before laying out
-// the child for the new window.
+// the child for the new window. It moves the window once a frame: a frame
+// lays the scroll out again until nothing changes, and content laid out
+// at the new window, rows measured as they come into it, can move where
+// the layout then holds the window, which another step to where the
+// animation is would undo, writing a bound offset on every pass and never
+// letting the frame settle.
 func (p *scrollPhysics) step(s *ScrollWidget) {
-	if !p.animating {
+	now := ggui.FrameTime()
+	if !p.animating || now.Equal(p.steppedAt) {
 		return
 	}
-	v := p.anim.Value(ggui.FrameTime())
+	p.steppedAt = now
+	v := p.anim.Value(now)
 	if v == p.anim.Target() {
 		p.animating = false
 	}

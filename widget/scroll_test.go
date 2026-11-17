@@ -1333,3 +1333,73 @@ func TestScrollBounceSpringsBackAsTheFingersLift(t *testing.T) {
 		t.Fatalf("a wheel's pull moved %v → %v within its pause", pulled, s.phys.over)
 	}
 }
+
+// A feed of rows far taller than their estimate, its offset bound, easing
+// to its end as a chat goes to its latest: rows measured as they come
+// into view move the end, and the frame settles each step.
+func TestScrollEasingThroughRowsMeasuredAsTheyComeSettles(t *testing.T) {
+	t.Parallel()
+	var keys []int
+	for i := range 400 {
+		keys = append(keys, i)
+	}
+	items := ggui.State(keys)
+	offset := ggui.State(0.0)
+	sc := &ScrollController{}
+	list := EachKeyed(items, func(k int) int { return k }, func(row EachItem[int]) ggui.Widget {
+		return Box().Size(50, float64(40+row.Item%7*30))
+	}).Gap(6).Stretch().EstimatedExtent(12)
+	s := Scroll(Box(Column(list).Stretch()).Pad(18, 0)).FollowEnd().Controller(sc).BindOffset(offset)
+	p := ggui.NewProbe(s, ggui.Sz(300, 400))
+	defer p.Close()
+	p.Frame()
+	sc.ScrollTo(0)
+	for range 10 {
+		p.Advance(16 * time.Millisecond)
+	}
+	for range 3 {
+		sc.ScrollTo(sc.MaxOffset())
+		for range 30 {
+			p.Advance(16 * time.Millisecond)
+		}
+		sc.ScrollTo(sc.MaxOffset() / 3)
+		for range 30 {
+			p.Advance(16 * time.Millisecond)
+		}
+	}
+}
+
+// offsetSized is as tall as where the scroll around it is: short once it
+// is scrolled past at, as a list whose rows are measured as they come into
+// view can be.
+type offsetSized struct{ at float64 }
+
+func (w offsetSized) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	if vp, ok := ScrollViewportOf(env); ok && vp.Offset >= w.at {
+		return ggui.Sz(50, 300)
+	}
+	return ggui.Sz(50, 1000)
+}
+func (offsetSized) Paint(*ggui.Canvas, ggui.Rect) {}
+
+// A scroll easing to where its content, laid out there, turns out shorter
+// than to reach it, is held back by its layout; the easing does not move
+// it there again within the frame, which would write its bound offset on
+// every pass and never let the frame settle.
+func TestScrollEasingPastWhatItsContentReachesSettles(t *testing.T) {
+	t.Parallel()
+	offset := ggui.State(0.0)
+	sc := &ScrollController{}
+	s := Scroll(offsetSized{at: 250}).BindOffset(offset).Controller(sc)
+	p := ggui.NewProbe(s, ggui.Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	sc.ScrollTo(800)
+	p.Frame()
+	for range 20 {
+		p.Advance(16 * time.Millisecond)
+	}
+	if v := ggui.Peek(offset); v > 250 {
+		t.Fatalf("the scroll is at %v, past where its content is long enough to reach", v)
+	}
+}
