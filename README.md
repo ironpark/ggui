@@ -109,7 +109,7 @@ No manual refresh or subscription wiring is needed.
 ### Or start with the ggui command
 
 ```sh
-go install github.com/ironpark/ggui/cmd/ggui@latest
+brew install ironpark/tap/ggui   # or: go install github.com/ironpark/ggui/cmd/ggui@latest
 ggui init hello && cd hello
 ggui dev      # run it, rebuilding and restarting it as you edit
 ggui build    # a signed .app on macOS; --target web for a browser

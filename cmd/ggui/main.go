@@ -174,9 +174,17 @@ func (c *command) usage(w io.Writer, fs *flag.FlagSet) {
 	fmt.Fprintf(w, "\nDocumentation: %s\n", docsURL)
 }
 
-// version reports the module version this program was built from, which
-// go install records.
+// releaseVersion is the version a release build stamps in with -X, as the
+// one built for Homebrew is: a build from a checkout records no module
+// version of its own.
+var releaseVersion string
+
+// version reports the version this program was released as, or the module
+// version it was built from, which go install records.
 func version() string {
+	if releaseVersion != "" {
+		return releaseVersion
+	}
 	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" {
 		return bi.Main.Version
 	}

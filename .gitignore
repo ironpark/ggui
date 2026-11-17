@@ -40,3 +40,6 @@ go.work.sum
 
 # Task's record of the sources a task was last run on (the cli task's).
 /.task/
+
+# GoReleaser output
+/dist/

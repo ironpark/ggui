@@ -1,0 +1,69 @@
+name: Release the ggui command
+
+# A tag cmd/ggui/vX.Y.Z releases the ggui command: GoReleaser builds it for
+# macOS, Linux and Windows, the archives become the tag's GitHub release,
+# and the formula goes to the Homebrew tap ironpark/homebrew-tap.
+#
+# The command is a module of its own, so Go wants its tags prefixed with its
+# directory, which GoReleaser OSS does not take: it is given the version,
+# builds and writes the formula without publishing, and this workflow
+# publishes. Pushing to the tap needs TAP_GITHUB_TOKEN, a token that may
+# write to ironpark/homebrew-tap; the workflow's own token may not.
+on:
+  push:
+    tags: ['cmd/ggui/v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: cmd/ggui/go.sum
+      - name: Version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#cmd/ggui/}" >> "$GITHUB_OUTPUT"
+      - name: Build
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          # validate would look for a tag vX.Y.Z; publish is done below.
+          args: release --clean --skip=publish,validate -f cmd/ggui/.goreleaser.yaml
+        env:
+          GOWORK: 'off'
+          GORELEASER_CURRENT_TAG: ${{ steps.version.outputs.version }}
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/*.zip dist/*_checksums.txt \
+            --title "ggui command $VERSION" \
+            --notes "Install with \`brew install ironpark/tap/ggui\` or \`go install github.com/ironpark/ggui/cmd/ggui@$VERSION\`. The command needs Go to build the applications it runs."
+      - name: Update the Homebrew tap
+        env:
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ -z "$TAP_GITHUB_TOKEN" ]; then
+            echo "::error::TAP_GITHUB_TOKEN is not set; the release is out, the tap is not updated"
+            exit 1
+          fi
+          git clone "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/ironpark/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cp dist/homebrew/Formula/ggui.rb tap/Formula/ggui.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/ggui.rb
+          git diff --cached --quiet && { echo "the formula is unchanged"; exit 0; }
+          git commit -m "Update ggui to $VERSION"
+          git push
