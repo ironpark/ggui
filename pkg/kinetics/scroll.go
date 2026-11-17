@@ -10,10 +10,25 @@ import (
 	"github.com/ironpark/ggui/pkg/gem"
 )
 
+// RubberReach is how far past an end, as a share of the viewport's
+// extent, content can be pulled at the most: it nears it, and never gets
+// there, however far the input goes.
+const RubberReach = 0.25
+
+// rubberGive is how much of the input's movement past an end the content
+// follows at the end itself, as iOS's 0.55.
+const rubberGive = 0.55
+
 // Rubber moves raw, the offset a scroll's content shows at, by d, with
-// movement past lo or hi resisted the further it goes: half the movement
-// at an end, none a whole extent past it, and less again for momentum
-// than for a finger. Movement back toward the range is never resisted.
+// movement past lo or hi resisted the further it goes, as iOS resists it:
+// input carried t past an end puts the content
+//
+//	reach·give·t / (give·t + reach)
+//
+// past it, a little over half the movement at the end and ever less after,
+// nearing reach, RubberReach of extent, and never getting there. Momentum
+// gives less again than a finger. Movement back toward the range is never
+// resisted.
 func Rubber(raw, d, lo, hi, extent float64, momentum bool) float64 {
 	next := raw + d
 	if next >= lo && next <= hi || raw < lo && d > 0 || raw > hi && d < 0 {
@@ -24,12 +39,17 @@ func Rubber(raw, d, lo, hi, extent float64, momentum bool) float64 {
 	if raw >= lo && raw <= hi {
 		from = edge
 	}
-	extent = max(extent, 1)
-	k := 0.5 * (1 - min(math.Abs(from-edge)/extent, 1))
+	reach := max(extent, 1) * RubberReach
+	give := rubberGive
 	if momentum {
-		k *= 0.4
+		give *= 0.4
 	}
-	return from + (next-from)*k
+	// How far the input has gone past the end to put the content where it
+	// is, and then where it puts it, gone d further.
+	over := min(math.Abs(from-edge), reach*(1-1e-9))
+	t := reach*over/(give*(reach-over)) + math.Abs(next-from)
+	over = reach * give * t / (give*t + reach)
+	return edge + math.Copysign(over, next-edge)
 }
 
 // Stretch is how much content pulled over past an end is stretched along
