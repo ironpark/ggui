@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -21,8 +22,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/ironpark/zapp/pkg/dmg"
+	"github.com/ironpark/zapp/pkg/udif"
 )
 
 // FileName is the name the file is looked for under.
@@ -72,15 +76,95 @@ type Dev struct {
 	Display string `toml:"display"`
 }
 
-// MacOS holds what only the .app bundle uses.
+// MacOS holds what only the .app bundle, and the disk image and installer
+// made from it, use.
+//
+// The keys that sign and notarize follow the vocabulary of zapp's
+// .zapp.yaml, which does the work, in TOML's spelling. Nothing here holds
+// a secret: a password or a certificate's contents comes from an
+// environment variable the file names, or from a file.
 type MacOS struct {
-	MinimumSystemVersion string         `toml:"minimum_system_version"`
-	Category             string         `toml:"category"`
-	SigningIdentity      string         `toml:"signing_identity"`
-	Entitlements         string         `toml:"entitlements"`
-	Universal            bool           `toml:"universal"`
-	Plist                map[string]any `toml:"plist"`
+	MinimumSystemVersion string `toml:"minimum_system_version"`
+	Category             string `toml:"category"`
+	// SigningIdentity names a keychain identity, or "-" to sign ad hoc.
+	SigningIdentity string `toml:"signing_identity"`
+	Entitlements    string `toml:"entitlements"`
+	// P12File is a PKCS#12 certificate and key to sign with instead of
+	// the keychain's, as CI has one; P12Base64Env names a variable that
+	// holds one as base64 text, read when there is no file.
+	P12File         string `toml:"p12_file"`
+	P12Base64Env    string `toml:"p12_base64_env"`
+	P12PasswordFile string `toml:"p12_password_file"`
+	P12PasswordEnv  string `toml:"p12_password_env"`
+	// Notarize submits what is built to Apple's notary service, with the
+	// credentials in Notary, and staples the ticket.
+	Notarize  bool           `toml:"notarize"`
+	Universal bool           `toml:"universal"`
+	Plist     map[string]any `toml:"plist"`
+	Notary    Notary         `toml:"notary"`
+	DMG       DMG            `toml:"dmg"`
+	PKG       PKG            `toml:"pkg"`
 }
+
+// Notary is how to reach Apple's notary service: a notarytool keychain
+// profile, an App Store Connect API key, or an Apple ID with an
+// app-specific password and its team. The first of them given is used.
+type Notary struct {
+	Profile     string `toml:"profile"`
+	APIKeyFile  string `toml:"api_key_file"`
+	AppleID     string `toml:"apple_id"`
+	TeamID      string `toml:"team_id"`
+	PasswordEnv string `toml:"password_env"`
+	Staple      bool   `toml:"staple"`
+	Timeout     string `toml:"timeout"`
+}
+
+// DMG is the disk image made beside the bundle: the app and a link to
+// /Applications to drag it onto, in a Finder window laid out as given.
+type DMG struct {
+	// Make is whether the file has a [macos.dmg] table, which asks for
+	// the disk image on every macOS build.
+	Make       bool   `toml:"-"`
+	Title      string `toml:"title"`
+	Icon       string `toml:"icon"`
+	Background string `toml:"background"`
+	Window     Window `toml:"window"`
+	IconSize   int    `toml:"icon_size"`
+	LabelSize  int    `toml:"label_size"`
+	// AppPosition and ApplicationsPosition are [x, y] of each icon's
+	// centre; empty places them side by side across the window.
+	AppPosition          []int  `toml:"app_position"`
+	ApplicationsPosition []int  `toml:"applications_position"`
+	FS                   string `toml:"fs"`
+	Format               string `toml:"format"`
+}
+
+// Window is the size of the Finder window a disk image opens in.
+type Window struct {
+	Width  int `toml:"width"`
+	Height int `toml:"height"`
+}
+
+// PKG is the installer package made beside the bundle, which installs
+// the app into InstallLocation.
+type PKG struct {
+	// Make is whether the file has a [macos.pkg] table.
+	Make bool `toml:"-"`
+	// SigningIdentity names the installer identity; empty is the
+	// keychain's or the certificate's Developer ID Installer.
+	SigningIdentity string `toml:"signing_identity"`
+	InstallLocation string `toml:"install_location"`
+	Scripts         string `toml:"scripts"`
+	License         string `toml:"license"`
+}
+
+// Defaults for a disk image, which are zapp's.
+const (
+	DefaultDMGWidth     = 640
+	DefaultDMGHeight    = 480
+	DefaultDMGIconSize  = 128
+	DefaultDMGLabelSize = 14
+)
 
 // Web holds what only the js/wasm bundle and its page use.
 type Web struct {
@@ -108,6 +192,23 @@ func Defaults() Config {
 			// value would only let Finder offer an app that cannot start.
 			MinimumSystemVersion: "13.0",
 			SigningIdentity:      "-",
+			P12Base64Env:         "GGUI_P12_BASE64",
+			P12PasswordEnv:       "GGUI_P12_PASSWORD",
+			Notary: Notary{
+				PasswordEnv: "GGUI_NOTARY_PASSWORD",
+				Staple:      true,
+				// zapp's default: a submission usually takes minutes,
+				// but Apple's queue has taken hours.
+				Timeout: "1h",
+			},
+			DMG: DMG{
+				Window:    Window{Width: DefaultDMGWidth, Height: DefaultDMGHeight},
+				IconSize:  DefaultDMGIconSize,
+				LabelSize: DefaultDMGLabelSize,
+				FS:        "hfsplus",
+				Format:    "udzo",
+			},
+			PKG: PKG{InstallLocation: "/Applications"},
 		},
 		Web: Web{Base: "/", WasmOpt: "-O2"},
 	}
@@ -203,6 +304,10 @@ func Parse(name string, data []byte) (Config, error) {
 		return Config{}, &Error{File: name, Msg: strings.TrimPrefix(err.Error(), "toml: ")}
 	}
 
+	// A table asks for what it describes even when it sets nothing.
+	cfg.MacOS.DMG.Make = md.IsDefined("macos", "dmg")
+	cfg.MacOS.PKG.Make = md.IsDefined("macos", "pkg")
+
 	var errs Errors
 	for _, k := range undecoded(md) {
 		errs = append(errs, &Error{File: name, Line: keyLine(data, k), Msg: unknownKey(k)})
@@ -297,7 +402,9 @@ func knownKeys(table []string) []string {
 	}
 	var keys []string
 	for i := range t.NumField() {
-		keys = append(keys, t.Field(i).Tag.Get("toml"))
+		if tag := t.Field(i).Tag.Get("toml"); tag != "-" {
+			keys = append(keys, tag)
+		}
 	}
 	return keys
 }
@@ -405,6 +512,7 @@ func (c *Config) validate() []problem {
 	if c.MacOS.SigningIdentity == "" {
 		add(`macos.signing_identity must not be empty: "-" signs ad hoc`, "macos", "signing_identity")
 	}
+	ps = append(ps, c.MacOS.validateSigning()...)
 	for k, v := range c.MacOS.Plist {
 		if err := plistValue(v); err != nil {
 			add(fmt.Sprintf("macos.plist.%s: %v", k, err), "macos", "plist", k)
@@ -422,13 +530,96 @@ func (c *Config) validate() []problem {
 	return ps
 }
 
+var (
+	envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	teamID  = regexp.MustCompile(`^[A-Z0-9]{10}$`)
+)
+
+// validateSigning checks the keys that sign, notarize and package.
+// Whether there is a certificate or a password to use depends on the
+// environment of the build, so that is checked there.
+func (m *MacOS) validateSigning() []problem {
+	var ps []problem
+	add := func(msg string, key ...string) { ps = append(ps, problem{toml.Key(key), msg}) }
+
+	for _, e := range []struct {
+		value string
+		key   []string
+	}{
+		{m.P12Base64Env, []string{"macos", "p12_base64_env"}},
+		{m.P12PasswordEnv, []string{"macos", "p12_password_env"}},
+		{m.Notary.PasswordEnv, []string{"macos", "notary", "password_env"}},
+	} {
+		if e.value != "" && !envName.MatchString(e.value) {
+			add(fmt.Sprintf("%s %q must name an environment variable, such as GGUI_P12_PASSWORD; the secret itself never goes in this file",
+				strings.Join(e.key, "."), e.value), e.key...)
+		}
+	}
+
+	n := m.Notary
+	if n.AppleID != "" && n.TeamID == "" {
+		add("macos.notary.apple_id needs macos.notary.team_id, the ten-character ID of the team the app is signed for", "macos", "notary", "apple_id")
+	}
+	if n.TeamID != "" && !teamID.MatchString(n.TeamID) {
+		add(fmt.Sprintf("macos.notary.team_id %q must be ten capital letters and digits, as in the signing identity's parentheses", n.TeamID), "macos", "notary", "team_id")
+	}
+	if d, err := time.ParseDuration(n.Timeout); err != nil || d <= 0 {
+		add(fmt.Sprintf("macos.notary.timeout %q must be a duration such as 30m or 2h", n.Timeout), "macos", "notary", "timeout")
+	}
+
+	d := m.DMG
+	if d.Icon != "" && !hasExt(d.Icon, ".png", ".icns") {
+		add(fmt.Sprintf("macos.dmg.icon %q must be a PNG or an .icns file", d.Icon), "macos", "dmg", "icon")
+	}
+	if d.Background != "" && !hasExt(d.Background, ".png", ".jpg", ".jpeg", ".tif", ".tiff") {
+		add(fmt.Sprintf("macos.dmg.background %q must be a PNG, JPEG or TIFF image", d.Background), "macos", "dmg", "background")
+	}
+	if d.Window.Width <= 0 || d.Window.Height <= 0 {
+		add(fmt.Sprintf("macos.dmg.window is %d×%d; give a width and height in points, such as { width = 640, height = 480 }", d.Window.Width, d.Window.Height), "macos", "dmg", "window")
+	}
+	if d.IconSize < dmg.MinIconSize || d.IconSize > dmg.MaxIconSize {
+		add(fmt.Sprintf("macos.dmg.icon_size %d must be from %d to %d", d.IconSize, dmg.MinIconSize, dmg.MaxIconSize), "macos", "dmg", "icon_size")
+	}
+	if d.LabelSize < dmg.MinLabelSize || d.LabelSize > dmg.MaxLabelSize {
+		add(fmt.Sprintf("macos.dmg.label_size %d must be from %d to %d", d.LabelSize, dmg.MinLabelSize, dmg.MaxLabelSize), "macos", "dmg", "label_size")
+	}
+	for _, p := range []struct {
+		pos []int
+		key string
+	}{{d.AppPosition, "app_position"}, {d.ApplicationsPosition, "applications_position"}} {
+		if p.pos != nil && (len(p.pos) != 2 || p.pos[0] < 0 || p.pos[1] < 0) {
+			add(fmt.Sprintf("macos.dmg.%s must be [x, y], the icon's centre in points from the window's top left", p.key), "macos", "dmg", p.key)
+		}
+	}
+	if _, err := dmg.ParseFileSystem(d.FS); err != nil {
+		add(fmt.Sprintf("macos.dmg.fs %q must be one of %s", d.FS, strings.Join(dmg.FileSystemNames, ", ")), "macos", "dmg", "fs")
+	}
+	if _, err := udif.ParseFormat(d.Format); err != nil {
+		add(fmt.Sprintf(`macos.dmg.format %q must be "udzo" (zlib, which every macOS reads) or "ulfo" (lzfse, smaller, macOS 10.11 and later)`, d.Format), "macos", "dmg", "format")
+	}
+
+	if !strings.HasPrefix(m.PKG.InstallLocation, "/") {
+		add(fmt.Sprintf("macos.pkg.install_location %q must be an absolute path, such as /Applications", m.PKG.InstallLocation), "macos", "pkg", "install_location")
+	}
+	return ps
+}
+
+func hasExt(path string, exts ...string) bool {
+	return slices.Contains(exts, strings.ToLower(filepath.Ext(path)))
+}
+
 // plistValue reports whether v can go in an Info.plist. Every TOML value
-// can but one: a table inside an array of tables is fine, but a value
-// mixing kinds is still a single plist type per element, so all that is
-// refused is what TOML itself cannot hold anyway.
+// can but dates and the floats a plist has no form for: a table inside an
+// array of tables is fine, and a value mixing kinds is still a single
+// plist type per element.
 func plistValue(v any) error {
 	switch v := v.(type) {
-	case string, bool, int64, float64:
+	case string, bool, int64:
+		return nil
+	case float64:
+		if math.IsInf(v, 0) || math.IsNaN(v) {
+			return fmt.Errorf("%v has no Info.plist form", v)
+		}
 		return nil
 	case []any:
 		for _, e := range v {

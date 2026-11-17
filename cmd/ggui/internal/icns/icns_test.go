@@ -5,9 +5,25 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"testing"
+
+	"github.com/ironpark/zapp/pkg/icns"
 )
+
+// read decodes an icon file with zapp's reader.
+func read(t *testing.T, data []byte) []icns.Element {
+	t.Helper()
+	f, err := icns.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f.Elements
+}
 
 // disc is a size×size opaque red disc on transparency, the shape of an
 // icon: hard edges to downscale and a transparent surround whose color
@@ -39,10 +55,7 @@ func TestEncodeReadBack(t *testing.T) {
 	if len(skipped) != 0 {
 		t.Errorf("skipped %v from a 1024 source", skipped)
 	}
-	entries, err := Read(&buf)
-	if err != nil {
-		t.Fatal(err)
-	}
+	entries := read(t, buf.Bytes())
 	var types []string
 	for _, e := range entries {
 		types = append(types, e.Type)
@@ -79,10 +92,7 @@ func TestEncodeSmallSourceSkipsLargerSizes(t *testing.T) {
 	if !slices.Equal(skipped, []int{512, 1024}) {
 		t.Errorf("skipped = %v, want [512 1024]", skipped)
 	}
-	entries, err := Read(&buf)
-	if err != nil {
-		t.Fatal(err)
-	}
+	entries := read(t, buf.Bytes())
 	if len(entries) != 7 {
 		t.Errorf("%d entries, want 7 (16 to 256 pixels)", len(entries))
 	}
@@ -97,18 +107,26 @@ func TestEncodeRejects(t *testing.T) {
 	}
 }
 
-func TestReadRejectsDamage(t *testing.T) {
+// iconutil, Apple's own tool, must read the file back into an iconset
+// with every size.
+func TestIconutilReadsIt(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("iconutil is part of macOS")
+	}
+	dir := t.TempDir()
 	var buf bytes.Buffer
-	Write(&buf, []Entry{{Type: "ic07", Data: []byte("data")}})
-	good := buf.Bytes()
-	if _, err := Read(bytes.NewReader(good)); err != nil {
+	if _, err := Encode(&buf, disc(1024)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Read(bytes.NewReader(good[:len(good)-1])); err == nil {
-		t.Error("a truncated file was read")
+	path := filepath.Join(dir, "AppIcon.icns")
+	os.WriteFile(path, buf.Bytes(), 0o644)
+	set := filepath.Join(dir, "AppIcon.iconset")
+	if out, err := exec.Command("iconutil", "-c", "iconset", "-o", set, path).CombinedOutput(); err != nil {
+		t.Fatalf("iconutil: %s", out)
 	}
-	if _, err := Read(bytes.NewReader([]byte("nope"))); err == nil {
-		t.Error("a file without the magic was read")
+	files, _ := filepath.Glob(filepath.Join(set, "*.png"))
+	if len(files) != len(sizes) {
+		t.Errorf("iconutil wrote %d images, want %d: %v", len(files), len(sizes), files)
 	}
 }
 

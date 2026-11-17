@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ironpark/ggui/cmd/ggui/internal/icns"
+	"github.com/ironpark/zapp/pkg/icns"
 )
 
 func info() Info {
@@ -89,11 +89,11 @@ func TestAssemble(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	entries, err := icns.Read(f)
+	family, err := icns.Decode(f)
 	// Closed before the bundle is built again: Windows removes no file that is open.
 	f.Close()
-	if err != nil || len(entries) == 0 {
-		t.Errorf("icon: %d entries, %v", len(entries), err)
+	if err != nil || len(family.Elements) == 0 {
+		t.Errorf("icon: %v, %v", family, err)
 	}
 	plistPath := filepath.Join(app, "Contents", "Info.plist")
 	data, _ := os.ReadFile(plistPath)
@@ -132,14 +132,9 @@ func TestAssemble(t *testing.T) {
 	}
 }
 
-func TestSignAdHoc(t *testing.T) {
-	if !CanSign() {
-		t.Skip("codesign needs macOS")
-	}
-	if testing.Short() {
-		t.Skip("builds a program")
-	}
-	dir := t.TempDir()
+// buildProgram builds an empty program for the host, to sign.
+func buildProgram(t *testing.T, dir string) string {
+	t.Helper()
 	src := filepath.Join(dir, "main.go")
 	os.WriteFile(src, []byte("package main\nfunc main() {}\n"), 0o644)
 	bin := filepath.Join(dir, "prog")
@@ -148,12 +143,29 @@ func TestSignAdHoc(t *testing.T) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go build: %s", out)
 	}
+	return bin
+}
+
+func TestSignAdHoc(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("codesign needs macOS")
+	}
+	if testing.Short() {
+		t.Skip("builds a program")
+	}
+	dir := t.TempDir()
+	bin := buildProgram(t, dir)
 	app, _, err := Assemble(Bundle{Info: info(), Binary: bin, OutDir: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := Sign(t.Context(), app, "-", ""); err != nil {
+	sg, err := NewSigner(Signing{Identity: "-"}, false)
+	if err != nil {
 		t.Fatal(err)
+	}
+	defer sg.Close()
+	if signed, err := sg.Sign(t.Context(), app); err != nil || !signed {
+		t.Fatalf("signed = %v, %v", signed, err)
 	}
 	if out, err := exec.Command("codesign", "--verify", "--strict", app).CombinedOutput(); err != nil {
 		t.Errorf("codesign --verify: %s", out)

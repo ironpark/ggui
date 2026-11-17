@@ -317,6 +317,7 @@ again.
 ggui build                    # macos on a Mac, native elsewhere
 ggui build --target web
 ggui build --target macos --universal
+ggui build --identity "Developer ID Application" --notarize --dmg
 ```
 
 Build makes a release build: without the development tags, with
@@ -328,7 +329,7 @@ on standard output, for scripts.
 
 | Target | Writes |
 | --- | --- |
-| `macos` | `Name.app`: the program in `Contents/MacOS`, `Info.plist` from `[app]` and `[macos]`, and `Contents/Resources/AppIcon.icns` made from `app.icon`. The bundle is signed with `macos.signing_identity`. |
+| `macos` | `Name.app`: the program in `Contents/MacOS`, `Info.plist` from `[app]` and `[macos]`, and `Contents/Resources/AppIcon.icns` made from `app.icon`, signed with `macos.signing_identity`. With `--dmg` or `[macos.dmg]` also `Name.dmg`, and with `--pkg` or `[macos.pkg]` the installer `Name.pkg`; with `--notarize` each is notarized and stapled. See [Shipping to other Macs](#shipping-to-other-macs). |
 | `web` | A directory, `build/web/` by default, for any static host: `index.html`, `main.wasm` and the Go toolchain's `wasm_exec.js`, each beside a gzipped `.gz` copy. |
 | `native` | The program, for the `GOOS` and `GOARCH` the go command builds for. |
 
@@ -337,6 +338,11 @@ on standard output, for scripts.
 | `--target macos\|web\|native` | What to build. |
 | `--out dir` | The output directory, replacing `build.output`. |
 | `--universal` | With `--target macos`, build for Apple silicon and Intel and join the two with `lipo`. Needs macOS with the Xcode command line tools. Same as `macos.universal`. |
+| `--identity name` | Sign as this keychain identity, replacing `macos.signing_identity`; `-` signs ad hoc. |
+| `--p12-file file`, `--p12-password-file file` | Sign with this PKCS#12 certificate and its password, replacing `macos.p12_file` and `macos.p12_password_file`. |
+| `--notarize` | Notarize and staple, replacing `macos.notarize`; `--notarize=false` turns it off. |
+| `--notary-profile name`, `--api-key-file file`, `--apple-id id`, `--team-id id` | Notarize with these credentials, replacing those in `[macos.notary]`. |
+| `--dmg`, `--pkg` | Also make the disk image or the installer; `--dmg=false` and `--pkg=false` skip the one `[macos.dmg]` or `[macos.pkg]` asks for. |
 | `--tags a,b` | Build tags, replacing `build.tags`. |
 | `--ldflags flags` | Linker flags after `-s -w`, replacing `build.ldflags`. |
 | `--config file` | Read this file instead of the `ggui.toml` found. |
@@ -349,14 +355,74 @@ bundle cross-built on Linux or Windows has it too. Every size from 16 to
 source smaller than 1024 pixels gives an icon without the larger sizes,
 and macOS scales up the largest it has.
 
-On macOS the bundle is signed with `codesign`. The default identity, `-`,
-signs ad hoc, which runs on the Mac that built it. A Developer ID identity
-also gets the hardened runtime and a secure timestamp, which notarization
-needs; ggui does not notarize. Elsewhere the bundle is left unsigned, with
-a notice: sign it on a Mac before shipping it.
+The default signing identity, `-`, signs ad hoc with `codesign`, which
+runs on the Mac that built it. Away from a Mac an ad hoc build is left
+unsigned, with a notice.
 
 Without `--universal` the program is built for the go command's `GOARCH`,
 so `GOARCH=amd64 ggui build` makes an Intel bundle.
+
+### Shipping to other Macs
+
+Another Mac opens an app only when it is signed with a Developer ID and
+notarized by Apple. ggui does both, and makes the disk image or installer
+it ships in, with the packages of [zapp](https://github.com/ironpark/zapp);
+its `.zapp.yaml` names the same settings much the same way.
+
+```sh
+ggui build --identity "Developer ID Application" --notarize --notary-profile ggui --dmg
+```
+
+1. **Signing.** `macos.signing_identity` or `--identity` names an identity
+   in the keychain: all of its name, such as `"Developer ID Application:
+   Example Ltd (ABCDE12345)"`, a part, such as `"Developer ID
+   Application"` for the first one, or its SHA-1 hash. `security
+   find-identity -v -p codesigning` lists them, and `ggui doctor` too. The
+   app is signed with the hardened runtime and a secure timestamp, which
+   notarization requires, and with `macos.entitlements` when it is set.
+   In CI, sign with a certificate exported with its private key as `.p12`
+   instead: `macos.p12_file` or `--p12-file`, or its base64 text in
+   `$GGUI_P12_BASE64`, with its password in `$GGUI_P12_PASSWORD` or a
+   file. ggui imports it into a temporary keychain for the build and
+   deletes that afterwards. The variables' names can be changed in
+   `ggui.toml`, which never holds a secret itself.
+2. **Notarizing.** `--notarize` or `macos.notarize = true` submits the
+   app, then the disk image and the installer, to Apple's notary service,
+   waits for the verdict, which usually takes minutes, and staples the
+   ticket to each. It needs one of: a notarytool keychain profile, made
+   once with `xcrun notarytool store-credentials NAME`
+   (`macos.notary.profile`, `--notary-profile`); an App Store Connect API
+   key (`macos.notary.api_key_file`, `--api-key-file`); or an Apple ID,
+   its team and an app-specific password (`apple_id`, `team_id`, and
+   `$GGUI_NOTARY_PASSWORD`). A rejection prints the notary's log.
+3. **Disk image.** `--dmg`, or a `[macos.dmg]` table, makes `Name.dmg`
+   beside the app: the app and a link to `/Applications`, side by side in
+   a 640×480 Finder window unless `[macos.dmg]` lays it out otherwise,
+   with the app's icon as the volume's. It is made in Go, without
+   `hdiutil`, and signed and notarized as the app is.
+4. **Installer.** `--pkg`, or a `[macos.pkg]` table, makes `Name.pkg`,
+   which installs the app into `/Applications`. An installer is signed
+   with a Developer ID *Installer* identity, a certificate of its own:
+   the keychain's or the `.p12`'s, or `macos.pkg.signing_identity`. With
+   ad hoc signing it is left unsigned.
+5. **Verifying.** A build signed with an identity ends by checking what
+   it made: the bundle, the signature, Developer ID, timestamp, hardened
+   runtime, architectures, minimum macOS, the stapled ticket, and
+   Gatekeeper's verdict. A failed check fails the build. Gatekeeper
+   rejects what is not notarized, which without `--notarize` is shown as a
+   warning.
+
+A build checks the identity, the certificate and the notary credentials
+before it compiles anything, so a missing identity or password fails at
+once, saying what to do. The paths of the app and of the disk image and
+installer are printed on standard output, one a line.
+
+Away from a Mac, ggui signs with a `.p12` and notarizes with an API key
+only through zapp's signing library, which needs cgo: a ggui installed
+with `CGO_ENABLED=1 go install` and a C compiler (GCC on Linux, LLVM MinGW
+on Windows) on Linux or Windows. The release binaries and the Homebrew
+formula are built without cgo, and stop with a message saying so when
+asked to sign there. Disk images and installers are made anywhere.
 
 ### The web bundle
 
@@ -389,6 +455,7 @@ It prints what to do under each line that is not ok, and exits with status
 | ggui.toml, icon | Whether the file is valid, and the icon a square PNG of at least 64 pixels, ideally 1024. |
 | platform | What ggwd and ggfx load when an app starts. |
 | tools | `wasm-opt`; on macOS `codesign`, and `lipo` for `--universal`. |
+| signing | On macOS: the keychain's signing identities and whether `macos.signing_identity` is one; a certificate `ggui.toml` or `$GGUI_P12_BASE64` gives; `notarytool` and `stapler`, which come with the Xcode command line tools; and the notarization credentials. Elsewhere: whether this ggui can sign at all. |
 
 ggwd and ggfx use no cgo: they load the system's libraries when the
 program starts, so a missing one is not a build error but an app that
@@ -422,9 +489,16 @@ icon = "icon.png"
 
 [macos]
 signing_identity = "Developer ID Application: Example Ltd (ABCDE12345)"
+notarize = true
 
 [macos.plist]
 NSCameraUsageDescription = "Scans documents."
+
+[macos.notary]
+profile = "example"
+
+[macos.dmg]
+background = "dmg-background.png"
 
 [web]
 base = "/hello/"
@@ -464,10 +538,59 @@ base = "/hello/"
 | --- | --- | --- |
 | `minimum_system_version` | `"13.0"` | `LSMinimumSystemVersion`. Go 1.27 programs need macOS 13 whatever this says. |
 | `category` | none | `LSApplicationCategoryType`, such as `"public.app-category.productivity"`. |
-| `signing_identity` | `"-"` | The `codesign` identity. `-` signs ad hoc; list your identities with `security find-identity -v -p codesigning`. |
+| `signing_identity` | `"-"` | The keychain identity to sign with: its name, part of it, or its hash. `-` signs ad hoc, or with a certificate picks its Developer ID Application identity. See [Shipping to other Macs](#shipping-to-other-macs). |
 | `entitlements` | none | An entitlements plist to sign with. |
+| `p12_file` | none | A `.p12` certificate and key to sign with instead of the keychain. |
+| `p12_base64_env` | `"GGUI_P12_BASE64"` | The environment variable holding a `.p12` as base64, read when `p12_file` is not set. |
+| `p12_password_file` | none | A file whose first line is the certificate's password. |
+| `p12_password_env` | `"GGUI_P12_PASSWORD"` | The environment variable holding the password, read when `p12_password_file` is not set. |
+| `notarize` | `false` | Notarize and staple; see `--notarize`. |
 | `universal` | `false` | Build for Apple silicon and Intel; see `--universal`. |
 | `[macos.plist]` | none | Extra `Info.plist` keys of any TOML type but dates, written over the generated ones. |
+
+### [macos.notary]
+
+How to reach Apple's notary service; the first of a profile, an API key
+and an Apple ID given is used.
+
+| Key | Default | Use |
+| --- | --- | --- |
+| `profile` | none | A notarytool keychain profile, made with `xcrun notarytool store-credentials NAME`. |
+| `api_key_file` | none | An App Store Connect API key as JSON: `{"issuer_id", "key_id", "private_key"}`, the last the `.p8` file's contents, as `rcodesign encode-app-store-connect-api-key` writes it. The only kind that works away from a Mac. |
+| `apple_id` | none | An Apple ID, with `team_id` and an app-specific password. |
+| `team_id` | none | The ten-character team ID, as in the identity's parentheses. |
+| `password_env` | `"GGUI_NOTARY_PASSWORD"` | The environment variable holding the Apple ID's app-specific password. |
+| `staple` | `true` | Attach the ticket, so Gatekeeper need not ask Apple when the app first opens. |
+| `timeout` | `"1h"` | How long to wait for the verdict. |
+
+### [macos.dmg]
+
+The table asks for a disk image on every macOS build; `--dmg` makes one
+without it, `--dmg=false` skips it.
+
+| Key | Default | Use |
+| --- | --- | --- |
+| `title` | `app.name` | The volume's name. |
+| `icon` | the app's icon | The volume's icon, a PNG or `.icns`. |
+| `background` | none | A PNG, JPEG or TIFF drawn at the window's top left, in points. |
+| `window` | `{ width = 640, height = 480 }` | The Finder window's size, in points. |
+| `icon_size` | `128` | The icons' size, from 16 to 512. |
+| `label_size` | `14` | The labels' text size, from 10 to 16. |
+| `app_position`, `applications_position` | side by side across the middle | `[x, y]` of each icon's centre, from the window's top left. |
+| `fs` | `"hfsplus"` | `"hfsplus"`, `"apfs"` or `"apfs-case-sensitive"`. |
+| `format` | `"udzo"` | `"udzo"` (zlib), which every macOS opens, or `"ulfo"` (lzfse), smaller. |
+
+### [macos.pkg]
+
+The table asks for an installer package on every macOS build; `--pkg`
+makes one without it, `--pkg=false` skips it.
+
+| Key | Default | Use |
+| --- | --- | --- |
+| `signing_identity` | the Developer ID Installer identity | The identity the installer is signed with. |
+| `install_location` | `"/Applications"` | Where the app is installed. |
+| `scripts` | none | A directory with `preinstall` and `postinstall` scripts. |
+| `license` | none | A plain-text license the installer shows. |
 
 ### [web]
 
