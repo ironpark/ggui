@@ -133,8 +133,9 @@ jobs:
       - name: Build
         run: GOOS=js GOARCH=wasm go build ./...
       # Only the packages that do not start ggfx run under node: ggfx wants
-      # a browser. internal/reactive/goid is the one that matters most, since wasm
-      # has no getg and must take the stack-parsing fallback.
+      # a browser. internal/reactive/goid is the one that matters most: wasm
+      # has no getg, and gives every goroutine one id rather than parse a
+      # stack on each signal read.
       - name: Test
         run: >-
           GOOS=js GOARCH=wasm go test
