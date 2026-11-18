@@ -102,7 +102,8 @@ type Native struct {
 	cause    string    // "the change", or "ggui dev started"
 	built    time.Duration
 	started  time.Time
-	shown    bool // the running app's first frame is up
+	shown    bool      // the running app's first frame is up
+	noticed  noticeSet // the viewer's notices said this session
 }
 
 // Settings are what ggui.toml gives a running session that it can take up
@@ -542,6 +543,7 @@ func (n *Native) useViewer(r startResult) {
 		return
 	}
 	n.viewer = r.v
+	n.logf("the viewer shows the app: one window, and no tray icon or menu bar of the app's own; --display=window shows them")
 }
 
 // viewerLost is the viewer's end when nobody closed its window: the app
@@ -609,11 +611,20 @@ func (n *Native) start(exe string) {
 		env = append(env, ours...)
 	}
 	n.tail = &tail{}
+	stderr := n.Stderr
+	if n.viewer != nil {
+		// What the viewer does not show, the app says on stderr; ggui
+		// says it instead, where it is not lost among the app's lines.
+		say := n.say()
+		stderr = &notices{out: n.Stderr, seen: &n.noticed, say: func(what string) {
+			say.Warn("%s", restate(what))
+		}}
+	}
 	p, err := proc.Start(exe, slices.Clone(n.Args), proc.Options{
 		Dir:    n.Dir,
 		Env:    env,
 		Stdout: n.Stdout,
-		Stderr: io.MultiWriter(n.Stderr, n.tail),
+		Stderr: io.MultiWriter(stderr, n.tail),
 	})
 	if err != nil {
 		n.say().Error("could not start the app: %v", err)

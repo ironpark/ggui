@@ -212,16 +212,22 @@ the session, the app is started again in its own window and stays there.
 `ggui doctor` says whether the project gets remote display, and why not.
 
 An app shown by the viewer is the same program as a release build, and
-behaves as one, but for what belongs to the window on the desktop:
+behaves as one, but for what belongs to the window on the desktop. `ggui
+dev` says so when the viewer starts, and when the app meets one of these
+limits, which it reports on stderr in a line of its own beginning `ggui:`,
+`ggui dev` takes that line out of the app's output and warns of it
+instead, once a session, with `--display=window` as the way to see what
+is missing:
 
 - **One window.** `App.OpenWindow` returns an error while the app runs,
-  and a window made before `Run` other than the first does not open; the
-  app says so once on stderr. `ggui dev --display=window` opens them all.
+  and a window made before `Run` other than the first does not open, with
+  a warning. `ggui dev --display=window` opens them all.
 - **Menus.** `NativeMenu`, `NativeContextMenu` and `TraySupported` report
   false: the menu bar is the viewer's, so `App.SetMenu`'s menus are drawn
   by `ui.AppMenubar`, as on Windows and Linux, and their chords work. A
-  tray icon does not show, said once on stderr; `Window.ShowContextMenu`
-  returns false. On Windows, too, `TraySupported` is false while the
+  tray icon does not show: when the app adds one, `ggui dev` warns once
+  a session that the tray is not shown and that `--display=window` shows
+  it; `Window.ShowContextMenu` returns false. On Windows, too, `TraySupported` is false while the
   viewer shows the app.
 - **Dialogs** open, from the app's process, standing alone in front of
   the viewer's window rather than as a sheet on it or owned by it. On
