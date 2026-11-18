@@ -49,6 +49,15 @@ var (
 	cur   atomic.Pointer[session]
 )
 
+// Env is the variable ggui dev starts the app with when it keeps state:
+// the instance ggui dev knows this run of the app by and the address of
+// the channel it listens on, after the first colon. The address is a unix
+// socket's path, as in "3:/tmp/ggui-123/k.sock", or on Windows a named
+// pipe's name, as in "3:\\.\pipe\ggui-dev-…", which is what makes the
+// app dial a pipe (see dial). ggui dev's own code, which imports nothing
+// of ggui's, spells it out.
+const Env = "GGUI_DEV_STATE"
+
 // active returns the session, beginning it on the first call when ggui dev
 // started the app, or nil when it did not.
 func active() *session {

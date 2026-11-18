@@ -130,6 +130,14 @@ said once on stderr.
 Nothing is kept under a `Probe` or a `WindowProbe`, in a browser, or in the
 viewer of `ggui dev`, whose one window is the viewer's.
 
+Run by `ggui dev` in a window of its own (`--display window`), an app whose
+`Config` was edited to place the window otherwise, in its `Screen`,
+`Position`, `Width`, `Height` or `Maximized`, opens as the code now says
+rather than where it was last closed, and says so once: the edit is what was
+just asked for. The placement is kept again from there. An app run by itself
+never does this, so its users' placements outlive a release that changes the
+defaults.
+
 ## Reaching the host from a widget
 
 `ggui.UseHost()` returns the `Host` a component was built in or a handler was

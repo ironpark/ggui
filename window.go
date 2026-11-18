@@ -219,6 +219,7 @@ type Window struct {
 	// its events have left (see placement.go).
 	remember   *placementStore
 	remembered placement
+	asked      placementAsk // what the Config asked for, before a placement was applied
 
 	focused  *StateValue[bool]
 	viewport *StateValue[Size]
