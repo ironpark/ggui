@@ -58,13 +58,20 @@ it opens, the same calls change the `Config` it will open with.
 | --- | --- |
 | `SetTitle`, `Title` | Change or read the title. |
 | `SetSize`, `Size` | Resize the content, in logical pixels. |
-| `SetPosition`, `Position` | Move the window on the screen. |
+| `SetPosition`, `Position` | Move the window on its screen, from the screen's top-left corner. |
 | `SetSizeLimits(min, max)` | Bound the size the user can resize to. |
 | `SetResizable`, `SetFrameless`, `SetAlwaysOnTop`, `SetIcon` | Change what `Config` set. |
 | `Minimize`, `Maximize`, `Restore`, `SetFullscreen` | Change the window's state. |
 | `Show`, `Hide`, `Visible` | Show or hide the window without closing it. |
 | `Focus`, `RequestAttention` | Bring it forward, or bounce the dock icon. |
-| `Screen`; `ggui.Screens()` | The display the window is on; every display. |
+| `Screen`; `ggui.Screens()` | The display the window is on; every display, the primary first. |
+
+A `Screen` has a `Name` for people and an `ID` to save, which tells two displays
+of one model apart and is the same after a restart. `Position` is the display's
+corner in the desktop, `Size` its size and `WorkArea` the part the menu bar,
+dock and taskbar leave to windows. `Config.Screen` opens a window on the display
+of that `ID`, with `Config.Position` on it; a display that is not connected
+leaves the window to the default one.
 
 What the window is doing is readable as signals, so a widget follows it like any
 other state:
@@ -82,7 +89,8 @@ app, the user or the OS changed it.
 ## Reopening where it was
 
 `Config.Remember` names a window's placement, and the window reopens where it
-was last closed: the same position, the same size, and maximized if it was.
+was last closed: on the same display, at the same position and size, and
+maximized if it was.
 
 ```go
 app := ggui.New(ggui.Config{
@@ -98,13 +106,17 @@ had while it was last shown normally: closed maximized, it reopens maximized,
 and `Restore` takes it back to that frame. A frame it had while minimized or
 fullscreen is never kept.
 
-When the window opens, a saved placement takes the place of `Position`,
-`Width`, `Height` and `Maximized`. The size stays within `MinWidth`,
-`MinHeight`, `MaxWidth` and `MaxHeight`, and within the display. A window opens
-on the main display, so a position saved on another one, or one that would put
-the window's top edge out of reach, as after a display was unplugged or its
-resolution lowered, is dropped: the window keeps its saved size and opens where
-`Position` puts it, centered when that is nil.
+The placement is kept as the display's `ID` and the position on that display,
+so a window comes back to its display even after the displays were rearranged,
+and two displays of one model are not confused. When the window opens, a saved
+placement takes the place of `Screen`, `Position`, `Width`, `Height` and
+`Maximized`, and the window is placed on its display before it first shows.
+The size stays within `MinWidth`, `MinHeight`, `MaxWidth` and `MaxHeight`, and
+within the display's work area. A position that would leave the window's top
+edge out of reach, as after the display's resolution was lowered, is moved just
+far enough to put the window in the work area. When the display is no longer
+connected, the window keeps its saved size and opens where `Screen` and
+`Position` put it, centered on the default display when they are empty.
 
 The placements of an app's windows live in `windows.json`, in a directory of
 `os.UserConfigDir()` named for the app: the id given to `app.SingleInstance`

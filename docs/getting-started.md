@@ -48,7 +48,8 @@ shorthand when you do not need to register setup or shortcuts first.
 | `Title` | `"ggui"` | Window title. |
 | `Width`, `Height` | `800`, `600` when zero | Initial window dimensions. |
 | `MinWidth`, `MinHeight`, `MaxWidth`, `MaxHeight` | `0`, no limit | Bound the size the user can resize to. |
-| `Position` | `nil`, centered | Open at a point on the screen, in logical pixels. |
+| `Position` | `nil`, centered | Open at a point on the screen, in logical pixels from its top-left corner. |
+| `Screen` | `""`, the default display | Open on the display with this `Screen.ID`. |
 | `Remember` | `""`, off | Name the window's placement, such as `"main"`, to reopen it where it was last closed: [Reopening where it was](windows-and-platform.md#reopening-where-it-was). |
 | `Resizable` | `false` | Allow the user to resize the window. |
 | `Frameless`, `AlwaysOnTop`, `Transparent` | `false` | Drop the title bar, float above other windows, or let the desktop show through where nothing is painted. |

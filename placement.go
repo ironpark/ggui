@@ -37,43 +37,57 @@ type placement struct {
 	Height float64 `json:"height"`
 	// Maximized reopens the window maximized, over the frame above.
 	Maximized bool `json:"maximized,omitempty"`
-	// Screen is the display Position is measured on; nil for the one a
-	// window opens on.
+	// Screen is the display the window was on, which Position is on; nil
+	// when the window could not tell.
 	Screen *placementScreen `json:"screen,omitempty"`
 }
 
-// placementScreen names the display a placement was taken on, so that a
-// position measured on another display is not taken for one on the display
-// the window opens on. Its size is not compared: a display whose resolution
-// changed is still the same one, and reachable decides what to keep there.
+// placementScreen names the display a placement was taken on by its ID,
+// which tells it from another of the same model and which it keeps across
+// restarts. The position is kept on the display rather than in the
+// desktop, so that a display moved in the arrangement takes its windows
+// with it. The name is for whoever reads the file.
 type placementScreen struct {
-	Name string `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
 }
 
-// placementReach is how much of a window, in logical pixels, must lie on
-// the screen for its saved position to be kept: enough of its top edge to
-// take hold of it and drag it back.
+// placementReach is how much of a window, in logical pixels, must lie in
+// the work area for its saved position to be kept as it is: enough of its
+// top edge to take hold of it and drag it.
 const placementReach = 40
 
-// placed returns cfg with p applied, for a window that opens on screens[0],
-// the display ggwd places every new window on: its size, kept within cfg's
-// limits and the screen, and its maximized state. The saved position is
-// kept only when it was taken on that display and the window's top edge is
-// still reachable there; otherwise cfg's own placement stands, so a window
-// last closed on a display since unplugged, or one that was made smaller,
-// opens where the app would put it rather than out of reach. With no
-// screens to measure against, or a placement without a size, cfg is
-// returned as it is.
+// placed returns cfg with p applied, among the displays screens: the
+// display, its size, kept within cfg's limits and the display's work area,
+// its maximized state, and its position. Where the display is still
+// connected the window opens on it, at its saved position, or moved just
+// far enough into the work area when the display shrank and the position
+// would leave it out of reach. Where the display is gone, or the placement
+// does not say which it was, the size is kept for the display cfg opens on
+// and the place left to cfg. With no screens to measure against, or a
+// placement without a size, cfg is returned as it is.
 func placed(cfg Config, p placement, screens []Screen) Config {
 	if len(screens) == 0 || !validLength(p.Width) || !validLength(p.Height) {
 		return cfg
 	}
-	screen := screens[0].Size
-	cfg.Width = int(math.Round(fitLength(p.Width, screen.W, cfg.MinWidth, cfg.MaxWidth)))
-	cfg.Height = int(math.Round(fitLength(p.Height, screen.H, cfg.MinHeight, cfg.MaxHeight)))
+	saved, connected := p.Screen.among(screens)
+	target := saved
+	if !connected {
+		target = screenWithID(cfg.Screen, screens)
+	}
+	area := target.usable()
+	size := Sz(fitLength(p.Width, area.Size.W, cfg.MinWidth, cfg.MaxWidth), fitLength(p.Height, area.Size.H, cfg.MinHeight, cfg.MaxHeight))
+	cfg.Width, cfg.Height = int(math.Round(size.W)), int(math.Round(size.H))
 	cfg.Maximized = p.Maximized
-	if pos := p.Position; pos != nil && p.Screen.is(screens[0]) && reachable(*pos, Sz(float64(cfg.Width), float64(cfg.Height)), screen) {
+	if !connected {
+		return cfg
+	}
+	cfg.Screen = saved.ID
+	if pos := p.Position; pos != nil && !math.IsNaN(pos.X) && !math.IsNaN(pos.Y) {
 		at := *pos
+		if !reachable(at, size, area) {
+			at = into(at, size, area)
+		}
 		cfg.Position = &at
 	}
 	return cfg
@@ -82,12 +96,12 @@ func placed(cfg Config, p placement, screens []Screen) Config {
 // validLength reports whether v is a size a window can have.
 func validLength(v float64) bool { return v >= 1 && !math.IsInf(v, 0) }
 
-// fitLength bounds v, a saved width or height, by the screen's and then by
-// the window's limits, of which a zero one is none: the minimum wins, as the
-// window could not be made smaller anyway.
-func fitLength(v, screen float64, least, most int) float64 {
-	if screen >= 1 {
-		v = min(v, screen)
+// fitLength bounds v, a saved width or height, by the work area's and then
+// by the window's limits, of which a zero one is none: the minimum wins, as
+// the window could not be made smaller anyway.
+func fitLength(v, area float64, least, most int) float64 {
+	if area >= 1 {
+		v = min(v, area)
 	}
 	if most > 0 {
 		v = min(v, float64(most))
@@ -95,20 +109,57 @@ func fitLength(v, screen float64, least, most int) float64 {
 	return max(v, float64(least), 1)
 }
 
-// is reports whether the display s names is screen, or whether s names none,
-// as a placement taken before the window knew its display does not.
-func (s *placementScreen) is(screen Screen) bool {
-	return s == nil || s.Name == screen.Name
+// among returns the display of screens that s names, and whether it is
+// connected: by ID alone, as two displays of one model share a name and a
+// rearranged one has moved.
+func (s *placementScreen) among(screens []Screen) (Screen, bool) {
+	if s == nil || s.ID == "" {
+		return Screen{}, false
+	}
+	for _, c := range screens {
+		if c.ID == s.ID {
+			return c, true
+		}
+	}
+	return Screen{}, false
+}
+
+// screenWithID returns the display of screens whose ID is id, or the first,
+// the primary, which stands for the one a window opens on by default.
+func screenWithID(id string, screens []Screen) Screen {
+	if id != "" {
+		for _, s := range screens {
+			if s.ID == id {
+				return s
+			}
+		}
+	}
+	return screens[0]
+}
+
+// usable returns the part of s windows are placed in, from its top-left
+// corner: its work area, or all of it where that is not known.
+func (s Screen) usable() Rect {
+	if s.WorkArea.Size.W >= 1 && s.WorkArea.Size.H >= 1 {
+		return s.WorkArea
+	}
+	return Rct(Point{}, s.Size)
 }
 
 // reachable reports whether a window of size at pos keeps enough of its top
-// edge on a screen of size screen to be dragged.
-func reachable(pos Point, size, screen Size) bool {
-	if math.IsNaN(pos.X) || math.IsNaN(pos.Y) {
-		return false
-	}
-	return pos.Y >= 0 && pos.Y <= screen.H-placementReach &&
-		pos.X+size.W >= placementReach && pos.X <= screen.W-placementReach
+// edge in area to be dragged.
+func reachable(pos Point, size Size, area Rect) bool {
+	top, left := area.Origin.Y, area.Origin.X
+	return pos.Y >= top && pos.Y <= top+area.Size.H-placementReach &&
+		pos.X+size.W >= left+placementReach && pos.X <= left+area.Size.W-placementReach
+}
+
+// into moves a window of size at pos the least distance that puts all of it
+// in area, which it fits.
+func into(pos Point, size Size, area Rect) Point {
+	pos.X = max(min(pos.X, area.Origin.X+area.Size.W-size.W), area.Origin.X)
+	pos.Y = max(min(pos.Y, area.Origin.Y+area.Size.H-size.H), area.Origin.Y)
+	return pos
 }
 
 // placementStore is the file an app's remembered placements live in. A
@@ -278,8 +329,9 @@ func (w *Window) restorePlacement(screens []Screen) *placementStore {
 }
 
 // trackPlacement starts keeping the window's placement in store, from the
-// Config it opened with; the window's events follow it from there.
-func (w *Window) trackPlacement(store *placementStore) {
+// Config it opened with on screen, the display it opened on; the window's
+// events follow it from there.
+func (w *Window) trackPlacement(store *placementStore, screen Screen) {
 	if store == nil {
 		return
 	}
@@ -289,6 +341,16 @@ func (w *Window) trackPlacement(store *placementStore) {
 		at := *w.cfg.Position
 		w.remembered.Position = &at
 	}
+	w.remembered.Screen = placementScreenOf(screen)
+}
+
+// placementScreenOf names screen in a placement, or is nil for a display
+// with no ID.
+func placementScreenOf(screen Screen) *placementScreen {
+	if screen.ID == "" {
+		return nil
+	}
+	return &placementScreen{ID: screen.ID, Name: screen.Name}
 }
 
 // notePlacement takes the native window's placement as it is now: its
@@ -314,7 +376,7 @@ func (w *Window) notePlacement() {
 	x, y := nw.Position()
 	p := placement{Position: &Point{X: x, Y: y}, Width: width, Height: height}
 	if m := nw.Monitor(); m != nil {
-		p.Screen = &placementScreen{Name: m.Name()}
+		p.Screen = placementScreenOf(screenOf(m))
 	}
 	w.remembered = p
 }
