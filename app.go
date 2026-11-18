@@ -177,7 +177,12 @@ func Run(cfg Config, build Builder) error {
 
 // Run opens the windows and blocks until the last one closes, disposing
 // owned resources on return, including when the engine returns an error.
+//
+// A process ggui record started, with GGUI_RECORD set, opens no window:
+// Run draws the tour asked for, which the app registered with package
+// record, and exits. See docs/recording.md.
 func (a *App) Run() error {
+	recordIfAsked()
 	defer func() {
 		a.running = false
 		a.Close()
