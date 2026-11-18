@@ -42,11 +42,12 @@ or the only one. --list prints the names. The GIF is name.gif, or
 tour.gif, in the project's directory, unless -o names another file.
 
 The GIF has one palette for the whole recording, chosen from its
-colors, and each frame after the first holds only what changed, so a
-tour that mostly holds still makes a small file. --fps keeps fewer
-frames than the tour draws, --width scales them down, --colors makes
-the palette smaller, and --dither mixes its colors where gradients
-band. docs/recording.md has the details.
+colors, and each frame after the first holds only the pixels that
+changed, so a tour that mostly holds still makes a small file. --fps
+keeps fewer frames than the tour draws, --width scales them down,
+--colors makes the palette smaller, --dither mixes its colors where
+gradients band, and --lossy trades exact colors for a smaller file.
+docs/recording.md has the details.
 
 --frame mac draws each frame as a macOS window, with a title bar,
 rounded corners and a shadow, on a backdrop that --backdrop sets, in
@@ -65,6 +66,7 @@ draw.`,
 		colors := fs.Int("colors", 256, "the GIF palette's `n` colors, 2 to 256")
 		dither := fs.Float64("dither", 0, "ordered dithering's `strength`, 0 (none) to 1; 0.3 smooths gradients that band")
 		loop := fs.Int("loop", 0, "play the GIF `n` times; 0 loops for ever")
+		lossy := fs.Int("lossy", 0, "let the GIF's compression write colors up to `n`/1000 off in Oklab, 0 (exact) to 200; 20 to 40 is hard to see")
 		frame := fs.String("frame", "", "draw the frames in a `style` of window frame, mac or none, in place of the tour's")
 		backdrop := fs.String("backdrop", "", "the `color` a framed window is drawn on, #RRGGBB or transparent")
 		cursor := fs.Bool("cursor", true, "draw the cursor the tour's pointer steps move")
@@ -86,6 +88,8 @@ draw.`,
 				return fmt.Errorf("--dither %g: the strength is 0 to 1", *dither)
 			case *fps < 0 || *width < 0 || *loop < 0:
 				return errors.New("--fps, --width and --loop are not negative")
+			case *lossy < 0 || *lossy > 200:
+				return fmt.Errorf("--lossy %d: it is 0 to 200", *lossy)
 			case *frame != "" && *frame != "mac" && *frame != "none":
 				return fmt.Errorf("--frame %s: the frames are mac and none", *frame)
 			case *backdrop != "" && !validBackdrop(*backdrop):
@@ -144,6 +148,7 @@ draw.`,
 			}
 			if req.Format != "list" {
 				req.FPS, req.Width, req.Loop, req.Dither = *fps, *width, *loop, *dither
+				req.Lossy = *lossy
 				if *colors != 256 {
 					req.Colors = *colors
 				}
@@ -207,6 +212,7 @@ type recordRequest struct {
 	Colors int     `json:"colors,omitempty"`
 	Dither float64 `json:"dither,omitempty"`
 	Loop   int     `json:"loop,omitempty"`
+	Lossy  int     `json:"lossy,omitempty"`
 	// Frame is "mac" or "none", or "" for the tour's; Backdrop is
 	// "#RRGGBB" or "transparent".
 	Frame    string `json:"frame,omitempty"`
