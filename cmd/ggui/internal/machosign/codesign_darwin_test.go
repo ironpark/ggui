@@ -93,7 +93,7 @@ func signatureFacts(out string) string {
 	for line := range strings.SplitSeq(out, "\n") {
 		switch {
 		case strings.HasPrefix(line, "CodeDirectory "):
-			for _, f := range strings.Fields(line) {
+			for f := range strings.FieldsSeq(line) {
 				if strings.HasPrefix(f, "flags=") || strings.HasPrefix(f, "v=") {
 					facts = append(facts, f)
 				}
