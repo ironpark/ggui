@@ -82,6 +82,54 @@ func TestRunCommandQuotes(t *testing.T) {
 	if got := runCommand(`C:\Program Files\App\app.exe`); got != `"C:\Program Files\App\app.exe"` {
 		t.Errorf("got %s", got)
 	}
+	got := runCommand(`C:\Program Files\App\app.exe`, "--hidden", "two words", `say "hi"`, `C:\dir\`, `C:\my dir\`, "100%", "")
+	want := `"C:\Program Files\App\app.exe" --hidden "two words" "say \"hi\"" C:\dir\ "C:\my dir\\" 100% ""`
+	if got != want {
+		t.Errorf("with args:\n got %s\nwant %s", got, want)
+	}
+}
+
+func TestWindowsArg(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct{ in, want string }{
+		{"", `""`},
+		{"plain", "plain"},
+		{"a b", `"a b"`},
+		{"a\tb", "\"a\tb\""},
+		{`a"b`, `a\"b`},
+		{`a\"b`, `a\\\"b`},
+		{`a\b`, `a\b`},
+		{`a b\`, `"a b\\"`},
+		{`a "b" \\`, `"a \"b\" \\\\"`},
+		{"%PATH%", "%PATH%"},
+	} {
+		if got := windowsArg(c.in); got != c.want {
+			t.Errorf("windowsArg(%q) = %s, want %s", c.in, got, c.want)
+		}
+	}
+}
+
+func TestLaunchAgentArgs(t *testing.T) {
+	t.Parallel()
+	got := string(launchAgent("com.example.app", "/x/App", "--hidden", `a "b" & <c>`, "100%"))
+	want := "<array>\n" +
+		"\t\t<string>/x/App</string>\n" +
+		"\t\t<string>--hidden</string>\n" +
+		"\t\t<string>a &#34;b&#34; &amp; &lt;c&gt;</string>\n" +
+		"\t\t<string>100%</string>\n" +
+		"\t</array>"
+	if !strings.Contains(got, want) {
+		t.Errorf("plist lacks %q:\n%s", want, got)
+	}
+}
+
+func TestAutostartEntryArgs(t *testing.T) {
+	t.Parallel()
+	got := string(autostartEntry("app", "/opt/app", "--hidden", "two words", `say "hi"`, "100%u", `$HOME\x`))
+	want := `Exec="/opt/app" "--hidden" "two words" "say \\"hi\\"" "100%%u" "\\$HOME\\\\x"` + "\n"
+	if !strings.Contains(got, want) {
+		t.Errorf("entry lacks %q:\n%s", want, got)
+	}
 }
 
 func TestLoginFileRoundTrip(t *testing.T) {

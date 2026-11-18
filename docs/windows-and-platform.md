@@ -450,6 +450,30 @@ ui.Switch(ggui.Bind(openAtLogin.Get, func(v bool) {
 }), "Open at login")
 ```
 
+Arguments after the first are passed to the app when the system opens it, each
+as one argument whatever spaces, quotes or percent signs it holds;
+registering again replaces them, and `OpenAtLogin` reports a registration
+whatever its arguments. They let an app tell that the system opened it, not
+the user, and start in its tray instead of in a window:
+
+```go
+ggui.SetOpenAtLogin(v, "--hidden")
+
+// in main, before app.Run():
+if slices.Contains(os.Args[1:], "--hidden") {
+    app.Setup(app.HideToTray)
+}
+```
+
+`HideToTray` belongs on the UI thread, and the Dock can be left only while the
+app runs, so call it from `Setup` rather than before `Run`: `Setup` runs on
+the UI thread as the app starts, before any window is shown, so the windows
+open hidden and the app leaves the Dock. `ShowFromTray`, from the tray's menu
+or `OnReopen`, brings them out.
+Only macOS has a tray icon: elsewhere an app started hidden needs another way
+back, such as a `SingleInstance` handler that calls `ShowFromTray` when the user
+opens the app again.
+
 What is registered is the executable running now, links resolved, so call it
 from the installed app; an app inside a bundle registers its
 `Contents/MacOS/<name>`. The registration is named for the
@@ -460,9 +484,9 @@ releases, so a new version finds what an old one registered.
 
 | Platform | Registration |
 | --- | --- |
-| macOS | A LaunchAgent, `~/Library/LaunchAgents/<id>.plist`, with `RunAtLoad`. It takes effect from the next login, and System Settings lists it under Login Items. |
-| Windows | A value named `<id>` in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, holding the quoted path. An entry the user turned off in Task Manager counts as off, and `SetOpenAtLogin` turns it back on. |
-| Linux and BSD | An XDG autostart entry, `$XDG_CONFIG_HOME/autostart/<id>.desktop` (`~/.config/autostart` by default). |
+| macOS | A LaunchAgent, `~/Library/LaunchAgents/<id>.plist`, with `RunAtLoad` and the path and arguments in `ProgramArguments`. It takes effect from the next login, and System Settings lists it under Login Items. |
+| Windows | A value named `<id>` in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, holding the quoted path followed by the arguments, quoted as `syscall.EscapeArg` quotes them. An entry the user turned off in Task Manager counts as off, and `SetOpenAtLogin` turns it back on. |
+| Linux and BSD | An XDG autostart entry, `$XDG_CONFIG_HOME/autostart/<id>.desktop` (`~/.config/autostart` by default), whose `Exec` quotes the path and each argument as the Desktop Entry specification says, a `%` doubled. |
 | Browser | Unsupported: both return an error wrapping `errors.ErrUnsupported`. |
 
 The files are written whole through a temporary file renamed over the old one.

@@ -20,13 +20,13 @@ func userAutostartDir() (string, error) {
 	return autostartDir(os.Getenv, home), nil
 }
 
-func setOpenAtLogin(id, exe string, enabled bool) error {
+func setOpenAtLogin(id, exe string, args []string, enabled bool) error {
 	dir, err := userAutostartDir()
 	if err != nil {
 		return err
 	}
 	name := strings.TrimSuffix(filepath.Base(exe), filepath.Ext(exe))
-	return setLoginFile(autostartPath(dir, id), autostartEntry(name, exe), enabled)
+	return setLoginFile(autostartPath(dir, id), autostartEntry(name, exe, args...), enabled)
 }
 
 func openAtLogin(id string) (bool, error) {

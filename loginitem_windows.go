@@ -17,13 +17,13 @@ const (
 // bundleID is "": only macOS runs an app from a bundle.
 func bundleID() string { return "" }
 
-func setOpenAtLogin(id, exe string, enabled bool) error {
+func setOpenAtLogin(id, exe string, args []string, enabled bool) error {
 	if enabled {
 		k, _, err := registry.CreateKey(registry.CURRENT_USER, runKey, registry.SET_VALUE)
 		if err != nil {
 			return err
 		}
-		err = k.SetStringValue(id, runCommand(exe))
+		err = k.SetStringValue(id, runCommand(exe, args...))
 		if cerr := k.Close(); err == nil {
 			err = cerr
 		}

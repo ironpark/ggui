@@ -12,6 +12,6 @@ func bundleID() string { return "" }
 // opens no page at login.
 var errNoLoginItem = fmt.Errorf("ggui: open at login in a browser: %w", errors.ErrUnsupported)
 
-func setOpenAtLogin(string, string, bool) error { return errNoLoginItem }
+func setOpenAtLogin(string, string, []string, bool) error { return errNoLoginItem }
 
 func openAtLogin(string) (bool, error) { return false, errNoLoginItem }
