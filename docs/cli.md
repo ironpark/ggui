@@ -33,6 +33,7 @@ applications it runs. `ggui version` prints the version installed.
 | [`ggui build [package]`](#ggui-build) | Build a release: a macOS `.app`, a Windows `.exe`, a web bundle or a plain program. |
 | [`ggui doctor`](#ggui-doctor) | Check the machine and the project for what ggui needs. |
 | [`ggui i18n check\|extract [dir]`](#ggui-i18n) | Check the translation catalogs against the messages the app passes, or add what they lack. |
+| [`ggui record [name]`](#ggui-record) | Draw a tour the app registered into an animated GIF, or PNG frames. |
 
 `ggui help <command>` prints a command's flags. Settings come from
 [`ggui.toml`](#ggui-toml), and flags override them. Flags may come before
@@ -55,6 +56,7 @@ and spinners. `NO_COLOR` wins over the other two.
 - [ggui build](#ggui-build)
 - [ggui doctor](#ggui-doctor)
 - [ggui i18n](#ggui-i18n)
+- [ggui record](#ggui-record)
 - [ggui.toml](#ggui-toml)
 
 ## ggui init
@@ -728,6 +730,52 @@ output, as lines to paste into its `Messages` and `Plurals`. With
 `--lang ko` it makes a new JSON catalog of every message instead, at
 `--out`, by default `locales/ko.json` in the project; a file already
 there is left alone.
+
+## ggui record
+
+```sh
+ggui record
+ggui record intro -o docs/intro.gif --fps 10 --width 800
+ggui record --list
+ggui record --frames /tmp/frames
+```
+
+`ggui record` draws a tour, a scripted walk through the app that the app
+registers with package `github.com/ironpark/ggui/record`, into an animated
+GIF. Nothing is captured from the screen and no window opens: the app draws
+each frame offscreen on a clock of its own. [Recording a tour](recording.md)
+shows how to write one.
+
+It builds the main package (`app.package`, or `--package`) with the release
+tags, `build.tags`, to a temporary directory, and runs it in the project's
+directory with `dev.env` added to its environment and `GGUI_RECORD` set to
+the request, which `ggui.Run` reads: the app draws the tour and exits
+instead of opening its window. What the app prints goes to the terminal.
+At the end ggui says what was written, as `Wrote tour.gif (42.7 KB, 10
+frames, 5.6s, 640×427)`, and prints its path on standard output.
+
+The name selects the tour: with none, the one registered with no name, or
+the only one. `--list` prints the names, the unnamed one as `(default)`.
+The GIF is `name.gif`, or `tour.gif`, in the project's directory, unless
+`-o` names a file.
+
+| Flag | |
+| --- | --- |
+| `-o file` | Write the GIF to `file`. |
+| `--frames dir` | Write PNG frames, `0000.png` and on, to `dir` instead of a GIF, for ffmpeg. |
+| `--list` | Print the tours' names. |
+| `--fps n` | Keep `n` frames a second; 0 keeps every frame the tour draws (15 a second unless the tour says otherwise). |
+| `--width px` | Scale the frames down to `px` pixels wide. |
+| `--colors n` | The GIF palette's size, 2 to 256 (256). |
+| `--dither s` | Ordered dithering, 0 (none, the default) to 1; 0.3 smooths gradients that band. |
+| `--loop n` | Play the GIF `n` times; 0 (the default) loops for ever. |
+| `--package pkg` | The main package, replacing `app.package`. |
+| `--tags tags` | Build tags, replacing `build.tags`. |
+| `--config file` | Read `file` instead of the `ggui.toml` found. |
+
+An app that does not import package `record`, has no tour of the name, or
+exits before it reaches `ggui.Run` (or `record.Main`) is said to, and
+`ggui record` exits with status 1.
 
 ## ggui.toml
 

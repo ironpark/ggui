@@ -228,6 +228,7 @@ and the full topic list.
 | The ggui command | [init, dev, build, doctor and ggui.toml](docs/cli.md) |
 | Custom widgets | [The widget protocol, setters and painting](docs/rendering.md#custom-widgets) · [API conventions](docs/api-conventions.md) |
 | Interaction and testing | [Input](docs/input.md#input) · [Headless testing](docs/testing.md#testing) · [Inspector](docs/inspector.md#inspector) |
+| Showing the app | [Recording a tour into an animated GIF](docs/recording.md) |
 | Internals | [Frame lifecycle](docs/rendering.md#frame-lifecycle) · [Repository layout](docs/development.md#repository-layout) |
 
 ## Development

@@ -58,6 +58,7 @@ from the repository root unless a guide says otherwise.
 | Translate the words controls show and say, such as "Close" and "No results" | [Localization](accessibility.md#localization) |
 | Translate an app's own text, with plurals, dates and numbers | [Translating an app](i18n.md) |
 | Test and inspect a UI | [Testing](testing.md) · [Widget inspector](inspector.md) |
+| Make an animated GIF of the app for a README, with no screen capture | [Recording a tour](recording.md) |
 | Write a custom widget or understand rendering | [Custom widgets and rendering](rendering.md) |
 | Understand API conventions and runtime setters | [Public API conventions](api-conventions.md) |
 | Create an app, run it with live rebuilds, bundle it as a macOS app or for the web, or check a machine's setup | [The ggui command](cli.md) |
