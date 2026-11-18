@@ -157,14 +157,15 @@ func autostartPath(dir, id string) string { return filepath.Join(dir, id+".deskt
 // autostartEntry is the desktop entry that starts exe with args at login,
 // shown to the user as name.
 func autostartEntry(name, exe string, args ...string) []byte {
-	exec := execArg(exe)
+	var exec strings.Builder
+	exec.WriteString(execArg(exe))
 	for _, a := range args {
-		exec += " " + execArg(a)
+		exec.WriteString(" " + execArg(a))
 	}
 	return []byte("[Desktop Entry]\n" +
 		"Type=Application\n" +
 		"Name=" + desktopString(name) + "\n" +
-		"Exec=" + desktopString(exec) + "\n" +
+		"Exec=" + desktopString(exec.String()) + "\n" +
 		"X-GNOME-Autostart-enabled=true\n")
 }
 
@@ -199,11 +200,12 @@ func desktopString(s string) string {
 // argument quoted as syscall.EscapeArg quotes one, which is how the C
 // runtime and CommandLineToArgvW, and so os.Args, split them again.
 func runCommand(exe string, args ...string) string {
-	cmd := `"` + exe + `"`
+	var cmd strings.Builder
+	cmd.WriteString(`"` + exe + `"`)
 	for _, a := range args {
-		cmd += " " + windowsArg(a)
+		cmd.WriteString(" " + windowsArg(a))
 	}
-	return cmd
+	return cmd.String()
 }
 
 // windowsArg is syscall.EscapeArg, which only Windows builds have: s as it
