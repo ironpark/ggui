@@ -537,9 +537,12 @@ ggui build --identity "Developer ID Application" --notarize --notary-profile ggu
    In CI, sign with a certificate exported with its private key as `.p12`
    instead: `macos.p12_file` or `--p12-file`, or its base64 text in
    `$GGUI_P12_BASE64`, with its password in `$GGUI_P12_PASSWORD` or a
-   file. ggui imports it into a temporary keychain for the build and
-   deletes that afterwards. The variables' names can be changed in
-   `ggui.toml`, which never holds a secret itself.
+   file; a PEM file with the private key and certificate works as
+   `macos.p12_file` too. ggui imports it into a temporary keychain for the
+   build and deletes that afterwards. The variables' names can be changed
+   in `ggui.toml`, which never holds a secret itself. On Linux and
+   Windows a certificate is what signs; see
+   [below](#signing-and-notarizing-on-linux-and-windows).
 2. **Notarizing.** `--notarize` or `macos.notarize = true` submits the
    app, then the disk image and the installer, to Apple's notary service,
    waits for the verdict, which usually takes minutes, and staples the
@@ -571,12 +574,79 @@ before it compiles anything, so a missing identity or password fails at
 once, saying what to do. The paths of the app and of the disk image and
 installer are printed on standard output, one a line.
 
-ggui signs with an identity, notarizes and verifies on a Mac only, with
-Apple's tools; build releases there, as a macOS runner in CI does.
-Elsewhere it signs the bundle ad hoc, leaves the disk image and installer
-unsigned, and stops with a message when asked to sign with an identity. zapp could sign on Linux and Windows through a Rust
-library, but only a cgo build links it, and linking it would ask every
-build of ggui with a C compiler there to link 30 MB it would not use.
+ggui signs ad hoc on any host, with its own signer. Signing with an
+identity, notarizing and verifying use Apple's tools on a Mac, and
+rcodesign on Linux and Windows, as below.
+
+#### Signing and notarizing on Linux and Windows
+
+On Linux and Windows, amd64 and arm64, ggui signs and notarizes with
+zapp's rcodesign library (Rust's
+[apple-codesign](https://github.com/indygreg/apple-platform-rs), linked
+statically, about 30 MB) in place of Apple's tools, so a Linux CI runner can
+ship a macOS release. There is no keychain or `notarytool` there, so it
+takes:
+
+- **A certificate with its private key**: the Developer ID Application
+  certificate exported as `.p12` (`macos.p12_file`, `--p12-file`, or its
+  base64 text in `$GGUI_P12_BASE64`, with its password as on a Mac), or
+  a PEM file holding the private key and the certificate, given the same
+  way as a file. The certificate holds the one identity it signs as:
+  `macos.signing_identity`, which may name a keychain identity for
+  building on a Mac, is not used, and without a certificate a keychain
+  identity is refused.
+- **An App Store Connect API key, to notarize**: `macos.notary.api_key_file`
+  or `--api-key-file`, as the JSON that
+  [rcodesign](https://gregoryszorc.com/docs/apple-codesign/stable/apple_codesign_rcodesign.html)'s
+  `rcodesign encode-app-store-connect-api-key -o key.json ISSUER_ID KEY_ID AuthKey_KEY_ID.p8`
+  writes: `{"issuer_id", "key_id", "private_key"}`, the last the base64 of
+  the `.p8` key, not its PEM. Make the key in App Store Connect, under
+  Users and Access, Integrations, with the Developer role. A notarytool
+  profile or an Apple ID works on a Mac only.
+
+The app and the disk image are signed, notarized and stapled as on a Mac,
+with the hardened runtime and Apple's timestamp service. An installer is
+not: it takes a Developer ID Installer certificate of its own, and away
+from a Mac ggui takes one certificate, so `--pkg` or `[macos.pkg]` with an
+identity is refused there; make the installer on a Mac. The checks at the
+end verify each binary's code digests and signature with rcodesign; a
+disk image's or installer's signature, and Gatekeeper's verdict, are
+checked on a Mac only, and are reported as skipped.
+
+Only some builds of the ggui command link the library, since it takes cgo:
+
+- **The release binaries** for Linux and Windows on
+  [GitHub](https://github.com/ironpark/ggui/releases) do, cross-compiled
+  with [zig](https://ziglang.org) as the C compiler; the Linux ones need
+  glibc 2.28 or later. Their archives carry the library's notices under
+  `rcodesign/`. Homebrew's formula builds with cgo on Linux too.
+- **`go install` on Linux** does with cgo and a C compiler: `CGO_ENABLED=1
+  go install github.com/ironpark/ggui/cmd/ggui@latest` with `gcc` or
+  `clang` on `PATH` (cgo is on by default when one is), and the system's
+  glibc 2.35 or later.
+- **`go install` on Windows** does only with [LLVM
+  MinGW](https://github.com/mstorsjo/llvm-mingw), the toolchain the
+  library is built with, and the tag `ggui_rcodesign`: MinGW's GCC, which
+  a Windows machine with a C compiler often has on `PATH` and cgo would
+  then use, does not link it, so the tag keeps such a build from trying.
+
+  ```powershell
+  $env:CGO_ENABLED = '1'
+  $env:CC = 'x86_64-w64-mingw32-clang'   # aarch64-w64-mingw32-clang on Arm
+  go install -tags ggui_rcodesign github.com/ironpark/ggui/cmd/ggui@latest
+  ```
+
+A build without it, `CGO_ENABLED=0` or on another system, builds the
+bundle, disk image and installer unsigned, and when asked to sign stops
+with a message saying which of these to install. `ggui doctor` says
+which kind of build it is, and checks the certificate and API key
+`ggui.toml` gives.
+
+Signing this way is tested in ggui's CI with a throwaway self-signed
+certificate: on Linux, by a build with GCC and one built as the release
+is, and checked by `codesign --verify` on a Mac; and on Windows by the
+release build, checked by rcodesign. Notarizing this way is not tested
+there, since CI has no Apple credentials.
 
 ### The Windows program
 
