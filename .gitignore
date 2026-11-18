@@ -41,5 +41,7 @@ go.work.sum
 # Task's record of the sources a task was last run on (the cli task's).
 /.task/
 
-# GoReleaser output
+# GoReleaser output, and the notices it puts in the Linux and Windows
+# archives (cmd/ggui/release/notices.sh)
 /dist/
+/cmd/ggui/release/notices/

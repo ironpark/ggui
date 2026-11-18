@@ -8,8 +8,9 @@
 # repository: the command is a module of its own, about 160 KB, where
 # the repository is 20 MB of fonts, icons and examples; the build then
 # downloads its dependencies, zapp's module zip, about 40 MB, the most
-# of them. Go is a dependency at run time too, since the command builds
-# applications.
+# of them, and on Linux the module of zapp's prebuilt rcodesign archives
+# too, which the cgo build there links. Go is a dependency at run time
+# too, since the command builds applications.
 set -eu
 version=$1
 url="https://proxy.golang.org/github.com/ironpark/ggui/cmd/ggui/@v/${version}.zip"
@@ -34,8 +35,11 @@ class Ggui < Formula
     # The module zip holds the module below its path and version.
     cd "ironpark/ggui/cmd/ggui@v#{version}" do
       ENV["GOWORK"] = "off"
-      # Built as the release binaries are; the command needs no cgo.
-      ENV["CGO_ENABLED"] = "0"
+      # Built as the release binaries are: on macOS without cgo, since
+      # ggui signs there with Apple's tools; on Linux with cgo and
+      # Homebrew's compiler, which links zapp's rcodesign library, so
+      # that ggui signs and notarizes macOS apps there too.
+      ENV["CGO_ENABLED"] = OS.mac? ? "0" : "1"
       system "go", "build", *std_go_args(ldflags: "-s -w -X main.releaseVersion=v#{version}")
     end
   end
