@@ -20,6 +20,7 @@ system appearance and a single running instance.
 - [Message dialogs](#message-dialogs)
 - [Light and dark](#light-and-dark)
 - [One instance](#one-instance)
+- [System languages](#system-languages)
 - [Platform support](#platform-support)
 
 ## Several windows
@@ -348,6 +349,27 @@ if errors.Is(err, runtime.ErrRunning) {
 The callback runs on the UI thread. The instances meet at a local socket that
 only the same user can reach.
 
+## System languages
+
+`ggui.SystemLanguages()` returns the languages the user prefers, most preferred
+first, as BCP 47 tags: `["ko-KR", "en-US"]`. An app picks its translation from
+them:
+
+```go
+lang := i18n.Match([]string{"en", "ko", "ja"}, ggui.SystemLanguages())
+```
+
+It asks the platform on every call, from any goroutine, so a change in the
+system's settings shows in the next call; it returns an empty list when the
+platform says nothing. macOS gives the list in Language & Region settings
+(`CFLocaleCopyPreferredLanguages`), Windows the user's preferred display
+languages (`GetUserPreferredUILanguages`, else the user's locale), and a
+browser `navigator.languages`. Linux and the BSDs read `LANGUAGE`, a list
+separated by colons, then the first of `LC_ALL`, `LC_MESSAGES` and `LANG`; as
+in gettext, a `C` or `POSIX` locale asks for no translation and leaves
+`LANGUAGE` unread. A POSIX name such as `ko_KR.UTF-8@mod` becomes `ko-KR`, and
+each tag appears once.
+
 ## Platform support
 
 | Feature | macOS | Windows | Linux | Browser |
@@ -361,5 +383,6 @@ only the same user can reach.
 | Clipboard | Pasteboard API | Clipboard API | X11 `CLIPBOARD` selection | Paste events and `navigator.clipboard` |
 | `SystemDark` | Yes | Yes | Yes | Yes |
 | `SingleInstance` | Yes | Yes | Yes | Every tab is one |
+| `SystemLanguages` | Yes | Yes | Environment | `navigator.languages` |
 | `runtime.OpenURL` | `open` | Default handler | `xdg-open` | New tab |
 | `runtime.Reveal` | Selected in Finder | Selected in Explorer | FileManager1 over D-Bus, else the folder | No |
