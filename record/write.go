@@ -24,7 +24,9 @@ func (t Tour) WriteGIF(path string, opts ...Option) error {
 }
 
 func (t Tour) writeGIF(path string, o *settings) (res result, err error) {
-	w, h := t.pixels()
+	o.flatten = true
+	size := t.layout(o).size
+	w, h := size.X, size.Y
 	s, err := newGIFSink(w, h, o, t.fps())
 	if err != nil {
 		return result{}, err
@@ -50,8 +52,9 @@ func (t Tour) writeGIF(path string, o *settings) (res result, err error) {
 
 // WritePNGs draws the tour and writes its frames to dir, which it
 // creates, as 0000.png, 0001.png and on, for a tool such as ffmpeg to make
-// a video or a GIF of. The options FPS, Width and Background apply; the
-// frames are as many a second as FPS keeps, or the tour's FPS. Call it
+// a video or a GIF of. The options FPS, Width, Background and the
+// frame's apply; the frames are as many a second as FPS keeps, or the
+// tour's FPS, and keep the alpha of a transparent Backdrop. Call it
 // from the main goroutine (see the package documentation).
 func (t Tour) WritePNGs(dir string, opts ...Option) error {
 	_, err := t.writePNGs(dir, resolve(opts))
@@ -62,7 +65,8 @@ func (t Tour) writePNGs(dir string, o *settings) (result, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return result{}, err
 	}
-	w, h := t.pixels()
+	size := t.layout(o).size
+	w, h := size.X, size.Y
 	pace := newPacer(t.fps(), o.fps)
 	sc := newScaler(w, h, o.width)
 	enc := png.Encoder{CompressionLevel: png.BestSpeed}

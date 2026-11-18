@@ -5,7 +5,7 @@ import (
 	"math"
 )
 
-// scaler shrinks opaque frames of one size to another with an area
+// scaler shrinks frames of one size to another with an area
 // filter: each pixel out is the average of the source area it covers,
 // partly covered pixels in proportion. It is what keeps thin strokes and
 // text legible when a frame shrinks by a fraction, where sampling would
@@ -13,8 +13,8 @@ import (
 type scaler struct {
 	sw, sh, dw, dh int
 	xs, ys         []taps
-	row            []float32 // a source row filtered across, dw×3
-	acc            []float32 // the output row being summed, dw×3
+	row            []float32 // a source row filtered across, dw×4
+	acc            []float32 // the output row being summed, dw×4
 	dst            *image.RGBA
 }
 
@@ -36,8 +36,8 @@ func newScaler(sw, sh, dw int) *scaler {
 		sw: sw, sh: sh, dw: dw, dh: dh,
 		xs:  areaTaps(sw, dw),
 		ys:  areaTaps(sh, dh),
-		row: make([]float32, dw*3),
-		acc: make([]float32, dw*3),
+		row: make([]float32, dw*4),
+		acc: make([]float32, dw*4),
 		dst: image.NewRGBA(image.Rect(0, 0, dw, dh)),
 	}
 }
@@ -70,15 +70,16 @@ func (s *scaler) scale(src *image.RGBA) *image.RGBA {
 			y := ty.first + j
 			line := src.Pix[y*src.Stride : y*src.Stride+s.sw*4]
 			for ox, tx := range s.xs {
-				var r, g, b float32
+				var r, g, b, a float32
 				p := tx.first * 4
 				for _, wx := range tx.w {
 					r += wx * float32(line[p])
 					g += wx * float32(line[p+1])
 					b += wx * float32(line[p+2])
+					a += wx * float32(line[p+3])
 					p += 4
 				}
-				s.row[ox*3], s.row[ox*3+1], s.row[ox*3+2] = r, g, b
+				s.row[ox*4], s.row[ox*4+1], s.row[ox*4+2], s.row[ox*4+3] = r, g, b, a
 			}
 			for i, v := range s.row {
 				s.acc[i] += wy * v
@@ -86,10 +87,9 @@ func (s *scaler) scale(src *image.RGBA) *image.RGBA {
 		}
 		out := s.dst.Pix[oy*s.dst.Stride:]
 		for ox := range s.dw {
-			out[ox*4] = clamp8(s.acc[ox*3])
-			out[ox*4+1] = clamp8(s.acc[ox*3+1])
-			out[ox*4+2] = clamp8(s.acc[ox*3+2])
-			out[ox*4+3] = 0xff
+			for j := range 4 {
+				out[ox*4+j] = clamp8(s.acc[ox*4+j])
+			}
 		}
 	}
 	return s.dst
