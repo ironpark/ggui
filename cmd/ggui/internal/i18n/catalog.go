@@ -128,7 +128,7 @@ func matchParts(pat, name []string) bool {
 
 // ValidGlob reports a pattern Find cannot match with.
 func ValidGlob(pattern string) error {
-	for _, p := range strings.Split(pattern, "/") {
+	for p := range strings.SplitSeq(pattern, "/") {
 		if _, err := path.Match(p, ""); err != nil {
 			return fmt.Errorf("%q: %w", pattern, err)
 		}

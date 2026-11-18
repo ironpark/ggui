@@ -54,7 +54,7 @@ func main() { _ = i18n.T("Hello") }
 		t.Fatal(err)
 	}
 	app, _, err := macos.Assemble(macos.Bundle{
-		Info:   macos.Info{Name: "App", Executable: "app", ID: "com.example.app", Version: "1.0", Extra: extra},
+		Name: "App", Executable: "app", ID: "com.example.app", Version: "1.0", Extra: extra,
 		Binary: bin, OutDir: filepath.Join(dir, "build"),
 	})
 	if err != nil {

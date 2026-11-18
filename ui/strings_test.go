@@ -25,8 +25,7 @@ import (
 func pseudo() ui.Strings {
 	s := ui.DefaultStrings()
 	v := reflect.ValueOf(&s).Elem()
-	for i := range v.NumField() {
-		f := v.Field(i)
+	for _, f := range v.Fields() {
 		switch f.Kind() {
 		case reflect.String:
 			f.SetString(tr(f.String()))
