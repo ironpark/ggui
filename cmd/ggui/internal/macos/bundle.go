@@ -6,9 +6,10 @@
 // Ad hoc signing and joining programs into a universal one are done in
 // Go by machosign, on any host. The rest of the work past assembling the
 // bundle is done by zapp's packages (github.com/ironpark/zapp/pkg/...):
-// signing with an identity and notarizing through Apple's tools, on a
-// Mac only; the disk image and the installer in pure Go; and the checks
-// a release should pass.
+// signing with an identity and notarizing, through Apple's tools on a Mac
+// and through the rcodesign library on Linux and Windows in a build that
+// links it; the disk image and the installer in pure Go; and the checks a
+// release should pass.
 package macos
 
 import (

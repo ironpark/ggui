@@ -213,16 +213,17 @@ func message(data []byte) string {
 		}
 		return s
 	}
-	msg := r.Message
+	var msg strings.Builder
+	msg.WriteString(r.Message)
 	for _, e := range r.Errors {
 		switch {
 		case e.Message != "":
-			msg += "; " + e.Message
+			msg.WriteString("; " + e.Message)
 		case e.Code != "":
-			msg += "; " + strings.TrimSpace(e.Resource+" "+e.Field+" "+e.Code)
+			msg.WriteString("; " + strings.TrimSpace(e.Resource+" "+e.Field+" "+e.Code))
 		}
 	}
-	return msg
+	return msg.String()
 }
 
 // Release is a GitHub release.
