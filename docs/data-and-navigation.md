@@ -49,17 +49,27 @@ Choose unique keys, then configure columns and selection:
 | `.BindSelected(binding)` | Read and write the selected row key on click, the arrows, Space, or Enter. |
 | `.BindSelection(binding)` | Edit a set of selected keys as a file list does: ⌘-click (Ctrl-click) toggles, Shift-click and Shift+arrows select a run, Space toggles, ⌘A selects all. |
 | `.OnSelect(fn)` | Receive the activated item. |
-| `.Height(h)` | Scroll the body beneath a fixed heading and virtualize rows. |
-| `.RowHeight(h)` | Set the fixed row height (default: 40 logical pixels). |
+| `.Height(h)` | Fix the table's height; the body scrolls beneath a fixed heading and lays out only the rows in view. Wins over the maximums. |
+| `.MaxHeight(h)` / `.MaxRows(n)` | Be as tall as the rows up to `h`, or up to `n` rows under the heading, then scroll the body as `Height` does. |
+| `.RowHeight(h)` | Fix every row's height; see the rule below. |
+| `.Toolbar(w)` | A widget above the heading, as wide as the table and in the cells' padding, for a filter field or actions; it stays put under a scrolling body and counts toward `Height`. `nil` removes it. |
 | `.RowName(fn)` | Set each row's accessible name; otherwise the key is used. |
 | `.Footer(cells...)` | A summary row under the body on a muted surface, one cell per column (`nil` leaves one empty); it stays put under a scrolling body. |
 | `.Caption(text)` | A line of muted text centered under the table; a `Height` includes it. |
 
-Without `Height`, the table grows to fit all rows.
+Without `Height`, `MaxHeight` or `MaxRows`, the table grows to fit all rows.
+
+A row is at least a line of text in the cell padding, 37 logical pixels under
+the stock themes. While the body does not scroll and there is no `RowHeight`,
+a row grows to its tallest cell, so a `ui.Button` in a cell keeps its height.
+A scrolling body needs rows of one height to lay out only those in view, so
+there every row is 37 unless `RowHeight` says otherwise: give a scrolling table
+with controls in its cells a `RowHeight` that fits them (49 for a default
+button under the default theme).
 
 A selectable table is one Tab stop: the row last used, or the selected one.
 The arrows, Home, End, Page Up and Page Down move between rows, scrolling a
-`Height` table to the row, and with `BindSelected` the selection follows.
+table with a scrolling body to the row, and with `BindSelected` the selection follows.
 Screen readers read it as a table of rows and cells under column headings.
 
 ```go
