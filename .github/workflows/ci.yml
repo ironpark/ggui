@@ -188,6 +188,144 @@ jobs:
             done
           '
 
+  # ggui signs a macOS app on Linux with zapp's rcodesign library, which a
+  # build of the command with cgo links: one built with the runner's GCC,
+  # and one cross-built with zig as the release's are. The certificate is
+  # a throwaway self-signed one with the Code Signing usage, named as a
+  # Developer ID Application certificate is, since ggui's own checks after
+  # signing want that name. Each build ends with those checks, rcodesign's
+  # verification of every binary's signature among them; the macOS job
+  # below then checks the signatures with codesign. Notarizing needs
+  # Apple's credentials, which CI has none of: it is not tested.
+  sign-linux:
+    name: sign a macOS app on Linux
+    runs-on: ubuntu-latest
+    env:
+      CERT_CN: 'Developer ID Application: ggui CI (GGUITEST01)'
+      GGUI_P12_PASSWORD: ci-throwaway
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            cmd/ggui/go.sum
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.1
+      - name: Build the command with cgo
+        env:
+          CGO_ENABLED: '1'
+        run: |
+          lib=github.com/ironpark/zapp/pkg/signing/rcodesign/lib
+          go -C cmd/ggui list -deps . | grep -qx "$lib"
+          go -C cmd/ggui build -o "$RUNNER_TEMP/ggui-gcc" .
+          # As cmd/ggui/.goreleaser.yaml builds the release binaries.
+          CC="zig cc -target x86_64-linux-gnu.2.28" CGO_LDFLAGS=-lunwind \
+            go -C cmd/ggui build -trimpath -o "$RUNNER_TEMP/ggui-zig" .
+          mkdir -p "$RUNNER_TEMP/windows"
+          GOOS=windows GOARCH=amd64 CC="zig cc -target x86_64-windows-gnu" \
+            CGO_LDFLAGS="-L$GITHUB_WORKSPACE/cmd/ggui/release/mingw -lunwind" \
+            go -C cmd/ggui build -trimpath -tags ggui_rcodesign -o "$RUNNER_TEMP/windows/ggui.exe" .
+          # Without the tag a Windows build with cgo leaves the library out,
+          # as the Windows runner's does: its cgo uses MinGW's GCC, not the
+          # LLVM MinGW the library is built with.
+          if GOOS=windows GOARCH=amd64 go -C cmd/ggui list -deps . | grep -qx "$lib"; then
+            echo "a Windows build without ggui_rcodesign links rcodesign"; exit 1
+          fi
+          "$RUNNER_TEMP/ggui-gcc" doctor || true
+      - name: Make a self-signed code signing certificate
+        run: |
+          cd "$RUNNER_TEMP"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 2 -keyout key.pem -out cert.pem \
+            -subj "/CN=$CERT_CN/OU=GGUITEST01/O=ggui CI" \
+            -addext "basicConstraints=critical,CA:FALSE" \
+            -addext "keyUsage=critical,digitalSignature" \
+            -addext "extendedKeyUsage=critical,codeSigning"
+          openssl pkcs12 -export -inkey key.pem -in cert.pem -out windows/cert.p12 -passout env:GGUI_P12_PASSWORD
+      - name: Sign an app with each build
+        run: |
+          "$RUNNER_TEMP/ggui-gcc" init --name "Hello World" --replace "$GITHUB_WORKSPACE" "$RUNNER_TEMP/hello"
+          cd "$RUNNER_TEMP/hello"
+          mkdir -p "$RUNNER_TEMP/signed"
+          for cc in gcc zig; do
+            "$RUNNER_TEMP/ggui-$cc" build --target macos --p12-file "$RUNNER_TEMP/windows/cert.p12" --out "$RUNNER_TEMP/out-$cc"
+            # zip -y keeps symbolic links as links, as ditto does.
+            (cd "$RUNNER_TEMP/out-$cc" && zip -q -y -r "$RUNNER_TEMP/signed/hello-$cc.zip" "Hello World.app")
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-on-linux
+          path: ${{ runner.temp }}/signed
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ggui-windows
+          path: ${{ runner.temp }}/windows
+          if-no-files-found: error
+
+  # The Windows release binary, cross-built above, signs an app on Windows;
+  # its build ends with ggui's checks, rcodesign's verification among them.
+  sign-windows:
+    name: sign a macOS app on Windows
+    needs: sign-linux
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      GGUI_P12_PASSWORD: ci-throwaway
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v4
+        with:
+          name: ggui-windows
+          path: ${{ runner.temp }}/ggui
+      - name: Sign an app
+        run: |
+          ggui="$RUNNER_TEMP/ggui/ggui.exe"
+          "$ggui" doctor || true
+          "$ggui" init --name "Hello World" --replace "$GITHUB_WORKSPACE" "$RUNNER_TEMP/hello"
+          cd "$RUNNER_TEMP/hello"
+          "$ggui" build --target macos --p12-file "$RUNNER_TEMP/ggui/cert.p12" --out "$RUNNER_TEMP/out"
+
+  # What was signed on Linux, checked by Apple's codesign: the signature's
+  # integrity, the code directory, the sealed resources and the designated
+  # requirement, not trust, which a self-signed certificate has none of:
+  # codesign --verify without -R does not evaluate the certificate's
+  # trust. Gatekeeper's verdict, which does, is printed, not checked.
+  verify-signed-on-linux:
+    name: verify on macOS what was signed on Linux
+    needs: sign-linux
+    runs-on: macos-26
+    env:
+      CERT_CN: 'Developer ID Application: ggui CI (GGUITEST01)'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: signed-on-linux
+          path: ${{ runner.temp }}/signed
+      - name: codesign
+        run: |
+          cd "$RUNNER_TEMP/signed"
+          for cc in gcc zig; do
+            echo "::group::signed by the $cc build"
+            mkdir "$cc"
+            ditto -x -k "hello-$cc.zip" "$cc"
+            app="$cc/Hello World.app"
+            codesign -dvvv "$app" 2>&1 | tee info.txt
+            grep -qxF "Authority=$CERT_CN" info.txt || { echo "the signing authority is not $CERT_CN"; exit 1; }
+            grep -q '^Timestamp=' info.txt || { echo "no secure timestamp"; exit 1; }
+            grep -q 'flags=.*runtime' info.txt || { echo "no hardened runtime"; exit 1; }
+            codesign --verify --strict --deep -vv "$app"
+            spctl --assess --type execute -vv "$app" || true
+            echo "::endgroup::"
+          done
+
   wasm:
     runs-on: ubuntu-latest
     steps:
