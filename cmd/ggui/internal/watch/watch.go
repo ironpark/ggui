@@ -294,15 +294,21 @@ func (w *Watcher) classify(ds []delta) (real, cosmetic, dirs []string) {
 // an editor between truncating and writing it. Then what is read is
 // judged, and its stamp taken as the one the scan saw, so that the next
 // scan does not judge it again.
+//
+// An empty file is taken as one caught there too, though it held still
+// while it was read: a save truncates the file and then writes it, and a
+// scan and this read can both fall in between. Judged as it is, the edit
+// would be a real one, and so would the next, compared with nothing. A Go
+// file that stays empty is a real change, said a moment later.
 func (w *Watcher) sameTokens(d delta) bool {
-	for range 3 {
+	for range 10 {
 		before := stat(d.path)
 		src, err := shared.ReadFile(d.path)
 		after := stat(d.path)
 		if err != nil {
 			break
 		}
-		if after != before {
+		if after != before || len(src) == 0 {
 			time.Sleep(5 * time.Millisecond) // being written
 			continue
 		}
