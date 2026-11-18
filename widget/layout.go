@@ -89,13 +89,18 @@ type BoxWidget struct {
 	childRect ggui.Rect // inside the padding, from the last Layout
 }
 
-// boxDeco is what few boxes paint: shadows and a gradient. A BoxWidget
-// makes one only when one is set.
+// boxDeco is what few boxes paint: shadows, a gradient and a clip. A
+// BoxWidget makes one only when one is set.
 type boxDeco struct {
 	shadows       []ggui.ShadowStyle
 	gradient      ggui.Gradient      // as given; see BoxWidget.Gradient
 	shownShadows  []ggui.ShadowStyle // shadows with their colors resolved
 	shownGradient ggui.Gradient      // gradient with its colors resolved
+
+	// paintClipped paints the child at childAt; it is made once, when
+	// Clip is first called, so a clipped Paint makes no closure.
+	paintClipped func(dst *ggui.Canvas)
+	childAt      ggui.Rect
 }
 
 // shownColor is a color property as it was given and as it is painted: the
@@ -182,6 +187,19 @@ func (b *BoxWidget) Shadow(styles ...ggui.ShadowStyle) *BoxWidget {
 // Radius rounds the corners of the fill and border.
 func (b *BoxWidget) Radius(r float64) *BoxWidget {
 	b.radius = r
+	return b
+}
+
+// Clip paints the child clipped to the inside of the box: within the
+// border, with the corners rounded by Radius less the border's width, or
+// square when there is no Radius. Content that runs to the box's edge, the
+// last row of a table or an image, then keeps to its rounded corners. Input
+// is clipped to that inside as a rectangle.
+func (b *BoxWidget) Clip() *BoxWidget {
+	d := b.decorate()
+	if d.paintClipped == nil {
+		d.paintClipped = func(dst *ggui.Canvas) { dst.Paint(b.child, d.childAt) }
+	}
 	return b
 }
 
@@ -308,9 +326,18 @@ func (b *BoxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if b.borderWidth > 0 {
 		dst.StrokeRoundRect(r, b.radius, b.borderWidth, b.borderColor.shown)
 	}
-	if b.child != nil {
-		dst.Paint(b.child, ggui.Rct(r.Origin.Add(b.childRect.Origin), b.childRect.Size))
+	if b.child == nil {
+		return
 	}
+	at := ggui.Rct(r.Origin.Add(b.childRect.Origin), b.childRect.Size)
+	if b.deco == nil || b.deco.paintClipped == nil {
+		dst.Paint(b.child, at)
+		return
+	}
+	bw := b.borderWidth
+	inner := ggui.Rct(r.Origin.Add(ggui.Pt(bw, bw)), ggui.Sz(max(r.Size.W-2*bw, 0), max(r.Size.H-2*bw, 0)))
+	b.deco.childAt = at
+	dst.ClipRoundRect(inner, max(min(b.radius-bw, inner.Size.W/2, inner.Size.H/2), 0), b.deco.paintClipped)
 }
 
 // InspectFields implements inspect.Fielder.

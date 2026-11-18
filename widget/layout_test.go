@@ -1,9 +1,11 @@
 package widget
 
 import (
+	"image/color"
 	"slices"
 	"testing"
 
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/inspect"
 	"golang.org/x/image/font/gofont/goregular"
@@ -781,5 +783,32 @@ func TestBoxDescribesItsBoxModelToTheInspector(t *testing.T) {
 	box.padding.Top = 9
 	if fr.BoxOf(i).Padding.Top != 9 {
 		t.Fatal("box model was frozen at trace time")
+	}
+}
+
+func TestBoxClipKeepsTheChildInsideTheBorder(t *testing.T) {
+	t.Parallel()
+	var clip ggui.Rect
+	var clipped bool
+	inside := ggui.Rct(ggui.Pt(2, 2), ggui.Sz(76, 46))
+	box := Box(clipProbe(ggui.Sz(80, 50), &clip, &clipped)).Radius(12).Border(2, color.Black)
+	p := ggui.NewProbe(topLeft(box), ggui.Sz(200, 200))
+	defer p.Close()
+	img := ggfx.NewImage(200, 200)
+	defer img.Deallocate()
+	p.Draw(img)
+	if clipped && clip == inside {
+		t.Fatal("a box without Clip clipped its child")
+	}
+	box.Clip()
+	p.Draw(img)
+	if !clipped || clip != inside {
+		t.Fatalf("child clipped to %v (%v), want the inside of the border", clip, clipped)
+	}
+	// Without a radius the clip is a plain rectangle and paints no layer.
+	box.Radius(0)
+	p.Draw(img)
+	if !clipped || clip != inside || p.Layers() != 0 {
+		t.Fatalf("square clip %v (%v) with %d layers", clip, clipped, p.Layers())
 	}
 }
