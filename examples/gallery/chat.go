@@ -27,6 +27,12 @@ func newChatPreviews() func() []ggui.Widget {
 	reaction := ggui.State(0)
 	expanded := ggui.State(false)
 	bubbleAction := ggui.State("Choose a suggested reply.")
+	// The Markdown reply streams in a piece at a time, a button press each,
+	// and starts out whole.
+	mdPieces := markdownPieces(markdownReply)
+	mdShown, mdStreaming := ggui.State(markdownReply), ggui.State(false)
+	mdAt := len(mdPieces)
+	mdNote := ggui.State("Stream the reply to watch it arrive; open blocks show as closed until it ends.")
 	rows := ggui.State([]ui.MessageEntry{
 		{ID: "welcome", Content: ui.Marker(widget.Text("Today")).Separator()},
 		{ID: "hello", Content: ui.Message(ui.Bubble(widget.Text("Can you review this patch?")).End()).End(), Anchor: true},
@@ -172,6 +178,30 @@ func newChatPreviews() func() []ggui.Widget {
 				)).Avatar(ui.Avatar("Oliver").Image(oliver).Size(32)),
 				ui.Marker(widget.Text("Oliver is typing…")),
 			).Gap(24).Stretch())),
+			preview("Markdown", widget.Column(
+				chatSurface(widget.Column(
+					ui.Message(ui.Bubble(widget.Text("How do I show a streaming reply?")).End()).End(),
+					ui.Message(ui.Bubble(ui.Markdown("").BindContent(mdShown).BindStreaming(mdStreaming).
+						OnLink(func(url string) { mdNote.Set("Link tapped: " + url) })).Ghost()),
+				).Gap(24).Stretch(), 448),
+				widget.Wrap(
+					ui.Button("Stream a piece", func() {
+						if mdAt == len(mdPieces) {
+							mdAt = 0
+							mdShown.Set("")
+						}
+						mdShown.Set(ggui.Peek(mdShown) + mdPieces[mdAt])
+						mdAt++
+						mdStreaming.Set(mdAt < len(mdPieces))
+					}),
+					ui.Button("Show it all", func() {
+						mdAt = len(mdPieces)
+						mdShown.Set(markdownReply)
+						mdStreaming.Set(false)
+					}).Outline(),
+				).Gap(8),
+				ui.CaptionOf(mdNote),
+			).Gap(12).Stretch()),
 			preview("Marker", chatSurface(widget.Column(
 				ui.Marker(widget.Text("Switched to a new branch")).Icon(&chatIcon{kind: "branch"}),
 				ui.Marker(widget.Text("Thinking…")).Icon(ui.Spinner().Size(16)),
@@ -229,6 +259,27 @@ func newChatPreviews() func() []ggui.Widget {
 		}
 	}
 }
+
+// markdownReply is the Markdown preview's reply.
+const markdownReply = "## Streaming a reply\n\n" +
+	"Bind the **reply** to a `State` and append to it as pieces arrive; see the [chat guide](https://github.com/ironpark/ggui/blob/main/docs/chat.md).\n\n" +
+	"1. Create the state\n2. Bind it with `BindContent`\n   - and `Streaming` until it ends\n\n" +
+	"- [x] Headings, lists and ~~plain text~~ tasks\n- [ ] Your next feature\n\n" +
+	"> Only the block still growing is rebuilt.\n\n" +
+	"```go\nreply := ggui.State(\"\")\nui.Markdown(\"\").BindContent(reply)\n```\n\n" +
+	"| Block | Shown with |\n|:--|:--|\n| Code | `CodeBlock` |\n| Rule | `Divider` |\n"
+
+// markdownPieces cuts a reply into the pieces a stream would bring: a few
+// words at a time.
+func markdownPieces(reply string) []string {
+	words := strings.SplitAfter(reply, " ")
+	var pieces []string
+	for i := 0; i < len(words); i += 3 {
+		pieces = append(pieces, strings.Join(words[i:min(i+3, len(words))], ""))
+	}
+	return pieces
+}
+
 func repeatReview(n int) string {
 	var out strings.Builder
 	for range min(n, 20) {

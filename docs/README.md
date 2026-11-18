@@ -46,6 +46,7 @@ from the repository root unless a guide says otherwise.
 | Build swipeable slides | [Carousel](carousel-and-otp.md#carousel) |
 | Visualize data | [Charts](charts.md) |
 | Build chat screens or questionnaires | [Chat components and questionnaires](chat.md) |
+| Render Markdown, such as a streaming chat reply | [Markdown](chat.md#markdown) |
 | Compare component coverage and behavior with shadcn/ui | [shadcn/ui comparison](shadcn-comparison.md) · [66-component implementation audit](shadcn-implementation.md) |
 | Customize colors, spacing, shadows, and themes, or offer light, dark and system modes | [Styling and themes](styling.md) · [Theme recipes and modes](../ui/theme/README.md) |
 | Load fonts, render emoji, or change icon sets | [Fonts, emoji, and icons](fonts.md) |

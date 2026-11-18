@@ -2,7 +2,7 @@
 
 [Documentation](README.md) · [Project README](../README.md)
 
-Build attachments, conversations, transcript scrolling, and validated questionnaires.
+Build attachments, conversations, Markdown replies, transcript scrolling, and validated questionnaires.
 
 Examples use `ggui`, `widget` and `ui` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
@@ -28,6 +28,7 @@ widgets continue to use the host theme and font. Sources and licenses are listed
 
 - [Attachments](#attachments)
 - [Conversation surfaces](#conversation-surfaces)
+- [Markdown](#markdown)
 - [Transcript scrolling](#transcript-scrolling)
 - [Questionnaires](#questionnaires)
 
@@ -81,6 +82,63 @@ avatars, links, attachments and content are supplied by the caller.
 `Marker(content)` displays muted status content. `Icon(widget)` supplies a
 16px decorative slot; `Separator()` adds rules around a centered label and
 `Border()` adds a bottom rule. Compose a spinner, text or links as needed.
+
+## Markdown
+
+A reply is usually written in Markdown. `ui.Markdown(text)` renders it in
+the theme's typography:
+
+```go
+reply := ggui.State("")
+streaming := ggui.State(true)
+answer := ui.Bubble(ui.Markdown("").BindContent(reply).BindStreaming(streaming)).Ghost()
+// As each piece arrives: reply.Set(ggui.Peek(reply) + piece)
+// When the stream ends:  streaming.Set(false)
+```
+
+It reads CommonMark with GitHub's extensions: ATX and setext headings,
+paragraphs with emphasis, strong emphasis, `~~strikethrough~~`, code spans,
+links, images and autolinks (`<https://…>`, and bare `www.` and
+`https://` addresses); bullet, numbered, nested and task lists; block
+quotes; fenced and indented code; thematic breaks; and tables, aligned by
+their delimiter row, with `\|` for a pipe inside a cell. Raw HTML shows as
+the text it is, and a reference link (`[text][ref]`) as written: nothing in
+a message is interpreted beyond what it shows. An image shows as a link
+named by its description; the image is not fetched.
+
+| Block | Rendered as |
+| --- | --- |
+| Heading | Semibold text, larger by level, described as a heading of its level |
+| Paragraph | Selectable rich text; a link is a focusable link span |
+| List | Bullets that change shape with nesting, numbers, or a read-only check box for a task item; described as a list of positioned items |
+| Block quote | Muted text inset from a bar |
+| Code | A `CodeBlock` labelled with its language, with its copy action, as tall as its code |
+| Table | A grid in the theme's border color, the heading row in semibold and every other row on the muted surface; described as a table of column headings and cells |
+| Rule | A `Divider`, described as a separator |
+
+`Content(s)` replaces the source; `BindContent(r)` follows a reader. When
+the source changes, only the blocks that changed are rebuilt: as a reply
+grows, that is its last block, which grows in place, and the source is
+parsed again only from that block on. `Streaming(true)` (or
+`BindStreaming`) says the text was cut off mid-stream, so emphasis, a code
+span or a link opened in the last block and not yet closed show as closed
+rather than as their syntax; turn it off when the stream ends, so the
+finished text reads as written. An unclosed code fence shows the code so
+far either way.
+
+`OnLink(fn)` receives the destination of a tapped link, whatever its
+scheme. Without it, http, https and mailto links open with
+`runtime.OpenURL` and every other scheme is ignored, so a `javascript:` or
+`file:` link in a message does nothing. `Size(px)` sets the body text size
+(headings and code scale with it), `Color(c)` the body text color, and
+`Selectable(false)` turns off selection, which otherwise runs across the
+blocks as on a page. A short reply is as wide as its text; one holding
+code, a quote, a table or a rule fills the width it is given.
+
+The parser is the [`markdown`](../pkg/markdown/markdown.go) package, which
+depends on nothing of ggui: `markdown.Parse` returns the blocks and inline
+spans, `ParseStream` reads a source cut off mid-stream, and `Reparse`
+parses a grown source again from its last blocks.
 
 ## Transcript scrolling
 
