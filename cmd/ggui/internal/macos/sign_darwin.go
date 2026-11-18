@@ -13,6 +13,9 @@ import (
 // find-identity prints it.
 var fingerprint = regexp.MustCompile(`^[0-9A-Fa-f]{40}$`)
 
+// Toolchain says what this build of ggui signs macOS apps with here.
+func Toolchain() (string, error) { return "Apple's tools", nil }
+
 // newBackend sets up zapp's backend for signing with identity: Apple's
 // tools, with the keychain or a certificate imported into a temporary one.
 func newBackend(s Signing, identity, entitlements string) (backend, error) {
@@ -37,6 +40,7 @@ func (s Signing) credentials(identity, entitlements string) (signing.Credentials
 		AppleID: s.Notary.AppleID, TeamID: s.Notary.TeamID, Password: s.Notary.Password,
 		NotarizeTimeout: s.Notary.Timeout,
 	}
+	pemOrP12(&c)
 	if s.HasCertificate() && identity == "-" {
 		identity = "" // the certificate's Developer ID identity
 	}
@@ -56,12 +60,3 @@ func (s Signing) credentials(identity, entitlements string) (signing.Credentials
 	}
 	return c, nil
 }
-
-// notarize submits path to Apple's notary service through b and, if
-// staple, staples the ticket.
-func notarize(ctx context.Context, b backend, path string, staple bool) error {
-	return signing.Notarize(ctx, b.(signing.Backend), path, staple)
-}
-
-// closeBackend removes the temporary keychain a certificate was put in.
-func closeBackend(b backend) error { return signing.Close(b.(signing.Backend)) }

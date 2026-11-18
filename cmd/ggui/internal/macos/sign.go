@@ -12,12 +12,18 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/machosign"
 )
 
-// backend signs through one toolchain. On macOS it is one of zapp's
-// signing backends, which drive Apple's tools; elsewhere there is none,
-// since zapp signs there with a Rust library that only a cgo build links,
-// and linking it would ask every Linux or Windows build of ggui with a C
-// compiler to link 30 MB it does not use, which on Windows fails outright
-// with MinGW's GCC. ggui therefore signs with an identity on a Mac only.
+// backend signs through one toolchain, one of zapp's signing backends.
+// On macOS it drives Apple's tools. On Linux and Windows, amd64 and arm64,
+// it is rcodesign, a Rust library zapp links statically, about 30 MB,
+// which only a cgo build links: there a certificate signs, as there is no
+// keychain, and an App Store Connect API key notarizes. On Windows the
+// library is built with LLVM MinGW and MinGW's GCC does not link it, so
+// a Windows build links it only when asked to with the tag ggui_rcodesign,
+// as the release binaries are; elsewhere, and in a build without it,
+// ggui refuses to sign with an identity and says how to get a build that
+// can. The build constraint that links it is, in full:
+//
+//	cgo && (amd64 || arm64) && (linux || (windows && ggui_rcodesign))
 type backend interface {
 	Describe(ctx context.Context, path string) (string, error)
 	Sign(ctx context.Context, path string) error
@@ -78,14 +84,19 @@ func (s Signing) Describe() string {
 	return fmt.Sprintf("the keychain identity %q", s.Identity)
 }
 
+// onMac is whether ggui runs on macOS, where Apple's tools sign and
+// notarize; elsewhere rcodesign does, which takes a certificate and an
+// App Store Connect API key only.
+const onMac = runtime.GOOS == "darwin"
+
 // Describe says which credentials notarize, safe to print.
 func (n Notary) Describe() string {
 	switch {
-	case n.Profile != "":
+	case n.Profile != "" && onMac:
 		return fmt.Sprintf("the notarytool profile %q", n.Profile)
 	case n.APIKeyFile != "":
 		return "the App Store Connect API key " + n.APIKeyFile
-	case n.AppleID != "":
+	case n.AppleID != "" && onMac:
 		return fmt.Sprintf("the Apple ID %s of team %s", n.AppleID, n.TeamID)
 	}
 	return "no credentials"
@@ -94,6 +105,13 @@ func (n Notary) Describe() string {
 // check reports credentials that cannot notarize, before anything is
 // built, saying what to give instead.
 func (n Notary) check() error {
+	if !onMac {
+		if n.APIKeyFile != "" {
+			return nil
+		}
+		return errors.New("notarizing away from a Mac takes an App Store Connect API key (macos.notary.api_key_file or --api-key-file), " +
+			"as the JSON rcodesign encode-app-store-connect-api-key writes; notarytool profiles and Apple IDs work on a Mac only")
+	}
 	switch {
 	case n.Profile != "" || n.APIKeyFile != "":
 		return nil
@@ -206,6 +224,10 @@ func (sg *Signer) Sign(ctx context.Context, path string) (bool, error) {
 // installer returns the backend that signs installer packages, which
 // take an identity of their own.
 func (sg *Signer) installer() (backend, error) {
+	if !onMac {
+		return nil, errors.New("ggui signs installer packages on a Mac only: an installer is signed with a Developer ID Installer certificate, " +
+			"one of its own, and away from a Mac ggui takes one certificate, the app's. Make the installer on a Mac, or leave out --pkg and [macos.pkg] here")
+	}
 	if sg.pkg == nil {
 		var err error
 		if sg.pkg, err = newBackend(sg.s, sg.s.PKGIdentity, ""); err != nil {

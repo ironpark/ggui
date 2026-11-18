@@ -14,6 +14,11 @@ import (
 
 // What cannot work is refused before a build starts, saying what to do.
 func TestNewSignerRefuses(t *testing.T) {
+	// Away from a Mac only an App Store Connect API key notarizes.
+	noCredentials, appleIDWithoutPassword := "store-credentials", "$GGUI_NOTARY_PASSWORD"
+	if !onMac {
+		noCredentials, appleIDWithoutPassword = "App Store Connect API key", "App Store Connect API key"
+	}
 	for _, tc := range []struct {
 		name     string
 		s        Signing
@@ -21,8 +26,8 @@ func TestNewSignerRefuses(t *testing.T) {
 		want     string
 	}{
 		{"ad hoc notarized", Signing{Identity: "-"}, true, "Developer ID signature"},
-		{"no notary credentials", Signing{Identity: "Developer ID Application", Notary: Notary{PasswordVar: "GGUI_NOTARY_PASSWORD"}}, true, "store-credentials"},
-		{"Apple ID without password", Signing{Identity: "Developer ID Application", Notary: Notary{AppleID: "me@example.com", TeamID: "ABCDE12345", PasswordVar: "GGUI_NOTARY_PASSWORD"}}, true, "$GGUI_NOTARY_PASSWORD"},
+		{"no notary credentials", Signing{Identity: "Developer ID Application", Notary: Notary{PasswordVar: "GGUI_NOTARY_PASSWORD"}}, true, noCredentials},
+		{"Apple ID without password", Signing{Identity: "Developer ID Application", Notary: Notary{AppleID: "me@example.com", TeamID: "ABCDE12345", PasswordVar: "GGUI_NOTARY_PASSWORD"}}, true, appleIDWithoutPassword},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := NewSigner(tc.s, tc.notarize)
@@ -31,13 +36,20 @@ func TestNewSignerRefuses(t *testing.T) {
 			}
 		})
 	}
-	// Away from a Mac nothing signs: neither an identity nor a certificate.
-	if runtime.GOOS != "darwin" {
-		for _, s := range []Signing{{Identity: "Developer ID Application"}, {Identity: "-", P12File: "cert.p12"}} {
-			_, err := NewSigner(s, false)
-			if err == nil || !strings.Contains(err.Error(), "on a Mac") {
-				t.Errorf("signing with %s away from a Mac: %v", s.Describe(), err)
-			}
+	if onMac {
+		return
+	}
+	// Away from a Mac a keychain identity never signs; a certificate signs
+	// only in a build of ggui with rcodesign, and a build without it says
+	// how to get one.
+	_, err := NewSigner(Signing{Identity: "Developer ID Application"}, false)
+	if err == nil || !strings.Contains(err.Error(), "on a Mac") {
+		t.Errorf("signing with a keychain identity away from a Mac: %v", err)
+	}
+	if _, cannot := Toolchain(); cannot != nil {
+		_, err := NewSigner(Signing{Identity: "-", P12File: "cert.p12"}, false)
+		if err == nil || !strings.Contains(err.Error(), "ggui cannot sign") {
+			t.Errorf("signing with a certificate in a build without rcodesign: %v", err)
 		}
 	}
 }

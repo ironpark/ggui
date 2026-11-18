@@ -1,10 +1,10 @@
-//go:build !darwin
+//go:build !darwin && !(cgo && (amd64 || arm64) && (linux || (windows && ggui_rcodesign)))
 
 package macos
 
 import "context"
 
-// Verify checks nothing away from a Mac: only what is signed is
-// verified, and ggui signs on a Mac only. zapp's checks there would link
-// its Rust signing library; see backend.
+// Verify checks nothing in a build of ggui that cannot sign here: only
+// what is signed is verified, and zapp's checks would link the rcodesign
+// library this build leaves out; see backend.
 func Verify(context.Context, string, bool) (string, []Failure) { return "", nil }

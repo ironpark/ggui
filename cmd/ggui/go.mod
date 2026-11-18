@@ -6,7 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/ebitengine/purego v0.11.1
 	github.com/goreleaser/nfpm/v2 v2.48.0
-	github.com/ironpark/zapp v1.7.0
+	github.com/ironpark/zapp v1.7.1
 	golang.org/x/sys v0.49.0
 )
 
@@ -31,7 +31,7 @@ require (
 	github.com/goreleaser/chglog v0.7.4 // indirect
 	github.com/goreleaser/fileglob v1.4.1 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
-	github.com/ironpark/zapp/pkg/signing/rcodesign/lib v1.0.0 // indirect
+	github.com/ironpark/zapp/pkg/signing/rcodesign/lib v1.0.1 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
 	github.com/klauspost/compress v1.20.1 // indirect
