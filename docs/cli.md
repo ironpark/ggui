@@ -31,6 +31,7 @@ applications it runs. `ggui version` prints the version installed.
 | [`ggui init [dir]`](#ggui-init) | Create a new application. |
 | [`ggui dev [package]`](#ggui-dev) | Run it, rebuilding and restarting it whenever its code changes; `--web` serves it to a browser instead. |
 | [`ggui build [package]`](#ggui-build) | Build a release: a macOS `.app`, a Windows `.exe`, a Linux install tree with its tarball and `.deb` and `.rpm` packages, a web bundle or a plain program. |
+| [`ggui release [dir]`](#ggui-release) | Build the release files for macOS, Windows and Linux, and publish them: a GitHub release, a Homebrew cask, a Chocolatey package. |
 | [`ggui doctor`](#ggui-doctor) | Check the machine and the project for what ggui needs. |
 | [`ggui i18n check\|extract [dir]`](#ggui-i18n) | Check the translation catalogs against the messages the app passes, or add what they lack. |
 | [`ggui record [name]`](#ggui-record) | Draw a tour the app registered into an animated GIF, or PNG frames. |
@@ -54,6 +55,7 @@ and spinners. `NO_COLOR` wins over the other two.
 - [ggui init](#ggui-init)
 - [ggui dev](#ggui-dev)
 - [ggui build](#ggui-build)
+- [ggui release](#ggui-release)
 - [ggui doctor](#ggui-doctor)
 - [ggui i18n](#ggui-i18n)
 - [ggui record](#ggui-record)
@@ -693,6 +695,66 @@ that serves precompressed files, such as nginx with `gzip_static on` or
 Caddy with `precompressed gzip`, sends the `.gz` copies, a little over a
 quarter of the binary's size.
 
+## ggui release
+
+```sh
+ggui release --dry-run          # build everything, print what would be sent
+ggui release                    # publish app.version to GitHub
+ggui release --publish github,homebrew,choco
+```
+
+`ggui release` builds `app.version` for each target and architecture,
+collects what it publishes in `build/release/VERSION/`, writes
+`SHA256SUMS` over it, prints a table of the files with their sizes and
+checksums, and publishes them. [Releasing an app](releasing.md) walks
+through it from the tag to the people installing the app, with the
+credentials each channel needs and a GitHub Actions workflow.
+
+| Target | Files, for each architecture |
+| --- | --- |
+| `macos` | `name-VERSION-macos-ARCH.dmg` when `[macos.dmg]` asks for a disk image, else `name-VERSION-macos-ARCH.zip` of `Name.app`, as `ditto -c -k --keepParent` lays it out, links and modes kept; `.pkg` too when `[macos.pkg]` asks. On a Mac one build, `universal`, joined with `lipo`; elsewhere one for each of `amd64` and `arm64`, unsigned. Signed and notarized as `[macos]` says. |
+| `windows` | `name-VERSION-windows-ARCH.zip`, holding `Name.exe`: `amd64`, `arm64` and `386`. |
+| `linux` | What `linux.formats` names: the tarball, `.deb` and `.rpm`: `amd64`, `arm64` and `riscv64`. |
+
+`name` is `app.name` lowercased, with hyphens between words. An
+architecture a target has no build for is passed over.
+
+| Channel | Publishes |
+| --- | --- |
+| `github` | A release at the tag `v` + version, with every file. It is created as a draft with the tag and `target_commitish` set to the commit checked out, so GitHub makes the tag when it is published and nothing is pushed from here; the files are uploaded, a file of the same name replaced, a failed upload retried; and only then is the draft published, so a failed run leaves a draft no one sees. A run after a failure takes up that draft. |
+| `homebrew` | The cask `Casks/TOKEN.rb`, committed to `release.homebrew.tap` through GitHub's contents API. |
+| `choco` | The package `ID.VERSION.nupkg`, pushed to `release.chocolatey.source`. Its install script downloads the Windows zip from the GitHub release and checks its SHA-256. |
+
+Before building, a run checks what it can: that the work tree has no
+changes not committed, that the tag, if it exists here or on `origin`, is
+at this commit, and, when publishing to GitHub, that the token works, the
+commit is pushed and the release is not published already. A dry run
+says what fails and carries on.
+
+| Flag | Does |
+| --- | --- |
+| `--version X.Y.Z` | Release this version, replacing `app.version`, which the builds stamp in. |
+| `--targets list` | Build these, from `macos`, `windows` and `linux`, replacing `release.targets`. |
+| `--arches list` | For these architectures, replacing `release.arches`. |
+| `--publish list` | Publish to these, from `github`, `homebrew` and `choco`, replacing `release.publish`; `none` publishes nothing. |
+| `--draft` | Leave the GitHub release a draft. Not with `homebrew` or `choco`, which download from it. |
+| `--prerelease` | Mark the GitHub release a prerelease. |
+| `--notes file` | The release's description, Markdown, replacing `release.notes`. Without either it is a table of the files. |
+| `--dry-run` | Build and write everything, the cask and the Chocolatey package too, publish nothing, and print the requests a real run would send. |
+| `--allow-dirty` | Release from a work tree with changes not committed. |
+| `--replace-assets` | Upload to a GitHub release already published, replacing its files of the same names. |
+| `--out dir` | The output directory, replacing `build.output`. |
+| `--config file` | Read this file instead of the `ggui.toml` found. |
+
+| Variable | For |
+| --- | --- |
+| `GITHUB_TOKEN`, then `GH_TOKEN`, then `gh auth token` | The GitHub release, and the tap. |
+| `HOMEBREW_TAP_TOKEN` | The tap, when the token above cannot write it. |
+| `CHOCOLATEY_API_KEY` | The Chocolatey push. |
+
+No token or key is ever printed: an error names where the token came
+from, not what it is.
+
 ## ggui doctor
 
 ```sh
@@ -1081,3 +1143,41 @@ What `ggui build --target linux` writes beyond `[app]`; see
 | --- | --- | --- |
 | `funcs` | none | The app's own functions that pass a message on as `i18n.T` does, for [`ggui i18n`](#your-own-functions) and `ggui doctor` to read: `"tr"`, `"ui.T"`, `"tr:1"`. As `--func`. |
 | `plurals` | none | Those that pass one on as `i18n.N` does: `"trn"`, `"trn:0,1"`. As `--plural`. |
+
+### [release]
+
+What [`ggui release`](#ggui-release) builds and where it publishes it; see
+[Releasing an app](releasing.md).
+
+| Key | Default | Use |
+| --- | --- | --- |
+| `targets` | `["macos", "windows", "linux"]` | The targets built. As `--targets`. |
+| `arches` | `["amd64", "arm64"]` | The architectures each target is built for where it has them: `"amd64"`, `"arm64"`, `"386"`, `"riscv64"`. As `--arches`. |
+| `publish` | `["github"]` | The channels: `"github"`, `"homebrew"`, `"choco"`. As `--publish`. |
+| `github` | `origin`'s repository | The GitHub repository, `"owner/repo"`. |
+| `github_api` | `"https://api.github.com"` | The REST API, such as `"https://github.example.com/api/v3"` for GitHub Enterprise. |
+| `tag_prefix` | `"v"` | What goes before the version in the tag. |
+| `notes` | none | A Markdown file, the release's description. As `--notes`. |
+
+### [release.homebrew]
+
+| Key | Default | Use |
+| --- | --- | --- |
+| `tap` | none | The tap's repository, `"owner/homebrew-name"`, which publishing to Homebrew needs. |
+| `cask` | `app.name` as a cask token, such as `hello-world` | The cask's token. |
+| `homepage` | `linux.homepage`, else the repository | The cask's `homepage`. |
+| `desc` | `linux.description` | The cask's `desc`: one line, which Homebrew wants without an article to begin it or a full stop to end it. |
+
+### [release.chocolatey]
+
+| Key | Default | Use |
+| --- | --- | --- |
+| `id` | `app.name` lowercased, with hyphens | The package ID. |
+| `authors` | `windows.company`, else the repository's owner | The package's authors. |
+| `project_url` | `linux.homepage`, else the repository | `projectUrl`. |
+| `license_url` | none | `licenseUrl`. |
+| `icon_url` | none | `iconUrl`, which the community repository asks for. |
+| `tags` | `[]` | Tags, each its own string. |
+| `summary` | `linux.description` | `summary`. |
+| `description` | `summary` | `description`, Markdown. |
+| `source` | `"https://push.chocolatey.org/"` | The feed pushed to; the package goes to `api/v2/package` below it. |
