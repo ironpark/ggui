@@ -22,6 +22,9 @@ type settings struct {
 	// flatten draws a transparent backdrop over white, for a GIF, which
 	// has no partial transparency.
 	flatten bool
+
+	optimize *int // the Optimize option's level, or nil for 1
+	lossy    int
 }
 
 func resolve(opts []Option) *settings {
@@ -58,6 +61,25 @@ func Dither(strength float64) Option {
 
 // Loop makes a GIF play n times. Zero, the default, loops forever.
 func Loop(n int) Option { return func(s *settings) { s.loop = max(n, 0) } }
+
+// Optimize sets how hard a GIF is compressed without changing what it
+// shows. Level 1, the default, writes in each frame only the pixels whose
+// palette color changes, within the smallest rectangle around them, the
+// rest of it transparent so that LZW compresses it to almost nothing, as
+// gifsicle -O2 does. Level 0 writes the whole rectangle that changed,
+// which shows the same and is larger.
+func Optimize(level int) Option {
+	return func(s *settings) { l := min(max(level, 0), 1); s.optimize = &l }
+}
+
+// Lossy lets a GIF's compression write a pixel in a color near its own
+// where that makes LZW's strings longer, as gifsicle's --lossy does: n
+// from 0, the default, which keeps every pixel exact, to 200. 20 to 40
+// makes UI recordings noticeably smaller with changes hard to see; more
+// shows as speckle and streaks in gradients. A color passes for another
+// within n/1000 of it in Oklab, about n/20 steps of what the eye just
+// tells apart.
+func Lossy(n int) Option { return func(s *settings) { s.lossy = min(max(n, 0), 200) } }
 
 // Background fills each frame with c before the tree is drawn on it, in
 // place of the background the tour's Env holds (ggui.Env.Background, which
