@@ -141,3 +141,56 @@ func TestTableScrollingRowsKeepOneHeight(t *testing.T) {
 		t.Fatalf("height = %v, want a heading and three 53px rows", sz.H)
 	}
 }
+
+func TestTableToolbarSitsAboveTheHeadingAndStays(t *testing.T) {
+	t.Parallel()
+	tbl := footedTable(ggui.State(manyPeople(50))).Height(300).Toolbar(widget.Text("Filters"))
+	p := ggui.NewProbe(tbl, ggui.Sz(300, 500))
+	defer p.Close()
+	if sz := p.Frame(); sz.H != 300 {
+		t.Fatalf("height = %v, want the 300 asked for, toolbar included", sz.H)
+	}
+	// The toolbar's text in 8px of padding, over a 1px line, then the heading.
+	bar, head := semNode(t, p, ggui.RoleText, "Filters"), semNode(t, p, ggui.RoleText, "Name")
+	barH := 8 + bar.Rect.Size.H + 8 + 1
+	if bar.Rect.Origin != ggui.Pt(8, 8) {
+		t.Fatalf("toolbar at %v, want inside the cell padding", bar.Rect)
+	}
+	if head.Rect.Origin.Y < barH || head.Rect.Origin.Y > barH+40 {
+		t.Fatalf("heading at %v, want in the 40px under a %vpx toolbar", head.Rect, barH)
+	}
+	if first := semNode(t, p, ggui.RoleRow, "p1"); first.Rect.Origin.Y != barH+40 {
+		t.Fatalf("first row at %v, want under the toolbar and heading at %v", first.Rect, barH+40)
+	}
+	p.Scroll(ggui.Pt(150, 200), ggui.Pt(0, -100000))
+	if after := semNode(t, p, ggui.RoleText, "Filters"); after.Rect != bar.Rect {
+		t.Fatalf("scrolling moved the toolbar from %v to %v", bar.Rect, after.Rect)
+	}
+	if _, ok := p.Find("p1"); ok {
+		t.Fatal("the body did not scroll")
+	}
+	// A maximum counts it too, and Toolbar(nil) takes it away.
+	tbl.Height(0).MaxRows(2)
+	if sz := p.Frame(); sz.H != barH+40+2*37 {
+		t.Fatalf("height = %v under MaxRows(2), want toolbar, heading and two rows", sz.H)
+	}
+	tbl.Toolbar(nil)
+	if sz := p.Frame(); sz.H != 40+2*37 {
+		t.Fatalf("height = %v without the toolbar, want 114", sz.H)
+	}
+	if _, ok := p.Semantics().Find(ggui.RoleText, "Filters"); ok {
+		t.Fatal("Toolbar(nil) left the toolbar in place")
+	}
+}
+
+func TestTableToolbarTakesInput(t *testing.T) {
+	t.Parallel()
+	taps := 0
+	tbl := footedTable(people()).Toolbar(widget.Row(ui.Button("Add", func() { taps++ })))
+	p := ggui.NewProbe(tbl, ggui.Sz(300, 500))
+	defer p.Close()
+	p.Tap("Add")
+	if taps != 1 {
+		t.Fatalf("taps = %d, want the toolbar's button pressed", taps)
+	}
+}

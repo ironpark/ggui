@@ -339,6 +339,8 @@ func DataTable[T any, K comparable](m *TableModel[T, K]) ggui.Widget {
 		columns := Menu("", entries...)
 		columns.button.TrailingIcon(Icon(icons.ChevronDown))
 		columns.Popup().Align(widget.PopupEnd)
+		// shadcn puts the filter above the table's border, so this is not
+		// the Table's own Toolbar, which sits inside it.
 		toolbar := localize(widget.Row(widget.Expanded(search), columns).Gap(12), func(s *Strings) {
 			search.Placeholder(s.FilterRowsHint).Name(s.FilterRows)
 			columns.button.relabel(s.Columns)
