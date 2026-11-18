@@ -99,8 +99,8 @@ version = {{.Version}}
 # so Gatekeeper opens them on any Mac. It takes minutes and a Developer
 # ID identity. Same as --notarize.
 # notarize = false
-# Build for both Apple silicon and Intel and join the two with lipo.
-# Needs macOS with the Xcode command line tools. Same as --universal.
+# Build for both Apple silicon and Intel and join the two into one
+# universal program, on any host. Same as --universal.
 # universal = false
 
 # Extra Info.plist keys, written over the generated ones.

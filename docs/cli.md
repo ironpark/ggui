@@ -424,7 +424,7 @@ on standard output, for scripts.
 | `--target macos\|windows\|linux\|web\|native` | What to build. |
 | `--format tar,deb,rpm` | With `--target linux`, what to make of the install tree, replacing `linux.formats`; `--format ""` makes the tree alone. |
 | `--out dir` | The output directory, replacing `build.output`. |
-| `--universal` | With `--target macos`, build for Apple silicon and Intel and join the two with `lipo`. Needs macOS with the Xcode command line tools. Same as `macos.universal`. |
+| `--universal` | With `--target macos`, build for Apple silicon and Intel and join the two into one universal program, on any host. Same as `macos.universal`. |
 | `--console` | With `--target windows`, link the program for the console, so that Windows opens a console window for its output; `--console=false` makes a GUI program though `windows.console` is set. |
 | `--identity name` | Sign as this keychain identity, replacing `macos.signing_identity`; `-` signs ad hoc. |
 | `--p12-file file`, `--p12-password-file file` | Sign with this PKCS#12 certificate and its password, replacing `macos.p12_file` and `macos.p12_password_file`. |
@@ -487,12 +487,32 @@ catalogs, found as [`ggui i18n check`](#ggui-i18n) finds them, gets it:
 said as the build starts. Set `CFBundleLocalizations` under
 `[macos.plist]` to name them yourself.
 
-The default signing identity, `-`, signs ad hoc with `codesign`, which
-runs on the Mac that built it. Away from a Mac an ad hoc build is left
-unsigned, with a notice.
+The default signing identity, `-`, signs ad hoc, on any host: ggui writes
+the signature itself, in Go, and it is the one `codesign --force --sign -`
+makes, byte for byte. The program gets a code directory, with
+`macos.entitlements` when set, that binds `Info.plist` and the seal of
+the bundle's other files, `Contents/_CodeSignature/CodeResources`.
+Programs in `Contents/MacOS` besides the app's own, and libraries in
+`Contents/Frameworks`, are signed first, as `codesign --deep` would sign
+them; a nested bundle, such as a `.framework`, is refused.
+
+An ad hoc signature names no one, so it is for trying the app, or for
+people who trust you, not for shipping. The Mac that built it, or one it
+is copied to without a download, runs it. Downloaded, the app is marked
+as quarantined, and macOS refuses it the first time, saying it cannot
+check it for malicious software; the person who downloaded it can still
+open it with **Open Anyway** in System Settings, Privacy & Security (or,
+before macOS 15, Control-click and Open), or by removing the mark:
+`xattr -d com.apple.quarantine Name.app`. Without the ad hoc signature,
+with only the one the Go linker puts on the program, which does not
+cover the bundle, macOS would call the downloaded app damaged and offer
+no way to open it. To ship to others, sign with a Developer ID and
+notarize; see below.
 
 Without `--universal` the program is built for the go command's `GOARCH`,
-so `GOARCH=amd64 ggui build` makes an Intel bundle.
+so `GOARCH=amd64 ggui build` makes an Intel bundle. With it, the program
+is built for both and the two are joined into one universal program, in
+Go, as `lipo -create` joins them, on any host.
 
 ### Shipping to other Macs
 
@@ -549,10 +569,10 @@ before it compiles anything, so a missing identity or password fails at
 once, saying what to do. The paths of the app and of the disk image and
 installer are printed on standard output, one a line.
 
-ggui signs, notarizes and verifies on a Mac only, with Apple's tools;
-build releases there, as a macOS runner in CI does. Elsewhere it builds
-the bundle, disk image and installer unsigned, and stops with a message
-when asked to sign. zapp could sign on Linux and Windows through a Rust
+ggui signs with an identity, notarizes and verifies on a Mac only, with
+Apple's tools; build releases there, as a macOS runner in CI does.
+Elsewhere it signs the bundle ad hoc, leaves the disk image and installer
+unsigned, and stops with a message when asked to sign with an identity. zapp could sign on Linux and Windows through a Rust
 library, but only a cgo build links it, and linking it would ask every
 build of ggui with a C compiler there to link 30 MB it would not use.
 
@@ -698,7 +718,7 @@ It prints what to do under each line that is not ok, and exits with status
 | Linux build | What `--target linux` makes: the package name, version, desktop entry and formats, warning when `app.id` is not set, or, for packages, `linux.maintainer` or `linux.license`. |
 | translations | In a project with [translation catalogs](#ggui-i18n) only: the errors `ggui i18n check` finds in each, as a warning, since the app still runs. |
 | platform | What ggwd and ggfx load when an app starts. |
-| tools | `wasm-opt`; on macOS `codesign`, and `lipo` for `--universal`. |
+| tools | `wasm-opt`; on macOS `codesign`, for signing with an identity. Signing ad hoc and `--universal` need no tools. |
 | signing | On macOS: the keychain's signing identities and whether `macos.signing_identity` is one; a certificate `ggui.toml` or `$GGUI_P12_BASE64` gives; `notarytool` and `stapler`, which come with the Xcode command line tools; and the notarization credentials. Elsewhere: whether this ggui can sign at all. |
 
 ggwd and ggfx use no cgo: they load the system's libraries when the

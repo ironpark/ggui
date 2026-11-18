@@ -413,16 +413,12 @@ func checkTools(ctx context.Context, r *Report, env map[string]string) {
 	if !hostIsDarwin() {
 		return
 	}
+	// ggui signs ad hoc and joins universal programs itself; codesign
+	// signs with an identity.
 	if _, err := exec.LookPath("codesign"); err != nil {
-		r.fail("codesign", "not found; ggui build --target macos signs every bundle", "codesign is part of macOS: check that /usr/bin is on PATH")
+		r.warn("codesign", "not found; signing with an identity needs it", "codesign is part of macOS: check that /usr/bin is on PATH")
 	} else {
 		r.ok("codesign", "found")
-	}
-	if xcodeTools() {
-		r.ok("lipo", "found (for --universal)")
-	} else {
-		r.warn("lipo", "needs the Xcode command line tools, which are not installed: --universal will fail",
-			"xcode-select --install")
 	}
 }
 

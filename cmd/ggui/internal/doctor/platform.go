@@ -31,7 +31,7 @@ import (
 func hostIsDarwin() bool { return runtime.GOOS == "darwin" }
 
 // xcodeTools reports whether the Xcode command line tools, or Xcode, are
-// installed: what lipo and a C compiler come from on macOS.
+// installed: what a C compiler comes from on macOS.
 func xcodeTools() bool {
 	return exec.Command("xcode-select", "-p").Run() == nil
 }

@@ -65,8 +65,9 @@ goes in its web/ subdirectory. --out names the directory instead.
 
 Signing with an identity uses the keychain on macOS, or a certificate:
 --p12-file, macos.p12_file, or base64 text in $GGUI_P12_BASE64, its
-password in --p12-password-file or $GGUI_P12_PASSWORD. Signing and
-notarizing take a Mac; elsewhere the bundle is left unsigned. Notarizing
+password in --p12-password-file or $GGUI_P12_PASSWORD. Signing with an
+identity and notarizing take a Mac; signing ad hoc, and --universal,
+work on any host. Notarizing
 uses a notarytool profile, an App Store Connect API key, or an Apple ID
 with its app-specific password in $GGUI_NOTARY_PASSWORD. docs/cli.md
 has the details.`,
@@ -74,7 +75,7 @@ has the details.`,
 		cfgPath := fs.String("config", "", "read `file` instead of the ggui.toml found from the current directory")
 		tgt := fs.String("target", defaultTarget(), "what to build: `macos`, windows, linux, web or native")
 		out := fs.String("out", "", "the output `directory`, replacing build.output")
-		universal := fs.Bool("universal", false, "with --target macos, build for Apple silicon and Intel and join them with lipo (macOS only)")
+		universal := fs.Bool("universal", false, "with --target macos, build for Apple silicon and Intel and join them into one universal program")
 		console := fs.Bool("console", false, "with --target windows, link for the console, which Windows opens a window of, replacing windows.console")
 		format := fs.String("format", "", "with --target linux, what to make of the install tree: `formats` from tar, deb and rpm, comma-separated, replacing linux.formats")
 		tags := fs.String("tags", "", "build `tags`, comma-separated, replacing build.tags")
@@ -445,9 +446,6 @@ func (b *builder) macos(ctx context.Context) error {
 	bin := filepath.Join(tmp, b.main.Executable)
 	arch := ""
 	if b.universal {
-		if runtime.GOOS != "darwin" {
-			return errors.New("--universal joins the two builds with lipo, which only macOS has: build on a Mac, or drop it and set GOARCH")
-		}
 		var halves []string
 		for _, a := range []string{"arm64", "amd64"} {
 			o := b.release(bin + "-" + a)
@@ -457,8 +455,8 @@ func (b *builder) macos(ctx context.Context) error {
 			}
 			halves = append(halves, o.Output)
 		}
-		err := step(ctx, "Joining arm64 and amd64 with lipo", "Joined arm64 and amd64 with lipo", func() error {
-			return macos.Lipo(ctx, bin, halves...)
+		err := step(ctx, "Joining arm64 and amd64 into a universal program", "Joined arm64 and amd64 into a universal program", func() error {
+			return macos.Lipo(bin, halves...)
 		})
 		if err != nil {
 			return err
@@ -507,14 +505,11 @@ func (b *builder) macos(ctx context.Context) error {
 		ui.Stderr.Warn("app.id is not set, so the bundle is %s; set it in ggui.toml before shipping, since macOS keys settings and permissions to it", b.main.ID)
 	}
 
-	signed, err := sign(ctx, sg, app)
-	switch {
-	case err != nil:
+	if _, err := sign(ctx, sg, app); err != nil {
 		return err
-	case !signed:
-		ui.Stderr.Warn("The bundle is not signed, since codesign needs macOS; sign it on a Mac before shipping it, or set macos.signing_identity and give a certificate")
-	case sg.AdHoc():
-		ui.Stderr.Note("%s", ui.Stderr.Dim("which runs on this Mac; set macos.signing_identity to ship it to others"))
+	}
+	if sg.AdHoc() {
+		ui.Stderr.Note("%s", ui.Stderr.Dim("which macOS runs as it is, but opens once downloaded only after Open Anyway in System Settings; set macos.signing_identity and notarize to ship it to others"))
 	}
 	artifacts := []string{app}
 	if notarize {

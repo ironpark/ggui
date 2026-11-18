@@ -3,28 +3,26 @@
 // signature; and the disk image and installer package made from it,
 // signed, notarized and verified.
 //
-// The work past assembling the bundle is done by zapp's packages
-// (github.com/ironpark/zapp/pkg/...): signing and notarizing through
-// Apple's tools, on a Mac only;
-// the disk image and the installer in pure Go; and the checks a release
-// should pass.
+// Ad hoc signing and joining programs into a universal one are done in
+// Go by machosign, on any host. The rest of the work past assembling the
+// bundle is done by zapp's packages (github.com/ironpark/zapp/pkg/...):
+// signing with an identity and notarizing through Apple's tools, on a
+// Mac only; the disk image and the installer in pure Go; and the checks
+// a release should pass.
 package macos
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"image/png"
 	"io"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
-	"strings"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/icns"
+	"github.com/ironpark/ggui/cmd/ggui/internal/machosign"
 	"github.com/ironpark/zapp/pkg/plist"
 )
 
@@ -234,14 +232,11 @@ func copyFile(dst, src string, mode os.FileMode) error {
 	return out.Close()
 }
 
-// Lipo joins programs built for different architectures into one.
-func Lipo(ctx context.Context, out string, inputs ...string) error {
-	if runtime.GOOS != "darwin" {
-		return errors.New("a universal build joins its halves with lipo, which only macOS has: build on a Mac, or drop --universal and set GOARCH")
-	}
-	args := append([]string{"-create", "-output", out}, inputs...)
-	if msg, err := exec.CommandContext(ctx, "lipo", args...).CombinedOutput(); err != nil {
-		return fmt.Errorf("lipo: %s (%w); lipo comes with the Xcode command line tools: xcode-select --install", strings.TrimSpace(string(msg)), err)
+// Lipo joins programs built for different architectures into one
+// universal program, as lipo -create does, on any host.
+func Lipo(out string, inputs ...string) error {
+	if err := machosign.Lipo(out, inputs...); err != nil {
+		return fmt.Errorf("joining %d programs into a universal one: %w", len(inputs), err)
 	}
 	return nil
 }
