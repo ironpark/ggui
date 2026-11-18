@@ -49,7 +49,9 @@ Targets:
            program in usr/bin, built for the go command's GOARCH (amd64,
            arm64 or riscv64) without cgo, a desktop entry, the icon made
            from app.icon in the hicolor sizes, and AppStream metadata.
-           Also the tarball name-version-linux-arch.tar.gz of the tree.
+           Beside it what --format names: tar, the tarball
+           name-version-linux-arch.tar.gz (the default); deb, a Debian
+           package; rpm, an RPM package.
   web      a directory for any static host: index.html, main.wasm and the
            Go toolchain's wasm_exec.js, each with a precompressed .gz copy,
            the binary run through wasm-opt (web.wasm_opt) when installed.
@@ -72,6 +74,7 @@ has the details.`,
 		out := fs.String("out", "", "the output `directory`, replacing build.output")
 		universal := fs.Bool("universal", false, "with --target macos, build for Apple silicon and Intel and join them with lipo (macOS only)")
 		console := fs.Bool("console", false, "with --target windows, link for the console, which Windows opens a window of, replacing windows.console")
+		format := fs.String("format", "", "with --target linux, what to make of the install tree: `formats` from tar, deb and rpm, comma-separated")
 		tags := fs.String("tags", "", "build `tags`, comma-separated, replacing build.tags")
 		ldflags := fs.String("ldflags", "", "linker `flags` after -s -w, replacing build.ldflags")
 		mf := macFlags{
@@ -161,6 +164,15 @@ has the details.`,
 			if *tgt != "windows" && isSet(fs, "console") {
 				return errors.New("--console is for a Windows build: add --target windows")
 			}
+			b.formats = []string{"tar"}
+			if isSet(fs, "format") {
+				if *tgt != "linux" {
+					return errors.New("--format is for a Linux build: add --target linux")
+				}
+				if b.formats, err = parseFormats(*format); err != nil {
+					return err
+				}
+			}
 			b.mac = mf
 			if b.main, err = resolveMain(ctx, ui.Stderr, proj, arg, lo); err != nil {
 				return err
@@ -202,8 +214,26 @@ type builder struct {
 	ldflags   string
 	universal bool
 	mac       macFlags
-	console   bool   // link a Windows program for the console
-	arch      string // the GOARCH of a Windows or Linux build
+	console   bool     // link a Windows program for the console
+	arch      string   // the GOARCH of a Windows or Linux build
+	formats   []string // what a Linux build makes of its tree
+}
+
+// parseFormats reads --format: Linux formats, comma-separated, each once.
+// An empty value makes the install tree alone.
+func parseFormats(s string) ([]string, error) {
+	var out []string
+	for f := range strings.SplitSeq(s, ",") {
+		f = strings.ToLower(strings.TrimSpace(f))
+		switch {
+		case f == "":
+		case !slices.Contains(linux.Formats, f):
+			return nil, fmt.Errorf("--format %q: the formats are %s", f, strings.Join(linux.Formats, ", "))
+		case !slices.Contains(out, f):
+			out = append(out, f)
+		}
+	}
+	return out, nil
 }
 
 // macFlags are the flags that sign, notarize and package a macOS build.
@@ -809,6 +839,14 @@ func (b *builder) linuxApp() linux.App {
 	}
 }
 
+// depends returns what a package in format, deb or rpm, depends on.
+func (b *builder) depends(format string) []string {
+	if format == "deb" {
+		return linux.DefaultDependsDeb
+	}
+	return linux.DefaultDependsRPM
+}
+
 // linuxPackage is the package name, and the program's name in /usr/bin:
 // made from the app's name, else the main package's, else the last part
 // of the ID.
@@ -889,14 +927,32 @@ func (b *builder) linux(ctx context.Context) error {
 	}
 	artifacts := []string{tree}
 
-	tarball := filepath.Join(dir, linux.TarName(app))
-	err = step(ctx, "Making "+filepath.Base(tarball), "Made "+filepath.Base(tarball), func() error {
-		return linux.Tar(tree, tarball)
-	})
-	if err != nil {
-		return err
+	for _, f := range b.formats {
+		var (
+			out   string
+			write func() error
+		)
+		switch f {
+		case "tar":
+			out = filepath.Join(dir, linux.TarName(app))
+			write = func() error { return linux.Tar(tree, out) }
+		default:
+			p := linux.Package{App: app, Tree: tree, Depends: b.depends(f), OutDir: dir}
+			name, err := p.FileName(f)
+			if err != nil {
+				return err
+			}
+			out = filepath.Join(dir, name)
+			write = func() error {
+				_, err := p.Make(f)
+				return err
+			}
+		}
+		if err := step(ctx, "Making "+filepath.Base(out), "Made "+filepath.Base(out), write); err != nil {
+			return err
+		}
+		artifacts = append(artifacts, out)
 	}
-	artifacts = append(artifacts, tarball)
 
 	if runtime.GOOS != "linux" && b.arch == runtime.GOARCH && b.arch != "amd64" && os.Getenv("GOARCH") == "" {
 		log.Note("%s", log.Dim("for "+b.arch+", this machine's architecture; most PCs need GOARCH=amd64"))

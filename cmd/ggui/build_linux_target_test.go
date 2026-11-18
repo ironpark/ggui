@@ -6,12 +6,14 @@ import (
 	"compress/gzip"
 	"debug/elf"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/ironpark/ggui/cmd/ggui/internal/linux/linuxtest"
 	"github.com/ironpark/ggui/cmd/ggui/internal/scaffold"
 	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
 )
@@ -111,6 +113,30 @@ func TestBuildLinuxTiny(t *testing.T) {
 	}
 }
 
+func TestBuildLinuxFormatFlag(t *testing.T) {
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"--target", "linux", "--format", "tar,zip"}, `--format "zip"`},
+		{[]string{"--target", "web", "--format", "deb"}, "--target linux"},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := run(append([]string{"build", tiny(t)}, c.args...), &stdout, &stderr); code == 0 || !strings.Contains(stderr.String(), c.want) {
+			t.Errorf("%v: exit %d: %s", c.args, code, stderr.String())
+		}
+	}
+	for in, want := range map[string][]string{
+		"":              nil,
+		"tar":           {"tar"},
+		"deb, RPM,deb,": {"deb", "rpm"},
+	} {
+		if got, err := parseFormats(in); err != nil || !slices.Equal(got, want) {
+			t.Errorf("parseFormats(%q) = %v, %v; want %v", in, got, err, want)
+		}
+	}
+}
+
 func TestBuildLinuxArch(t *testing.T) {
 	if testing.Short() {
 		t.Skip("asks the go command")
@@ -123,7 +149,8 @@ func TestBuildLinuxArch(t *testing.T) {
 }
 
 // The app ggui init writes, with an SVG icon, must build for Linux into
-// an install tree with every icon size and the SVG, and its tarball.
+// an install tree with every icon size and the SVG, and the tarball,
+// Debian package and RPM package of it.
 func TestBuildLinuxInitApp(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs go mod tidy and cross-compiles the app")
@@ -143,7 +170,7 @@ func TestBuildLinuxInitApp(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "icon.svg"), []byte(circleSVG), 0o644)
 	setTOML(t, dir, `# icon = "icon.png"`, `icon = "icon.svg"`)
 
-	out, code, said := buildLinux(t, dir)
+	out, code, said := buildLinux(t, dir, "--format", "tar,deb,rpm")
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, said)
 	}
@@ -162,6 +189,30 @@ func TestBuildLinuxInitApp(t *testing.T) {
 	slices.Sort(want)
 	if got := tarNames(t, filepath.Join(out, "hello-world-0.1.0-linux-amd64.tar.gz")); !slices.Equal(got, want) {
 		t.Errorf("tarball has\n  %s\nwant\n  %s", strings.Join(got, "\n  "), strings.Join(want, "\n  "))
+	}
+	deb, err := linuxtest.ReadDeb(filepath.Join(out, "hello-world_0.1.0_amd64.deb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rpm, err := linuxtest.ReadRPM(filepath.Join(out, "hello-world-0.1.0-1.x86_64.rpm"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, files := range []map[string]fs.FileMode{deb.Files, rpm.Files} {
+		var got []string
+		for f := range files {
+			got = append(got, strings.TrimPrefix(f, "/"))
+		}
+		slices.Sort(got)
+		if !slices.Equal(got, want) {
+			t.Errorf("a package has\n  %s\nwant\n  %s", strings.Join(got, "\n  "), strings.Join(want, "\n  "))
+		}
+	}
+	if deb.Control["Package"] != "hello-world" || deb.Control["Architecture"] != "amd64" || !strings.Contains(deb.Control["Depends"], "libx11-6") {
+		t.Errorf("deb control: %v", deb.Control)
+	}
+	if rpm.Name != "hello-world" || rpm.Arch != "x86_64" || !slices.Contains(rpm.Requires, "libX11") {
+		t.Errorf("rpm header: %+v", rpm)
 	}
 	desktop, err := os.ReadFile(filepath.Join(tree, "usr/share/applications", id+".desktop"))
 	if err != nil {
