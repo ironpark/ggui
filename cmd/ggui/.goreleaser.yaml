@@ -6,12 +6,36 @@
 #
 # The command is a module of its own, so Go wants its tags prefixed with
 # its directory; GoReleaser OSS takes the version from the variable instead.
+#
+# The Linux and Windows binaries link zapp's rcodesign library, which signs
+# and notarizes macOS apps away from a Mac, so they are built with cgo,
+# cross-compiled with zig (https://ziglang.org, 0.17.1 as the workflow
+# installs it; zig must be on PATH) as the C compiler and linker:
+#
+#   - Linux against glibc 2.28, so that the binary runs on distributions
+#     from 2018 on, not only on the runner's;
+#   - Windows with the tag ggui_rcodesign, which a Windows build needs to
+#     link the library (see internal/macos's backend), against zig's
+#     MinGW-w64 with LLVM, as the library is built with LLVM MinGW.
+#
+# The library is Rust, which unwinds with libunwind; GCC's driver links
+# that implicitly, zig's does not, hence -lunwind. zapp links the Windows
+# archive with -lruntimeobject, an import library zig's MinGW-w64 lacks and
+# from which the archive takes no symbol: release/mingw holds an empty one.
+# The macOS binaries are built without cgo: on a Mac ggui signs with
+# Apple's tools.
 version: 2
 
 project_name: ggui
 
+before:
+  hooks:
+    # rcodesign's notices, for the Linux and Windows archives.
+    - sh cmd/ggui/release/notices.sh
+
 builds:
-  - id: ggui
+  # macOS, without cgo.
+  - id: ggui-darwin
     dir: cmd/ggui
     main: .
     binary: ggui
@@ -21,11 +45,55 @@ builds:
       - -trimpath
     ldflags:
       - -s -w -X main.releaseVersion=v{{ .Version }}
-    goos: [darwin, linux, windows]
+    goos: [darwin]
     goarch: [amd64, arm64]
+  # Linux and Windows, with cgo and rcodesign, through zig.
+  - id: ggui
+    dir: cmd/ggui
+    main: .
+    binary: ggui
+    env:
+      - CGO_ENABLED=1
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.releaseVersion=v{{ .Version }}
+    goos: [linux, windows]
+    goarch: [amd64, arm64]
+    overrides:
+      - goos: linux
+        goarch: amd64
+        env:
+          - CC=zig cc -target x86_64-linux-gnu.2.28
+          - CGO_LDFLAGS=-lunwind
+      - goos: linux
+        goarch: arm64
+        env:
+          - CC=zig cc -target aarch64-linux-gnu.2.28
+          - CGO_LDFLAGS=-lunwind
+      - goos: windows
+        goarch: amd64
+        tags: [ggui_rcodesign]
+        env:
+          - CC=zig cc -target x86_64-windows-gnu
+          - CGO_LDFLAGS=-L{{ abs "cmd/ggui/release/mingw" }} -lunwind
+      - goos: windows
+        goarch: arm64
+        tags: [ggui_rcodesign]
+        env:
+          - CC=zig cc -target aarch64-windows-gnu
+          - CGO_LDFLAGS=-L{{ abs "cmd/ggui/release/mingw" }} -lunwind
 
 archives:
+  - id: ggui-darwin
+    ids: [ggui-darwin]
+    formats: [tar.gz]
+    name_template: "ggui_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - src: LICENSE*
+      - src: cmd/ggui/README*
   - id: ggui
+    ids: [ggui]
     formats: [tar.gz]
     format_overrides:
       - goos: windows
@@ -34,6 +102,13 @@ archives:
     files:
       - src: LICENSE*
       - src: cmd/ggui/README*
+      # rcodesign's notices, which notices.sh copies from zapp's module.
+      - src: cmd/ggui/release/notices/LICENSE
+        dst: rcodesign/LICENSE
+      - src: cmd/ggui/release/notices/NOTICE
+        dst: rcodesign/NOTICE
+      - src: "cmd/ggui/release/notices/{{ .Os }}.html"
+        dst: rcodesign/THIRD_PARTY_LICENSES.html
 
 checksum:
   name_template: "ggui_{{ .Version }}_checksums.txt"

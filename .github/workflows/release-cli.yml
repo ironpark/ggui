@@ -1,7 +1,8 @@
 name: Release the ggui command
 
 # A tag cmd/ggui/vX.Y.Z releases the ggui command: GoReleaser builds it for
-# macOS, Linux and Windows, the archives become the tag's GitHub release,
+# macOS, Linux and Windows, the last two with cgo through zig so that they
+# link zapp's rcodesign library, the archives become the tag's GitHub release,
 # and a formula that builds the tag from source goes to the Homebrew tap
 # ironpark/homebrew-tap (cmd/ggui/release/formula.sh writes it).
 #
@@ -28,6 +29,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: cmd/ggui/go.sum
+      # The C compiler and linker of the Linux and Windows binaries, which
+      # link zapp's rcodesign library with cgo; see cmd/ggui/.goreleaser.yaml.
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.1
       - name: Version
         id: version
         run: echo "version=${GITHUB_REF_NAME#cmd/ggui/}" >> "$GITHUB_OUTPUT"
@@ -48,7 +54,9 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/*.zip dist/*_checksums.txt \
             --title "ggui command $VERSION" \
-            --notes "Install with \`brew install ironpark/tap/ggui\` or \`go install github.com/ironpark/ggui/cmd/ggui@$VERSION\`. The command needs Go to build the applications it runs."
+            --notes "Install with \`brew install ironpark/tap/ggui\` or \`go install github.com/ironpark/ggui/cmd/ggui@$VERSION\`. The command needs Go to build the applications it runs.
+
+          The Linux and Windows binaries here (amd64 and arm64) can also sign and notarize macOS apps, with a certificate and an App Store Connect API key: they link zapp's rcodesign library (MPL-2.0; its notices are in each archive's rcodesign directory). The Linux ones need glibc 2.28 or later. A \`go install\` build signs off a Mac only when built with cgo, and on Windows also with LLVM MinGW and \`-tags ggui_rcodesign\`; see docs/cli.md."
       - name: Update the Homebrew tap
         env:
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
