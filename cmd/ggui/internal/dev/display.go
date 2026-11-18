@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
+	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
 	"github.com/ironpark/ggui/cmd/ggui/internal/viewer"
 )
 
@@ -60,10 +61,6 @@ type RemoteDisplay struct {
 	proj string
 }
 
-func (d *RemoteDisplay) logf(format string, args ...any) {
-	fmt.Fprintf(d.Log, "ggui: "+format+"\n", args...)
-}
-
 // Start resolves the viewer of the project's module graph, builds it if
 // the cache does not have it and starts it.
 func (d *RemoteDisplay) Start(ctx context.Context) (Viewer, error) {
@@ -90,17 +87,27 @@ func (d *RemoteDisplay) Start(ctx context.Context) (Viewer, error) {
 			return nil, err
 		}
 	}
+	// No app runs while the viewer is built, so its step may animate.
+	say := ui.For(d.Log).Prefixed("ggui")
+	var s *ui.Step
 	if _, err := os.Stat(b.Path); err != nil {
-		d.logf("building the viewer, once for these versions of ggui, ggwd and ggfx")
+		s = say.Step("building the viewer, once for these versions of ggui, ggwd and ggfx", ui.NoElapsed())
 	}
 	start := time.Now()
 	built, err := b.Ensure(ctx)
 	if err != nil {
+		s.Stop()
 		return nil, err
 	}
 	if built {
-		d.logf("built the viewer in %s; later sessions find it in %s", time.Since(start).Round(time.Millisecond), filepath.Dir(b.Path))
+		msg := fmt.Sprintf("built the viewer in %s; later sessions find it in %s", time.Since(start).Round(time.Millisecond), filepath.Dir(b.Path))
+		if s != nil {
+			s.Done(msg)
+		} else {
+			say.Success("%s", msg)
+		}
 	}
+	s.Stop()
 	p, err := viewer.Start(ctx, b.Path, viewer.Options{Project: d.proj, Stderr: d.Stderr})
 	if err != nil {
 		return nil, fmt.Errorf("the viewer did not start: %w", err)

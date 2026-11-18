@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
 )
 
 // Status is a check's verdict.
@@ -87,8 +89,26 @@ func Run(ctx context.Context, o Options) *Report {
 }
 
 // Print writes the report for a person: a line per check, its fix
-// indented below it.
+// indented below it. On a terminal the status is colored and marked ✓, !
+// or ✗.
 func (r *Report) Print(w io.Writer) {
+	o := ui.For(w)
+	statusWidth := 4
+	status := func(s Status) string { return fmt.Sprintf("%-4s", s) }
+	if o.Terminal() {
+		statusWidth = 6
+		status = func(s Status) string {
+			text := fmt.Sprintf("%-4s", s)
+			switch s {
+			case OK:
+				return o.Green("✓ " + text)
+			case Warn:
+				return o.Yellow("! " + text)
+			default:
+				return o.Red("✗ " + text)
+			}
+		}
+	}
 	width := 0
 	for _, c := range r.Checks {
 		width = max(width, len(c.Name))
@@ -96,11 +116,11 @@ func (r *Report) Print(w io.Writer) {
 	for _, c := range r.Checks {
 		// A detail of several lines, such as a list of errors, keeps to
 		// its column.
-		detail := strings.ReplaceAll(c.Detail, "\n", "\n"+strings.Repeat(" ", 4+2+width+2))
-		fmt.Fprintf(w, "%-4s  %-*s  %s\n", c.Status, width, c.Name, detail)
+		detail := strings.ReplaceAll(c.Detail, "\n", "\n"+strings.Repeat(" ", statusWidth+2+width+2))
+		fmt.Fprintf(w, "%s  %-*s  %s\n", status(c.Status), width, c.Name, detail)
 		if c.Fix != "" {
-			for _, line := range strings.Split(c.Fix, "\n") {
-				fmt.Fprintf(w, "%-4s  %-*s  → %s\n", "", width, "", line)
+			for line := range strings.SplitSeq(c.Fix, "\n") {
+				fmt.Fprintf(w, "%-*s  %-*s  %s %s\n", statusWidth, "", width, "", o.Cyan("→"), line)
 			}
 		}
 	}
@@ -116,11 +136,11 @@ func (r *Report) Print(w io.Writer) {
 	fmt.Fprintln(w)
 	switch {
 	case fails > 0:
-		fmt.Fprintf(w, "%d failed, %d warnings.\n", fails, warns)
+		fmt.Fprintln(w, o.Red(fmt.Sprintf("%d failed, %d warnings.", fails, warns)))
 	case warns > 0:
-		fmt.Fprintf(w, "No problems that stop a build; %d warnings.\n", warns)
+		fmt.Fprintln(w, o.Yellow(fmt.Sprintf("No problems that stop a build; %d warnings.", warns)))
 	default:
-		fmt.Fprintln(w, "Everything checked is in order.")
+		fmt.Fprintln(w, o.Green("Everything checked is in order."))
 	}
 }
 

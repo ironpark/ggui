@@ -32,6 +32,16 @@ own; `go install github.com/ironpark/ggui/cmd/ggui@vX.Y.Z` installs one.
 [`ggui.toml`](#ggui-toml), and flags override them. Flags may come before
 or after the package, as in `ggui dev ./cmd/app --web`.
 
+On a terminal, ggui shows each step that takes a while as a line with a
+spinner, the time so far and the last thing the `go` command printed,
+ending in ✓, ! or ✗, in color. When the `go` command has been quiet for
+20 seconds, as while a slow network or proxy resolves a module, the line
+says so. Piped or redirected, ggui prints a plain line as each step starts
+and ends instead, without colors or escape sequences. `NO_COLOR` set to
+anything turns colors off; `CLICOLOR_FORCE` or `FORCE_COLOR` (other than
+`0`) turns them on even off a terminal; `TERM=dumb` turns off both colors
+and spinners. `NO_COLOR` wins over the other two.
+
 ## On this page
 
 - [ggui init](#ggui-init)
@@ -58,9 +68,11 @@ default, creating it if needed:
 | `ggui.toml` | Every setting, each documented, the defaults commented out. |
 | `.gitignore` | `build/` and the program `go build` leaves in the directory. |
 
-It then runs `go get github.com/ironpark/ggui@latest` and `go mod tidy`.
-It refuses to overwrite any of these files unless given `--force`, and then
-writes none of them.
+It then runs `go get github.com/ironpark/ggui@latest` and `go mod tidy`,
+with `GOWORK=off`. If either fails, or is interrupted with Ctrl-C, the files
+stay written and init prints what the `go` command said and the commands
+that finish the job. It refuses to overwrite any of these files unless
+given `--force`, and then writes none of them.
 
 | Flag | Use |
 | --- | --- |
@@ -442,6 +454,7 @@ ggui doctor --json
 
 Doctor prints a line for each check: `ok`; `warn`, which works but lacks
 something or is worth knowing; or `fail`, which will not work until fixed.
+On a terminal each is also marked ✓, ! or ✗, in color.
 It prints what to do under each line that is not ok, and exits with status
 1 when a check failed. `--json` prints
 `{"ok": bool, "checks": [{"name", "status", "detail", "fix"}]}`.

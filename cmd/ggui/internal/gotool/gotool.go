@@ -10,10 +10,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
 )
 
 // Go is the program run as the go command.
@@ -46,12 +49,29 @@ func output(ctx context.Context, dir string, env []string, args ...string) ([]by
 			return out, fmt.Errorf("go %s: %s", args[0], strings.TrimSpace(stderr.String()))
 		}
 		if errors.Is(err, exec.ErrNotFound) {
-			return out, errors.New("the go command is not on PATH: install Go from https://go.dev/dl/")
+			return out, ErrNoGo
 		}
 		return out, fmt.Errorf("go %s: %w", args[0], err)
 	}
 	return out, nil
 }
+
+// Run runs a go command in dir with env added, writing what it prints,
+// both streams, to out. When ctx is done the go command is interrupted,
+// as Ctrl-C would, and Run returns once it has stopped, or WaitDelay
+// after. A go command that is not on PATH is said so.
+func Run(ctx context.Context, dir string, env []string, out io.Writer, args ...string) error {
+	cmd := command(ctx, dir, env, args...)
+	cmd.Stdout, cmd.Stderr = out, out
+	err := cmd.Run()
+	if errors.Is(err, exec.ErrNotFound) {
+		return ErrNoGo
+	}
+	return err
+}
+
+// ErrNoGo reports that there is no go command to run.
+var ErrNoGo = errors.New("the go command is not on PATH: install Go from https://go.dev/dl/")
 
 // Env returns the go command's view of the named variables, which takes
 // GOENV, the environment and the toolchain's defaults into account.
@@ -160,13 +180,14 @@ func Build(ctx context.Context, o BuildOptions) error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
-			return errors.New("the go command is not on PATH: install Go from https://go.dev/dl/")
+			return ErrNoGo
 		}
 		return &BuildError{Output: out, Err: err}
 	}
 	if len(out) > 0 {
-		// A successful build can still warn, as a linker does.
-		os.Stderr.Write(out)
+		// A successful build can still warn, as a linker does: above a
+		// step that is live on the terminal, not into its line.
+		ui.Stderr.Write(out)
 	}
 	return nil
 }
