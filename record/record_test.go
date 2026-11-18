@@ -281,12 +281,12 @@ func near(a, b color.RGBA, tol int) bool {
 // The request and the report are what ggui record writes and reads; its
 // test checks the same strings (cmd/ggui/cmd_record_test.go).
 const (
-	goldenRequest = `{"v":1,"tour":"intro","format":"gif","out":"/tmp/tour.gif","fps":10,"width":640,"colors":128,"dither":0.25,"loop":2,"lossy":30,"frame":"mac","backdrop":"#20242a","no_cursor":true,"report":"/tmp/report.json"}`
+	goldenRequest = `{"v":1,"tour":"intro","format":"gif","out":"/tmp/tour.gif","fps":10,"width":640,"colors":128,"dither":0.25,"loop":2,"lossy":30,"frame":"mac-unified","backdrop":"#20242a","no_cursor":true,"report":"/tmp/report.json"}`
 	goldenReport  = `{"v":1,"tours":["","intro"],"frames":42,"duration_ms":4200,"width":640,"height":400}`
 )
 
 func TestProtocolGolden(t *testing.T) {
-	req := request{V: 1, Tour: "intro", Format: "gif", Out: "/tmp/tour.gif", FPS: 10, Width: 640, Colors: 128, Dither: 0.25, Loop: 2, Lossy: 30, Frame: "mac", Backdrop: "#20242a", NoCursor: true, Report: "/tmp/report.json"}
+	req := request{V: 1, Tour: "intro", Format: "gif", Out: "/tmp/tour.gif", FPS: 10, Width: 640, Colors: 128, Dither: 0.25, Loop: 2, Lossy: 30, Frame: "mac-unified", Backdrop: "#20242a", NoCursor: true, Report: "/tmp/report.json"}
 	if got, _ := json.Marshal(req); string(got) != goldenRequest {
 		t.Errorf("request\n%s\nwant\n%s", got, goldenRequest)
 	}
@@ -480,12 +480,15 @@ func TestServe(t *testing.T) {
 		t.Fatalf("reported %+v", r)
 	}
 
-	// Framed, with the default margin and title bar.
-	if code, err := ask(request{Format: "gif", Out: out, Report: rep, Frame: "mac", Backdrop: "#ffffff"}); code != 0 || err != nil {
-		t.Fatalf("framed: %d %v", code, err)
-	}
-	if r := readReport(); r.Width != 60+96 || r.Height != 40+28+96 {
-		t.Fatalf("framed: reported %+v", r)
+	// Framed, with the default margin and title bar, and with a unified
+	// toolbar's.
+	for frame, bar := range map[string]int{"mac": 28, "mac-unified": 52} {
+		if code, err := ask(request{Format: "gif", Out: out, Report: rep, Frame: frame, Backdrop: "#ffffff"}); code != 0 || err != nil {
+			t.Fatalf("framed %s: %d %v", frame, code, err)
+		}
+		if r := readReport(); r.Width != 60+96 || r.Height != 40+bar+96 {
+			t.Fatalf("framed %s: reported %+v", frame, r)
+		}
 	}
 	if code, err := ask(request{Format: "gif", Out: out, Frame: "round"}); code != 2 || err == nil {
 		t.Fatalf("a frame named round: %d %v", code, err)
