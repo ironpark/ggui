@@ -29,37 +29,35 @@ type AlertDialogWidget struct {
 	props              property.Owner
 	open               ggui.Binding[bool]
 	title, description string
-	confirmLabel       string
-	cancelLabel        string
+	confirmLabel       string // as Confirm set it; empty is the Strings' AlertContinue
+	cancelLabel        string // as Cancel set it; empty is the Strings' AlertCancel
 	onConfirm          func()
 	onCancel           func()
 	destructive        bool
 	small              bool
 	media              ggui.Widget
 
-	dialog   *DialogWidget
-	heading  *widget.TextWidget
-	text     *widget.TextWidget
-	lines    *widget.ColumnWidget // the title over the description
-	tile     *widget.BoxWidget    // the media, if any
-	header   ggui.Widget
-	beside   *widget.RowWidget    // the media beside the lines
-	stacked  *widget.ColumnWidget // the media over the lines, in a Small dialog
-	answered bool
+	dialog          *DialogWidget
+	confirm, cancel *ButtonWidget
+	heading         *widget.TextWidget
+	text            *widget.TextWidget
+	lines           *widget.ColumnWidget // the title over the description
+	tile            *widget.BoxWidget    // the media, if any
+	header          ggui.Widget
+	beside          *widget.RowWidget    // the media beside the lines
+	stacked         *widget.ColumnWidget // the media over the lines, in a Small dialog
+	answered        bool
 }
 
 // AlertDialog creates a confirmation shown while open is true. Confirm
-// names the action it asks about; without it the button reads "Continue"
-// and only closes.
+// names the action it asks about; without it the button reads the
+// Strings' AlertContinue, "Continue", and only closes.
 //
 //	del := ggui.State(false)
 //	ui.AlertDialog(del, "Delete the file?", "This cannot be undone.").
 //		Confirm("Delete", remove).Destructive()
 func AlertDialog(open ggui.Binding[bool], title, description string) *AlertDialogWidget {
-	return &AlertDialogWidget{
-		open: open, title: title, description: description,
-		confirmLabel: "Continue", cancelLabel: "Cancel",
-	}
+	return &AlertDialogWidget{open: open, title: title, description: description}
 }
 
 // Confirm names the confirming button and what it does. The dialog closes
@@ -164,11 +162,12 @@ func (a *AlertDialogWidget) build() {
 			a.header = a.beside
 		}
 	}
-	confirm := Button(a.confirmLabel, func() { a.finish(a.onConfirm) })
+	// The buttons are worded at layout; see Layout.
+	a.confirm = Button("", func() { a.finish(a.onConfirm) })
 	if a.destructive {
-		confirm.Destructive()
+		a.confirm.Destructive()
 	}
-	cancel := Button(a.cancelLabel, func() { a.finish(a.onCancel) }).Outline()
+	a.cancel = Button("", func() { a.finish(a.onCancel) }).Outline()
 	if a.dialog == nil {
 		a.dialog = Dialog(a.open, alertDialogHeader{a}).
 			Name(a.title).
@@ -181,7 +180,7 @@ func (a *AlertDialogWidget) build() {
 			})
 	}
 	a.dialog.evenActions = a.small
-	a.dialog.Footer(cancel, confirm)
+	a.dialog.Footer(a.cancel, a.confirm)
 	if a.small {
 		a.dialog.Width(alertDialogSmallWidth)
 	}
@@ -202,6 +201,9 @@ func (a *AlertDialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if a.dialog == nil {
 		a.build()
 	}
+	words := stringsOf(env)
+	a.confirm.relabel(pick(a.confirmLabel != "", a.confirmLabel, words.AlertContinue))
+	a.cancel.relabel(pick(a.cancelLabel != "", a.cancelLabel, words.AlertCancel))
 	t := uitheme.Of(env)
 	a.text.Style(mutedText(t))
 	a.lines.Gap(t.Space * .75)

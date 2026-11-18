@@ -318,7 +318,8 @@ highlight for orientation, but Enter/Space and accessibility selection cannot
 select them. Month controls and the date grid are separate tab stops.
 
 `.WeekdayLabels([7]string{...})` takes Sunday-to-Saturday labels;
-`.MonthLabel(fn)` formats the heading. `.Disabled(true)` disables the calendar.
+`.MonthLabel(fn)` formats the heading. Both, and the month names, otherwise
+come from the [`ui.Strings`](accessibility.md#localization) around the calendar. `.Disabled(true)` disables the calendar.
 The calendar includes six weeks of 28-pixel cells, with adjacent-month dates
 muted but selectable and today marked. `.Months(n)` shows n consecutive months
 side by side, wrapping onto further rows where the width runs out; the previous
@@ -356,7 +357,9 @@ picker.Calendar().RangeNights(1, 14)
 pages. It shows at most five numbered buttons, Previous and Next, with standard
 button keyboard support. `.OnChange(fn)` reports user changes; `.Disabled(v)`
 disables navigation, and `.Labels(previous, next)` renames the Previous and Next
-buttons for another language. Data slicing or fetching stays with the application.
+buttons; for a whole app in another language provide
+[`ui.Strings`](accessibility.md#localization) instead. Data slicing or fetching
+stays with the application.
 
 Explore these controls in the [component gallery](../examples/gallery).
 

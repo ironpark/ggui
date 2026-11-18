@@ -150,23 +150,27 @@ type ButtonWidget struct {
 	content     *buttonContent
 	onTap       func()
 	defaultName string
-	variant     *ButtonVariant
-	size        *ButtonSizeVariant
-	style       ButtonStyle
-	padded      bool
-	pad         ggui.EdgeInsets
-	radius      float64 // set by Radius; negative follows the size and the theme
-	corner      float64 // the radius drawn, from the last Layout
-	sides       JoinedSides
-	selected    bool // current item for composite navigation controls
-	expands     func() bool
-	opener      ggui.Actor
-	value       func() string // optional accessible value for composite triggers
-	motion      time.Duration
-	theme       *uitheme.Theme
-	chord       ggui.Chord
-	chorded     bool
-	invalidProp property.Value[bool] // set by Invalid or BindInvalid
+	// defaultWords gives defaultName from the Strings at each layout,
+	// for a button whose built-in name is one of their words; nil leaves
+	// defaultName as it is.
+	defaultWords func(*Strings) string
+	variant      *ButtonVariant
+	size         *ButtonSizeVariant
+	style        ButtonStyle
+	padded       bool
+	pad          ggui.EdgeInsets
+	radius       float64 // set by Radius; negative follows the size and the theme
+	corner       float64 // the radius drawn, from the last Layout
+	sides        JoinedSides
+	selected     bool // current item for composite navigation controls
+	expands      func() bool
+	opener       ggui.Actor
+	value        func() string // optional accessible value for composite triggers
+	motion       time.Duration
+	theme        *uitheme.Theme
+	chord        ggui.Chord
+	chorded      bool
+	invalidProp  property.Value[bool] // set by Invalid or BindInvalid
 }
 
 // buttonInvalidSlot eases the destructive border and halo of an invalid
@@ -365,6 +369,9 @@ func (b *ButtonWidget) Pad(sides ...float64) *ButtonWidget {
 func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer b.props.Layout().EndLayout()
 	b.Sync()
+	if b.defaultWords != nil {
+		b.defaultName = b.defaultWords(stringsOf(env))
+	}
 	t := uitheme.Of(env)
 	b.theme = t
 	b.motion = env.Motion(t.MotionFast)
@@ -564,6 +571,13 @@ func (b *ButtonWidget) HandleKey(ev ggui.KeyEvent) { b.Keyboard(ev, b.onTap) }
 
 // HandlePointer implements PointerHandler.
 func (b *ButtonWidget) HandlePointer(ev ggui.PointerEvent) bool { return b.Pointer(ev, b.onTap) }
+
+// relabel puts s on a text button and names it with it, as Button does:
+// for a button of this package's own whose word comes from the Strings.
+func (b *ButtonWidget) relabel(s string) {
+	b.label.Content(s)
+	b.SetName(s)
+}
 
 func (b *ButtonWidget) name() string {
 	return pick(b.SemanticName() != "", b.SemanticName(), b.defaultName)

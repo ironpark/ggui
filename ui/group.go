@@ -33,6 +33,7 @@ type ButtonGroupWidget struct {
 	vertical   bool
 	rtl        bool
 	name       string
+	named      bool // Name was called; otherwise the Strings name the strip
 
 	theme *uitheme.Theme
 	sizes []ggui.Size
@@ -53,7 +54,7 @@ type ButtonGroupWidget struct {
 //		ui.Button("Paste", pasteIt).Outline(),
 //	)
 func ButtonGroup(children ...ggui.Widget) *ButtonGroupWidget {
-	g := &ButtonGroupWidget{children: children, name: "Actions"}
+	g := &ButtonGroupWidget{children: children}
 	g.enclosed = func() { g.paint(g.paintDst, g.paintRect) }
 	return g
 }
@@ -68,7 +69,7 @@ func (g *ButtonGroupWidget) Name(s string) *ButtonGroupWidget {
 		g.props.Changed()
 	}
 	defer property.Watch(&g.props, &g.name)()
-	g.name = s
+	g.name, g.named = s, true
 	return g
 }
 
@@ -103,6 +104,8 @@ func (g *ButtonGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer g.props.Layout().EndLayout()
 	if g.nameReader != nil {
 		g.name = g.nameReader.Get()
+	} else if !g.named {
+		g.name = stringsOf(env).ButtonGroupName
 	}
 	g.theme = uitheme.Of(env)
 	g.rtl = env.Direction() == ggui.DirRTL
@@ -348,6 +351,14 @@ type ToggleGroupWidget[T comparable] struct {
 	variant          *ButtonVariant
 	size             *ButtonSizeVariant
 	spacing          float64 // the gap, in halves of the theme's Space
+	// defaultName names the group while it has no name of its own, in
+	// place of the Strings' ToggleGroupName; nil keeps that.
+	defaultName func(*Strings) string
+	// defaultFormat words an option in the Strings, until Format is
+	// called; nil leaves the options to label.
+	defaultFormat func(*Strings, T) string
+	formatted     bool     // Format was called
+	words         *Strings // the Strings of the last layout
 
 	theme *uitheme.Theme
 	style ButtonStyle
@@ -499,13 +510,19 @@ type segmentParts struct{ icon, label ggui.Size }
 
 // Format sets how each option is shown and named.
 func (g *ToggleGroupWidget[T]) Format(fn func(T) string) *ToggleGroupWidget[T] {
+	g.formatted = true
+	g.relabel(fn)
+	return g
+}
+
+// relabel shows and names every option as fn words it.
+func (g *ToggleGroupWidget[T]) relabel(fn func(T) string) {
 	g.label = fn
 	for i, o := range g.options {
 		g.names[i] = fn(o)
 		g.labels[i].Content(g.names[i])
 	}
 	g.makeIcons()
-	return g
 }
 
 // Name sets the accessible name of the group.
@@ -605,7 +622,22 @@ func (g *ToggleGroupWidget[T]) pick(i int) {
 // Layout implements ggui.Widget.
 func (g *ToggleGroupWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer g.props.Layout().EndLayout()
+	g.words = stringsOf(env)
+	var word func(T) string
+	if g.defaultFormat != nil && !g.formatted {
+		words := g.words
+		word = func(v T) string { return g.defaultFormat(words, v) }
+		g.label = word
+	}
 	g.setOptions(g.optionProp.Get())
+	if word != nil {
+		for i, o := range g.options {
+			if g.names[i] != word(o) {
+				g.relabel(word)
+				break
+			}
+		}
+	}
 	g.Sync()
 	t := uitheme.Of(env)
 	size := g.size.Style(*t)
@@ -882,7 +914,14 @@ func (s toggleSegment[T]) Adopt(prev any) {
 }
 
 func (g *ToggleGroupWidget[T]) name() string {
-	return pick(g.SemanticName() != "", g.SemanticName(), "Options")
+	if g.SemanticName() != "" {
+		return g.SemanticName()
+	}
+	words := g.words.orDefault()
+	if g.defaultName != nil {
+		return g.defaultName(words)
+	}
+	return words.ToggleGroupName
 }
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.

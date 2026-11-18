@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"image/color"
 	"strconv"
 	"strings"
@@ -252,9 +253,10 @@ func (g *AvatarGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		// of the first one beside it.
 		if g.count == nil || g.counted != hidden {
 			label := "+" + strconv.Itoa(hidden)
-			g.count = &AvatarWidget{name: strconv.Itoa(hidden) + " more", initials: widget.Text(label).NoWrap(), side: -1, counts: true}
+			g.count = &AvatarWidget{initials: widget.Text(label).NoWrap(), side: -1, counts: true}
 			g.counted = hidden
 		}
+		g.count.name = fmt.Sprintf(stringsOf(env).AvatarMoreFormat, hidden)
 		side := -1.0
 		if len(visible) > 0 {
 			side = visible[0].side

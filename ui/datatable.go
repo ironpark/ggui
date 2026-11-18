@@ -41,17 +41,22 @@ func (s TableSort) Mark(id string) string {
 }
 
 // sortHeading is a ghost heading button that toggles sorting by id and shows
-// the current direction from sort as an icon after the title.
-func sortHeading(title string, sort ggui.Readable[TableSort], id string, toggle func()) *ButtonWidget {
+// the current direction from sort as an icon after the title. It is named,
+// and reads its direction, in the Strings it is laid out under.
+func sortHeading(title string, sort ggui.Readable[TableSort], id string, toggle func()) ggui.Widget {
 	face := widget.Row(widget.Text(title).NoWrap(), &sortMark{sort: sort, id: id}).Gap(4).Align(widget.AlignCenter)
-	b := ButtonOf(face, toggle).Ghost().Pad(0, 0).Name("Sort " + title)
+	b := ButtonOf(face, toggle).Ghost().Pad(0, 0)
+	var words *Strings
 	b.value = func() string {
 		if s := ggui.Untrack(sort.Get); s.Column == id {
-			return pick(s.Descending, "descending", "ascending")
+			return pick(s.Descending, words.orDefault().SortDescending, words.orDefault().SortAscending)
 		}
 		return ""
 	}
-	return b
+	return localize(b, func(s *Strings) {
+		words = s
+		b.Name(fmt.Sprintf(s.SortFormat, title))
+	})
 }
 
 // sortMark is the icon of a sortable heading: a chevron pointing the way the
@@ -313,8 +318,12 @@ func (m *TableModel[T, K]) pageSelection() pageSelection {
 // actions. Keep the model outside reactive presentation rebuilds.
 func DataTable[T any, K comparable](m *TableModel[T, K]) ggui.Widget {
 	return ggui.Component(func() ggui.Widget {
-		search := TextField(ggui.Bind(m.Query, m.SetQuery)).Placeholder("Filter rows...").Name("Filter rows")
+		// What the table says of itself is worded at layout, in the
+		// Strings it is laid out under: see localize.
+		search := TextField(ggui.Bind(m.Query, m.SetQuery))
 		entries := make([]ggui.Widget, 0, len(m.cols))
+		items := make([]*MenuItemWidget, 0, len(m.cols))
+		titles := make([]string, 0, len(m.cols))
 		for _, c := range m.cols {
 			title := c.Title
 			if title == "" {
@@ -322,24 +331,32 @@ func DataTable[T any, K comparable](m *TableModel[T, K]) ggui.Widget {
 			}
 			item := MenuItem(title, func() { m.SetColumnVisible(c.ID, !m.ColumnVisible(c.ID)) }).
 				BindChecked(ggui.Derived(func() bool { return m.ColumnVisible(c.ID) }))
-			item.SetName("Show " + title)
 			entries = append(entries, item)
+			items, titles = append(items, item), append(titles, title)
 		}
 		// shadcn opens the column menu with align="end", under the button's
 		// trailing edge, so it does not run past the table's.
-		columns := Menu("Columns", entries...)
+		columns := Menu("", entries...)
 		columns.button.TrailingIcon(Icon(icons.ChevronDown))
 		columns.Popup().Align(widget.PopupEnd)
-		toolbar := widget.Row(widget.Expanded(search), columns).Gap(12)
+		toolbar := localize(widget.Row(widget.Expanded(search), columns).Gap(12), func(s *Strings) {
+			search.Placeholder(s.FilterRowsHint).Name(s.FilterRows)
+			columns.button.relabel(s.Columns)
+			for i, item := range items {
+				item.SetName(fmt.Sprintf(s.ShowColumnFormat, titles[i]))
+			}
+		})
 		isEmpty := ggui.Map(m.visible, func(rows []T) bool { return len(rows) == 0 })
 		page := ggui.Derived(m.pageSelection)
 		table := ggui.Reactive(func() ggui.Widget {
 			cols := []Column[T]{Col("", func(row ggui.Readable[T]) ggui.Widget {
 				key := m.key(ggui.Untrack(row.Get))
-				return Checkbox(ggui.Bind(func() bool { return m.IsSelected(key) }, func(v bool) { m.Select(key, v) }), "").Name(fmt.Sprintf("Select row %v", key))
+				box := Checkbox(ggui.Bind(func() bool { return m.IsSelected(key) }, func(v bool) { m.Select(key, v) }), "")
+				return localize(box, func(s *Strings) { box.Name(fmt.Sprintf(s.SelectRowFormat, key)) })
 			}).W(40)}
-			cols[0].Header = Checkbox(ggui.Bind(func() bool { return page.Get().all }, m.SelectPage), "").Name("Select page").
+			all := Checkbox(ggui.Bind(func() bool { return page.Get().all }, m.SelectPage), "").
 				BindIndeterminate(ggui.Map(page, func(p pageSelection) bool { return p.mixed })).BindDisabled(isEmpty)
+			cols[0].Header = localize(all, func(s *Strings) { all.Name(s.SelectPage) })
 			// Only visibility rebuilds the table. Sorting and data changes update its
 			// keyed rows; heading labels read the sort state independently.
 			for _, c := range m.cols {
@@ -362,17 +379,27 @@ func DataTable[T any, K comparable](m *TableModel[T, K]) ggui.Widget {
 			for _, c := range cols {
 				minWidth += cmp.Or(c.Width, 160)
 			}
-			return &dataTableFrame{minWidth: max(560, minWidth), box: box, scroll: widget.Scroll(box).Horizontal(), isEmpty: isEmpty, message: widget.Center(widget.Text("No results."))}
+			message := widget.Text("")
+			return &dataTableFrame{minWidth: max(560, minWidth), box: box, scroll: widget.Scroll(box).Horizontal(), isEmpty: isEmpty, text: message, message: widget.Center(message)}
 		})
-		summary := withMutedText(widget.TextOf(ggui.Derived(func() string {
+		// The summary and the page read the model as the footer is worded,
+		// at layout, as widget.TextOf would.
+		summary := widget.Text("")
+		pageLabel := widget.Text("").NoWrap()
+		previous := Button("", func() { m.SetPage(m.Page() - 1) }).Outline().Size(ButtonSmall).BindDisabled(ggui.Derived(func() bool { return m.Page() <= 1 }))
+		next := Button("", func() { m.SetPage(m.Page() + 1) }).Outline().Size(ButtonSmall).BindDisabled(ggui.Derived(func() bool { return m.Page() >= m.PageCount() }))
+		sizes := Select(ggui.Bind(m.PageSize, m.SetPageSize)).Options([]int{5, 10, 20, 50})
+		size := widget.Box(sizes).Width(72)
+		sizeLabel := widget.Text("").NoWrap()
+		footer := localize(widget.Wrap(withMutedText(summary), widget.Row(ggui.WithEnv(tableLabelText, sizeLabel), size).Gap(8).Align(widget.AlignCenter), pageLabel, widget.Row(previous, next).Gap(8)).Gap(12).Align(widget.AlignCenter), func(s *Strings) {
 			rows := m.filtered.Get()
-			return fmt.Sprintf("%d of %d row(s) selected.", m.countSelected(rows), len(rows))
-		})))
-		pageLabel := widget.TextOf(ggui.Derived(func() string { return fmt.Sprintf("Page %d of %d", m.Page(), m.PageCount()) })).NoWrap()
-		previous := Button("Previous", func() { m.SetPage(m.Page() - 1) }).Outline().Size(ButtonSmall).BindDisabled(ggui.Derived(func() bool { return m.Page() <= 1 }))
-		next := Button("Next", func() { m.SetPage(m.Page() + 1) }).Outline().Size(ButtonSmall).BindDisabled(ggui.Derived(func() bool { return m.Page() >= m.PageCount() }))
-		size := widget.Box(Select(ggui.Bind(m.PageSize, m.SetPageSize)).Options([]int{5, 10, 20, 50}).Name("Rows per page")).Width(72)
-		footer := widget.Wrap(summary, widget.Row(ggui.WithEnv(tableLabelText, widget.Text("Rows per page").NoWrap()), size).Gap(8).Align(widget.AlignCenter), pageLabel, widget.Row(previous, next).Gap(8)).Gap(12).Align(widget.AlignCenter)
+			summary.Content(fmt.Sprintf(s.RowsSelectedFormat, m.countSelected(rows), len(rows)))
+			pageLabel.Content(fmt.Sprintf(s.PageOfFormat, m.Page(), m.PageCount()))
+			previous.relabel(s.Previous)
+			next.relabel(s.Next)
+			sizes.Name(s.RowsPerPage)
+			sizeLabel.Content(s.RowsPerPage)
+		})
 		return widget.Column(toolbar, table, footer).Gap(16).Align(widget.AlignStretch)
 	})
 }
@@ -383,6 +410,7 @@ type dataTableFrame struct {
 	box      *widget.BoxWidget
 	scroll   *widget.ScrollWidget
 	isEmpty  ggui.Readable[bool]
+	text     *widget.TextWidget // what message says
 	message  ggui.Widget
 	head     float64
 }
@@ -400,6 +428,7 @@ func (f *dataTableFrame) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	c.MaxH = min(c.MaxH, natural.H)
 	size := f.scroll.Layout(c, env)
 	if f.isEmpty.Get() {
+		f.text.Content(stringsOf(env).NoTableResults)
 		f.message.Layout(ggui.Constraints{MinW: size.W, MaxW: size.W, MinH: 96, MaxH: 96}, env)
 	}
 	return size

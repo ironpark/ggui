@@ -273,7 +273,7 @@ func (r *ResizableWidget) BindDisabled(when ggui.Readable[bool]) *ResizableWidge
 }
 
 func (r *ResizableWidget) name() string {
-	return pick(r.SemanticName() != "", r.SemanticName(), "Resize panels")
+	return pick(r.SemanticName() != "", r.SemanticName(), stringsOf(r.env).ResizablePanels)
 }
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.

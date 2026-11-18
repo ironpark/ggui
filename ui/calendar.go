@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"image/color"
 	"math"
 	"strconv"
@@ -33,9 +34,11 @@ type CalendarWidget struct {
 	first                                          time.Time // the first month shown; the browsed date stays within the months from it
 	location                                       *time.Location
 	weekStart                                      time.Weekday
-	weekdays                                       [7]string
-	monthNames                                     [12]string
-	monthLabel                                     func(time.Time) string
+	weekdays                                       [7]string              // as WeekdayLabels set them; empty follows the Strings
+	monthNames                                     [12]string             // as MonthNames set them; empty follows the Strings
+	monthLabel                                     func(time.Time) string // as MonthLabel set it; nil follows the Strings
+	words                                          *Strings               // the Strings of the last layout
+	shortMonths                                    [12]string             // the month names the caption dropdown lists, as of the last layout
 	disabledDate                                   func(time.Time) bool
 	onChange                                       func(time.Time)
 	onPick                                         func()
@@ -104,15 +107,14 @@ func Calendar(value ggui.Binding[time.Time]) *CalendarWidget {
 }
 
 func newCalendar() *CalendarWidget {
-	c := &CalendarWidget{location: time.Local, weekStart: time.Sunday, count: 1,
-		weekdays:   [7]string{"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"},
-		monthNames: [12]string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"},
-		monthLabel: func(t time.Time) string { return t.Format("January 2006") }}
+	// The weekday and month names, the month's caption and the buttons'
+	// names come from the Strings at layout, unless a setter gave them.
+	c := &CalendarWidget{location: time.Local, weekStart: time.Sunday, count: 1}
 	c.Role = ggui.RoleGroup
 	c.AutoKey()
 	c.previousIcon, c.nextIcon = Icon(icons.ChevronLeft), Icon(icons.ChevronRight)
-	c.previous = ButtonOf(c.previousIcon, func() { c.moveMonth(-1) }).Ghost().Size(ButtonIconSmall).Name("Previous month")
-	c.next = ButtonOf(c.nextIcon, func() { c.moveMonth(1) }).Ghost().Size(ButtonIconSmall).Name("Next month")
+	c.previous = ButtonOf(c.previousIcon, func() { c.moveMonth(-1) }).Ghost().Size(ButtonIconSmall)
+	c.next = ButtonOf(c.nextIcon, func() { c.moveMonth(1) }).Ghost().Size(ButtonIconSmall)
 	c.setPanes(1)
 	return c
 }
@@ -162,14 +164,16 @@ func (c *CalendarWidget) WeekStartsOn(d time.Weekday) *CalendarWidget {
 	return c
 }
 
-// WeekdayLabels sets localized labels in Sunday-to-Saturday order.
+// WeekdayLabels sets localized labels in Sunday-to-Saturday order, in
+// place of the Strings' Weekdays.
 func (c *CalendarWidget) WeekdayLabels(labels [7]string) *CalendarWidget {
 	defer property.Watch(&c.props, &c.weekdays)()
 	c.weekdays = labels
 	return c
 }
 
-// MonthLabel formats the month heading; nil keeps the current formatter.
+// MonthLabel formats the month heading, in place of the Strings' Months
+// and MonthTitleFormat; nil keeps the current formatter.
 func (c *CalendarWidget) MonthLabel(fn func(time.Time) string) *CalendarWidget {
 	if fn != nil {
 		c.monthLabel = fn
@@ -214,7 +218,7 @@ func (c *CalendarWidget) DropdownYears(from, to int) *CalendarWidget {
 }
 
 // MonthNames sets the localized short month names the caption dropdown
-// lists, January first.
+// lists, January first, in place of the Strings' MonthsShort.
 func (c *CalendarWidget) MonthNames(names [12]string) *CalendarWidget {
 	if names != c.monthNames {
 		c.monthNames = names
@@ -388,16 +392,16 @@ func (c *CalendarWidget) choose(t time.Time) {
 func (c *CalendarWidget) layoutDropdown(p *calendarPane, index int, cs ggui.Constraints, env ggui.Env) {
 	if p.month == nil {
 		shown := func() time.Time { return c.first.AddDate(0, index, 0) }
-		monthName := func(m time.Month) string { return c.monthNames[(int(m)+11)%12] }
+		monthName := func(m time.Month) string { return c.shortMonths[(int(m)+11)%12] }
 		p.month = Select[time.Month](calendarPart[time.Month]{
 			get: func() time.Month { return shown().Month() },
 			set: func(m time.Month) { c.browse(index, shown().Year(), m) },
-		}).Format(monthName).Options(calendarMonths).Name("Month").Small().
+		}).Format(monthName).Options(calendarMonths).Small().
 			TriggerContent(&calendarCaptionFace{owner: c, label: func() string { return monthName(shown().Month()) }})
 		p.year = Select[int](calendarPart[int]{
 			get: func() int { return shown().Year() },
 			set: func(y int) { c.browse(index, y, shown().Month()) },
-		}).Name("Year").Small().
+		}).Small().
 			TriggerContent(&calendarCaptionFace{owner: c, label: func() string { return strconv.Itoa(shown().Year()) }})
 		p.yearFrom, p.yearTo = 0, 0
 	}
@@ -410,8 +414,8 @@ func (c *CalendarWidget) layoutDropdown(p *calendarPane, index int, cs ggui.Cons
 		p.yearFrom, p.yearTo = from, to
 		p.year.Options(c.years)
 	}
-	p.month.Disabled(c.IsInert())
-	p.year.Disabled(c.IsInert())
+	p.month.Name(c.words.MonthSelect).Disabled(c.IsInert())
+	p.year.Name(c.words.YearSelect).Disabled(c.IsInert())
 	p.monthSize = p.month.Layout(cs, env)
 	p.yearSize = p.year.Layout(cs, env)
 }
@@ -471,6 +475,7 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
 	c.Sync()
 	c.env = env
+	c.localize(env)
 	angle := pick(env.Direction() == ggui.DirRTL, math.Pi, 0.0)
 	c.previousIcon.Rotate(angle)
 	c.nextIcon.Rotate(angle)
@@ -504,7 +509,7 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 			c.layoutDropdown(p, i, loose, env)
 			size = ggui.Sz(p.monthSize.W+calendarDropdownGap(t)+p.yearSize.W, max(p.monthSize.H, p.yearSize.H))
 		} else {
-			p.titleSize = p.title.Content(c.monthLabel(c.first.AddDate(0, i, 0))).Style(captionStyle).Layout(loose, env)
+			p.titleSize = p.title.Content(c.caption(c.first.AddDate(0, i, 0))).Style(captionStyle).Layout(loose, env)
 			size = p.titleSize
 		}
 		captionW, m.caption = max(captionW, size.W), max(m.caption, size.H)
@@ -529,9 +534,13 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.motion = env.Motion(t.MotionFast)
 	end := c.first.AddDate(0, c.count, 0)
 	m.weekday = 0
+	weekdays := c.weekdays
+	if weekdays == ([7]string{}) {
+		weekdays = c.words.Weekdays
+	}
 	for i, p := range c.panes {
 		for j, label := range p.weekdayText {
-			p.weekdaySize[j] = label.Content(c.weekdays[(j+int(c.weekStart))%7]).Color(t.MutedFg).Size(12.8).Layout(cell, env)
+			p.weekdaySize[j] = label.Content(weekdays[(j+int(c.weekStart))%7]).Color(t.MutedFg).Size(12.8).Layout(cell, env)
 			m.weekday = max(m.weekday, p.weekdaySize[j].H)
 		}
 		month := c.first.AddDate(0, i, 0)
@@ -564,6 +573,34 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	m.monthH = m.caption + m.captionGap + m.weekday + 6*(m.rowGap+m.cell)
 	rows := float64((c.count + m.perRow - 1) / m.perRow)
 	return cs.Constrain(ggui.Sz(w, 2*m.pad+rows*m.monthH+(rows-1)*m.monthGap))
+}
+
+// localize takes the words of the Strings under env: the buttons' names,
+// and the month names the caption dropdown lists, where MonthNames did not
+// give them, building its selects again when those change.
+func (c *CalendarWidget) localize(env ggui.Env) {
+	c.words = stringsOf(env)
+	c.previous.Name(c.words.PreviousMonth)
+	c.next.Name(c.words.NextMonth)
+	short := c.monthNames
+	if short == ([12]string{}) {
+		short = c.words.MonthsShort
+	}
+	if short != c.shortMonths {
+		c.shortMonths = short
+		for _, p := range c.panes {
+			p.month, p.year = nil, nil // built again with the new names
+		}
+	}
+}
+
+// caption is the heading of the month holding t: MonthLabel's, or the
+// month's name and year as the Strings word them.
+func (c *CalendarWidget) caption(t time.Time) string {
+	if c.monthLabel != nil {
+		return c.monthLabel(t)
+	}
+	return fmt.Sprintf(c.words.MonthTitleFormat, c.words.Months[t.Month()-1], t.Year())
 }
 
 // calendarDropdownGap separates the month select from the year select.
@@ -824,7 +861,7 @@ func (c *CalendarWidget) BindDisabled(r ggui.Readable[bool]) *CalendarWidget {
 }
 
 func (c *CalendarWidget) name() string {
-	return pick(c.SemanticName() != "", c.SemanticName(), "Calendar")
+	return pick(c.SemanticName() != "", c.SemanticName(), c.words.orDefault().CalendarName)
 }
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.

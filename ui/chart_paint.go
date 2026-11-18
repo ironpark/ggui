@@ -128,7 +128,7 @@ func (c *ChartWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	progress := c.progress()
 	if len(c.data) == 0 || len(c.config) == 0 {
-		c.text(dst, "No data", r.Center().Add(ggui.Pt(0., -7.)), 12, c.theme.MutedFg, .5)
+		c.text(dst, c.words.orDefault().ChartNoData, r.Center().Add(ggui.Pt(0., -7.)), 12, c.theme.MutedFg, .5)
 		return
 	}
 	if c.kind.polar() {

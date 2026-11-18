@@ -355,6 +355,7 @@ func (i *NavigationMenuItemWidget) Adopt(prev any) { i.Interactive.Adopt(prev) }
 type NavigationMenuWidget struct {
 	props property.Owner
 	ggui.Interactive
+	words   *Strings // the Strings of the last layout
 	items   []*NavigationMenuItemWidget
 	popup   *widget.PopupWidget
 	row     *widget.RowWidget
@@ -394,7 +395,6 @@ type NavigationMenuWidget struct {
 func NavigationMenu(items ...*NavigationMenuItemWidget) *NavigationMenuWidget {
 	n := &NavigationMenuWidget{items: slices.Clone(items), active: -1, leaving: -1, hoverItem: -1, hoverBlocked: -1, hoverShown: -1}
 	n.Role = ggui.RoleGroup
-	n.SetName("Navigation")
 	n.AutoKey()
 	children := make([]ggui.Widget, len(items))
 	for j, item := range items {
@@ -504,6 +504,7 @@ func (n *NavigationMenuWidget) place(at ggui.Point) ggui.Point {
 func (n *NavigationMenuWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer n.props.Layout().EndLayout()
 	n.Sync()
+	n.words = stringsOf(env)
 	n.rtl = env.Direction() == ggui.DirRTL
 	t := uitheme.Of(env)
 	n.theme, n.env, n.motion = t, env, env.Motion(navigationMenuMotion)
@@ -519,6 +520,13 @@ func (n *NavigationMenuWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Siz
 }
 
 // Paint implements ggui.Widget.
+func (n *NavigationMenuWidget) name() string {
+	return pick(n.SemanticName() != "", n.SemanticName(), n.words.orDefault().NavigationName)
+}
+
+// Semantics implements ggui.Semantic, including the built-in fallback name.
+func (n *NavigationMenuWidget) Semantics() (ggui.Role, string) { return n.Role, n.name() }
+
 func (n *NavigationMenuWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.HitPointer(r, n)
 	open := n.popup.IsOpen()

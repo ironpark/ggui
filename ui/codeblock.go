@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"image/color"
 	"maps"
 	"strconv"
@@ -72,6 +73,7 @@ type CodeBlockWidget struct {
 	paintBodyFn func(*ggui.Canvas)
 	copied      bool
 	copiedAt    time.Time
+	words       *Strings // the Strings of the last layout
 }
 
 // CodeBlock creates a code surface. The language is a label, not a syntax
@@ -80,14 +82,13 @@ type CodeBlockWidget struct {
 func CodeBlock(code string) *CodeBlockWidget {
 	c := &CodeBlockWidget{copyButton: true, height: 320, startLine: 1}
 	c.Role = ggui.RoleGroup
-	c.SetName("Code content")
 	c.AutoKey()
 	c.code.Set(code)
 	c.text = widget.RichText().Selectable()
 	c.title = widget.Text("").NoWrap().Ellipsis()
 	c.lang = widget.Text("").NoWrap().Ellipsis()
 	c.glyph = &codeCopyGlyph{owner: c}
-	c.copy = ButtonOf(c.glyph, c.copyCode).Name("Copy code").Ghost().Size(ButtonIconExtraSmall)
+	c.copy = ButtonOf(c.glyph, c.copyCode).Ghost().Size(ButtonIconExtraSmall)
 	c.body = &codeBlockBody{owner: c, measure: widget.RichText()}
 	c.xScroll = widget.Scroll(c.body).Horizontal().Controller(&c.xController)
 	c.yScroll = widget.Scroll(c.xScroll).Shrink().Controller(&c.yController)
@@ -225,8 +226,17 @@ func (c *CodeBlockWidget) caption() string {
 	if c.language != "" {
 		return c.language
 	}
-	return "Code"
+	return c.words.orDefault().CodeName
 }
+
+// viewportName is what the focusable viewport is called: its name, or the
+// Strings' CodeContent.
+func (c *CodeBlockWidget) viewportName() string {
+	return pick(c.SemanticName() != "", c.SemanticName(), c.words.orDefault().CodeContent)
+}
+
+// Semantics implements ggui.Semantic, including the built-in fallback name.
+func (c *CodeBlockWidget) Semantics() (ggui.Role, string) { return c.Role, c.viewportName() }
 
 // ink is the color of the code and the title.
 func (c *CodeBlockWidget) ink() color.Color {
@@ -238,6 +248,8 @@ func (c *CodeBlockWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
 	c.viewportW = cs.MaxW
 	c.rtl = env.Direction() == ggui.DirRTL
+	c.words = stringsOf(env)
+	c.copy.Name(c.words.CopyCode)
 	c.theme = uitheme.Of(env)
 	t := c.theme
 	c.motion = env.Motion(t.MotionFast)
@@ -336,7 +348,7 @@ func (c *CodeBlockWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	outer := dst
 	dst = dst.Clip(r)
-	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Name: c.caption(), Description: "Code block"}, func(dst *ggui.Canvas) {
+	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Name: c.caption(), Description: c.words.orDefault().CodeBlockName}, func(dst *ggui.Canvas) {
 		line := max(0, c.headerH-c.pad)
 		if c.hasHeader {
 			x := c.pad
@@ -349,7 +361,7 @@ func (c *CodeBlockWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			}
 		}
 		if c.copied {
-			dst.Leaf(r, ggui.Node{Role: ggui.RoleStatus, Name: "Code copied"})
+			dst.Leaf(r, ggui.Node{Role: ggui.RoleStatus, Name: c.words.orDefault().CodeCopied})
 		}
 		viewport := ggui.Rct(r.Origin.Add(ggui.Pt(0, c.headerH)), ggui.Sz(r.Size.W, c.bodySize.H))
 		c.Hit(dst, viewport, c, ggui.CursorShapeDefault)
@@ -423,7 +435,7 @@ func (c *CodeBlockWidget) side(r ggui.Rect, x, w float64) float64 {
 
 // Describe exposes the focusable code viewport separately from its copy action.
 func (c *CodeBlockWidget) Describe() ggui.Node {
-	return ggui.Node{Role: ggui.RoleGroup, Name: "Code content", Description: "Use arrow keys or Page Up and Page Down to scroll", Actions: ggui.ActionFocus}
+	return ggui.Node{Role: ggui.RoleGroup, Name: c.viewportName(), Description: c.words.orDefault().CodeScrollHelp, Actions: ggui.ActionFocus}
 }
 
 // HandlePointer focuses empty space in the code viewport; the selectable text
@@ -606,20 +618,21 @@ func (b *codeBlockBody) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		at := r.Origin.Add(ggui.Pt(c.pad, c.padTop+line.top))
 		var fill color.Color
 		var annotation string
+		words := c.words.orDefault()
 		switch line.style {
 		case CodeLineHighlighted:
-			fill, annotation = c.theme.Muted, "Highlighted line "
+			fill, annotation = c.theme.Muted, words.HighlightedLineFormat
 		case CodeLineAdded:
-			fill, annotation = c.theme.Muted, "Added line "
+			fill, annotation = c.theme.Muted, words.AddedLineFormat
 		case CodeLineRemoved:
-			fill, annotation = fade(c.theme.Destructive, .1), "Removed line "
+			fill, annotation = fade(c.theme.Destructive, .1), words.RemovedLineFormat
 		}
 		if annotation != "" {
 			// The band runs from edge to edge of the viewport or the longest
 			// line, whichever is wider, with the line's leading shared above
 			// and below its glyphs.
 			dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, at.Y-b.leading/2), ggui.Sz(max(r.Size.W, c.viewportW), line.height)), fill)
-			dst.Leaf(ggui.Rct(at, ggui.Sz(max(0, r.Size.W-2*c.pad), line.height)), ggui.Node{Role: ggui.RoleText, Name: annotation + strconv.Itoa(c.startLine+i)})
+			dst.Leaf(ggui.Rct(at, ggui.Sz(max(0, r.Size.W-2*c.pad), line.height)), ggui.Node{Role: ggui.RoleText, Name: fmt.Sprintf(annotation, c.startLine+i)})
 		}
 		if at.Y+line.height < visible.Origin.Y || at.Y > visible.Origin.Y+visible.Size.H {
 			continue

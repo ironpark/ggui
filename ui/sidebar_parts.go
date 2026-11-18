@@ -11,9 +11,6 @@ import (
 	"github.com/ironpark/ggui/widget"
 )
 
-// sidebarToggleName is what the trigger and the rail are called.
-const sidebarToggleName = "Toggle Sidebar"
-
 // sidebarPanelIcon is the role of the trigger's icon, which an icon set in
 // the Env or the theme may supply; sidebarIcons draws Lucide's panel-left
 // where none does.
@@ -49,8 +46,9 @@ func (w sidebarTriggerIcon) Paint(dst *ggui.Canvas, r ggui.Rect) { w.icon.Paint(
 //	top := widget.Row(ui.SidebarTrigger(collapsed), title)
 func SidebarTrigger(collapsed ggui.Binding[bool]) *ButtonWidget {
 	icon := sidebarTriggerIcon{icons.Placeholder(sidebarPanelIcon).Fallback(sidebarIcons())}
-	return ButtonOf(icon, func() { collapsed.Set(!ggui.Untrack(collapsed.Get)) }).
-		Ghost().Pad(6).Name(sidebarToggleName)
+	b := ButtonOf(icon, func() { collapsed.Set(!ggui.Untrack(collapsed.Get)) }).Ghost().Pad(6)
+	b.defaultWords = func(s *Strings) string { return s.ToggleSidebar }
+	return b
 }
 
 // SidebarInsetWidget is the content beside an inset sidebar. Build one
@@ -108,11 +106,13 @@ type sidebarRail struct{ s *SidebarWidget }
 
 // Describe implements ggui.Describer.
 func (h sidebarRail) Describe() ggui.Node {
-	return ggui.Node{Role: ggui.RoleButton, Name: sidebarToggleName, Disabled: h.s.IsInert(), Actions: ggui.ActionPress}
+	return ggui.Node{Role: ggui.RoleButton, Name: stringsOf(h.s.env).ToggleSidebar, Disabled: h.s.IsInert(), Actions: ggui.ActionPress}
 }
 
 // Semantics implements ggui.Semantic.
-func (h sidebarRail) Semantics() (ggui.Role, string) { return ggui.RoleButton, sidebarToggleName }
+func (h sidebarRail) Semantics() (ggui.Role, string) {
+	return ggui.RoleButton, stringsOf(h.s.env).ToggleSidebar
+}
 
 // Act implements ggui.Actor.
 func (h sidebarRail) Act(a ggui.Action) bool {

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"math"
 	"slices"
 
@@ -258,7 +259,8 @@ func (s *SheetWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		s.grip.Role = ggui.RoleSlider
 		s.grip.SetKey(s.grip)
 	}
-	s.grip.SetName(pick(s.name == "", "Drawer size", s.name+" size"))
+	words := stringsOf(env)
+	s.grip.SetName(pick(s.name == "", words.DrawerSize, fmt.Sprintf(words.DrawerSizeFormat, s.name)))
 	if s.effect == nil {
 		s.effect = widget.Transition(ggui.FromFuncs(func(c ggui.Constraints, e ggui.Env) ggui.Size { return s.panel.Layout(c, e) }, s.paintDrawerSurface)).Fade().Easing(ggui.EaseLinear)
 	}

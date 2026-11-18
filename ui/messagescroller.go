@@ -54,6 +54,7 @@ type TranscriptVisibility struct {
 type MessageScrollerWidget struct {
 	props property.Owner
 	ggui.Interactive
+	words                                                         *Strings // the Strings of the last layout
 	source                                                        ggui.Readable[[]MessageEntry]
 	rows                                                          []MessageEntry
 	starts                                                        []float64
@@ -98,12 +99,11 @@ type MessageScrollerWidget struct {
 func MessageScroller(items ggui.Readable[[]MessageEntry]) *MessageScrollerWidget {
 	s := &MessageScrollerWidget{source: items, height: 320, gap: -1, peek: 64, threshold: 8, opening: ScrollEnd, duration: 200 * time.Millisecond}
 	s.Role = ggui.RoleGroup
-	s.SetName("Conversation")
 	s.AutoKey()
 	s.pause = s.Pause
 	s.paintRowsFn = s.paintRows
-	s.startButton = ButtonOf(&scrollEdgeGlyph{up: true}, func() { s.ScrollToStart() }).Name("Scroll to start").Variant(scrollEdgeButton).Size(ButtonIconSmall)
-	s.endButton = ButtonOf(&scrollEdgeGlyph{}, func() { s.ScrollToEnd() }).Name("Scroll to end").Variant(scrollEdgeButton).Size(ButtonIconSmall)
+	s.startButton = ButtonOf(&scrollEdgeGlyph{up: true}, func() { s.ScrollToStart() }).Variant(scrollEdgeButton).Size(ButtonIconSmall)
+	s.endButton = ButtonOf(&scrollEdgeGlyph{}, func() { s.ScrollToEnd() }).Variant(scrollEdgeButton).Size(ButtonIconSmall)
 	return s
 }
 
@@ -275,6 +275,9 @@ func (s *MessageScrollerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Si
 	saved := s.Save()
 	oldRows := s.rows
 	s.theme, s.reduced = uitheme.Of(env), env.ReducedMotion()
+	s.words = stringsOf(env)
+	s.startButton.Name(s.words.ScrollToStart)
+	s.endButton.Name(s.words.ScrollToEnd)
 	t := s.theme
 	gap := s.gap
 	if gap < 0 {
@@ -444,9 +447,16 @@ func (s *MessageScrollerWidget) paintEdgeButton(dst *ggui.Canvas, r ggui.Rect, b
 	})
 }
 
+func (s *MessageScrollerWidget) name() string {
+	return pick(s.SemanticName() != "", s.SemanticName(), s.words.orDefault().ConversationName)
+}
+
+// Semantics implements ggui.Semantic, including the built-in fallback name.
+func (s *MessageScrollerWidget) Semantics() (ggui.Role, string) { return s.Role, s.name() }
+
 // Describe implements ggui.Describer.
 func (s *MessageScrollerWidget) Describe() ggui.Node {
-	return ggui.Node{Role: ggui.RoleGroup, Name: s.SemanticName(), Actions: ggui.ActionFocus | ggui.ActionScrollIntoView}
+	return ggui.Node{Role: ggui.RoleGroup, Name: s.name(), Actions: ggui.ActionFocus | ggui.ActionScrollIntoView}
 }
 
 // wheelEase is how long a wheel's notch takes to scroll a transcript, as

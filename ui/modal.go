@@ -27,6 +27,8 @@ type modal struct {
 	actionsRev  int           // counts the calls to setFooter
 	evenActions bool          // the actions share the footer's width equally
 	name        string
+	defaultName func(*Strings) string // names the panel while name is empty, or nil
+	words       *Strings              // the Strings of the last layout
 	compact     bool
 	dismissible bool
 	onClose     func()
@@ -131,7 +133,12 @@ func (m *modal) Close() {
 func (m *modal) Rect() ggui.Rect { return m.rect }
 
 // Semantics implements ggui.Semantic.
-func (m *modal) Semantics() (ggui.Role, string) { return ggui.RoleDialog, m.name }
+func (m *modal) Semantics() (ggui.Role, string) {
+	if m.name == "" && m.defaultName != nil {
+		return ggui.RoleDialog, m.defaultName(m.words.orDefault())
+	}
+	return ggui.RoleDialog, m.name
+}
 
 // build makes the panel out of the title, the description, the content and
 // the footer, on the surface every floating thing uses and in the shape its
@@ -140,8 +147,10 @@ func (m *modal) build(env ggui.Env, shape modalShape) *widget.BoxWidget {
 	t := uitheme.Of(env)
 	m.theme, m.env, m.shape = t, env, shape
 	if m.closeButton == nil {
-		m.closeButton = ButtonOf(Icon(icons.Close), m.Close).Name("Close").Ghost().Size(ButtonIconSmall)
+		m.closeButton = ButtonOf(Icon(icons.Close), m.Close).Ghost().Size(ButtonIconSmall)
 	}
+	m.words = stringsOf(env)
+	m.closeButton.Name(m.words.Close)
 	m.closeSize = m.closeButton.Layout(ggui.Loose(ggui.Sz(t.ControlSize*2, t.ControlSize*2)), env)
 	parts := modalParts{m.title, m.description, m.actionsRev, m.evenActions, shape.band, shape.fill}
 	if m.panel == nil || parts != m.parts {

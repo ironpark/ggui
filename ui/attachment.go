@@ -49,6 +49,7 @@ type AttachmentWidget struct {
 	actions                              []ggui.Widget
 	trigger                              *ButtonWidget
 	state                                AttachmentState
+	words                                *Strings // the Strings of the last layout
 	stateReader                          ggui.Readable[AttachmentState]
 	size                                 AttachmentSize
 	vertical                             bool
@@ -161,6 +162,7 @@ func (a *AttachmentWidget) uploadState() AttachmentState {
 func (a *AttachmentWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer a.props.Layout().EndLayout()
 	a.theme, a.reduced, a.current = uitheme.Of(env), env.ReducedMotion(), a.uploadState()
+	a.words = stringsOf(env)
 	a.motion = env.Motion(a.theme.MotionFast)
 	a.padX, a.padY, a.gap, a.mediaSide = 10, 8, 8, 40
 	a.radius = a.theme.Chat.AttachmentRadius
@@ -320,7 +322,7 @@ func (a *AttachmentWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	} else {
 		dst.StrokeRoundRect(r, a.radius, t.BorderWidth, border)
 	}
-	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Name: a.title, Description: string(state)}, func(dst *ggui.Canvas) {
+	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Name: a.title, Description: a.words.orDefault().attachmentState(state)}, func(dst *ggui.Canvas) {
 		// Register the full-card trigger before painting the independent actions.
 		if a.trigger != nil {
 			a.trigger.Hit(dst, r, a.trigger, ggui.CursorShapePointer)

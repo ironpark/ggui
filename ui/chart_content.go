@@ -267,7 +267,7 @@ func (c *ChartWidget) paintTooltipContent(dst *ggui.Canvas, r ggui.Rect, index i
 		}
 		label := c.tooltip.TotalLabel
 		if label == "" {
-			label = "Total"
+			label = c.words.orDefault().ChartTotal
 		}
 		value := fmt.Sprintf("%g", total)
 		if len(c.config) > 0 {

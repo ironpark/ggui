@@ -361,7 +361,7 @@ func (t menubarTarget) HandlePointer(e ggui.PointerEvent) bool {
 func (t menubarTarget) Semantics() (ggui.Role, string) { return t.b.menus[t.i].button.Semantics() }
 
 func (b *MenubarWidget) name() string {
-	return pick(b.SemanticName() != "", b.SemanticName(), "Menubar")
+	return pick(b.SemanticName() != "", b.SemanticName(), stringsOf(b.env).MenubarName)
 }
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.

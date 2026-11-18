@@ -64,6 +64,8 @@ type TraceWidget struct {
 	steps    property.Value[[]TraceStep]
 	expanded ggui.Binding[map[string]bool]
 	name     string
+	named    bool     // Name was called; otherwise the Strings name the list
+	words    *Strings // the Strings of the layout running
 	onToggle func(string, bool)
 	rows     map[string]*traceRow
 	list     traceList
@@ -74,7 +76,7 @@ type TraceWidget struct {
 // each disclosure and its visible detail controls; Enter and Space toggle it.
 // Wrap the trace in widget.Scroll when the execution history needs a viewport.
 func Trace(steps ...TraceStep) *TraceWidget {
-	t := &TraceWidget{name: "Execution trace", expanded: ggui.State(map[string]bool{}), rows: make(map[string]*traceRow)}
+	t := &TraceWidget{expanded: ggui.State(map[string]bool{}), rows: make(map[string]*traceRow)}
 	t.steps.Set(cloneTraceSteps(steps))
 	return t
 }
@@ -95,7 +97,7 @@ func (t *TraceWidget) BindSteps(steps ggui.Readable[[]TraceStep]) *TraceWidget {
 // Name sets the accessible name of the execution list.
 func (t *TraceWidget) Name(name string) *TraceWidget {
 	defer property.Watch(&t.props, &t.name)()
-	t.name = name
+	t.name, t.named = name, true
 	return t
 }
 
@@ -145,7 +147,7 @@ func (t *TraceWidget) build(steps []TraceStep, seen map[string]bool) []*traceRow
 		row.Role = pick(row.expandable(), ggui.RoleDisclosure, ggui.RoleButton)
 		row.SetName(step.Title)
 		// Said once a layout: a running step paints every frame.
-		row.described, row.statusName = row.description(), step.Title+": "+string(step.Status)
+		row.described, row.statusName = row.description(), step.Title+": "+t.words.orDefault().traceStatus(step.Status)
 		row.shown = row.caption()
 		row.title.Content(step.Title)
 		row.run.Content(row.shown)
@@ -157,6 +159,7 @@ func (t *TraceWidget) build(steps []TraceStep, seen map[string]bool) []*traceRow
 // Layout implements Widget.
 func (t *TraceWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer t.props.Layout().EndLayout()
+	t.words = stringsOf(env)
 	seen := make(map[string]bool)
 	t.list.rows = t.build(t.steps.Get(), seen)
 	for id := range t.rows {
@@ -164,7 +167,7 @@ func (t *TraceWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 			delete(t.rows, id)
 		}
 	}
-	t.list.name = t.name
+	t.list.name = pick(t.named, t.name, stringsOf(env).TraceName)
 	return t.list.Layout(cs, env)
 }
 
@@ -251,7 +254,7 @@ func (r *traceRow) actionable() bool { return r.expandable() || r.step.OnActivat
 func (r *traceRow) open() bool { return r.trace.expanded.Get()[r.id] }
 
 func (r *traceRow) metadata() string {
-	description := string(r.step.Status)
+	description := r.trace.words.orDefault().traceStatus(r.step.Status)
 	if r.step.Duration > 0 {
 		if description != "" {
 			description += " · "
