@@ -537,7 +537,9 @@ func (col *ColumnWidget) Align(a CrossAlign) *ColumnWidget {
 }
 
 // Stretch makes every child as wide as the column: Align(AlignStretch),
-// the arrangement of a form or a page.
+// the arrangement of a form or a page. When the column's width is
+// unbounded it is as wide as its widest child, and the others are laid out
+// again at that width.
 func (col *ColumnWidget) Stretch() *ColumnWidget { return col.Align(AlignStretch) }
 
 // Layout implements Widget.
@@ -595,7 +597,10 @@ func (row *RowWidget) Align(a CrossAlign) *RowWidget {
 	return row
 }
 
-// Stretch makes every child as tall as the row: Align(AlignStretch).
+// Stretch makes every child as tall as the row: Align(AlignStretch). When
+// the row's height is unbounded, as in a vertical Scroll, it is as tall as
+// its tallest child, and the others are laid out again at that height: two
+// cards side by side come out equally tall.
 func (row *RowWidget) Stretch() *RowWidget { return row.Align(AlignStretch) }
 
 // Layout implements Widget.

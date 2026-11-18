@@ -110,6 +110,46 @@ func TestColumnStretchAndRTL(t *testing.T) {
 	}
 }
 
+func TestStretchUnboundedCrossMeasuresSmallerChildrenAgain(t *testing.T) {
+	var scratch layout.Scratch
+	type call struct {
+		i int
+		c layout.Constraints
+	}
+	var calls []call
+	measure := fixed(layout.Sz(10, 20), layout.Sz(30, 50), layout.Sz(20, 50), layout.Sz(5, 5))
+	items := []layout.Item{{}, {}, {Weight: 1}, {}}
+	got := scratch.Flow(layout.Loose(layout.Sz(100, math.Inf(1))), layout.FlowStyle{Axis: layout.Horizontal, Align: layout.AlignStretch}, items, func(i int, c layout.Constraints) layout.Measurement {
+		calls = append(calls, call{i, c})
+		if i == 3 {
+			return layout.Measurement{Absent: true}
+		}
+		return measure(i, c)
+	})
+	if got.Size != layout.Sz(100, 50) {
+		t.Fatalf("size %+v", got)
+	}
+	for i, h := range []float64{50, 50, 50} {
+		if got.Children[i].Size.H != h {
+			t.Fatalf("child %d: %+v", i, got.Children)
+		}
+	}
+	// Only child 0 is measured again, with the main bounds it first had.
+	if len(calls) != 5 {
+		t.Fatalf("calls %+v", calls)
+	}
+	last := calls[4]
+	if last.i != 0 || last.c != (layout.Constraints{MaxW: 100, MinH: 50, MaxH: 50}) {
+		t.Fatalf("second measure %+v", last)
+	}
+
+	// A column grows its children to the widest, or to its own minimum.
+	got = scratch.Flow(layout.Constraints{MinW: 40, MaxW: math.Inf(1), MaxH: 100}, layout.FlowStyle{Align: layout.AlignStretch}, make([]layout.Item, 2), fixed(layout.Sz(10, 10), layout.Sz(30, 10)))
+	if got.Size != layout.Sz(40, 20) || got.Children[0].Size.W != 40 || got.Children[1].Size.W != 40 {
+		t.Fatalf("column %+v", got)
+	}
+}
+
 func TestJustification(t *testing.T) {
 	for _, tc := range []struct {
 		j           layout.Justify
