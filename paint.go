@@ -481,6 +481,37 @@ func (p *Path) Arc(cx, cy, r, start, end float64) {
 	}
 }
 
+// RoundRect adds r with its corners rounded by radius as a closed subpath,
+// running clockwise on screen from where the top-left corner meets the top
+// edge. The
+// radius is clamped to half the shorter side, so a large one makes a
+// pill; zero or less leaves the corners square.
+func (p *Path) RoundRect(r Rect, radius float64) {
+	x0, y0 := r.Origin.X, r.Origin.Y
+	x1, y1 := x0+r.Size.W, y0+r.Size.H
+	rad := max(min(radius, r.Size.W/2, r.Size.H/2), 0)
+	if rad == 0 {
+		p.MoveTo(x0, y0)
+		p.LineTo(x1, y0)
+		p.LineTo(x1, y1)
+		p.LineTo(x0, y1)
+		p.Close()
+		return
+	}
+	const k = 0.5522847498307936 // 4/3·(√2−1), a quarter circle's handle
+	h := rad * (1 - k)
+	p.MoveTo(x0+rad, y0)
+	p.LineTo(x1-rad, y0)
+	p.CubicTo(x1-h, y0, x1, y0+h, x1, y0+rad)
+	p.LineTo(x1, y1-rad)
+	p.CubicTo(x1, y1-h, x1-h, y1, x1-rad, y1)
+	p.LineTo(x0+rad, y1)
+	p.CubicTo(x0+h, y1, x0, y1-h, x0, y1-rad)
+	p.LineTo(x0, y0+rad)
+	p.CubicTo(x0, y0+h, x0+h, y0, x0+rad, y0)
+	p.Close()
+}
+
 func (p *Path) Close() { p.path.Close(); p.outline.Close(); p.revision++ }
 func (p *Path) Reset() { p.path.Reset(); p.outline.Reset(); p.revision++ }
 

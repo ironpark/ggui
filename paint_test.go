@@ -65,6 +65,38 @@ func TestPathArcFollowsTheCircle(t *testing.T) {
 	}
 }
 
+// A rounded rectangle fills its Rect except outside the arcs at its
+// corners, and its radius stops at half the shorter side.
+func TestPathRoundRect(t *testing.T) {
+	t.Parallel()
+	var p Path
+	r := Rct(Pt(10, 20), Sz(100, 40))
+	p.RoundRect(r, 10)
+	if b := p.Bounds(); b != r {
+		t.Fatalf("bounds %v, want %v", b, r)
+	}
+	for _, pt := range []Point{Pt(60, 40), Pt(11, 40), Pt(60, 21), Pt(14, 24)} {
+		if !p.Contains(pt) {
+			t.Fatalf("%v should be inside", pt)
+		}
+	}
+	if p.Contains(Pt(11, 21)) || p.Contains(Pt(109, 59)) {
+		t.Fatal("a corner outside the arc is inside")
+	}
+
+	p.Reset()
+	p.RoundRect(r, 100) // a pill: the radius is 20
+	if !p.Contains(Pt(30, 40)) || p.Contains(Pt(13, 23)) || !p.Contains(Pt(11, 40)) {
+		t.Fatal("pill corners")
+	}
+
+	p.Reset()
+	p.RoundRect(r, 0)
+	if !p.Contains(Pt(10.5, 20.5)) {
+		t.Fatal("square corner is not filled")
+	}
+}
+
 func layerCount(c *Canvas) int {
 	if c.frameState == nil {
 		return 0
