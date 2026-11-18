@@ -13,10 +13,18 @@ type settings struct {
 	dither     float64
 	loop       int
 	background color.Color
+
+	frame    *FrameStyle // the Frame option's, or nil for the Tour's
+	radius   float64     // the window's corner radius, logical; negative is DefaultCornerRadius
+	margin   float64     // around the window, logical; negative is DefaultMargin
+	backdrop color.Color // nil is DefaultBackdrop
+	// flatten draws a transparent backdrop over white, for a GIF, which
+	// has no partial transparency.
+	flatten bool
 }
 
 func resolve(opts []Option) *settings {
-	s := &settings{colors: 256}
+	s := &settings{colors: 256, margin: -1, radius: -1}
 	for _, o := range opts {
 		o(s)
 	}
@@ -54,3 +62,24 @@ func Loop(n int) Option { return func(s *settings) { s.loop = max(n, 0) } }
 // place of the background the tour's Env holds (ggui.Env.Background, which
 // a theme sets). A color that is not opaque is shown over white.
 func Background(c color.Color) Option { return func(s *settings) { s.background = c } }
+
+// Frame draws f around every frame in place of the Tour's Frame: FrameMac
+// draws the content as a macOS window, with a title bar, its buttons, a
+// border and a shadow, on a backdrop. The output grows by the frame;
+// Width scales the framed image.
+func Frame(f FrameStyle) Option { return func(s *settings) { s.frame = &f } }
+
+// CornerRadius rounds a framed window's corners by pt logical pixels in
+// place of DefaultCornerRadius, the radius macOS 26 gives a window with a
+// title bar: 10 is the radius of the macOS releases before it.
+func CornerRadius(pt float64) Option { return func(s *settings) { s.radius = max(pt, 0) } }
+
+// Margin leaves pt logical pixels of backdrop around a framed window, for
+// its shadow, in place of DefaultMargin. Less crops the shadow.
+func Margin(pt float64) Option { return func(s *settings) { s.margin = max(pt, 0) } }
+
+// Backdrop is what a framed window is drawn on, in place of
+// DefaultBackdrop. color.Transparent leaves it clear: PNG frames keep the
+// transparency, and the shadow falls on nothing; a GIF, which has no
+// partial transparency, is drawn over white.
+func Backdrop(c color.Color) Option { return func(s *settings) { s.backdrop = c } }

@@ -68,6 +68,17 @@ type Tour struct {
 	Setup func(p *ggui.Probe)
 	// Build returns the root of the tree drawn. It is required.
 	Build ggui.Builder
+	// Frame is what is drawn around the app: FrameNone, the default,
+	// draws the content alone; FrameMac a macOS window around it. The
+	// Frame option overrides it.
+	Frame FrameStyle
+	// Title is the window's title, which FrameMac sets in its title bar,
+	// as the app's Config.Title would be.
+	Title string
+	// TitlebarHidden draws FrameMac as for a window whose Config sets
+	// TitlebarHidden: no title bar, the content up to the window's top
+	// edge and the window buttons over it.
+	TitlebarHidden bool
 	// Script walks through the app, a step at a time, with Hold and
 	// Then. It is required. A panic in it, as Probe.Tap's when nothing
 	// has the label, ends the recording with an error.
@@ -177,6 +188,9 @@ type Recorder struct {
 	pix  *image.RGBA
 	sink func(*image.RGBA) error
 
+	lay   layout
+	frame *framer // nil for FrameNone
+
 	frames int
 	err    error
 }
@@ -220,9 +234,10 @@ func (r *Recorder) shoot() {
 		panic(abort{r.err})
 	}
 	r.p.Advance(r.step)
+	env := ggui.Untrack(ggui.UseEnv)
 	bg := r.bg
 	if bg == nil {
-		bg = ggui.Untrack(ggui.UseEnv).Background()
+		bg = env.Background()
 	}
 	err := r.dev.frame(func() error {
 		r.img.Fill(opaque(bg))
@@ -236,7 +251,11 @@ func (r *Recorder) shoot() {
 		for i := 3; i < len(r.pix.Pix); i += 4 {
 			r.pix.Pix[i] = 0xff
 		}
-		err = r.sink(r.pix)
+		out := r.pix
+		if r.frame != nil {
+			out = r.frame.draw(r.pix, bg, env.Text())
+		}
+		err = r.sink(out)
 	}
 	if err != nil {
 		r.err = err
@@ -277,6 +296,10 @@ func (t Tour) play(o *settings, sink func(*image.RGBA) error) (err error) {
 		bg:   o.background,
 		pix:  image.NewRGBA(image.Rect(0, 0, w, h)),
 		sink: sink,
+		lay:  t.layout(o),
+	}
+	if r.lay.style == FrameMac {
+		r.frame = newFramer(r.lay, t.Title, o)
 	}
 	r.img = ggfx.NewImage(w, h)
 	defer r.img.Deallocate()
