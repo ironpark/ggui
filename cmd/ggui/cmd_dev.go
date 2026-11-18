@@ -49,7 +49,9 @@ a window of its own, as a release build does. When there is no viewer
 to be had, because the project's ggui is too old for one or it does not
 build or start, the app opens its own window and ggui says why; if the
 viewer goes away, the app is started again in its own window. Closing
-the viewer's window ends ggui dev.
+the viewer's window ends ggui dev. The viewer shows one window and no
+tray icon or menu bar of the app's own; when the app adds what does not
+show, ggui says so, once, with --display=window to see it.
 
 The package is a directory such as ./cmd/app, app.package in ggui.toml
 by default. Arguments after -- go to the app, after dev.args.
