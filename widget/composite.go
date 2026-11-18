@@ -287,11 +287,13 @@ func (t *TransformWidget) at(r ggui.Rect) ggui.Affine {
 }
 
 // ClipPathWidget clips its child to a path built for the Rect it paints in,
-// input included. Build one with ClipPath or ClipOval.
+// input included. Build one with ClipPath, ClipOval or ClipRoundRect.
 type ClipPathWidget struct {
-	child ggui.Widget
-	shape func(r ggui.Rect) *ggui.Path
-	oval  bool
+	child  ggui.Widget
+	shape  func(r ggui.Rect) *ggui.Path
+	oval   bool
+	round  bool
+	radius float64
 }
 
 // ClipPath clips child to the path shape returns for the Rect the child
@@ -306,6 +308,15 @@ func ClipPath(child ggui.Widget, shape func(r ggui.Rect) *ggui.Path) *ClipPathWi
 // the child is square.
 func ClipOval(child ggui.Widget) *ClipPathWidget { return &ClipPathWidget{child: child, oval: true} }
 
+// ClipRoundRect clips child to its Rect with the corners rounded by radius,
+// clamped to half the shorter side: content that runs to the edge of a
+// rounded surface, a photo or a table, kept inside its corners. Input is
+// clipped to the Rect, square corners and all; drawing it costs one mask
+// rather than a path's.
+func ClipRoundRect(child ggui.Widget, radius float64) *ClipPathWidget {
+	return &ClipPathWidget{child: child, round: true, radius: radius}
+}
+
 // Baseline implements Baseliner: the child's.
 func (w *ClipPathWidget) Baseline() (float64, bool) { return ggui.BaselineOf(w.child) }
 
@@ -319,6 +330,10 @@ func (w *ClipPathWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	paint := func(dst *ggui.Canvas) { dst.Paint(w.child, r) }
 	if w.oval {
 		dst.ClipOval(r, paint)
+		return
+	}
+	if w.round {
+		dst.ClipRoundRect(r, min(w.radius, r.Size.W/2, r.Size.H/2), paint)
 		return
 	}
 	dst.ClipPath(w.shape(r), paint)

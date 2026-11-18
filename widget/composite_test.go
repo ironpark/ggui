@@ -234,6 +234,30 @@ func TestClipPathFollowsItsShape(t *testing.T) {
 	c.ClipOval(ggui.Rct(ggui.Pt(0, 0), ggui.Sz(1, 1)), func(*ggui.Canvas) {})
 }
 
+// clipProbe is a widget of size that records the clip it was painted under.
+func clipProbe(size ggui.Size, clip *ggui.Rect, clipped *bool) ggui.Widget {
+	return ggui.FromFuncs(
+		func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(size) },
+		func(dst *ggui.Canvas, _ ggui.Rect) { *clip, *clipped = dst.ClipBounds() },
+	)
+}
+
+func TestClipRoundRectClipsToItsRect(t *testing.T) {
+	t.Parallel()
+	var clip ggui.Rect
+	var clipped bool
+	p := ggui.NewProbe(topLeft(Padding(ClipRoundRect(clipProbe(ggui.Sz(60, 40), &clip, &clipped), 100), 10)), ggui.Sz(200, 200))
+	defer p.Close()
+	img := ggfx.NewImage(200, 200)
+	defer img.Deallocate()
+	p.Draw(img)
+	if !clipped || clip != ggui.Rct(ggui.Pt(10, 10), ggui.Sz(60, 40)) {
+		t.Fatalf("child clipped to %v (%v), want its own rect", clip, clipped)
+	}
+	var c *ggui.Canvas
+	c.Paint(ClipRoundRect(Box(), 4), ggui.Rct(ggui.Pt(0, 0), ggui.Sz(1, 1)))
+}
+
 func TestBoxGradientResolvesThemeColors(t *testing.T) {
 	t.Parallel()
 	box := Box().Size(40, 20).Gradient(ggui.LinearGradient(0, ggui.Stops(testColor{}, color.White)...)).Radius(4)
