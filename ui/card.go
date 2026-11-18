@@ -29,8 +29,12 @@ import (
 //	)
 //
 // Fill, Border, Radius, Pad and Shadow override the theme for one card.
+// OnTap makes the whole card a button, and Clip keeps what runs to its
+// edges inside its rounded corners.
 func Card(children ...ggui.Widget) *CardWidget {
 	c := &CardWidget{radius: -1, borderWidth: -1, sectioned: len(children) != 1}
+	c.Role = ggui.RoleGroup
+	c.AutoKey()
 	for _, w := range children {
 		if _, ok := w.(cardSection); ok {
 			c.sectioned = true
@@ -59,7 +63,14 @@ func Card(children ...ggui.Widget) *CardWidget {
 
 // CardWidget is a themed panel. Build one with Card.
 type CardWidget struct {
+	ggui.Interactive
 	props       property.Owner
+	onTap       func()
+	motion      time.Duration
+	hover       float64 // how far toward Muted the card was painted under the pointer
+	theme       *uitheme.Theme
+	rest        color.Color // the fill, resolved, that hover tints; only for a card with OnTap
+	shownRadius float64     // the corners' radius from the last Layout
 	box         *widget.BoxWidget
 	column      *widget.ColumnWidget // the sections, when the card has them
 	sectioned   bool
@@ -134,6 +145,27 @@ func (c *CardWidget) Radius(r float64) *CardWidget {
 	return c
 }
 
+// Clip paints the card's content clipped to the inside of its border and
+// rounded corners: the way to keep content that runs to the card's edges,
+// a table whose last row lights up under the pointer or an image, from
+// painting over the corners.
+func (c *CardWidget) Clip() *CardWidget {
+	c.box.Clip()
+	return c
+}
+
+// OnTap makes the whole card a button that runs fn on a click, or on Space
+// or Enter while it has the keyboard focus: the card tints toward the Muted
+// surface under the pointer, shows the pointer cursor and a focus ring, and
+// is a button named by Name. Controls inside the card still take the input
+// over themselves. A nil fn makes the card a plain group again.
+func (c *CardWidget) OnTap(fn func()) *CardWidget {
+	defer property.Watch(&c.props, &c.onTap)()
+	c.onTap = fn
+	c.Role = pick(fn != nil, ggui.RoleButton, ggui.RoleGroup)
+	return c
+}
+
 // Shadow sets outer shadow layers without changing the card's layout.
 func (c *CardWidget) Shadow(styles ...ggui.ShadowStyle) *CardWidget {
 	defer property.Watch(&c.props, &c.shadowSet)()
@@ -190,16 +222,64 @@ func (c *CardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	} else if !c.pad {
 		c.box.Padding(spacing)
 	}
-	c.box.Fill(colorOr(c.fill, t.Card)).
+	fill := colorOr(c.fill, t.Card)
+	c.theme, c.shownRadius = t, radius
+	if c.onTap != nil {
+		// Paint tints the fill, which it can only do to a color: an
+		// EnvColor given to the box would lay it out again each frame.
+		c.rest = ggui.ResolveColor(fill, env)
+		fill = c.rest
+		// As an Item's, shadcn's transition-colors duration-100.
+		c.motion = env.Motion(t.MotionFast * 2 / 3)
+	}
+	c.box.Fill(fill).
 		Border(border, colorOr(c.border, fade(t.Fg, .1))).
 		Radius(radius)
 	return c.box.Layout(cs, env)
 }
 
 // Paint implements Widget. A card groups what is inside it, which a
-// screen reader announces as a region it can step over.
+// screen reader announces as a region it can step over, named by Name; a
+// card with OnTap is a button holding it instead.
 func (c *CardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	dst.Node(r, ggui.Node{Role: ggui.RoleGroup}, func(dst *ggui.Canvas) { dst.Paint(c.box, r) })
+	if c.onTap == nil {
+		dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Name: c.SemanticName()}, func(dst *ggui.Canvas) { dst.Paint(c.box, r) })
+		return
+	}
+	t := c.theme
+	c.hover = ease(dst, t, c.Anchor(r), cardHoverSlot, pick(c.Hovered && !c.IsInert(), 1.0, 0.0), c.motion)
+	c.box.Fill(pick(c.hover > 0, mix(c.rest, t.Muted, c.hover), c.rest))
+	dst.DescribeNode(r, c, func(dst *ggui.Canvas) {
+		// Registered before the content, which is painted over it and so
+		// keeps its own input.
+		c.Hit(dst, r, c, ggui.CursorShapePointer)
+		dst.Paint(c.box, r)
+	})
+	focusRing(dst, &c.Interactive, t, r, c.shownRadius, t.Ring, 0)
+}
+
+// cardHoverSlot keeps a tappable card's easing onto its hover surface.
+var cardHoverSlot = ggui.NewSlot[*ggui.Motion]("card hover")
+
+// HandlePointer implements ggui.PointerHandler, for a card with OnTap.
+func (c *CardWidget) HandlePointer(ev ggui.PointerEvent) bool { return c.Pointer(ev, c.onTap) }
+
+// HandleKey implements ggui.KeyHandler: Space or Enter runs OnTap's fn.
+func (c *CardWidget) HandleKey(ev ggui.KeyEvent) { c.Keyboard(ev, c.onTap) }
+
+// Describe implements ggui.Describer: a card with OnTap is a button named
+// by Name.
+func (c *CardWidget) Describe() ggui.Node {
+	return ggui.Node{Role: c.Role, Name: c.SemanticName(), Actions: ggui.ActionFocus | ggui.ActionPress}
+}
+
+// Act implements ggui.Actor: a press runs OnTap's fn.
+func (c *CardWidget) Act(a ggui.Action) bool {
+	if a.Kind != ggui.ActionPress || c.onTap == nil {
+		return false
+	}
+	c.onTap()
+	return true
 }
 
 // CardHeaderWidget is the top section of a Card: a title over a

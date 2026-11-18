@@ -148,6 +148,9 @@ var keyedControls = []struct {
 	{name: "Calendar", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
 		return keyed(ui.Calendar(ggui.State(time.Date(2024, 3, 14, 0, 0, 0, 0, time.UTC))), k, n)
 	}, unfocused: "its month buttons are not keyed; TestCalendarKeyKeepsKeyboardAfterMovingRebuild covers the grid"},
+	{name: "Card", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
+		return keyed(ui.Card(widget.Text("body")).OnTap(func() {}), k, n)
+	}},
 	{name: "Carousel", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
 		return keyed(ui.Carousel(ggui.State(0), widget.Text("one"), widget.Text("two")).Height(80), k, n)
 	}},

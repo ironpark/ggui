@@ -48,6 +48,9 @@ func (w *ButtonWidget) Key(k any) *ButtonWidget { w.Interactive.SetKey(k); retur
 func (w *CalendarWidget) Key(k any) *CalendarWidget { w.Interactive.SetKey(k); return w }
 
 // Key assigns this control an input identity. Configure it before mount.
+func (w *CardWidget) Key(k any) *CardWidget { w.Interactive.SetKey(k); return w }
+
+// Key assigns this control an input identity. Configure it before mount.
 func (w *CarouselWidget) Key(k any) *CarouselWidget { w.Interactive.SetKey(k); return w }
 
 // Key assigns this control an input identity. Configure it before mount.
@@ -139,6 +142,16 @@ func (w *BubbleWidget) Name(name string) *BubbleWidget { w.SetName(name); return
 
 // BindName follows a non-nil accessible-name reader.
 func (w *BubbleWidget) BindName(r ggui.Readable[string]) *BubbleWidget {
+	w.Interactive.BindName(r)
+	return w
+}
+
+// Name sets the accessible name: of the button a card with OnTap is, or of
+// the group a card is without it.
+func (w *CardWidget) Name(name string) *CardWidget { w.SetName(name); return w }
+
+// BindName follows a non-nil accessible-name reader.
+func (w *CardWidget) BindName(r ggui.Readable[string]) *CardWidget {
 	w.Interactive.BindName(r)
 	return w
 }

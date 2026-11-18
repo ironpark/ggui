@@ -199,6 +199,92 @@ func TestProgressLabelAndValueSitAboveTheBar(t *testing.T) {
 	}
 }
 
+// A card given OnTap is a button named by Name: it tints toward Muted under
+// the pointer, eased as an Item does, shows the pointer cursor, and runs
+// on a click or on Enter and Space, while a button inside it keeps its own
+// click. A card without OnTap is still a group that takes no input.
+func TestCardWithOnTapIsAButton(t *testing.T) {
+	t.Parallel()
+	taps, runs := 0, 0
+	plain := Card(widget.Box().Height(40)).Name("Notes")
+	tappable := Card(widget.Column(widget.Box().Height(40), Button("Run", func() { runs++ }))).Name("Project").OnTap(func() { taps++ })
+	a, b := &placed{Widget: plain}, &placed{Widget: tappable}
+	p := ggui.NewProbe(widget.Column(a, b).Gap(10).Align(widget.AlignStretch), ggui.Sz(320, 400))
+	defer p.Close()
+	p.Frame()
+	if _, ok := p.Semantics().Find(ggui.RoleGroup, "Notes"); !ok {
+		t.Fatalf("a card without OnTap is not a group:\n%s", p.Semantics())
+	}
+	p.Move(center(a.at))
+	p.Frame()
+	if p.Cursor() == ggui.CursorShapePointer || plain.Hovered {
+		t.Fatal("a card without OnTap took the pointer")
+	}
+	if f, ok := p.FindRole(ggui.RoleButton, "Project"); !ok || f.Rect != b.at {
+		t.Fatalf("the card is not a button named by Name: %v %v\n%s", f, ok, p.Semantics())
+	}
+	at := ggui.Pt(b.at.Origin.X+20, b.at.Origin.Y+30)
+	p.Move(at)
+	p.Frame()
+	p.Advance(tappable.theme.MotionFast / 3)
+	p.Frame()
+	if k := tappable.hover; !(k > 0 && k < 1) || p.Cursor() != ggui.CursorShapePointer {
+		t.Fatalf("50ms in the card is %v onto its hover tint with cursor %v, want it easing under a pointer cursor", k, p.Cursor())
+	}
+	p.Advance(tappable.theme.MotionFast)
+	p.Frame()
+	if tappable.hover != 1 {
+		t.Fatalf("the settled card is %v onto its hover tint", tappable.hover)
+	}
+	p.Click(at)
+	p.Tap("Run")
+	if taps != 1 || runs != 1 {
+		t.Fatalf("a click on the card and one on its button ran the card %d times and the button %d, want 1 and 1", taps, runs)
+	}
+	p.Move(ggui.Pt(1, 399))
+	p.Type(ggui.Mods{}, ggui.KeyTab)
+	p.Frame()
+	if !tappable.Focused || !tappable.FocusVisible {
+		t.Fatal("Tab did not bring the focus to the card")
+	}
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeySpace)
+	if taps != 3 {
+		t.Fatalf("Enter and Space on the focused card ran it %d times in all, want 3", taps)
+	}
+	tappable.OnTap(nil)
+	p.Frame()
+	if _, ok := p.Semantics().Find(ggui.RoleGroup, "Project"); !ok {
+		t.Fatal("a card whose OnTap was taken away is not a group again")
+	}
+}
+
+// Clip keeps a card's content inside its border, so a full-bleed table's
+// last row cannot paint over the rounded corners.
+func TestCardClipKeepsContentInsideTheBorder(t *testing.T) {
+	t.Parallel()
+	var clip ggui.Rect
+	var clipped bool
+	content := ggui.FromFuncs(
+		func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(200, 60)) },
+		func(dst *ggui.Canvas, _ ggui.Rect) { clip, clipped = dst.ClipBounds() },
+	)
+	card := Card(content).Pad(0).Border(2, color.Black)
+	b := &placed{Widget: card}
+	p := ggui.NewProbe(widget.Align(b).At(0, 0), ggui.Sz(320, 200))
+	defer p.Close()
+	p.Frame()
+	inside := ggui.Rct(ggui.Pt(2, 2), ggui.Sz(b.at.Size.W-4, b.at.Size.H-4))
+	if clipped && clip == inside {
+		t.Fatal("a card without Clip clipped its content")
+	}
+	card.Clip()
+	p.Frame()
+	if !clipped || clip != inside {
+		t.Fatalf("content clipped to %v (%v), want the inside of the border %v", clip, clipped, inside)
+	}
+}
+
 func TestSpinnerIsIconSizedInTheTextColor(t *testing.T) {
 	t.Parallel()
 	theme := uitheme.Default()
