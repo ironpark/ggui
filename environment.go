@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/layout"
 	"github.com/ironpark/ggui/property"
@@ -144,6 +145,73 @@ func SetEnv(env Env) {
 
 func rootEnv() Env { return Untrack(UseEnv) }
 
+// CurrentEnv returns the Env a value read now should resolve against: for
+// a read made while a tree lays out or paints, the Env of the innermost
+// EnvWidget (Provide, WithEnv, Directionality) around the widget reading
+// it, or the root Env above them all; for a read made anywhere else, such
+// as in an Effect, a builder or a menu's callback, the application
+// environment UseEnv returns.
+//
+// It is what lets a plain Readable follow the subtree it is shown in. A
+// reader whose Get calls it, handed to widget.TextOf or a BindName, gives
+// a Text under a Provide the value that Provide set, though Get takes no
+// Env:
+//
+//	type greeting struct{}
+//
+//	func (greeting) Get() string {
+//		if ggui.CurrentEnv().Language() == "ko" {
+//			return "안녕하세요"
+//		}
+//		return "Hello"
+//	}
+//
+// Read in layout or paint it subscribes nothing: what the subtree's Env
+// holds was read where it was provided, and a change there lays the
+// subtree out again. Read anywhere else it subscribes as UseEnv does. A
+// popup's or a tooltip's content, laid out and painted after the tree, sees
+// the Env of the subtree that opened it. Accessible names are read as the
+// control paints, so they see its subtree's too.
+func CurrentEnv() Env {
+	w := activeWorld()
+	if w.envSet {
+		return w.envAt
+	}
+	if reactive.InLayout() {
+		return rootEnv()
+	}
+	return w.environment().Get()
+}
+
+// envScope is what CurrentEnv returns on a world, kept to be restored:
+// see enterEnv.
+type envScope struct {
+	w   *world
+	env Env
+	set bool
+}
+
+// currentScope is the running world's envScope now.
+func currentScope() envScope {
+	w := activeWorld()
+	return envScope{w, w.envAt, w.envSet}
+}
+
+// enter makes s its world's and returns the scope it replaced, whose leave
+// puts that back: defer s.enter().leave(), which allocates nothing.
+func (s envScope) enter() envScope {
+	prev := envScope{s.w, s.w.envAt, s.w.envSet}
+	s.w.envAt, s.w.envSet = s.env, s.set
+	return prev
+}
+
+// leave makes s its world's again.
+func (s envScope) leave() { s.w.envAt, s.w.envSet = s.env, s.set }
+
+// enterEnv makes env what CurrentEnv returns on the running world until
+// the returned scope's leave.
+func enterEnv(env Env) envScope { return envScope{activeWorld(), env, true}.enter() }
+
 // TextDirection is the direction a subtree reads in: left to right, as
 // English does, or right to left, as Arabic and Hebrew do. The zero value
 // is DirLTR.
@@ -190,6 +258,8 @@ func Directionality(dir TextDirection, child Widget) *EnvWidget {
 type EnvWidget struct {
 	with  func(Env) Env
 	child Widget
+	env   Env  // the Env the child was last laid out in, for CurrentEnv in Paint
+	laid  bool // whether env is set
 }
 
 // Provide stores v under k for the subtree below child, where any widget can
@@ -206,13 +276,25 @@ func WithEnv(transform func(Env) Env, child Widget) *EnvWidget {
 }
 
 // Layout implements Widget.
-func (e *EnvWidget) Layout(c Constraints, env Env) Size { return e.child.Layout(c, e.with(env)) }
+// The child's Env is what CurrentEnv returns while the child lays out, and
+// again while it paints.
+func (e *EnvWidget) Layout(c Constraints, env Env) Size {
+	env = e.with(env)
+	e.env, e.laid = env, true
+	defer enterEnv(env).leave()
+	return e.child.Layout(c, env)
+}
 
 // Baseline implements Baseliner: the child's.
 func (e *EnvWidget) Baseline() (float64, bool) { return BaselineOf(e.child) }
 
 // Paint implements Widget.
-func (e *EnvWidget) Paint(dst *Canvas, r Rect) { dst.Paint(e.child, r) }
+func (e *EnvWidget) Paint(dst *Canvas, r Rect) {
+	if e.laid {
+		defer enterEnv(e.env).leave()
+	}
+	dst.Paint(e.child, r)
+}
 
 // EnvColor is a color the Env holds, such as a theme's primary color. A
 // widget given one resolves it against the Env it is laid out in, so the

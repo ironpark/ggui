@@ -164,3 +164,67 @@ func TestEnvKeyFuncKeepsManyValuesUnderOneParent(t *testing.T) {
 		}
 	}
 }
+
+// TestCurrentEnvIsTheSubtreesInLayoutAndTheAppsElsewhere reads
+// CurrentEnv from a widget under a Provide as it lays out, as it paints and
+// from an overlay it schedules, from one beside it, and from outside any
+// frame: the first three see the subtree's value, the one beside it the
+// application's, and the last the application's too.
+func TestCurrentEnvIsTheSubtreesInLayoutAndTheAppsElsewhere(t *testing.T) {
+	t.Parallel()
+	lang := NewEnvKey[string]("lang")
+	read := func() string { v, _ := CurrentEnv().Get(lang); return v }
+	var laid, painted, overlaid, beside string
+	inner := FromFuncs(func(Constraints, Env) Size {
+		laid = read()
+		return Sz(1, 1)
+	}, func(dst *Canvas, _ Rect) {
+		painted = read()
+		dst.Overlay(func(*Canvas) { overlaid = read() })
+	})
+	outer := FromFuncs(func(Constraints, Env) Size {
+		beside = read()
+		return Sz(1, 1)
+	}, func(*Canvas, Rect) {})
+	p := NewProbe(column(Provide(lang, "ko", inner), outer), Sz(10, 10))
+	defer p.Close()
+	p.Setup(func() { SetEnv(UseEnv().With(lang, "en")) })
+	p.Frame()
+	if laid != "ko" || painted != "ko" || overlaid != "ko" {
+		t.Errorf("under the Provide: layout %q, paint %q, overlay %q; want ko", laid, painted, overlaid)
+	}
+	if beside != "en" {
+		t.Errorf("beside the Provide = %q, want the application's en", beside)
+	}
+	if got := read(); got != "en" {
+		t.Errorf("after the frame = %q, want the application's en", got)
+	}
+}
+
+// TestCurrentEnvSubscribesOnlyOutsideLayout reads CurrentEnv in two
+// observers, one of them as layout would: only the other runs again when
+// the application environment is replaced.
+func TestCurrentEnvSubscribesOnlyOutsideLayout(t *testing.T) {
+	t.Parallel()
+	k := NewEnvKey[int]("n")
+	var outside, inside int
+	stop := Observe(func() {
+		outside++
+		CurrentEnv()
+	})
+	defer stop()
+	stopIn := Observe(func() {
+		inside++
+		defer reactive.EnterLayout()()
+		CurrentEnv()
+	})
+	defer stopIn()
+	SetEnv(UseEnv().With(k, 1))
+	reactive.Base().Flush()
+	if outside != 2 {
+		t.Errorf("read outside layout ran %d times, want 2", outside)
+	}
+	if inside != 1 {
+		t.Errorf("read in layout ran %d times, want 1: it subscribed", inside)
+	}
+}

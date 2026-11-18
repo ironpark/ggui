@@ -284,6 +284,7 @@ func (c *Canvas) fs() *frameState {
 type overlay struct {
 	fn    func(*Canvas)
 	owner SemRef
+	env   envScope // what CurrentEnv returned where the overlay was scheduled
 }
 
 // Slot names one value a widget retains on the Canvas between frames,
@@ -703,7 +704,7 @@ func (c *Canvas) Overlay(fn func(dst *Canvas), owner ...SemRef) {
 		fn = func(dst *Canvas) { dst.Transform(m, inner) }
 	}
 	f := c.fs()
-	f.overlays = append(f.overlays, overlay{fn: fn, owner: under})
+	f.overlays = append(f.overlays, overlay{fn: fn, owner: under, env: currentScope()})
 }
 
 // Size returns the logical size of the window being painted, or zero for
@@ -732,10 +733,17 @@ func (c *Canvas) paintOverlays() {
 	for i := 0; i < len(f.overlays); i++ {
 		o := f.overlays[i]
 		f.cur = regionCursor{}
-		c.scoped(o.owner, o.fn)
+		paintOverlay(c, o)
 	}
 	f.cur = saved
 	f.overlays = f.overlays[:0]
+}
+
+// paintOverlay paints o in the Env it was scheduled in, so that a popup's
+// content reads with CurrentEnv the Env of the subtree that opened it.
+func paintOverlay(c *Canvas, o overlay) {
+	defer o.env.enter().leave()
+	c.scoped(o.owner, o.fn)
 }
 
 // Adopter is a handler that can take over from the handler that held the

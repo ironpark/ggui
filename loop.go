@@ -680,6 +680,8 @@ type world struct {
 
 	env     *StateValue[Env] // see UseEnv; nil until first read
 	envMemo envMemo
+	envAt   Env  // see CurrentEnv: the Env of the innermost EnvWidget laying out or painting
+	envSet  bool // whether envAt is set
 
 	font        *Font                // see SetDefaultFont; nil inherits
 	mono        *Font                // see SetDefaultMonoFont; nil inherits
