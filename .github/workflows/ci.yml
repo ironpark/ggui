@@ -1,9 +1,21 @@
 name: CI
 
+# A change to the documentation alone runs nothing: no test reads a
+# Markdown file, the guide under docs or the recordings under assets/demos.
+# A push or a pull request that touches anything else beside them runs
+# everything, as before.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'assets/demos/**'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'assets/demos/**'
 
 permissions:
   contents: read
