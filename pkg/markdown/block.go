@@ -539,9 +539,7 @@ func delimiterRow(s string) ([]Align, bool) {
 // the cell's inline parse reads it.
 func splitRow(s string) []string {
 	s = strings.Trim(s, " \t")
-	if strings.HasPrefix(s, "|") {
-		s = s[1:]
-	}
+	s = strings.TrimPrefix(s, "|")
 	if strings.HasSuffix(s, "|") && !escapedAt(s, len(s)-1) {
 		s = s[:len(s)-1]
 	}
