@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
+	"github.com/ironpark/ggui/cmd/ggui/internal/shared"
 )
 
 // Package is the viewer's main package, in ggui's module.
@@ -225,7 +226,7 @@ func (b *Binary) Ensure(ctx context.Context) (built bool, err error) {
 		}
 		return false, err
 	}
-	if err := os.Rename(tmp.Name(), b.Path); err != nil {
+	if err := shared.Rename(tmp.Name(), b.Path); err != nil {
 		return false, err
 	}
 	prune(filepath.Dir(dir), keep)

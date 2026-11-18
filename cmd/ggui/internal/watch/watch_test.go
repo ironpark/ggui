@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ironpark/ggui/cmd/ggui/internal/shared"
 )
 
 // touch writes a file and moves its modification time on, so a change is
@@ -18,7 +20,29 @@ func touch(t *testing.T, path, data string) {
 		t.Fatal(err)
 	}
 	future := time.Now().Add(time.Duration(len(data)+1) * time.Second)
-	os.Chtimes(path, future, future)
+	if err := os.Chtimes(path, future, future); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// rename saves as an editor does, by renaming a file over another, and
+// remove deletes one. Both try again when Windows refuses because the
+// file is open, as it is for a moment while the watcher under test reads
+// it or an antivirus scans it: an editor does the same. An operation that
+// still fails is the test's failure, said as what it is, rather than a
+// scan that then finds nothing changed.
+func rename(t *testing.T, from, to string) {
+	t.Helper()
+	if err := shared.Rename(from, to); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func remove(t *testing.T, path string) {
+	t.Helper()
+	if err := shared.Remove(path); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestScan(t *testing.T) {
@@ -40,9 +64,11 @@ func TestScan(t *testing.T) {
 	}
 
 	// Removing a file is a change to it and to its directory.
-	os.Remove(b)
+	remove(t, b)
 	dirTime := time.Now().Add(time.Hour)
-	os.Chtimes(dir, dirTime, dirTime)
+	if err := os.Chtimes(dir, dirTime, dirTime); err != nil {
+		t.Fatal(err)
+	}
 	if got := w.Scan(); !slices.Equal(got, []string{dir, b}) {
 		t.Errorf("after removing b: %v", got)
 	}
@@ -56,7 +82,7 @@ func TestScan(t *testing.T) {
 	// An editor's save by rename: same name, new file.
 	tmp := filepath.Join(t.TempDir(), "a.tmp")
 	touch(t, tmp, "a3-renamed")
-	os.Rename(tmp, a)
+	rename(t, tmp, a)
 	if got := w.Scan(); !slices.Contains(got, a) {
 		t.Errorf("after replacing a by rename: %v", got)
 	}
@@ -230,7 +256,9 @@ func TestRun(t *testing.T) {
 		// Ignored: below node_modules, and the output directory.
 		write(t, p.path("node_modules/x/index.js"), "y")
 		none(t, out, "node_modules")
-		os.MkdirAll(p.path("build"), 0o755)
+		if err := os.MkdirAll(p.path("build"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 		none(t, out, "the output directory made")
 		write(t, p.path("build/app"), "binary")
 		none(t, out, "a build written")
@@ -247,9 +275,7 @@ func TestRun(t *testing.T) {
 		}
 
 		// Deleted.
-		if err := os.Remove(extra); err != nil {
-			t.Fatal(err)
-		}
+		remove(t, extra)
 		c = next(t, out, "a deleted Go file")
 		if !slices.Contains(c.Real, extra) {
 			t.Errorf("a deleted Go file: %+v", c)
@@ -267,9 +293,7 @@ func TestRunRenameSave(t *testing.T) {
 		save := func(data string) {
 			tmp := main + ".tmp~"
 			write(t, tmp, data)
-			if err := os.Rename(tmp, main); err != nil {
-				t.Fatal(err)
-			}
+			rename(t, tmp, main)
 		}
 		save(mainGo + "\nfunc g() {}\n")
 		c := next(t, out, "a real save")

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
+	"github.com/ironpark/ggui/cmd/ggui/internal/shared"
 )
 
 // WasmName is the binary's file name, beside the page.
@@ -152,7 +153,7 @@ func Optimize(ctx context.Context, path, flags string, logf func(string, ...any)
 		os.Remove(tmp)
 		return err
 	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := shared.Rename(tmp, path); err != nil {
 		os.Remove(tmp)
 		return err
 	}
