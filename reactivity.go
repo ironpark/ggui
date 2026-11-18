@@ -652,26 +652,43 @@ func Async[T any](work func() (T, error), done func(T, error)) {
 //
 //	q := ggui.Debounced(query, 250*time.Millisecond)
 //	res := ggui.Resource(q.Get, search)
+//	searching := ggui.Derived(func() bool {
+//		return q.Pending() || res.Get().Status == ggui.Pending
+//	})
+//
+// The value keeps State's equality: when the typing settles on the text it
+// started from, as "a", "ab", "a" does, the value does not change and no
+// second search runs for text already searched. That is why an indicator
+// shown from the first keystroke until the results come must read Pending
+// as well as the resource, as searching does above: Pending is true from
+// r's change until d has passed, and goes false then whether or not the
+// value changed. A search that does start makes the resource pending in
+// the same frame, before anything is painted, so the indicator does not
+// flicker off between the two.
 //
 // d is measured by the clock ClockTime reads, so a test steps it with
 // Probe.Advance or SetClock; a value comes through in the frame that
 // reaches it, or, when no frame does, in work posted for it at that time.
 // Nothing is written but on the UI thread. Like Resource it needs an owner
 // with a frame loop: create it in App.Setup or a component's setup, and it
-// stops with that owner, keeping the last value it took.
-func Debounced[T any](r Readable[T], d time.Duration) Readable[T] {
+// stops with that owner, keeping the last value it took, with nothing
+// pending.
+func Debounced[T any](r Readable[T], d time.Duration) *DebouncedValue[T] {
 	reactive.CheckUIThread("Debounced")
 	l := loopOf(reactive.CurrentOwner())
 	if l == nil {
 		panic("ggui: Debounced requires an app or mounted component owner")
 	}
 	w := l.world()
-	out := State(Untrack(r.Get))
+	dv := &DebouncedValue[T]{value: State(Untrack(r.Get)), pending: State(false)}
 	var (
-		pending T
-		real    *time.Timer
+		next T
+		real *time.Timer
 	)
-	t := &clockTimer{fire: func() { out.Set(pending) }}
+	t := &clockTimer{fire: func() {
+		dv.value.Set(next)
+		dv.pending.Set(false)
+	}}
 	first := true
 	Observe(func() {
 		v := r.Get()
@@ -680,10 +697,11 @@ func Debounced[T any](r Readable[T], d time.Duration) Readable[T] {
 			return
 		}
 		if d <= 0 {
-			out.Set(v)
+			dv.value.Set(v)
 			return
 		}
-		pending = v
+		next = v
+		dv.pending.Set(true)
 		w.schedule(t, w.frame.raw().Add(d))
 		// The frame clock moves only while frames run, and a window that
 		// shows nothing new runs none: a timer of the process's own posts
@@ -700,9 +718,30 @@ func Debounced[T any](r Readable[T], d time.Duration) Readable[T] {
 			real.Stop()
 		}
 		w.unschedule(t)
+		dv.pending.Set(false)
 	})
-	return out
+	return dv
 }
+
+// DebouncedValue is a Readable that follows another late, as Debounced
+// makes it, and tells whether a value may still come.
+type DebouncedValue[T any] struct {
+	value   *StateValue[T]
+	pending *StateValue[bool]
+}
+
+// Get returns the value the source last held for the whole wait, and
+// subscribes the running computation to it.
+func (v *DebouncedValue[T]) Get() T { return v.value.Get() }
+
+// GetAny implements the reader Textf and Sprintf unwrap.
+func (v *DebouncedValue[T]) GetAny() any { return v.Get() }
+
+// Pending reports whether the source changed and the wait since has not
+// ended: true from the change until the wait's end, whether or not the
+// value it ends with differs from Get's. Like Get, it subscribes the
+// running computation.
+func (v *DebouncedValue[T]) Pending() bool { return v.pending.Get() }
 
 // clockTimer is something to do once the frame clock's raw time reaches
 // due. It belongs to one world and runs on its UI thread.

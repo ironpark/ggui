@@ -514,7 +514,19 @@ query changes again:
 ```go
 q := ggui.Debounced(query, 250*time.Millisecond)
 res := ggui.Resource(q.Get, search)
+searching := ggui.Derived(func() bool {
+    return q.Pending() || res.Get().Status == ggui.Pending
+})
 ```
+
+`q` keeps the equality of a `State`: typing that settles on the text it
+started from, as `a`, `ab`, `a` does, leaves `q` unchanged, and no second
+search runs for text already searched. So a "searching…" indicator shown
+from the first keystroke must not wait for a new result alone, which in that
+case never comes. `q.Pending()` is true from the change in `query` until the
+wait ends, whether or not `q` then changes; `searching` above reads both, and
+when the wait does start a search, the resource is pending in the same frame,
+so the indicator never flickers off in between.
 
 Like `Resource`, `Debounced` needs an owner with a frame loop (app setup or
 a mounted component) and stops with it. It writes only on the UI goroutine,
