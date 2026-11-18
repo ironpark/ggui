@@ -169,24 +169,27 @@ func TestAssemble(t *testing.T) {
 	}
 }
 
-// buildProgram builds an empty program for the host, to sign.
+// buildProgram builds an empty program for macOS, to sign, on the host's
+// architecture when macOS has it.
 func buildProgram(t *testing.T, dir string) string {
 	t.Helper()
 	src := filepath.Join(dir, "main.go")
 	os.WriteFile(src, []byte("package main\nfunc main() {}\n"), 0o644)
 	bin := filepath.Join(dir, "prog")
 	cmd := exec.Command("go", "build", "-o", bin, src)
-	cmd.Env = append(os.Environ(), "GOWORK=off", "GO111MODULE=off")
+	arch := runtime.GOARCH
+	if arch != "arm64" {
+		arch = "amd64"
+	}
+	cmd.Env = append(os.Environ(), "GOWORK=off", "GO111MODULE=off", "GOOS=darwin", "GOARCH="+arch, "CGO_ENABLED=0")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go build: %s", out)
 	}
 	return bin
 }
 
+// Ad hoc signing works on any host; on a Mac codesign checks it.
 func TestSignAdHoc(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("codesign needs macOS")
-	}
 	if testing.Short() {
 		t.Skip("builds a program")
 	}
@@ -204,7 +207,16 @@ func TestSignAdHoc(t *testing.T) {
 	if signed, err := sg.Sign(t.Context(), app); err != nil || !signed {
 		t.Fatalf("signed = %v, %v", signed, err)
 	}
-	if out, err := exec.Command("codesign", "--verify", "--strict", app).CombinedOutput(); err != nil {
+	if _, err := os.Stat(filepath.Join(app, "Contents", "_CodeSignature", "CodeResources")); err != nil {
+		t.Error(err)
+	}
+	if signed, err := sg.Sign(t.Context(), filepath.Join(dir, "App.pkg")); err != nil || signed {
+		t.Errorf("an installer signed ad hoc: %v, %v", signed, err)
+	}
+	if runtime.GOOS != "darwin" {
+		return
+	}
+	if out, err := exec.Command("codesign", "--verify", "--strict", "--deep", app).CombinedOutput(); err != nil {
 		t.Errorf("codesign --verify: %s", out)
 	}
 }

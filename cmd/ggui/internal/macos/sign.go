@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
+	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
+
+	"github.com/ironpark/ggui/cmd/ggui/internal/machosign"
 )
 
 // backend signs through one toolchain. On macOS it is one of zapp's
@@ -62,7 +63,8 @@ type Notary struct {
 // the keychain.
 func (s Signing) HasCertificate() bool { return s.P12File != "" || s.P12Base64 != "" }
 
-// AdHoc reports whether s signs ad hoc: for running on this Mac only.
+// AdHoc reports whether s signs ad hoc: with no identity, so that other
+// Macs open the app only once told to.
 func (s Signing) AdHoc() bool { return s.Identity == "-" && !s.HasCertificate() }
 
 // Describe says what s signs with, safe to print.
@@ -174,16 +176,16 @@ func (sg *Signer) explain(err error) error {
 func (sg *Signer) AdHoc() bool { return sg.app == nil }
 
 // Sign signs the app, disk image or installer at path. It reports false
-// when it left path unsigned: ad hoc signing away from macOS, where
-// codesign is not, or an installer when the app is signed ad hoc, since
-// an installer has no ad hoc signature.
+// when it left path unsigned: an installer or a disk image when the app
+// is signed ad hoc, since an ad hoc signature on them means nothing to
+// another Mac.
 func (sg *Signer) Sign(ctx context.Context, path string) (bool, error) {
 	ext := strings.ToLower(filepath.Ext(path))
 	if sg.app == nil {
-		if runtime.GOOS != "darwin" || ext == ".pkg" {
+		if ext == ".pkg" || ext == ".dmg" {
 			return false, nil
 		}
-		return true, signAdHoc(ctx, path, sg.s.Entitlements)
+		return true, signAdHoc(path, sg.s.Entitlements)
 	}
 	b := sg.app
 	if ext == ".pkg" {
@@ -262,17 +264,24 @@ func (sg *Signer) Close() error {
 	return errors.Join(errs...)
 }
 
-// signAdHoc signs path ad hoc, which zapp leaves out: it signs for
-// distribution, with the hardened runtime and a secure timestamp, which
-// need an identity. Ad hoc signing is for running on this Mac.
-func signAdHoc(ctx context.Context, path, entitlements string) error {
-	args := []string{"--force", "--sign", "-"}
+// signAdHoc signs the app or program at path ad hoc, which zapp leaves
+// out: it signs for distribution, with the hardened runtime and a secure
+// timestamp, which need an identity. machosign signs as codesign --force
+// --sign - does, byte for byte, on any host, so a bundle built on Linux
+// or Windows is signed as one built on a Mac.
+func signAdHoc(path, entitlements string) error {
+	var ents []byte
 	if entitlements != "" {
-		args = append(args, "--entitlements", entitlements)
+		var err error
+		if ents, err = os.ReadFile(entitlements); err != nil {
+			return fmt.Errorf("reading the entitlements: %w", err)
+		}
 	}
-	args = append(args, path)
-	if out, err := exec.CommandContext(ctx, "codesign", args...).CombinedOutput(); err != nil {
-		return fmt.Errorf("codesign: %s (%w)", strings.TrimSpace(string(out)), err)
+	if fi, err := os.Stat(path); err != nil {
+		return err
+	} else if fi.IsDir() {
+		return machosign.SignBundle(path, ents)
 	}
-	return nil
+	name := filepath.Base(path)
+	return machosign.SignFile(path, machosign.Options{Identifier: strings.TrimSuffix(name, filepath.Ext(name)), Entitlements: ents})
 }
