@@ -189,7 +189,7 @@ and the full topic list.
 | --- | --- |
 | State and components | [Signals, ownership, builders, and keyed lists](docs/reactivity.md#concepts) |
 | Layout and controls | [Widgets and layout](docs/layout.md#widgets-and-layout) · [Controls](docs/forms.md#controls) · [Additional controls](docs/data-and-navigation.md) |
-| Chat and questionnaires | [Attachments, conversations, transcript scrolling, and questionnaires](docs/chat.md) |
+| Chat and questionnaires | [Attachments, conversations, Markdown, transcript scrolling, and questionnaires](docs/chat.md) |
 | Feedback and composition | [Toasts, sheets, dialogs, and composition helpers](docs/feedback-and-composition.md) |
 | Fonts and icons | [Font fallbacks, emoji, and icon sets](docs/fonts.md) |
 | Charts | [Native charts, options, examples and visual validation](docs/charts.md) |
