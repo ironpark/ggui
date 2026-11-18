@@ -154,6 +154,10 @@ A setter on a control still wins over the Strings around it: `Name`,
 `Questionnaire.SubmitLabel`, `AlertDialog.Confirm` and `Cancel`,
 `EditorTab.CloseName`, `DatePicker.Format`.
 
+Strings are the controls' words. An app's own text is translated by package
+`i18n`, which works the same way and can follow the same language: see
+[Translating an app](i18n.md#with-uistrings).
+
 Strings carry words only. `ggui.LanguageKey` is the language text is shaped
 in, which picks a script's forms, and `ggui.Directionality` the direction it
 reads in; see [right-to-left text](fonts.md#right-to-left-text). An app in
