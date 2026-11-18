@@ -430,6 +430,21 @@ bundle cross-built on Linux or Windows has it too. Every size from 16 to
 source smaller than 1024 pixels gives an icon without the larger sizes,
 and macOS scales up the largest it has.
 
+A macOS icon does not fill its canvas: Apple's grid puts its body, the
+rounded square, in the middle 824×824 pixels of 1024, leaving 100 on each
+side for the shadow, and an icon drawn to the edges looks larger than
+every other in the Dock. Artwork made that way, as a Windows icon is, can
+be scaled into the grid by setting `macos.icon_inset = true`: the bundle's
+icon is then the PNG scaled to 824/1024 of its size, centred on
+transparency. The Windows icon keeps the edges. ggui does not cut the
+rounded square, or add the shadow: the artwork has its own shape. Without
+`icon_inset`, a build whose icon has opaque pixels near the edges says so.
+
+The icon must be a PNG. ggui carries no SVG renderer, so an `.svg`
+`app.icon` is refused with what to do: export it as a 1024×1024 PNG from
+the drawing program, or with `rsvg-convert -w 1024 -h 1024 icon.svg -o
+icon.png`, and name that.
+
 The default signing identity, `-`, signs ad hoc with `codesign`, which
 runs on the Mac that built it. Away from a Mac an ad hoc build is left
 unsigned, with a notice.
@@ -726,7 +741,7 @@ base = "/hello/"
 | `name` | the main package directory's name | The name people see: the `.app` name, its menu title, `Name.exe` and the page title. |
 | `id` | made from the import path, such as `com.github.alice.hello` | The reverse-DNS bundle identifier. macOS keys settings, permissions and the Dock to it, so set it once and keep it. The Windows manifest names the program by it too. |
 | `version` | `"0.1.0"` | One to three numbers: `CFBundleShortVersionString` and `CFBundleVersion`, and the Windows file and product version, for which each is at most 65535. |
-| `icon` | none | A square PNG, ideally 1024×1024, for the macOS and Windows icons. |
+| `icon` | none | A square PNG, ideally 1024×1024, for the macOS and Windows icons. Not an SVG: export one as a PNG. See `macos.icon_inset` for the margin a macOS icon has. |
 | `package` | `"."` | The main package's directory. A package given on the command line replaces it. |
 
 ### [build]
@@ -753,6 +768,7 @@ base = "/hello/"
 | --- | --- | --- |
 | `minimum_system_version` | `"13.0"` | `LSMinimumSystemVersion`. Go 1.27 programs need macOS 13 whatever this says. |
 | `category` | none | `LSApplicationCategoryType`, such as `"public.app-category.productivity"`. |
+| `icon_inset` | `false` | Scale `app.icon` into the middle 824×824 of 1024, on transparency, as Apple's icon grid places a macOS icon, for artwork drawn edge to edge. The rounded square is the artwork's own; the Windows icon is unchanged. See [The macOS bundle](#the-macos-bundle). |
 | `signing_identity` | `"-"` | The keychain identity to sign with: its name, part of it, or its hash. `-` signs ad hoc, or with a certificate picks its Developer ID Application identity. See [Shipping to other Macs](#shipping-to-other-macs). |
 | `entitlements` | none | An entitlements plist to sign with. |
 | `p12_file` | none | A `.p12` certificate and key to sign with instead of the keychain. |

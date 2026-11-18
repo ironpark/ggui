@@ -69,6 +69,11 @@ version = {{.Version}}
 # minimum_system_version = "13.0"
 # The App Store category, such as "public.app-category.productivity".
 # category = ""
+# Scale app.icon into the middle 824x824 of 1024 on transparency, as
+# Apple's icon grid places a macOS icon, for artwork drawn edge to edge.
+# The rounded square shape is the artwork's to have. Windows' icon keeps
+# the edges.
+# icon_inset = false
 # The keychain identity to sign with, such as "Developer ID Application"
 # (the first one of that kind) or "Developer ID Application: Name
 # (TEAMID)"; security find-identity -v -p codesigning lists them. "-"

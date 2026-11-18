@@ -88,6 +88,11 @@ type Dev struct {
 type MacOS struct {
 	MinimumSystemVersion string `toml:"minimum_system_version"`
 	Category             string `toml:"category"`
+	// IconInset scales app.icon into the body of Apple's icon grid,
+	// 824×824 centred in 1024×1024 on transparency, for the bundle's
+	// icon, as for artwork drawn edge to edge for Windows. The rounded
+	// square shape is the artwork's own.
+	IconInset bool `toml:"icon_inset"`
 	// SigningIdentity names a keychain identity, or "-" to sign ad hoc.
 	SigningIdentity string `toml:"signing_identity"`
 	Entitlements    string `toml:"entitlements"`
@@ -496,8 +501,15 @@ func (c *Config) validate() []problem {
 	if !versionRE.MatchString(c.App.Version) {
 		add(fmt.Sprintf("app.version %q must be one to three numbers separated by dots, such as 1.2.0: macOS reads it as CFBundleShortVersionString", c.App.Version), "app", "version")
 	}
-	if c.App.Icon != "" && !strings.EqualFold(filepath.Ext(c.App.Icon), ".png") {
-		add(fmt.Sprintf("app.icon %q must be a PNG file", c.App.Icon), "app", "icon")
+	switch ext := strings.ToLower(filepath.Ext(c.App.Icon)); {
+	case c.App.Icon == "" || ext == ".png":
+	case ext == ".svg" || ext == ".svgz":
+		// Rasterizing SVG takes a renderer this command does not carry;
+		// any drawing program or rsvg-convert exports the PNG.
+		add(fmt.Sprintf("app.icon %q is an SVG; ggui makes icons from a PNG: export it at 1024×1024 pixels, as with rsvg-convert -w 1024 -h 1024 %s -o %s, and name the PNG here",
+			c.App.Icon, filepath.Base(c.App.Icon), strings.TrimSuffix(filepath.Base(c.App.Icon), filepath.Ext(c.App.Icon))+".png"), "app", "icon")
+	default:
+		add(fmt.Sprintf("app.icon %q must be a PNG file, square, ideally 1024×1024", c.App.Icon), "app", "icon")
 	}
 	if c.App.Package == "" {
 		add(`app.package must name the main package's directory; "." is the directory of this file`, "app", "package")

@@ -422,6 +422,7 @@ func (b *builder) macos(ctx context.Context) error {
 		Extra:                cfg.MacOS.Plist,
 		Binary:               bin,
 		Icon:                 b.proj.Path(cfg.App.Icon),
+		IconInset:            cfg.MacOS.IconInset,
 		OutDir:               dir,
 	})
 	if err != nil {
