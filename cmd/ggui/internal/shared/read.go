@@ -6,7 +6,8 @@
 // and os.Open does not share deletion; ReadFile does. Renaming over a file
 // that is open still fails there whatever it shares, as MoveFileEx, which
 // os.Rename uses, refuses to replace an open file; an editor that saves so
-// tries again, and the read is over in a moment.
+// tries again, and the read is over in a moment. Rename is that second
+// try, for ggui's own saves and for the tests that save as an editor does.
 package shared
 
 // ReadFile reads the whole of the named file, as os.ReadFile does, without

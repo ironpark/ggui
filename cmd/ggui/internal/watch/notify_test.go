@@ -82,18 +82,14 @@ func TestSource(t *testing.T) {
 
 	tmp := filepath.Join(dir, ".a.go.swp")
 	write(t, tmp, "package a // renamed over\n")
-	if err := os.Rename(tmp, a); err != nil {
-		t.Fatal(err)
-	}
+	rename(t, tmp, a)
 	expect(t, s, "write a temporary file and rename it over", a)
 
 	b := filepath.Join(dir, "b.go")
 	write(t, b, "package a\n")
 	expect(t, s, "create", b)
 
-	if err := os.Remove(b); err != nil {
-		t.Fatal(err)
-	}
+	remove(t, b)
 	expect(t, s, "delete", b)
 
 	sub := filepath.Join(dir, "sub")
@@ -109,9 +105,7 @@ func TestSource(t *testing.T) {
 	expect(t, s, "write in a new directory", c)
 
 	moved := filepath.Join(dir, "moved")
-	if err := os.Rename(sub, moved); err != nil {
-		t.Fatal(err)
-	}
+	rename(t, sub, moved)
 	expect(t, s, "rename a directory", sub, moved)
 	write(t, filepath.Join(moved, "c.go"), "package sub // after the rename\n")
 	expect(t, s, "write in a renamed directory", filepath.Join(moved, "c.go"))

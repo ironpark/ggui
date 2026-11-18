@@ -14,6 +14,7 @@ import (
 
 	"github.com/ironpark/ggui/internal/devstate"
 	"github.com/ironpark/ggui/internal/platform/remotedisplay"
+	"github.com/ironpark/ggui/internal/robustio"
 )
 
 // A window whose Config names a Remember key reopens where it was last
@@ -327,7 +328,7 @@ func replaceFile(path string, data []byte) error {
 		err = cerr
 	}
 	if err == nil {
-		err = os.Rename(f.Name(), path)
+		err = robustio.Rename(f.Name(), path)
 	}
 	if err != nil {
 		os.Remove(f.Name())

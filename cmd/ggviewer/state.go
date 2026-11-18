@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ironpark/ggui/internal/robustio"
 )
 
 // geometry is where the window is, in device-independent pixels: its
@@ -86,7 +88,7 @@ func saveState(path, project string, g geometry) error {
 		werr = cerr
 	}
 	if werr == nil {
-		werr = os.Rename(f.Name(), path)
+		werr = robustio.Rename(f.Name(), path)
 	}
 	if werr != nil {
 		_ = os.Remove(f.Name())
