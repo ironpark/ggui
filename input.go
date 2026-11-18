@@ -1321,7 +1321,7 @@ func (in *inputState) panTouch(f *frameInput) {
 	if len(f.down) != 0 {
 		in.touchPan.Down(f.pos)
 		in.touchScroll = nil
-		in.touchMotion = touchMotion{Tracker: kinetics.Tracker{Last: now, Pos: f.pos}}
+		in.touchMotion = touchMotion{Last: now, Pos: f.pos}
 		return
 	}
 	// Assert before re-resolving: the scan only pays off for the rare control

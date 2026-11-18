@@ -833,11 +833,11 @@ func (indicPlan *indicShapePlan) initialReorderingConsonantSyllable(font *Font, 
 		/* Find a Halant,Ra sequence and mark it for pre-base-reordering processing. */
 		for i := base + 1; i+prefLen-1 < end; i++ {
 			var glyphs [2]GID
-			for j := 0; j < prefLen; j++ {
+			for j := range prefLen {
 				glyphs[j] = info[i+j].Glyph
 			}
 			if indicPlan.pref.wouldSubstitute(glyphs[:prefLen], font) {
-				for j := 0; j < prefLen; j++ {
+				for range prefLen {
 					info[i].Mask |= indicPlan.maskArray[indicPref]
 					i++
 				}

@@ -9,12 +9,12 @@ import (
 // A window's tree as a long list publishes it: a root, rows under it, and
 // a few leaves in each, in paint order.
 func benchNodes(rows int) []SemNode {
-	nodes := []SemNode{{Node: Node{Role: RoleWindow, Name: "Main"}, Parent: -1}}
+	nodes := []SemNode{{Role: RoleWindow, Name: "Main", Parent: -1}}
 	for range rows {
 		row := len(nodes)
-		nodes = append(nodes, SemNode{Node: Node{Role: RoleGroup}, Parent: 0})
+		nodes = append(nodes, SemNode{Role: RoleGroup, Parent: 0})
 		for _, role := range []Role{RoleText, RoleButton, RoleCheckbox} {
-			nodes = append(nodes, SemNode{Node: Node{Role: role, Name: "item"}, Parent: row})
+			nodes = append(nodes, SemNode{Role: role, Name: "item", Parent: row})
 		}
 	}
 	return nodes

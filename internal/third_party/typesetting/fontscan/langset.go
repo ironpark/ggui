@@ -39,7 +39,7 @@ func newLangsetFromCoverage(rs RuneSet) (out LangSet) {
 func (ls LangSet) String() string {
 	var chunks []string
 	for pageN, page := range ls {
-		for bit := 0; bit < 64; bit++ {
+		for bit := range 64 {
 			if page&(1<<bit) != 0 {
 				id := LangID(pageN<<6 | bit)
 				chunks = append(chunks, string(id.Language()))

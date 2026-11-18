@@ -47,10 +47,10 @@ func wrapped() SemNode {
 		return out
 	}
 	return SemNode{
-		Node: Node{Role: RoleTextField, Value: "héllo wörld", Runs: []TextRun{
+		Role: RoleTextField, Value: "héllo wörld", Runs: []TextRun{
 			{Start: 0, End: 7, Rect: Rct(Pt(10, 20), Sz(60, 16)), Stops: stops(0, 0, 1, 3, 4, 5, 6, 7)},
 			{Start: 7, End: 13, Rect: Rct(Pt(10, 36), Sz(50, 16)), Stops: stops(0, 7, 8, 10, 11, 12, 13)},
-		}},
+		},
 		Full: Rct(Pt(0, 0), Sz(200, 60)),
 	}
 }

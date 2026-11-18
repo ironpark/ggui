@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"image/color"
+	"maps"
 	"math"
 	"strings"
 	"time"
@@ -229,9 +230,7 @@ func (c *ChartWidget) Data(data []ChartDatum) *ChartWidget {
 	for i, d := range data {
 		c.data[i] = d
 		c.data[i].Values = make(map[string]float64, len(d.Values))
-		for k, v := range d.Values {
-			c.data[i].Values[k] = v
-		}
+		maps.Copy(c.data[i].Values, d.Values)
 	}
 	c.revision++
 	c.started = time.Time{}

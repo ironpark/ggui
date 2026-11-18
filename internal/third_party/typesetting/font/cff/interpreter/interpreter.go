@@ -198,7 +198,7 @@ func (p *Machine) parseNumber() (hasResult bool, err error) {
 			by := p.instructions[0]
 			p.instructions = p.instructions[1:]
 			// Process by's two nibbles, high then low.
-			for i := 0; i < 2; i++ {
+			for range 2 {
 				nib := by >> 4
 				by = by << 4
 				if nib == 0x0f {

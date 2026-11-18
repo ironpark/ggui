@@ -18,8 +18,7 @@ func TestInputOTPForwardsTheEditorsInput(t *testing.T) {
 	t.Parallel()
 	editor := reflect.TypeFor[*widget.TextInputWidget]()
 	otp := reflect.TypeFor[*ui.InputOTPWidget]()
-	for i := range editor.NumMethod() {
-		m := editor.Method(i)
+	for m := range editor.Methods() {
 		if !strings.HasPrefix(m.Name, "Handle") && !strings.HasPrefix(m.Name, "Consumes") &&
 			!strings.HasPrefix(m.Name, "Claims") && !strings.HasPrefix(m.Name, "Capture") {
 			continue

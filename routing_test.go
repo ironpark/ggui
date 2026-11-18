@@ -790,7 +790,7 @@ func (t *trapped) Paint(dst *Canvas, r Rect) {
 func TestBareKeysWithinFollowTheFocusedWidget(t *testing.T) {
 	t.Parallel()
 	var log []string
-	field := &spaceEater{focusable: focusable{child: sized(20, 20)}}
+	field := &spaceEater{child: sized(20, 20)}
 	inner := &keyWatcher{name: "inner", log: &log, child: field, take: map[KeyboardKey]bool{KeyS: true, KeyEscape: true}}
 	outer := &keyWatcher{name: "outer", log: &log, child: padded(inner, 5), take: map[KeyboardKey]bool{KeyX: true}}
 	trap := &trapped{child: outer}
@@ -852,9 +852,9 @@ func (k *claimingLog) ClaimsChord(ev KeyEvent) bool { return ev.Mods.Ctrl }
 func TestChordsWithinPrecedeTheFocusedWidgetAndTheWindow(t *testing.T) {
 	t.Parallel()
 	var log []string
-	field := &keyedLog{focusable: focusable{child: sized(20, 20)}, log: &log}
+	field := &keyedLog{child: sized(20, 20), log: &log}
 	pane := &keyWatcher{name: "pane", log: &log, child: field, take: map[KeyboardKey]bool{KeyS: true}}
-	term := &claimingLog{keyedLog{focusable: focusable{child: sized(20, 20)}, log: &log}}
+	term := &claimingLog{keyedLog{child: sized(20, 20), log: &log}}
 	p := NewProbe(column(pane, &keyWatcher{name: "around", log: &log, child: term, take: map[KeyboardKey]bool{KeyS: true}}), Sz(100, 100))
 	defer p.Close()
 	runs := 0
@@ -882,7 +882,7 @@ func TestChordsWithinPrecedeTheFocusedWidgetAndTheWindow(t *testing.T) {
 func TestTabIsNotOfferedWithin(t *testing.T) {
 	t.Parallel()
 	var log []string
-	field := func() Widget { return &keyedLog{focusable: focusable{child: sized(20, 20)}, log: &log} }
+	field := func() Widget { return &keyedLog{child: sized(20, 20), log: &log} }
 	pane := &keyWatcher{name: "pane", log: &log, child: column(field(), field())}
 	p := NewProbe(column(pane), Sz(100, 100))
 	defer p.Close()
@@ -897,7 +897,7 @@ func TestKeysWithinNeedFocusInside(t *testing.T) {
 	t.Parallel()
 	var log []string
 	pane := &keyWatcher{name: "pane", log: &log, child: sized(40, 40)}
-	beside := &keyedLog{focusable: focusable{child: sized(20, 20)}, log: &log}
+	beside := &keyedLog{child: sized(20, 20), log: &log}
 	p := NewProbe(column(pane, beside), Sz(100, 100))
 	defer p.Close()
 	p.Type(Mods{}, KeyA)

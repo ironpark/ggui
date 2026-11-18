@@ -63,7 +63,7 @@ func (m *modelled) InspectFields() []inspect.Field {
 // The frame answers what a widget says of itself, its box model and its
 // fields, from the widget as it is when asked, not as it was traced.
 func TestInspectFrameAnswersFromTheWidgets(t *testing.T) {
-	w := &modelled{block: block{size: Sz(108, 50)}, pad: inspect.Insets{Top: 7, Right: 11, Bottom: 13, Left: 17}, border: 2}
+	w := &modelled{size: Sz(108, 50), pad: inspect.Insets{Top: 7, Right: 11, Bottom: 13, Left: 17}, border: 2}
 	inspectorEnabled.Store(true)
 	c := &Canvas{}
 	c.fs().tracing = true

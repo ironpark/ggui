@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/ironpark/ggui/internal/third_party/typesetting/font"
 	ot "github.com/ironpark/ggui/internal/third_party/typesetting/font/opentype"
 	"github.com/ironpark/ggui/internal/third_party/typesetting/font/opentype/tables"
 	ucd "github.com/ironpark/ggui/internal/third_party/typesetting/internal/unicodedata"
@@ -291,7 +290,7 @@ func applyArabicJoining(buffer *Buffer) {
 		break
 	}
 
-	for i := 0; i < len(info); i++ {
+	for i := range info {
 		thisType := getJoiningType(info[i].codepoint, info[i].unicode.generalCategory())
 
 		if thisType == joiningTypeT {
@@ -597,7 +596,7 @@ var modifierCombiningMarks = [...]rune{
 
 func infoIsMcm(info *GlyphInfo) bool {
 	u := info.codepoint
-	for i := 0; i < len(modifierCombiningMarks); i++ {
+	for i := range len(modifierCombiningMarks) {
 		if u == modifierCombiningMarks[i] {
 			return true
 		}
@@ -729,7 +728,7 @@ func arabicFallbackSynthesizeLookupSingle(ft *Font, featureIndex int) *lookupGSU
 	sort.Stable(jointGlyphs{glyphs: glyphs, substitutes: substitutes})
 
 	return &lookupGSUB{
-		LookupOptions: font.LookupOptions{Flag: otIgnoreMarks},
+		Flag: otIgnoreMarks,
 		Subtables: []tables.GSUBLookup{
 			tables.SingleSubs{Data: tables.SingleSubstData2{
 				Coverage:           tables.Coverage1{Glyphs: glyphs},
@@ -813,7 +812,7 @@ func arabicFallbackSynthesizeLookupLigature(ft *Font, ligatureTable []arabicTabl
 	}
 
 	return &lookupGSUB{
-		LookupOptions: font.LookupOptions{Flag: lookupFlags},
+		Flag: lookupFlags,
 		Subtables: []tables.GSUBLookup{
 			out,
 		},

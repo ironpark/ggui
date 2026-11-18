@@ -65,7 +65,7 @@ func render(dir string) error {
 		}
 		img := ggfx.NewImage(int(size.W), int(size.H))
 		defer img.Deallocate()
-		for i := 0; i < 4; i++ {
+		for range 4 {
 			img.Fill(theme.Preset{}.For(dark).Bg)
 			p.Draw(img)
 			now = now.Add(time.Second)

@@ -70,14 +70,12 @@ func TestPickersShareFontsAcrossGoroutines(t *testing.T) {
 	f := mustLoad(t, goregular.TTF)
 	var wg sync.WaitGroup
 	for range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			p := f.Picker(400)
 			for r := rune(0x20); r < 0x2000; r++ {
 				p.Pick(r)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }

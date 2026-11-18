@@ -1,6 +1,7 @@
 package text
 
 import (
+	"slices"
 	"sync"
 
 	"github.com/ironpark/ggfx/vector"
@@ -59,10 +60,8 @@ func (f *FallbackFace) resolveLocked(r rune) bool {
 	if face == nil {
 		return false
 	}
-	for _, have := range f.faces {
-		if have == face {
-			return true
-		}
+	if slices.Contains(f.faces, face) {
+		return true
 	}
 	f.faces = append(f.faces, face)
 	f.multi, _ = NewMultiFace(append(f.faces[:len(f.faces):len(f.faces)], f.last)...)

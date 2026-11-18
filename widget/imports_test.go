@@ -23,7 +23,7 @@ func TestWidgetStaysBelowTheDesignSystem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go list: %v", err)
 	}
-	for _, dep := range strings.Fields(string(out)) {
+	for dep := range strings.FieldsSeq(string(out)) {
 		ui := dep == "github.com/ironpark/ggui/ui" || strings.HasPrefix(dep, "github.com/ironpark/ggui/ui/")
 		if ui || strings.HasPrefix(dep, "github.com/ironpark/ggui/fonts/") {
 			t.Errorf("widget depends on %s", dep)

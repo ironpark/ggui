@@ -37,7 +37,7 @@ func runDialog(path string, args []string) ([]string, error) {
 		return nil, err
 	}
 	var paths []string
-	for _, line := range strings.Split(strings.TrimRight(out.String(), "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.TrimRight(out.String(), "\n"), "\n") {
 		if line != "" {
 			paths = append(paths, line)
 		}

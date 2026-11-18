@@ -223,7 +223,7 @@ func (met *cff2CharstringHandler) blend(state *ps.Machine) error {
 	if len(met.coords) != 0 {
 		args := state.ArgStack.Vals[state.ArgStack.Top-n*(k+1) : state.ArgStack.Top]
 		// the first n values are the 'default' arguments
-		for i := int32(0); i < n; i++ {
+		for i := range n {
 			baseValue := args[i]
 			deltas := args[n+i*k : n+(i+1)*k] // all the regions, for one operand
 			v := 0.

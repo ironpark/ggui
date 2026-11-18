@@ -1,7 +1,6 @@
 package harfbuzz
 
 import (
-	"github.com/ironpark/ggui/internal/third_party/typesetting/font"
 	ot "github.com/ironpark/ggui/internal/third_party/typesetting/font/opentype"
 	"github.com/ironpark/ggui/internal/third_party/typesetting/font/opentype/tables"
 )
@@ -24,14 +23,14 @@ var arabicWin1256GsubLookups = [...]manifest{
 // Lookups
 var (
 	initLookup = lookupGSUB{
-		LookupOptions: font.LookupOptions{Flag: otIgnoreMarks},
+		Flag: otIgnoreMarks,
 		Subtables: []tables.GSUBLookup{
 			initmediSubLookup,
 			initSubLookup,
 		},
 	}
 	mediLookup = lookupGSUB{
-		LookupOptions: font.LookupOptions{Flag: otIgnoreMarks},
+		Flag: otIgnoreMarks,
 		Subtables: []tables.GSUBLookup{
 			initmediSubLookup,
 			mediSubLookup,
@@ -39,7 +38,7 @@ var (
 		},
 	}
 	finaLookup = lookupGSUB{
-		LookupOptions: font.LookupOptions{Flag: otIgnoreMarks},
+		Flag: otIgnoreMarks,
 		Subtables: []tables.GSUBLookup{
 			finaSubLookup,
 			/* We don't need this one currently as the sequence inherits masks
@@ -49,8 +48,8 @@ var (
 		},
 	}
 	rligLookup = lookupGSUB{
-		LookupOptions: font.LookupOptions{Flag: otIgnoreMarks},
-		Subtables:     []tables.GSUBLookup{lamAlefLigaturesSubLookup},
+		Flag:      otIgnoreMarks,
+		Subtables: []tables.GSUBLookup{lamAlefLigaturesSubLookup},
 	}
 	rligMarksLookup = lookupGSUB{
 		Subtables: []tables.GSUBLookup{shaddaLigaturesSubLookup},

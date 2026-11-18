@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"image/color"
+	"maps"
 	"math"
 	"slices"
 	"sync"
@@ -263,13 +264,9 @@ func (p Preset) build(dark bool) Theme {
 		mode = 1
 	}
 	tokens := make(map[string]color.Color)
-	for k, v := range themePalettes()[string(base)][mode] {
-		tokens[k] = v
-	}
+	maps.Copy(tokens, themePalettes()[string(base)][mode])
 	if p.Accent != "" {
-		for k, v := range themePalettes()[string(p.Accent)][mode] {
-			tokens[k] = v
-		}
+		maps.Copy(tokens, themePalettes()[string(p.Accent)][mode])
 	}
 	// PrimaryHover, Selection, Input and the text colors follow these.
 	t.Bg, t.Fg = tokens["background"], tokens["foreground"]

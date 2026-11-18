@@ -105,7 +105,7 @@ func tileMark(m *model, slot int) ggui.Widget {
 			dst.StrokeRoundRect(tileRect(x+1, y+1, 14, 14), 7, 1.2, ink)
 			dst.StrokeRoundRect(tileRect(x+4, y+4, 8, 8), 4, 1.2, ink)
 		default:
-			for i := 0; i < 3; i++ {
+			for i := range 3 {
 				dst.StrokeLine(ggui.Pt(x+2, y+3+float64(i)*5), ggui.Pt(x+14-float64(i)*3, y+3+float64(i)*5), 1.4, ink)
 			}
 		}

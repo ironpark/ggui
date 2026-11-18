@@ -244,7 +244,7 @@ func (c *ChartWidget) paintTooltipContent(dst *ggui.Canvas, r ggui.Rect, index i
 			case c.tooltip.Indicator == ChartIndicatorLine:
 				dst.FillRoundRect(ggui.Rct(ggui.Pt(x, y), ggui.Sz(w, chartTipRow)), 2, row.col)
 			case c.tooltip.Indicator == ChartIndicatorDashed:
-				for k := 0; k < 3; k++ {
+				for k := range 3 {
 					dst.FillRect(ggui.Rct(ggui.Pt(x, y+float64(k)*4.5), ggui.Sz(w, 3.)), row.col)
 				}
 			default:

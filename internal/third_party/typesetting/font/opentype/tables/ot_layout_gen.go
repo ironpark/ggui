@@ -140,7 +140,7 @@ func ParseFeatureTableSubstitution(src []byte) (FeatureTableSubstitution, int, e
 	{
 
 		offset := 6
-		for i := 0; i < arrayLengthSubstitutions; i++ {
+		for range arrayLengthSubstitutions {
 			elem, read, err := ParseFeatureTableSubstitutionRecord(src[offset:], src)
 			if err != nil {
 				return item, 0, fmt.Errorf("reading FeatureTableSubstitution: %s", err)
@@ -196,7 +196,7 @@ func ParseFeatureVariation(src []byte) (FeatureVariation, int, error) {
 	{
 
 		offset := 8
-		for i := 0; i < arrayLengthFeatureVariationRecords; i++ {
+		for range arrayLengthFeatureVariationRecords {
 			elem, read, err := ParseFeatureVariationRecord(src[offset:], src)
 			if err != nil {
 				return item, 0, fmt.Errorf("reading FeatureVariation: %s", err)

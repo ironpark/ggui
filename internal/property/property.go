@@ -127,8 +127,8 @@ func plain(t reflect.Type) bool {
 		is = plain(t.Elem())
 	case reflect.Struct:
 		is = true
-		for i := range t.NumField() {
-			if !plain(t.Field(i).Type) {
+		for field := range t.Fields() {
+			if !plain(field.Type) {
 				is = false
 				break
 			}

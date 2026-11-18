@@ -907,7 +907,7 @@ func (c *otApplyContext) matchBacktrack(backtrack []uint16, matchFunc matcherFun
 	skippyIter.resetBack(c.buffer.backtrackLen())
 	skippyIter.setMatchFunc(matchFunc, backtrack)
 
-	for i := 0; i < len(backtrack); i++ {
+	for range backtrack {
 		if ok, unsafeFrom := skippyIter.prev(); !ok {
 			return false, unsafeFrom
 		}
@@ -925,7 +925,7 @@ func (c *otApplyContext) matchLookahead(lookahead []uint16, matchFunc matcherFun
 	skippyIter.reset(startIndex - 1)
 	skippyIter.setMatchFunc(matchFunc, lookahead)
 
-	for i := 0; i < len(lookahead); i++ {
+	for range lookahead {
 		if ok, unsafeTo := skippyIter.next(); !ok {
 			return false, unsafeTo
 		}

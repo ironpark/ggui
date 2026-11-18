@@ -505,7 +505,7 @@ type ColumnWidget struct {
 
 // Column stacks children top to bottom.
 func Column(children ...ggui.Widget) *ColumnWidget {
-	return &ColumnWidget{flow: flow{children: children}}
+	return &ColumnWidget{children: children}
 }
 
 // Gap sets the space between consecutive children.
@@ -564,7 +564,7 @@ type RowWidget struct {
 // Row lines children up left to right, centered on the row's height; a
 // Column starts its children at the left.
 func Row(children ...ggui.Widget) *RowWidget {
-	return &RowWidget{flow: flow{horizontal: true, align: AlignCenter, children: children}}
+	return &RowWidget{horizontal: true, align: AlignCenter, children: children}
 }
 
 // Gap sets the space between consecutive children.

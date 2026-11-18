@@ -186,7 +186,7 @@ func ParseAATLoopkup4(src []byte) (AATLoopkup4, int, error) {
 		arrayLength := int(item.nUnits - 1)
 
 		offset := 12
-		for i := 0; i < arrayLength; i++ {
+		for range arrayLength {
 			elem, read, err := ParseAATLookupRecord4(src[offset:], src)
 			if err != nil {
 				return item, 0, fmt.Errorf("reading AATLoopkup4: %s", err)
