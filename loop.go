@@ -13,7 +13,6 @@ import (
 
 	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/fontsys"
-	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/runtime"
@@ -508,7 +507,7 @@ func (l *frameLoop) needsLayout(logical Size) bool {
 // write dirties the child's cached measurement but schedules no layout.
 // Scheduling one would lay the whole tree out again on every frame.
 func (l *frameLoop) paintTree(c *Canvas) {
-	defer property.EnterLayout()()
+	defer reactive.EnterLayout()()
 	c.Paint(l.root, Rect{Size: l.rootSize})
 	c.paintOverlays()
 }
@@ -642,7 +641,7 @@ func (l *frameLoop) settle(size Size) (err error) {
 		}
 		before := reactive.StateGen()
 		if l.root != nil && l.needsLayout(size) {
-			reactive.WithOwner(l.owner, func() { defer property.EnterLayout()(); l.rootSize = l.root.Layout(Tight(size), rootEnv()) })
+			reactive.WithOwner(l.owner, func() { defer reactive.EnterLayout()(); l.rootSize = l.root.Layout(Tight(size), rootEnv()) })
 		}
 		if !rt.Settled() || reactive.StateGen() != before {
 			continue

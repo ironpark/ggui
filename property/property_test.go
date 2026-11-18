@@ -54,7 +54,7 @@ func TestOwnerChangedSchedulesLayoutOnlyOnceMountedAndOutsideLayout(t *testing.T
 		t.Fatal("a change to a mounted owner did not schedule a layout")
 	}
 	gen = reactive.LayoutGen()
-	done := EnterLayout()
+	done := reactive.EnterLayout()
 	o.Changed()
 	done()
 	if reactive.LayoutGen() != gen {

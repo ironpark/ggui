@@ -8,7 +8,6 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/framestats"
-	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/region"
 )
@@ -390,7 +389,7 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 	background := w.background()
 	f.partial, f.regions, f.moved = true, damage, pointer
 	opened := func() bool {
-		defer property.EnterLayout()()
+		defer reactive.EnterLayout()()
 		for _, d := range damage {
 			f.damage = d
 			at := c.Clip(d)

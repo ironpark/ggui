@@ -66,6 +66,12 @@ func Watch[T any](src Readable[T], fn func(T)) (dispose func()) { return reactiv
 // Effect runs fn now and again whenever what it read changes.
 func Effect(fn func() Cleanup) Cleanup { return reactive.Effect(fn) }
 
+// Observe runs fn now and again as soon as what it read changes, before the
+// layout that follows rather than after it as Effect does: for a widget
+// keeping one piece of its state in step with another that layout reads. It
+// returns a function to stop.
+func Observe(fn func()) (dispose func()) { return reactive.Observe(fn) }
+
 // Root runs fn under a fresh owner and returns a function to dispose it.
 func Root(fn func()) (dispose func()) { return reactive.Root(fn) }
 

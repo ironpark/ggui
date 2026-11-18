@@ -7,10 +7,10 @@ import (
 	"sync"
 
 	"github.com/ironpark/ggui/a11y"
-	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/pkg/geom"
 	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/property"
 )
 
 // Widget is the unit of composition. Layout asks it for a size under some

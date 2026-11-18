@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/kinetics"
+	"github.com/ironpark/ggui/property"
 )
 
 // Animation is a reactive value that moves toward its target over time

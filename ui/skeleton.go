@@ -2,7 +2,7 @@ package ui
 
 import (
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 

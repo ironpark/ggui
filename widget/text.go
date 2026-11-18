@@ -10,12 +10,13 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/fontsys"
+	"github.com/ironpark/ggui/internal/kernel"
 	"github.com/ironpark/ggui/internal/paragraph"
-	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/property"
 )
 
 // textBidi is a Text's lines in visual order, for the lines that need
@@ -376,7 +377,10 @@ func (t *TextWidget) current() ggui.TextStyle {
 
 // engine is the current style as the text engine sets text in it, and the
 // generation of its fonts.
-func (t *TextWidget) engine() (paragraph.Style, uint64) { return ggui.TextEngineStyle(t.current()) }
+// textEngineStyle is the root package's: see kernel.TextEngineStyle.
+var textEngineStyle = kernel.TextEngineStyle.(func(ggui.TextStyle) (paragraph.Style, uint64))
+
+func (t *TextWidget) engine() (paragraph.Style, uint64) { return textEngineStyle(t.current()) }
 
 // dir is the direction the lines were last ordered for: DirLTR, unless
 // they were laid out in another.

@@ -18,9 +18,9 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/framestats"
 	"github.com/ironpark/ggui/internal/imgcache"
-	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/render"
+	"github.com/ironpark/ggui/property"
 )
 
 // ImageWidget draws an ggfx.Image. Build one with Image.

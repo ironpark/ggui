@@ -8,9 +8,9 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/inspect"
-	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/property"
 )
 
 // Built-in widgets follow one shape: a constructor takes what the widget

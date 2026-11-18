@@ -3,6 +3,8 @@ package ui_test
 import (
 	"go/parser"
 	"go/token"
+	"io/fs"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -34,5 +36,41 @@ func TestOnlyImageWidgetsImportGgfx(t *testing.T) {
 			}
 			t.Errorf("%s imports %s; name it through ggui instead", fset.Position(imp.Pos()), imp.Path.Value)
 		}
+	}
+}
+
+// rasterizesIcons is the one file under ui that reaches into ggui's
+// internals: the SVG rasterizer, which uploads its masks as the image cache
+// does and reports them to the same memory accounting.
+var rasterizesIcons = []string{"icons/svg.go"}
+
+// TestUIIsWrittenOnThePublicAPI keeps the themed library, its themes and its
+// icon sets on what a module outside ggui can import: a control here is what
+// another design system could have written, and what it needs and cannot
+// reach is missing from the public API rather than borrowed from internal.
+// Tests are exempt; they start the headless renderer.
+func TestUIIsWrittenOnThePublicAPI(t *testing.T) {
+	t.Parallel()
+	fset := token.NewFileSet()
+	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return err
+		}
+		if slices.Contains(rasterizesIcons, filepath.ToSlash(path)) {
+			return nil
+		}
+		f, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
+		if err != nil {
+			return err
+		}
+		for _, imp := range f.Imports {
+			if strings.Contains(imp.Path.Value, "ironpark/ggui/internal/") {
+				t.Errorf("%s imports %s; ui is written on ggui's public API", fset.Position(imp.Pos()), imp.Path.Value)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

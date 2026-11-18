@@ -4,7 +4,9 @@
 
 Set a literal with `X(value)`, follow a source with `BindX(reader)`, and pass a
 `Binding[T]` when a control edits a value. Both forms return the concrete widget
-so expressions chain. There is no public property wrapper.
+so expressions chain. Widgets expose setters, never a property type; a custom
+widget writes setters that keep this contract with the
+[`property`](../property/property.go) package, as `widget` and `ui` do.
 
 ```go
 ui.TextField(name).Name("Display name").BindDisabled(saving)

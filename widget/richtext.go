@@ -7,10 +7,10 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/paragraph"
-	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/textedit"
 	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/property"
 )
 
 // TextSpan is one stretch of a RichText in a style of its own. It is a
@@ -291,7 +291,7 @@ func (t *RichTextWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		st := env.ResolveText(t.style.Merge(sp.style))
 		start := end
 		end += len(sp.text)
-		run, _ := ggui.TextEngineStyle(st)
+		run, _ := textEngineStyle(st)
 		p.Runs = append(p.Runs, paragraph.Run{Start: start, End: end, Style: run, Span: i})
 		t.styles = append(t.styles, st)
 		keys = append(keys, runKey{start, end, st.Font, st.Size, st.LineHeight, st.Weight, st.Tracking})
@@ -307,7 +307,7 @@ func (t *RichTextWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		text = sb.String()
 	}
 	var gen uint64
-	p.Base, gen = ggui.TextEngineStyle(base)
+	p.Base, gen = textEngineStyle(base)
 	t.base = base
 	t.dir, p.Lang = env.Direction(), env.Language()
 	p.RTL = t.dir == ggui.DirRTL

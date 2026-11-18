@@ -37,8 +37,8 @@ func callerOutside(skip int, own func(fn string) bool) string {
 }
 
 // isGgui reports whether fn is ggui's own plumbing -- the root package,
-// the built-in widgets of package widget, or one of the internals,
-// including this one -- as opposed to the ui and icons packages built on
+// the built-in widgets of package widget, package property, or one of the
+// internals, including this one -- as opposed to the ui and icons packages built on
 // it, whose frames are worth naming.
 func isGgui(fn string) bool {
 	const mod = "github.com/ironpark/ggui"
@@ -47,7 +47,7 @@ func isGgui(fn string) bool {
 		return false
 	}
 	rest := fn[i+len(mod):]
-	return strings.HasPrefix(rest, ".") || strings.HasPrefix(rest, "/widget.") || strings.HasPrefix(rest, "/internal/")
+	return strings.HasPrefix(rest, ".") || strings.HasPrefix(rest, "/widget.") || strings.HasPrefix(rest, "/property.") || strings.HasPrefix(rest, "/internal/")
 }
 
 // reportSnapshot reports, once per place, a signal read while widgets are
