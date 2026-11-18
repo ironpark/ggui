@@ -20,6 +20,11 @@ go install github.com/ironpark/ggui/cmd/ggui@latest
 
 Releases are tagged `cmd/ggui/vX.Y.Z`, since the command is a module of its
 own; `go install github.com/ironpark/ggui/cmd/ggui@vX.Y.Z` installs one.
+Each release also carries the command built for macOS, Linux and Windows,
+Intel and ARM, on the [releases page](https://github.com/ironpark/ggui/releases)
+under `ggui command`: unpack the archive and put `ggui` on your `PATH`.
+However it was installed, the command needs Go, which builds the
+applications it runs. `ggui version` prints the version installed.
 
 | Command | Does |
 | --- | --- |
