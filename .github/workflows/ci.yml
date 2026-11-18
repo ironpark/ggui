@@ -132,6 +132,62 @@ jobs:
           path: ${{ runner.temp }}/e2e
           if-no-files-found: ignore
 
+  # What ggui build --target linux makes must install and run where people
+  # put it: the .deb with apt on Ubuntu, where the app is started under
+  # Xvfb and its window must carry the class the desktop file names, which
+  # is how a dock finds the app's icon; and the .rpm with dnf on Fedora,
+  # whose dependencies must name the packages that hold the libraries the
+  # app opens.
+  linux-package:
+    name: linux package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            cmd/ggui/go.sum
+      - name: Build an app's packages
+        run: |
+          go -C cmd/ggui build -o "$RUNNER_TEMP/ggui" .
+          "$RUNNER_TEMP/ggui" init --name "Hello World" --replace "$GITHUB_WORKSPACE" "$RUNNER_TEMP/hello"
+          cd "$RUNNER_TEMP/hello"
+          "$RUNNER_TEMP/ggui" build --target linux --format tar,deb,rpm
+          ls -l build
+      - name: Install the .deb and run it under Xvfb
+        run: |
+          cd "$RUNNER_TEMP/hello/build"
+          sudo apt-get update
+          sudo apt-get install -y xvfb x11-utils ./*.deb
+          desktop=$(dpkg -L hello-world | grep '^/usr/share/applications/.*\.desktop$')
+          class=$(sed -n 's/^StartupWMClass=//p' "$desktop")
+          echo "desktop file $desktop, StartupWMClass=$class"
+          test -n "$class"
+          export DISPLAY=:99
+          Xvfb :99 -screen 0 1280x1024x24 &
+          sleep 1
+          hello-world > "$RUNNER_TEMP/app.log" 2>&1 &
+          app=$!
+          for i in $(seq 1 30); do
+            if xwininfo -root -tree | grep -F "(\"" | grep -qF "\"$class\")"; then break; fi
+            sleep 1
+          done
+          xwininfo -root -tree | grep -F "(\"" || true
+          kill -0 "$app" || { echo "the app exited:"; cat "$RUNNER_TEMP/app.log"; exit 1; }
+          xwininfo -root -tree | grep -F "(\"" | grep -qF "\"$class\")" || { echo "no window of class $class"; cat "$RUNNER_TEMP/app.log"; exit 1; }
+          kill "$app"
+      - name: Install the .rpm on Fedora
+        run: |
+          docker run --rm -v "$RUNNER_TEMP/hello/build:/pkgs:ro" fedora:latest sh -euxc '
+            dnf install -y /pkgs/*.rpm
+            rpm -ql hello-world
+            for lib in libX11.so.6 libXrandr.so.2 libXi.so.6 libXcursor.so.1 libXinerama.so.1 libXext.so.6 libXrender.so.1 libGL.so.1 libEGL.so.1; do
+              ldconfig -p | grep -qF "$lib" || { echo "missing $lib"; exit 1; }
+            done
+          '
+
   wasm:
     runs-on: ubuntu-latest
     steps:
