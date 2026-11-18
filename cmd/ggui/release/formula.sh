@@ -26,6 +26,7 @@ class Ggui < Formula
   url "${url}"
   version "${version#v}"
   sha256 "${sum}"
+  license "Apache-2.0"
 
   depends_on "go"
 

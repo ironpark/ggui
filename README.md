@@ -8,7 +8,7 @@
 
 Powered by [ggfx](https://github.com/ironpark/ggfx), a fork of [Ebitengine](https://ebiten.org).
 
-[Demos](#demos) · [Quick start](#quick-start) · [Examples](#examples) · [Guide](docs/README.md) · [Accessibility](#accessibility) · [Development](#development)
+[Demos](#demos) · [Quick start](#quick-start) · [Examples](#examples) · [Guide](docs/README.md) · [Accessibility](#accessibility) · [Development](#development) · [License](#license)
 
 </div>
 
@@ -253,3 +253,11 @@ Override the Go executable with `task build GO=/path/to/go` when needed.
 
 See [Development](docs/development.md) for all commands, browser/WASM examples,
 debug builds, visual checks, and the repository map.
+
+## License
+
+ggui is licensed under the [Apache License 2.0](LICENSE). The code, fonts
+and icon sets it bundles from other projects keep their own licenses, in the
+directories that hold them: the text engines under
+[internal/third_party](internal/third_party), the fonts under
+[fonts](fonts), and the icon sets under [icons](icons).
