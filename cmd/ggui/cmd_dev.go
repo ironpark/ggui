@@ -83,17 +83,28 @@ which keeps running the last build that succeeded.`,
 				return err
 			}
 			cfg := proj.Config
-			devTags := cfg.Dev.Tags
-			if isSet(fs, "tags") {
-				devTags = splitTags(*tags)
+			// settings are what p's file gives the session that it can
+			// take up again while it runs, the flags replacing what
+			// they replace.
+			settings := func(p *project.Project) dev.Settings {
+				s := dev.Settings{
+					Tags: p.Config.Dev.Tags,
+					Args: append(slices.Clone(p.Config.Dev.Args), rest...),
+					Env:  p.Config.Dev.Env,
+				}
+				if isSet(fs, "tags") {
+					s.Tags = splitTags(*tags)
+				}
+				if p.File != "" {
+					s.Extra = append(s.Extra, p.File)
+				}
+				for _, w := range p.Config.Dev.Watch {
+					s.Extra = append(s.Extra, p.Path(w))
+				}
+				return s
 			}
-			var extra []string
-			if proj.File != "" {
-				extra = append(extra, proj.File)
-			}
-			for _, w := range cfg.Dev.Watch {
-				extra = append(extra, proj.Path(w))
-			}
+			first := settings(proj)
+			devTags, extra := first.Tags, first.Extra
 			outDir := proj.Path(cfg.Build.Output)
 			say := ui.Stderr.Prefixed("ggui")
 			var tracef func(string, ...any)
@@ -130,6 +141,7 @@ which keeps running the last build that succeeded.`,
 					Title: title, Base: b,
 					Addr:  net.JoinHostPort(*host, strconv.Itoa(*port)),
 					Extra: extra, OutDir: outDir, Watch: !*noWatch, Log: os.Stderr,
+					Config: proj.File,
 					Tracef: tracef,
 				}
 				return w.Run(ctx)
@@ -148,10 +160,29 @@ which keeps running the last build that succeeded.`,
 
 			n := &dev.Native{
 				Dir: proj.Root, Package: main.Package, Tags: devTags,
-				Args:  append(slices.Clone(cfg.Dev.Args), rest...),
-				Env:   cfg.Dev.Env,
+				Args: first.Args, Env: first.Env,
 				Extra: extra, OutDir: outDir, Watch: !*noWatch,
 				StopTimeout: *stopTimeout, Force: force,
+				Config: proj.File,
+				// ggui.toml read again when it changes. What the session
+				// took from it once and holds for good is named, so that
+				// an edit that seems ignored is not a puzzle.
+				Reload: func() (dev.Settings, []string, error) {
+					p, err := project.Open(".", arg, *cfgPath)
+					if err != nil {
+						return dev.Settings{}, nil, err
+					}
+					var notes []string
+					held := func(changed bool, key string) {
+						if changed {
+							notes = append(notes, key+" changed: start ggui dev again for it to take effect")
+						}
+					}
+					held(p.Config.Dev.Display != cfg.Dev.Display && !isSet(fs, "display"), "dev.display")
+					held(p.Path(p.Config.Build.Output) != outDir, "build.output")
+					held(p.Config.App.Package != cfg.App.Package && arg == "", "app.package")
+					return settings(p), notes, nil
+				},
 				// The app's stdout is the terminal itself; its stderr
 				// goes through a pipe for the tail a viewer shows, and on
 				// through ui, above any spinner of ggui's.

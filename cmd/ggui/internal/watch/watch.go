@@ -121,7 +121,8 @@ type Options struct {
 type Watcher struct {
 	o Options
 
-	syncs chan chan Change // Sync's requests to Run
+	syncs   chan chan Change // Sync's requests to Run
+	relists chan struct{}    // Relist's
 
 	mu    sync.Mutex
 	files map[string]stamp
@@ -130,7 +131,7 @@ type Watcher struct {
 
 // New returns a watcher for paths, stamped as they are now.
 func New(paths []string, o Options) *Watcher {
-	w := &Watcher{o: o, sums: map[string]fileSum{}, syncs: make(chan chan Change)}
+	w := &Watcher{o: o, sums: map[string]fileSum{}, syncs: make(chan chan Change), relists: make(chan struct{}, 1)}
 	w.Set(paths)
 	return w
 }
@@ -498,6 +499,9 @@ func (w *Watcher) Run(ctx context.Context, out chan<- Change) {
 			}
 		case <-tick.C:
 			check(false)
+		case <-w.relists:
+			w.tracef("asked to list the sources again")
+			startList()
 		case reply := <-w.syncs:
 			check(false)
 			var c Change
@@ -562,6 +566,17 @@ func (w *Watcher) Sync(ctx context.Context) Change {
 		return c
 	case <-ctx.Done():
 		return Change{}
+	}
+}
+
+// Relist has Run list the set again, for a change to what the listing is
+// made with, such as the build tags, that no change to a watched file
+// tells of. It does not wait; asked twice before Run has listed, it lists
+// once.
+func (w *Watcher) Relist() {
+	select {
+	case w.relists <- struct{}{}:
+	default:
 	}
 }
 

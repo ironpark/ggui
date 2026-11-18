@@ -287,6 +287,14 @@ this.
   after the first change, so that a stream of changes cannot hold the
   build off. A formatter that rewrites a file just saved is in the same
   build.
+- **A change to `ggui.toml`** is read again before that build:
+  `dev.tags`, `dev.args`, `dev.env` and `dev.watch` take effect in it and
+  in the app it is run as, the flags still replacing what they replace.
+  A file that is not valid is said, with its line, and the settings in
+  use stay until it is. `dev.display`, `build.output` and `app.package`
+  are held for the session; ggui says so when one of them changed, and
+  starting `ggui dev` again takes it up. With `--web` the server holds
+  every setting it started with, and says the same.
 - **A change during a build** cancels it, the go command and its
   compilers with it, and builds again after the same wait; the build
   cache keeps what was compiled. Before the app is replaced, dev looks at
