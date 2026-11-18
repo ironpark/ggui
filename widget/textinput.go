@@ -14,12 +14,12 @@ import (
 	"github.com/ironpark/ggui/internal/editlayout"
 	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/paragraph"
-	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/textedit"
 	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/runtime"
 )
 
@@ -588,9 +588,9 @@ func (t *TextInputWidget) fromDisplay(b int) int {
 // the editor's own.
 func (t *TextInputWidget) engine() (paragraph.Style, uint64) {
 	if t.resolved.Font == nil {
-		return ggui.TextEngineStyle(t.style)
+		return textEngineStyle(t.style)
 	}
-	return ggui.TextEngineStyle(t.resolved)
+	return textEngineStyle(t.resolved)
 }
 
 // textStyle is the style engine returns, without the generation.

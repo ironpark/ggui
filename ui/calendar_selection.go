@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/property"
 )
 
 // DateRange is an inclusive interval of civil dates. A zero Start means no

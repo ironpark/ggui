@@ -7,10 +7,10 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/inspect"
-	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/kinetics"
+	"github.com/ironpark/ggui/property"
 )
 
 // ScrollViewport is what a Scroll tells the subtree it lays out: how far along

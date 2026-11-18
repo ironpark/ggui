@@ -7,8 +7,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/property"
-	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
@@ -57,7 +56,7 @@ func NumberInput(value ggui.Binding[float64]) *NumberInputWidget {
 	n.inc.SetName("Increment")
 	// The text follows the value, so a write from outside -- or a commit
 	// that normalised what was typed -- shows at once.
-	reactive.Observe(func() {
+	ggui.Observe(func() {
 		v := n.value.Get()
 		n.text.Set(ggui.Untrack(func() string { return n.format(v) }))
 	})

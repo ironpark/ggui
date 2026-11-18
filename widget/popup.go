@@ -4,9 +4,9 @@ import (
 	"slices"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/property"
 )
 
 // popupEscape closes the innermost open popup.

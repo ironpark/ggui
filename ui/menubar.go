@@ -4,7 +4,7 @@ import (
 	"image/color"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )

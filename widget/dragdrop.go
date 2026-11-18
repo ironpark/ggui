@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/property"
 )
 
 // Dragging inside the app: a DragSource is something the user can pick up

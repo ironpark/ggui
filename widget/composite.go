@@ -2,8 +2,8 @@ package widget
 
 import (
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/property"
 )
 
 // Widgets that paint a subtree as a whole, through the Canvas's effects:

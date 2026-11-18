@@ -2,7 +2,7 @@ package widget
 
 import (
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/property"
 )
 
 // Wrappers that make a child take input: the pointer, through Pointer and

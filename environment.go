@@ -5,9 +5,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/property"
 )
 
 // BackgroundKey supplies the window background when Config.Background is nil.

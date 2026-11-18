@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/property"
 )
 
 // RevealWidget shows its child while a condition holds and folds it away
