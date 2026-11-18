@@ -35,7 +35,9 @@ On macOS, install it with `brew install go-task`.
 | `task clean` | Clean Go artifacts and remove `bin/`, including app bundles. |
 
 Override the Go executable with `task build GO=/path/to/go` when needed.
-To enable reactive-thread diagnostics and source locations for runtime errors:
+To enable reactive-thread diagnostics (see
+[Testing](testing.md#writes-from-the-wrong-goroutine)) and source locations for
+runtime errors:
 
 ```sh
 go test -tags ggui_debug ./...

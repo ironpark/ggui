@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/inspect"
+	"github.com/ironpark/ggui/internal/reactive"
 )
 
 // Probe drives a widget tree without a window, for tests: it runs the same
@@ -116,7 +117,10 @@ func (p *Probe) Setup(fn func()) *Probe {
 }
 
 // Close disposes the root owner and everything built under it.
-func (p *Probe) Close() { p.close() }
+func (p *Probe) Close() {
+	p.close()
+	reactive.UnmarkUIThread(p.runtime())
+}
 
 // RequestClose asks to close as a window's close button does: the
 // OnCloseRequest handlers run now, and the probe closes if they all agree.

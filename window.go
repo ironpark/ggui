@@ -603,11 +603,6 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 	}
 	start := time.Now()
 	defer func() { framestats.Frame(time.Since(start)) }()
-	// Frames run here, whichever goroutine the engine calls this on. A Probe
-	// does not arm the check: it runs on its test's goroutine, and several
-	// live in one process, so there is no single UI goroutine to compare
-	// with and no frame racing the write either.
-	reactive.MarkUIThread()
 	restoreInput := textinput.WithWindow(ev.Window)
 	defer restoreInput()
 	cursor := w.cursor

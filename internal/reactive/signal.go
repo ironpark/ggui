@@ -386,6 +386,10 @@ func (m *DerivedValue[T]) GetAny() any { return m.Get() }
 // StateValue is a reactive value. Reads inside an Effect subscribe to it; writes
 // mark every subscriber dirty so the next frame recomputes them.
 type StateValue[T any] struct {
+	// The runtime the value was made in, in a ggui_debug build, for the
+	// UI-goroutine check; empty, and first so as not to be padded,
+	// otherwise. See thread_debug.go.
+	valueThread
 	mu      sync.Mutex
 	val     T
 	version uint64
@@ -404,7 +408,7 @@ type StateValue[T any] struct {
 // when T has an Equal method or is comparable; see WithEqual to supply
 // equality for other types, or to pass nil so that every write notifies.
 func State[T any](v T) *StateValue[T] {
-	return &StateValue[T]{val: v, eq: ComparableEqual[T](), subs: map[*Computation]struct{}{}}
+	return &StateValue[T]{valueThread: madeHere(), val: v, eq: ComparableEqual[T](), subs: map[*Computation]struct{}{}}
 }
 
 // equaler is the equality a type declares for itself, as time.Time does.
@@ -447,7 +451,7 @@ func (s *StateValue[T]) WithEqual(eq func(a, b T) bool) *StateValue[T] {
 
 // Get returns the current value and subscribes the running Effect, if any.
 func (s *StateValue[T]) Get() T {
-	CheckUIThread("StateValue.Get")
+	s.checkThread("StateValue.Get")
 	sc := current()
 	e := sc.listener
 	if Debug && e == nil && sc.building {
@@ -515,7 +519,7 @@ func (s *StateValue[T]) Set(v T) {
 // store is Set without the Derived check, for a memo storing its value; sc
 // is the running goroutine's scope.
 func (s *StateValue[T]) store(sc *scope, v T) {
-	CheckUIThread("StateValue.Set")
+	s.checkThread("StateValue.Set")
 	s.mu.Lock()
 	if s.eq != nil && s.eq(s.val, v) {
 		s.mu.Unlock()
@@ -647,7 +651,7 @@ func Combine[A, B, C any](a Readable[A], b Readable[B], fn func(A, B) C) *Derive
 // reader never sees one input updated and another not. Outside an effect
 // this means fn may run at the call site rather than at the next flush.
 func (m *DerivedValue[T]) Get() T {
-	CheckUIThread("DerivedValue.Get")
+	m.sig.checkThread("DerivedValue.Get")
 	if m.eff.running {
 		panic("ggui: cyclic Derived")
 	}
@@ -971,6 +975,10 @@ type effectSet struct {
 // of them flushes is written from the other: a signal written by one
 // goroutine and read by another's computations is a race, runtimes or not.
 type Runtime struct {
+	// The goroutine running the runtime's frames, in a ggui_debug build;
+	// empty otherwise. See thread_debug.go.
+	//lint:ignore U1000 only a ggui_debug build checks the goroutine
+	runtimeThread
 	effects effectSet
 
 	// base is the Base of the goroutine that made this runtime, which holds
