@@ -26,10 +26,11 @@ import (
 // has nothing of the kind, and there it returns an error that wraps
 // errors.ErrUnsupported.
 //
-// The id names the app to the system: the bundle identifier of the app
-// bundle it runs from on macOS, else the id given to App.SingleInstance,
-// else the executable's name. Keep it the same from one release to the
-// next, so that a later version finds what an earlier one registered.
+// The registration is named for the app's id, as AppID gives it: the
+// bundle identifier on macOS when the app runs from a bundle, else the id
+// ggui build linked in, else the id given to App.SingleInstance, else the
+// executable's name. Keep it the same from one release to the next, so
+// that a later version finds what an earlier one registered.
 func SetOpenAtLogin(enabled bool) error {
 	exe, err := loginExecutable()
 	if err != nil {
@@ -49,8 +50,8 @@ func OpenAtLogin() (bool, error) {
 	return openAtLogin(loginID(exe))
 }
 
-// instanceName is the id App.SingleInstance last claimed, which names the
-// app's login item where no bundle identifier does.
+// instanceName is the id App.SingleInstance last claimed: the app's id
+// where neither a bundle identifier nor a linked one is.
 var instanceName atomic.Pointer[string]
 
 // loginExecutable is the path of the running executable, links resolved:
@@ -66,27 +67,10 @@ func loginExecutable() (string, error) {
 	return exe, nil
 }
 
-// loginID is the name the login item of the app running exe is kept under.
+// loginID is the name the login item of the app running exe is kept under:
+// the app's id, made a single file name.
 func loginID(exe string) string {
-	instance := ""
-	if p := instanceName.Load(); p != nil {
-		instance = *p
-	}
-	return chooseLoginID(bundleID(), instance, exe)
-}
-
-// chooseLoginID is the first of the bundle identifier and the instance id
-// that is set, or else the executable's name without its extension, made
-// a single file name.
-func chooseLoginID(bundle, instance, exe string) string {
-	id := bundle
-	if id == "" {
-		id = instance
-	}
-	if id == "" {
-		base := filepath.Base(exe)
-		id = strings.TrimSuffix(base, filepath.Ext(base))
-	}
+	id, _ := appIDOf(exe)
 	return placementDirName(id)
 }
 

@@ -191,9 +191,7 @@ func (a *App) Run() error {
 	}()
 	appRunning.Store(true)
 	runningApp.Store(a)
-	// Holding a key on macOS pops up the accent menu, as it does in every
-	// text field on the platform; text editing relies on it.
-	return ggwd.Run(ggwd.HandlerFunc(a.handleEvent), &ggwd.RunOptions{MacOS: ggwd.MacOSOptions{PressAndHold: true}})
+	return ggwd.Run(ggwd.HandlerFunc(a.handleEvent), runOptions(appID()))
 }
 
 // handleEvent is the App's ggwd.Handler. It opens the windows made before
@@ -535,10 +533,12 @@ func (a *App) ShowFromTray() {
 // it before Run. When another process already runs the app, that process
 // is handed this launch's arguments and working directory, and
 // SingleInstance returns runtime.ErrRunning: return from main without
-// calling Run. The id also names the directory where windows keep the
-// placements Config.Remember asks for, which is otherwise named for the
-// main window's title, and the login item SetOpenAtLogin registers where
-// the app runs from no bundle with an identifier of its own.
+// calling Run. Where the app has no id of its own, from a bundle or
+// linked in by ggui build, this id becomes AppID: it names the directory
+// where windows keep the placements Config.Remember asks for, which is
+// otherwise named for the main window's title, the login item
+// SetOpenAtLogin registers, and on X11 the windows' class. Give it the
+// app's project id, so that a dev run and a built app agree.
 //
 // In the process that runs, fn receives every later launch on the UI
 // thread, where UseWindow is the window that last had the focus. It is
