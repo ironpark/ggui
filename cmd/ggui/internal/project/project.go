@@ -113,6 +113,9 @@ type Main struct {
 	// ID is the bundle identifier: app.id, or one made from the import
 	// path.
 	ID string
+	// SysoFiles are the object files in Dir the go command links into
+	// the program, for the platform and tags it was listed with.
+	SysoFiles []string
 }
 
 // ResolveMain lists the main package, which also checks it is one.
@@ -126,7 +129,7 @@ func (p *Project) ResolveMain(ctx context.Context, arg string, lo gotool.ListOpt
 	if err != nil {
 		return nil, err
 	}
-	m := &Main{Package: pkg, Dir: mp.Dir, ImportPath: mp.ImportPath}
+	m := &Main{Package: pkg, Dir: mp.Dir, ImportPath: mp.ImportPath, SysoFiles: mp.SysoFiles}
 	m.Executable = filepath.Base(mp.Dir)
 	if m.Executable == "." || m.Executable == string(filepath.Separator) {
 		m.Executable = "app"

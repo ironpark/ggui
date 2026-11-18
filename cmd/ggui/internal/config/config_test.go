@@ -51,6 +51,13 @@ NSCameraUsageDescription = "Scans documents."
 LSUIElement = true
 CFBundleURLTypes = [{ CFBundleURLSchemes = ["hello"] }]
 
+[windows]
+description = "Says hello"
+company = "Example Ltd"
+copyright = "© 2026 Example Ltd"
+console = true
+manifest = "app.manifest"
+
 [web]
 title = "Hello"
 base = "/app/"
@@ -72,6 +79,10 @@ wasm_opt = "-Oz"
 	}
 	if cfg.MacOS.Plist["LSUIElement"] != true {
 		t.Errorf("plist = %#v", cfg.MacOS.Plist)
+	}
+	want := Windows{Description: "Says hello", Company: "Example Ltd", Copyright: "© 2026 Example Ltd", Console: true, Manifest: "app.manifest"}
+	if cfg.Windows != want {
+		t.Errorf("windows = %+v, want %+v", cfg.Windows, want)
 	}
 }
 
@@ -114,7 +125,8 @@ func TestUnknownKeys(t *testing.T) {
 		{"misspelt key", "[app]\nname = \"a\"\nnmae = \"b\"\n", 3, `unknown key "app.nmae" (did you mean "app.name"?)`},
 		{"key in the wrong table", "[app]\nwasm_opt = \"-O2\"\n", 2, `unknown key "app.wasm_opt"; [app] takes name, id, version, icon, package`},
 		{"unknown table, reported once", "[app]\n\n[mac]\nfoo = 1\nbar = 2\n", 3, `unknown key "mac" (did you mean "macos"?)`},
-		{"unknown top-level key", "titel = \"x\"\n", 1, `unknown key "titel"; the tables are [app], [build], [dev], [macos], [web]`},
+		{"unknown top-level key", "titel = \"x\"\n", 1, `unknown key "titel"; the tables are [app], [build], [dev], [macos], [windows], [web]`},
+		{"misspelt Windows key", "[windows]\nconsle = true\n", 2, `unknown key "windows.consle" (did you mean "windows.console"?)`},
 		{"dotted key", "web.titel = \"x\"\n", 1, `unknown key "web.titel" (did you mean "web.title"?)`},
 		{"quoted key", "[dev]\n\"tag\" = [\"a\"]\n", 2, `unknown key "dev.tag" (did you mean "dev.tags"?)`},
 		{"after a multi-line array", "[dev]\nargs = [\n  \"a=b\",\n]\nwach = []\n", 5, `unknown key "dev.wach"`},
@@ -289,7 +301,7 @@ func TestTemplate(t *testing.T) {
 	if !reflect.DeepEqual(cfg, want) {
 		t.Errorf("template parses to %+v, want %+v", cfg, want)
 	}
-	for _, table := range []string{"app", "build", "dev", "macos", "macos.notary", "macos.dmg", "macos.pkg", "web"} {
+	for _, table := range []string{"app", "build", "dev", "macos", "macos.notary", "macos.dmg", "macos.pkg", "windows", "web"} {
 		for _, key := range knownKeys(strings.Split(table, ".")) {
 			if !strings.Contains(string(data), "\n"+key+" =") && !strings.Contains(string(data), "\n# "+key+" =") &&
 				!strings.Contains(string(data), "["+table+"."+key+"]") {

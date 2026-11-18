@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -29,7 +28,13 @@ func command(ctx context.Context, dir string, env []string, args ...string) *exe
 	cmd := exec.CommandContext(ctx, Go, args...)
 	cmd.Dir = dir
 	if len(env) > 0 {
-		cmd.Env = append(os.Environ(), env...)
+		// Environ, not os.Environ: it sets PWD to dir, as a command
+		// without an Env of its own gets. The go command takes its
+		// working directory from PWD when PWD names it, and otherwise
+		// from the system, which resolves symbolic links; a package
+		// named by a path through one, such as macOS's /var/folders
+		// for /private/var/folders, would then lie outside the module.
+		cmd.Env = append(cmd.Environ(), env...)
 	}
 	cmd.Cancel = func() error { return interrupt(cmd.Process) }
 	cmd.WaitDelay = 5 * time.Second

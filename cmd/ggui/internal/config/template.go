@@ -18,17 +18,20 @@ var fileTemplate = template.Must(template.New(FileName).Parse(`# ggui.toml confi
 # Reference: https://github.com/ironpark/ggui/blob/main/docs/cli.md
 
 [app]
-# The name people see: the .app bundle's name and the macOS menu title.
+# The name people see: the .app bundle's name and the macOS menu title,
+# and the Windows program's, Name.exe.
 # Default: the name of the main package's directory.
 name = {{.Name}}
 # Reverse-DNS bundle identifier. macOS keys preferences, permissions and
 # the Dock to it, so pick it once and keep it.
 id = {{.ID}}
 # User-visible version, one to three numbers: Info.plist's
-# CFBundleShortVersionString and CFBundleVersion.
+# CFBundleShortVersionString and CFBundleVersion, and the Windows
+# program's file and product version, where each number is at most 65535.
 version = {{.Version}}
-# A square PNG, ideally 1024x1024, turned into the macOS app icon.
-# Default: none, and the bundle has the generic icon.
+# A square PNG, ideally 1024x1024, turned into the macOS app icon and the
+# Windows program's icon.
+# Default: none, and the app has the generic icon.
 # icon = "icon.png"
 # The directory of the main package.
 # package = "."
@@ -151,6 +154,25 @@ version = {{.Version}}
 # scripts = ""
 # A plain-text license the installer shows and asks to accept.
 # license = ""
+
+[windows]
+# ggui build --target windows makes Name.exe with app.icon as its icon, a
+# manifest, and version information from [app] and the keys below, which
+# Explorer shows under Properties > Details.
+# The description Task Manager and the taskbar's menus call the program
+# by. Default: app.name.
+# description = ""
+# The company and the copyright notice; left out when empty.
+# company = ""
+# copyright = ""
+# Link the program for the console, so that Windows opens a console window
+# for its output, as for debugging. By default it is a GUI program that
+# opens none. Same as --console.
+# console = false
+# An application manifest to link instead of the one ggui writes, which
+# asks for per-monitor DPI awareness, the themed common controls, the
+# UTF-8 code page and long paths, and runs as the user who starts it.
+# manifest = ""
 
 [web]
 # The page title. Default: app.name.

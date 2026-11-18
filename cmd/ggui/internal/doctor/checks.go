@@ -16,6 +16,7 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/config"
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
+	"github.com/ironpark/ggui/cmd/ggui/internal/windows"
 )
 
 // Module paths the project is checked for.
@@ -238,7 +239,49 @@ func checkConfig(r *Report, o Options) *project.Project {
 	if icon := proj.Config.App.Icon; icon != "" {
 		checkIcon(r, proj.Path(icon))
 	}
+	checkWindowsBuild(r, proj)
 	return proj
+}
+
+// checkWindowsBuild checks what ggui build --target windows takes from
+// ggui.toml beyond what the file's own validation does, since macOS takes
+// it as it is: a version whose parts fit Windows' 16 bits, a name a file
+// can have, and a manifest Windows can parse.
+func checkWindowsBuild(r *Report, proj *project.Project) {
+	cfg := proj.Config
+	var problems []string
+	if _, err := windows.ParseVersion(cfg.App.Version); err != nil {
+		problems = append(problems, "app.version: "+err.Error())
+	}
+	if cfg.App.Name != "" {
+		if err := windows.CheckFileName(cfg.App.Name); err != nil {
+			problems = append(problems, err.Error())
+		}
+	}
+	manifest := "ggui's manifest"
+	if m := cfg.Windows.Manifest; m != "" {
+		if _, err := windows.ReadManifest(proj.Path(m)); err != nil {
+			problems = append(problems, "windows.manifest: "+err.Error())
+		}
+		manifest = "the manifest " + m
+	}
+	if len(problems) > 0 {
+		r.fail("Windows build", strings.Join(problems, "\n"), "ggui build --target windows needs these fixed; other targets build as they are")
+		return
+	}
+	name := cfg.App.Name
+	if name == "" {
+		name = "the main package's name"
+	}
+	link := "a GUI program"
+	if cfg.Windows.Console {
+		link = "a console program (windows.console)"
+	}
+	icon := "no icon"
+	if cfg.App.Icon != "" {
+		icon = "app.icon"
+	}
+	r.ok("Windows build", fmt.Sprintf("%s.exe, %s, with %s, version %s and %s", name, link, icon, cfg.App.Version, manifest))
 }
 
 func checkIcon(r *Report, path string) {
@@ -257,6 +300,8 @@ func checkIcon(r *Report, path string) {
 		r.fail("icon", fmt.Sprintf("%s is %d×%d; it must be square", path, cfg.Width, cfg.Height), "")
 	case cfg.Width < 64:
 		r.fail("icon", fmt.Sprintf("%s is %d×%d; it must be at least 64×64", path, cfg.Width, cfg.Height), "")
+	case cfg.Width < 256:
+		r.warn("icon", fmt.Sprintf("%s is %d×%d; Windows' largest icon is 256×256, and a Retina Dock and Finder want 1024×1024", path, cfg.Width, cfg.Height), "")
 	case cfg.Width < 1024:
 		r.warn("icon", fmt.Sprintf("%s is %d×%d; a Retina Dock and Finder want 1024×1024", path, cfg.Width, cfg.Height), "")
 	default:

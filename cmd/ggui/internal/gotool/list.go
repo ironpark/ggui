@@ -96,7 +96,7 @@ func Deps(ctx context.Context, o ListOptions, pkg string) ([]Package, error) {
 
 // Main returns pkg itself, which must be a main package.
 func Main(ctx context.Context, o ListOptions, pkg string) (*Package, error) {
-	args := []string{"list", "-e", "-json=ImportPath,Name,Dir,Module,Error"}
+	args := []string{"list", "-e", "-json=ImportPath,Name,Dir,Module,SysoFiles,Error"}
 	if len(o.Tags) > 0 {
 		args = append(args, "-tags", strings.Join(o.Tags, ","))
 	}
