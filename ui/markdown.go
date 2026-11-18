@@ -529,6 +529,7 @@ type mdQuote struct {
 	bar   float64
 	inset float64
 	rtl   bool
+	words *Strings // from Layout, for the node Paint describes
 }
 
 func (q *mdQuote) update(b markdown.Block) bool {
@@ -540,6 +541,7 @@ func (q *mdQuote) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer q.props.Layout().EndLayout()
 	q.theme = uitheme.Of(env)
 	q.rtl = env.Direction() == ggui.DirRTL
+	q.words = stringsOf(env)
 	q.bar = max(2, 2*q.theme.BorderWidth)
 	q.inset = q.bar + q.m.style.base*.85
 	sz := q.body.Layout(inset(c, q.inset), env.WithText(ggui.TextStyle{Color: uitheme.MutedFg}))
@@ -554,7 +556,7 @@ func (q *mdQuote) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		body.Origin.X = r.Origin.X
 	}
 	dst.FillRoundRect(bar, q.bar/2, q.theme.Border)
-	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Description: "Block quote"}, func(dst *ggui.Canvas) { dst.Paint(q.body, body) })
+	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Description: q.words.BlockQuote}, func(dst *ggui.Canvas) { dst.Paint(q.body, body) })
 }
 
 // inset takes w off the widths c allows, for content set in by it.

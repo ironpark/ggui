@@ -112,6 +112,7 @@ type Strings struct {
 	CodeName              string // a CodeBlock with no title or language: "Code"
 	CopyCode              string // a CodeBlock's copy button: "Copy code"
 	CodeCopied            string // what is read once it copied: "Code copied"
+	BlockQuote            string // a quote in Markdown: "Block quote"
 	HighlightedLineFormat string // a highlighted line; %d is its number: "Highlighted line %d"
 	AddedLineFormat       string // an added line; %d is its number: "Added line %d"
 	RemovedLineFormat     string // a removed line; %d is its number: "Removed line %d"
@@ -261,6 +262,7 @@ var english = sync.OnceValue(func() *Strings {
 		CodeName:              "Code",
 		CopyCode:              "Copy code",
 		CodeCopied:            "Code copied",
+		BlockQuote:            "Block quote",
 		HighlightedLineFormat: "Highlighted line %d",
 		AddedLineFormat:       "Added line %d",
 		RemovedLineFormat:     "Removed line %d",
