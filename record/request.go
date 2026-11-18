@@ -34,6 +34,7 @@ type request struct {
 	Colors int     `json:"colors,omitempty"`
 	Dither float64 `json:"dither,omitempty"`
 	Loop   int     `json:"loop,omitempty"`
+	Lossy  int     `json:"lossy,omitempty"`
 	// Frame is "mac" or "none", in place of the tour's Frame; "" keeps
 	// it. Backdrop is "#RRGGBB" or "transparent". NoCursor leaves the
 	// cursor out.
@@ -123,6 +124,7 @@ func serveTo(raw string, stdout io.Writer) (int, error) {
 	if req.Colors != 0 {
 		Colors(req.Colors)(o)
 	}
+	Lossy(req.Lossy)(o)
 	o.noCursor = req.NoCursor
 	if req.Frame != "" {
 		f, err := parseFrame(req.Frame)
