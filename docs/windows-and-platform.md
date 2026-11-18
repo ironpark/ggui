@@ -21,6 +21,7 @@ system appearance and a single running instance.
 - [Light and dark](#light-and-dark)
 - [One instance](#one-instance)
 - [System languages](#system-languages)
+- [Open at login](#open-at-login)
 - [Platform support](#platform-support)
 
 ## Several windows
@@ -370,6 +371,42 @@ in gettext, a `C` or `POSIX` locale asks for no translation and leaves
 `LANGUAGE` unread. A POSIX name such as `ko_KR.UTF-8@mod` becomes `ko-KR`, and
 each tag appears once.
 
+## Open at login
+
+`ggui.SetOpenAtLogin(true)` has the system start the app when the user logs in,
+and `SetOpenAtLogin(false)` stops it; `ggui.OpenAtLogin()` reports whether it
+will. Call them from a setting the user changes, not on every launch, and show
+`OpenAtLogin` as that setting's state:
+
+```go
+on, err := ggui.OpenAtLogin()
+if err == nil {
+    openAtLogin.Set(on)
+}
+...
+ui.Switch(ggui.Bind(openAtLogin.Get, func(v bool) {
+    if err := ggui.SetOpenAtLogin(v); err == nil {
+        openAtLogin.Set(v)
+    }
+}), "Open at login")
+```
+
+What is registered is the executable running now, links resolved, so call it
+from the installed app; an app inside a bundle registers its
+`Contents/MacOS/<name>`. The registration is named for the app: the bundle
+identifier on macOS when the app runs from a bundle, else the id given to
+`app.SingleInstance`, else the executable's name. Keep it the same between
+releases, so a new version finds what an old one registered.
+
+| Platform | Registration |
+| --- | --- |
+| macOS | A LaunchAgent, `~/Library/LaunchAgents/<id>.plist`, with `RunAtLoad`. It takes effect from the next login, and System Settings lists it under Login Items. |
+| Windows | A value named `<id>` in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, holding the quoted path. An entry the user turned off in Task Manager counts as off, and `SetOpenAtLogin` turns it back on. |
+| Linux and BSD | An XDG autostart entry, `$XDG_CONFIG_HOME/autostart/<id>.desktop` (`~/.config/autostart` by default). |
+| Browser | Unsupported: both return an error wrapping `errors.ErrUnsupported`. |
+
+The files are written whole through a temporary file renamed over the old one.
+
 ## Platform support
 
 | Feature | macOS | Windows | Linux | Browser |
@@ -384,5 +421,6 @@ each tag appears once.
 | `SystemDark` | Yes | Yes | Yes | Yes |
 | `SingleInstance` | Yes | Yes | Yes | Every tab is one |
 | `SystemLanguages` | Yes | Yes | Environment | `navigator.languages` |
+| `SetOpenAtLogin` | LaunchAgent | `Run` key | XDG autostart | No |
 | `runtime.OpenURL` | `open` | Default handler | `xdg-open` | New tab |
 | `runtime.Reveal` | Selected in Finder | Selected in Explorer | FileManager1 over D-Bus, else the folder | No |
