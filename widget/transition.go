@@ -266,18 +266,20 @@ func Presence(show ggui.Readable[bool], child ggui.Widget) ggui.Widget {
 // SwitcherWidget shows the subtree built for the current key and animates
 // between subtrees when the key changes: the new one plays its enter
 // Transition while the old one plays the same Transition backwards on top
-// of nothing, inert to input, and is disposed when it is gone. Build one
-// with Switcher.
+// of nothing, inert to input, and is disposed when it is gone. Sequential
+// has the old one leave before the new one enters instead. Build one with
+// Switcher.
 type SwitcherWidget[K comparable] struct {
 	comp  *ggui.ComponentWidget
 	key   ggui.Readable[K]
 	build func(K) ggui.Widget
 
-	fade     bool
-	dx, dy   float64
-	from     float64 // starting scale, 0 for none
-	duration time.Duration
-	ease     ggui.Easing
+	fade         bool
+	dx, dy       float64
+	from         float64 // starting scale, 0 for none
+	leave, enter time.Duration
+	ease         ggui.Easing
+	sequential   bool
 
 	props   property.Owner
 	entries []*switchEntry // oldest first; the last is the current key's
@@ -294,6 +296,14 @@ type switchEntry struct {
 	from    float64       // its progress then
 	d       time.Duration // how long a full move takes, as of its switch
 	leaving bool
+	// waiting is a sequential switcher's new subtree while the old one
+	// leaves: mounted, but neither laid out nor painted until it enters.
+	waiting bool
+}
+
+// end returns when a leaving e is gone.
+func (e *switchEntry) end() time.Time {
+	return e.since.Add(time.Duration(e.from * float64(e.d)))
 }
 
 // progress returns how far in e is at now, from zero to one.
@@ -311,14 +321,15 @@ func (e *switchEntry) progress(now time.Time) float64 {
 
 // Switcher builds a subtree for key's value, as Key does, and cross-fades
 // to a new one when the value changes: the old subtree stays, inert, until
-// it has faded out. The first subtree appears without animating. Like Key,
+// it has faded out; Sequential has it leave before the new one enters. The
+// first subtree appears without animating. Like Key,
 // build is untracked and owns what it creates; each subtree is disposed
 // once it has left. Its options may change after mount; they apply from
 // the next switch.
 //
 //	widget.Switcher(tab, func(t Tab) ggui.Widget { return page(t) }).Slide(0, 8)
 func Switcher[K comparable](key ggui.Readable[K], build func(K) ggui.Widget) *SwitcherWidget[K] {
-	s := &SwitcherWidget[K]{key: key, build: build, duration: 200 * time.Millisecond, ease: ggui.EaseOut}
+	s := &SwitcherWidget[K]{key: key, build: build, leave: 200 * time.Millisecond, enter: 200 * time.Millisecond, ease: ggui.EaseOut}
 	s.comp = ggui.Component(func() ggui.Widget {
 		scope := ggui.UseScope()
 		ggui.OnCleanup(func() {
@@ -355,9 +366,29 @@ func (s *SwitcherWidget[K]) Scale(from float64) *SwitcherWidget[K] {
 	return s
 }
 
-// Duration sets how long a switch takes, 200ms by default.
+// Duration sets how long a switch takes, 200ms by default: both how long
+// the old subtree takes to leave and how long the new one takes to enter.
 func (s *SwitcherWidget[K]) Duration(d time.Duration) *SwitcherWidget[K] {
-	s.duration = d
+	return s.Durations(d, d)
+}
+
+// Durations sets how long the old subtree takes to leave and how long the
+// new one takes to enter. Under Sequential a switch takes their sum.
+func (s *SwitcherWidget[K]) Durations(leave, enter time.Duration) *SwitcherWidget[K] {
+	s.leave, s.enter = leave, enter
+	return s
+}
+
+// Sequential makes a switch play its two halves one after the other: the
+// old subtree leaves first, and only once it is gone does the new one
+// enter. The new subtree is built at the switch but is not shown, and takes
+// no input, while it waits; the switcher is the leaving subtree's size
+// until then, and the entering one's after. A switch while the old subtree
+// is still leaving replaces the one waiting, which is disposed without
+// having shown; a switch while the new one enters sends it away from as far
+// in as it got.
+func (s *SwitcherWidget[K]) Sequential() *SwitcherWidget[K] {
+	s.sequential = true
 	return s
 }
 
@@ -367,21 +398,32 @@ func (s *SwitcherWidget[K]) Easing(e ggui.Easing) *SwitcherWidget[K] {
 	return s
 }
 
-// change makes v's subtree the current one and sends the rest away.
+// change makes v's subtree the current one and sends the rest away. A
+// subtree still waiting to enter never showed, so it goes at once.
 func (s *SwitcherWidget[K]) change(v K, scope ggui.Scope, first bool) {
 	now := ggui.FrameTime()
+	s.entries = slices.DeleteFunc(s.entries, func(e *switchEntry) bool {
+		if e.waiting {
+			e.dispose()
+		}
+		return e.waiting
+	})
+	others := false
 	for _, e := range s.entries {
 		if !e.leaving {
 			e.from, e.since, e.leaving = e.progress(now), now, true
+			e.d = s.leave
 		}
+		others = true
 	}
-	e := &switchEntry{since: now, from: gem.Pick(first, 1.0, 0.0), d: s.duration}
+	e := &switchEntry{since: now, from: gem.Pick(first, 1.0, 0.0), d: s.enter}
+	e.waiting = s.sequential && others
 	child, dispose := scope.Mount(func() ggui.Widget { return s.build(v) })
 	e.dispose = dispose
 	if child == nil {
 		child = Box()
 	}
-	t := Transition(child).Duration(s.duration).Easing(s.ease)
+	t := Transition(child).Duration(s.enter).Easing(s.ease)
 	if s.fade {
 		t.Fade()
 	}
@@ -401,23 +443,51 @@ func (s *SwitcherWidget[K]) change(v K, scope ggui.Scope, first bool) {
 type switcherBody[K comparable] struct{ s *SwitcherWidget[K] }
 
 // Layout implements Widget: as large as the largest subtree, the leaving
-// ones included, all anchored at the top-left corner as in a Stack.
+// ones included, all anchored at the top-left corner as in a Stack. A
+// subtree waiting to enter does not count.
 func (b *switcherBody[K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s := b.s
 	defer s.props.Layout().EndLayout()
 	s.reduced = env.ReducedMotion()
 	now := ggui.FrameTime()
+	var gone time.Time // when the last subtree to leave was gone
+	leaving := false
 	s.entries = slices.DeleteFunc(s.entries, func(e *switchEntry) bool {
 		if e.leaving && (s.reduced || e.progress(now) <= 0) {
+			if end := e.end(); end.After(gone) {
+				gone = end
+			}
 			e.dispose()
 			return true
 		}
+		leaving = leaving || e.leaving
 		return false
 	})
+	if !leaving {
+		for _, e := range s.entries {
+			if e.waiting {
+				// It enters from when the one before it was gone, so the
+				// two halves join up whenever this layout runs.
+				start := now
+				if !gone.IsZero() && gone.Before(now) {
+					start = gone
+					if start.Before(e.since) {
+						start = e.since
+					}
+				}
+				e.waiting, e.since = false, start
+			}
+		}
+	}
 	s.sizes = s.sizes[:0]
 	var total ggui.Size
 	moving := false
 	for _, e := range s.entries {
+		if e.waiting {
+			moving = true
+			s.sizes = append(s.sizes, ggui.Size{})
+			continue
+		}
 		e.t.drive(gem.Pick(s.reduced, 1.0, e.progress(now)), e.leaving)
 		moving = moving || e.leaving || e.t.progress < 1
 		size := e.t.Layout(c.Loosen(), env)
@@ -437,14 +507,19 @@ func (b *switcherBody[K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (b *switcherBody[K]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	s := b.s
 	for i, e := range s.entries {
-		dst.Paint(e.t, ggui.Rct(r.Origin, s.sizes[i]))
+		if !e.waiting {
+			dst.Paint(e.t, ggui.Rct(r.Origin, s.sizes[i]))
+		}
 	}
 }
 
-// Baseline implements Baseliner: the current subtree's.
+// Baseline implements Baseliner: the current subtree's, or while it waits
+// to enter, the leaving one's.
 func (b *switcherBody[K]) Baseline() (float64, bool) {
-	if n := len(b.s.entries); n > 0 {
-		return ggui.BaselineOf(b.s.entries[n-1].t)
+	for _, e := range slices.Backward(b.s.entries) {
+		if !e.waiting {
+			return ggui.BaselineOf(e.t)
+		}
 	}
 	return 0, false
 }
