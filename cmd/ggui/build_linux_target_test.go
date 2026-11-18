@@ -137,6 +137,53 @@ func TestBuildLinuxFormatFlag(t *testing.T) {
 	}
 }
 
+// --format replaces linux.formats, and the tree is made whatever either
+// says.
+func TestBuildLinuxFormatOverride(t *testing.T) {
+	if testing.Short() {
+		t.Skip("cross-compiles a program for Linux")
+	}
+	buildEnv(t)
+	dir := tiny(t)
+	f, err := os.OpenFile(filepath.Join(dir, "ggui.toml"), os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("[linux]\nformats = [\"deb\"]\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		args []string
+		want []string
+	}{
+		{nil, []string{"tiny-linux-amd64", "tiny_0.1.0_amd64.deb"}},
+		{[]string{"--format", "rpm,tar"}, []string{"tiny-0.1.0-1.x86_64.rpm", "tiny-0.1.0-linux-amd64.tar.gz", "tiny-linux-amd64"}},
+		{[]string{"--format", ""}, []string{"tiny-linux-amd64"}},
+	} {
+		out, code, said := buildLinux(t, dir, c.args...)
+		if code != 0 {
+			t.Fatalf("%v: exit %d: %s", c.args, code, said)
+		}
+		entries, err := os.ReadDir(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, e := range entries {
+			got = append(got, e.Name())
+		}
+		if !slices.Equal(got, c.want) {
+			t.Errorf("%v: made %v, want %v", c.args, got, c.want)
+		}
+		if deb := slices.Contains(c.want, "tiny_0.1.0_amd64.deb"); deb != strings.Contains(said, "linux.maintainer is not set") {
+			t.Errorf("%v: a deb, %v, but the warning:\n%s", c.args, deb, said)
+		}
+	}
+}
+
 func TestBuildLinuxArch(t *testing.T) {
 	if testing.Short() {
 		t.Skip("asks the go command")
@@ -169,8 +216,15 @@ func TestBuildLinuxInitApp(t *testing.T) {
 	}
 	os.WriteFile(filepath.Join(dir, "icon.svg"), []byte(circleSVG), 0o644)
 	setTOML(t, dir, `# icon = "icon.png"`, `icon = "icon.svg"`)
+	setTOML(t, dir, `# formats = ["tar"]`, `formats = ["tar", "deb", "rpm"]`)
+	setTOML(t, dir, `# categories = ["Utility"]`, `categories = ["Graphics", "Viewer"]`)
+	setTOML(t, dir, "Default: app.name.\n# description = \"\"\n# What kind", "Default: app.name.\ndescription = \"Says hello\"\n# What kind")
+	setTOML(t, dir, `# maintainer = ""`, `maintainer = "Jane Doe <jane@example.com>"`)
+	setTOML(t, dir, "SPDX expression such as \"MIT\".\n# license = \"\"", "SPDX expression such as \"MIT\".\nlicense = \"MIT\"")
+	setTOML(t, dir, `# depends_rpm = [`, `depends_rpm = ["libX11"]
+# [`)
 
-	out, code, said := buildLinux(t, dir, "--format", "tar,deb,rpm")
+	out, code, said := buildLinux(t, dir)
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, said)
 	}
@@ -208,17 +262,21 @@ func TestBuildLinuxInitApp(t *testing.T) {
 			t.Errorf("a package has\n  %s\nwant\n  %s", strings.Join(got, "\n  "), strings.Join(want, "\n  "))
 		}
 	}
-	if deb.Control["Package"] != "hello-world" || deb.Control["Architecture"] != "amd64" || !strings.Contains(deb.Control["Depends"], "libx11-6") {
+	if deb.Control["Package"] != "hello-world" || deb.Control["Architecture"] != "amd64" || deb.Control["Description"] != "Says hello" ||
+		deb.Control["Maintainer"] != "Jane Doe <jane@example.com>" || !strings.Contains(deb.Control["Depends"], "libx11-6") {
 		t.Errorf("deb control: %v", deb.Control)
 	}
-	if rpm.Name != "hello-world" || rpm.Arch != "x86_64" || !slices.Contains(rpm.Requires, "libX11") {
+	if rpm.Name != "hello-world" || rpm.Arch != "x86_64" || rpm.License != "MIT" || !slices.Contains(rpm.Requires, "libX11") || slices.Contains(rpm.Requires, "libXi") {
 		t.Errorf("rpm header: %+v", rpm)
+	}
+	if strings.Contains(said, "linux.maintainer") {
+		t.Errorf("warned of the maintainer, which is set:\n%s", said)
 	}
 	desktop, err := os.ReadFile(filepath.Join(tree, "usr/share/applications", id+".desktop"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, line := range []string{"Name=Hello World", "Exec=hello-world", "Icon=" + id, "StartupWMClass=" + id} {
+	for _, line := range []string{"Name=Hello World", "Comment=Says hello", "Exec=hello-world", "Icon=" + id, "Categories=Graphics;Viewer;", "StartupWMClass=" + id} {
 		if !bytes.Contains(desktop, []byte("\n"+line+"\n")) {
 			t.Errorf("the desktop entry has no line %s:\n%s", line, desktop)
 		}

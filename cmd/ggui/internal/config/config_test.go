@@ -146,7 +146,7 @@ func TestUnknownKeys(t *testing.T) {
 		{"misspelt key", "[app]\nname = \"a\"\nnmae = \"b\"\n", 3, `unknown key "app.nmae" (did you mean "app.name"?)`},
 		{"key in the wrong table", "[app]\nwasm_opt = \"-O2\"\n", 2, `unknown key "app.wasm_opt"; [app] takes name, id, version, icon, package`},
 		{"unknown table, reported once", "[app]\n\n[mac]\nfoo = 1\nbar = 2\n", 3, `unknown key "mac" (did you mean "macos"?)`},
-		{"unknown top-level key", "titel = \"x\"\n", 1, `unknown key "titel"; the tables are [app], [build], [dev], [macos], [windows], [web]`},
+		{"unknown top-level key", "titel = \"x\"\n", 1, `unknown key "titel"; the tables are [app], [build], [dev], [macos], [windows], [linux], [web]`},
 		{"misspelt Windows key", "[windows]\nconsle = true\n", 2, `unknown key "windows.consle" (did you mean "windows.console"?)`},
 		{"dotted key", "web.titel = \"x\"\n", 1, `unknown key "web.titel" (did you mean "web.title"?)`},
 		{"quoted key", "[dev]\n\"tag\" = [\"a\"]\n", 2, `unknown key "dev.tag" (did you mean "dev.tags"?)`},
@@ -215,6 +215,79 @@ wasm_opt = "O2"
 	for _, e := range es {
 		if !strings.HasPrefix(e.Msg, want[e.Line]) {
 			t.Errorf("line %d: %q, want a message about %s", e.Line, e.Msg, want[e.Line])
+		}
+	}
+}
+
+func TestLinux(t *testing.T) {
+	cfg, err := Parse("ggui.toml", []byte(`[linux]
+formats = ["tar", "deb", "rpm"]
+description = "Says hello"
+generic_name = "Greeter"
+categories = ["Utility", "X-Example"]
+mime_types = ["image/png", "x-scheme-handler/hello"]
+maintainer = "Jane Doe <jane@example.com>"
+homepage = "https://example.com"
+license = "MIT OR Apache-2.0"
+depends_deb = ["libx11-6", "libgl1 | libgles2"]
+depends_rpm = []
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Linux{
+		Formats:     []string{"tar", "deb", "rpm"},
+		Description: "Says hello",
+		GenericName: "Greeter",
+		Categories:  []string{"Utility", "X-Example"},
+		MIMETypes:   []string{"image/png", "x-scheme-handler/hello"},
+		Maintainer:  "Jane Doe <jane@example.com>",
+		Homepage:    "https://example.com",
+		License:     "MIT OR Apache-2.0",
+		DependsDeb:  []string{"libx11-6", "libgl1 | libgles2"},
+		DependsRPM:  []string{},
+	}
+	if !reflect.DeepEqual(cfg.Linux, want) {
+		t.Errorf("got %+v\nwant %+v", cfg.Linux, want)
+	}
+
+	d := Defaults().Linux
+	if !reflect.DeepEqual(d.Formats, []string{"tar"}) || !reflect.DeepEqual(d.Categories, []string{"Utility"}) ||
+		!reflect.DeepEqual(d.DependsDeb, DefaultDependsDeb) || !reflect.DeepEqual(d.DependsRPM, DefaultDependsRPM) {
+		t.Errorf("defaults: %+v", d)
+	}
+}
+
+func TestLinuxValidation(t *testing.T) {
+	es := errorsOf(t, `[linux]
+formats = ["tar", "zip", "tar"]
+description = "two\nlines"
+categories = ["Utility;Graphics"]
+mime_types = ["png"]
+maintainer = "jane@example.com"
+homepage = "example.com"
+license = "MIT/X11"
+depends_deb = ["libx11-6, libxi6"]
+depends_rpm = [""]
+`)
+	want := []string{
+		`linux.formats: "zip"`,
+		`linux.formats names "tar" twice`,
+		"linux.description",
+		"linux.categories",
+		"linux.mime_types",
+		"linux.maintainer",
+		"linux.homepage",
+		"linux.license",
+		"linux.depends_deb",
+		"linux.depends_rpm",
+	}
+	if len(es) != len(want) {
+		t.Fatalf("got %d errors, want %d:\n%v", len(es), len(want), es)
+	}
+	for i, e := range es {
+		if !strings.HasPrefix(e.Msg, want[i]) {
+			t.Errorf("error %d: %q, want one about %s", i, e.Msg, want[i])
 		}
 	}
 }
@@ -322,13 +395,25 @@ func TestTemplate(t *testing.T) {
 	if !reflect.DeepEqual(cfg, want) {
 		t.Errorf("template parses to %+v, want %+v", cfg, want)
 	}
-	for _, table := range []string{"app", "build", "dev", "macos", "macos.notary", "macos.dmg", "macos.pkg", "windows", "web"} {
+	for _, table := range []string{"app", "build", "dev", "macos", "macos.notary", "macos.dmg", "macos.pkg", "windows", "linux", "web"} {
 		for _, key := range knownKeys(strings.Split(table, ".")) {
 			if !strings.Contains(string(data), "\n"+key+" =") && !strings.Contains(string(data), "\n# "+key+" =") &&
 				!strings.Contains(string(data), "["+table+"."+key+"]") {
 				t.Errorf("template does not document %s.%s", table, key)
 			}
 		}
+	}
+
+	// The defaults [linux] shows commented out are the defaults.
+	src := string(data)
+	for _, key := range []string{"formats", "categories", "depends_deb", "depends_rpm"} {
+		src = strings.Replace(src, "\n# "+key+" = [", "\n"+key+" = [", 1)
+	}
+	if cfg, err = Parse("ggui.toml", []byte(src)); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(cfg.Linux, Defaults().Linux) {
+		t.Errorf("the template's [linux] is %+v, the defaults %+v", cfg.Linux, Defaults().Linux)
 	}
 }
 

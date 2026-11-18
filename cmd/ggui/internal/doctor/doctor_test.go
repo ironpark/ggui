@@ -108,6 +108,31 @@ func TestCheckWindowsBuild(t *testing.T) {
 	}
 }
 
+// The Linux line names what a build makes, and warns of an ID, and for
+// packages a maintainer and license, left unset.
+func TestCheckLinuxBuild(t *testing.T) {
+	for _, tc := range []struct {
+		name, src string
+		want      Status
+		detail    string
+	}{
+		{"defaults", "", Warn, "the main package's name, version 0.1.0, a desktop entry named for an ID made from the import path; the install tree and tar"},
+		{"tarball", "[app]\nname = \"Hello World\"\nid = \"com.example.hello\"\n", OK, "hello-world, version 0.1.0, desktop entry com.example.hello.desktop; the install tree and tar"},
+		{"packages", "[app]\nid = \"com.example.hello\"\n[linux]\nformats = [\"deb\"]\n", Warn, "linux.maintainer"},
+		{"shippable", "[app]\nid = \"com.example.hello\"\n[linux]\nformats = [\"deb\", \"rpm\"]\nmaintainer = \"J <j@example.com>\"\nlicense = \"MIT\"\n", OK, "deb, rpm"},
+	} {
+		cfg, err := config.Parse("ggui.toml", []byte(tc.src))
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		r := &Report{}
+		checkLinuxBuild(r, &project.Project{Config: cfg})
+		if len(r.Checks) != 1 || r.Checks[0].Status != tc.want || !strings.Contains(r.Checks[0].Detail+r.Checks[0].Fix, tc.detail) {
+			t.Errorf("%s: %+v, want %s with %q", tc.name, r.Checks, tc.want, tc.detail)
+		}
+	}
+}
+
 func TestReportOutput(t *testing.T) {
 	r := &Report{}
 	r.ok("go", "go1.27.3")

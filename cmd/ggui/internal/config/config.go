@@ -40,6 +40,7 @@ type Config struct {
 	Dev     Dev     `toml:"dev"`
 	MacOS   MacOS   `toml:"macos"`
 	Windows Windows `toml:"windows"`
+	Linux   Linux   `toml:"linux"`
 	Web     Web     `toml:"web"`
 }
 
@@ -194,6 +195,50 @@ type Windows struct {
 	Manifest string `toml:"manifest"`
 }
 
+// Linux holds what only the Linux install tree and the packages made of
+// it use. Its name, ID, version and icon are app's.
+type Linux struct {
+	// Formats are what ggui build --target linux makes of the tree:
+	// "tar", "deb" and "rpm".
+	Formats []string `toml:"formats"`
+	// Description is one line on what the app does: the desktop entry's
+	// Comment, the AppStream summary and the packages' description.
+	// Empty is app.name.
+	Description string `toml:"description"`
+	// GenericName is what kind of program it is, such as "Image Viewer".
+	GenericName string `toml:"generic_name"`
+	// Categories are the desktop menu categories, from the freedesktop.org
+	// menu specification's registered ones.
+	Categories []string `toml:"categories"`
+	// MIMETypes are the types the app opens; with any, it is given the
+	// files or URLs it is opened with.
+	MIMETypes []string `toml:"mime_types"`
+	// Maintainer is "Name <email>", which a Debian package must name.
+	Maintainer string `toml:"maintainer"`
+	Homepage   string `toml:"homepage"`
+	// License is an SPDX license expression, such as MIT.
+	License string `toml:"license"`
+	// DependsDeb and DependsRPM are the packages' dependencies, in each
+	// format's syntax, replacing the libraries ggui's own need.
+	DependsDeb []string `toml:"depends_deb"`
+	DependsRPM []string `toml:"depends_rpm"`
+}
+
+// Default Linux package dependencies: the libraries ggwd and ggfx open at
+// run time, which a package manager cannot see, as each family names
+// their packages. libgl1 and libglvnd-glx hold libGL and GLX, libegl1 and
+// libglvnd-egl EGL, and each requires Mesa's drivers.
+var (
+	DefaultDependsDeb = []string{
+		"libx11-6", "libxrandr2", "libxi6", "libxcursor1", "libxinerama1", "libxext6", "libxrender1",
+		"libgl1", "libegl1",
+	}
+	DefaultDependsRPM = []string{
+		"libX11", "libXrandr", "libXi", "libXcursor", "libXinerama", "libXext", "libXrender",
+		"libglvnd-glx", "libglvnd-egl",
+	}
+)
+
 // Web holds what only the js/wasm bundle and its page use.
 type Web struct {
 	Title   string `toml:"title"`
@@ -237,6 +282,12 @@ func Defaults() Config {
 				Format:    "udzo",
 			},
 			PKG: PKG{InstallLocation: "/Applications"},
+		},
+		Linux: Linux{
+			Formats:    []string{"tar"},
+			Categories: []string{"Utility"},
+			DependsDeb: slices.Clone(DefaultDependsDeb),
+			DependsRPM: slices.Clone(DefaultDependsRPM),
 		},
 		Web: Web{Base: "/", WasmOpt: "-O2"},
 	}
@@ -552,6 +603,7 @@ func (c *Config) validate() []problem {
 			add(fmt.Sprintf("macos.plist.%s: %v", k, err), "macos", "plist", k)
 		}
 	}
+	ps = append(ps, c.Linux.validate()...)
 	if !strings.HasPrefix(c.Web.Base, "/") {
 		add(fmt.Sprintf("web.base %q must be an absolute path such as / or /app/", c.Web.Base), "web", "base")
 	}
@@ -634,6 +686,69 @@ func (m *MacOS) validateSigning() []problem {
 
 	if !strings.HasPrefix(m.PKG.InstallLocation, "/") {
 		add(fmt.Sprintf("macos.pkg.install_location %q must be an absolute path, such as /Applications", m.PKG.InstallLocation), "macos", "pkg", "install_location")
+	}
+	return ps
+}
+
+var (
+	categoryRE   = regexp.MustCompile(`^[A-Za-z0-9-]+$`)
+	mimeTypeRE   = regexp.MustCompile(`^[a-z0-9][a-z0-9.+-]*/[A-Za-z0-9][A-Za-z0-9.+_-]*$`)
+	maintainerRE = regexp.MustCompile(`^[^<>\n]*[^<>\s] <[^<>@\s]+@[^<>@\s]+>$`)
+	licenseRE    = regexp.MustCompile(`^[A-Za-z0-9.+:() -]+$`)
+)
+
+// LinuxFormats are what [linux] formats may name.
+var LinuxFormats = []string{"tar", "deb", "rpm"}
+
+// validate checks [linux]: values that would make a desktop entry or a
+// package that its readers refuse.
+func (l *Linux) validate() []problem {
+	var ps []problem
+	add := func(msg string, key ...string) { ps = append(ps, problem{toml.Key(key), msg}) }
+
+	for i, f := range l.Formats {
+		switch {
+		case !slices.Contains(LinuxFormats, f):
+			add(fmt.Sprintf(`linux.formats: %q must be "tar", "deb" or "rpm"`, f), "linux", "formats")
+		case slices.Index(l.Formats, f) != i:
+			add(fmt.Sprintf("linux.formats names %q twice", f), "linux", "formats")
+		}
+	}
+	for _, k := range []struct {
+		value, key string
+	}{{l.Description, "description"}, {l.GenericName, "generic_name"}} {
+		if strings.ContainsAny(k.value, "\n\r") {
+			add(fmt.Sprintf("linux.%s must be one line", k.key), "linux", k.key)
+		}
+	}
+	for _, c := range l.Categories {
+		if !categoryRE.MatchString(c) {
+			add(fmt.Sprintf("linux.categories: %q is not a menu category; use the registered names, such as Utility, Graphics or Development, each as its own string", c), "linux", "categories")
+		}
+	}
+	for _, m := range l.MIMETypes {
+		if !mimeTypeRE.MatchString(m) {
+			add(fmt.Sprintf("linux.mime_types: %q is not a MIME type such as image/png or x-scheme-handler/myapp", m), "linux", "mime_types")
+		}
+	}
+	if l.Maintainer != "" && !maintainerRE.MatchString(l.Maintainer) {
+		add(fmt.Sprintf(`linux.maintainer %q must be a name and an email address, such as "Jane Doe <jane@example.com>"`, l.Maintainer), "linux", "maintainer")
+	}
+	if l.Homepage != "" && !strings.HasPrefix(l.Homepage, "https://") && !strings.HasPrefix(l.Homepage, "http://") {
+		add(fmt.Sprintf("linux.homepage %q must be an http or https URL", l.Homepage), "linux", "homepage")
+	}
+	if l.License != "" && !licenseRE.MatchString(l.License) {
+		add(fmt.Sprintf("linux.license %q must be an SPDX license expression, such as MIT or Apache-2.0", l.License), "linux", "license")
+	}
+	for _, d := range []struct {
+		list []string
+		key  string
+	}{{l.DependsDeb, "depends_deb"}, {l.DependsRPM, "depends_rpm"}} {
+		for _, p := range d.list {
+			if strings.TrimSpace(p) == "" || strings.ContainsAny(p, ",\n") {
+				add(fmt.Sprintf("linux.%s: %q must name one dependency; give each as its own string", d.key, p), "linux", d.key)
+			}
+		}
 	}
 	return ps
 }

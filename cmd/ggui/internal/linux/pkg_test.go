@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ironpark/ggui/cmd/ggui/internal/config"
 	"github.com/ironpark/ggui/cmd/ggui/internal/linux"
 	"github.com/ironpark/ggui/cmd/ggui/internal/linux/linuxtest"
 )
@@ -87,7 +88,7 @@ func TestDeb(t *testing.T) {
 	for _, arch := range []struct{ goarch, deb string }{{"amd64", "amd64"}, {"arm64", "arm64"}, {"riscv64", "riscv64"}} {
 		t.Run(arch.goarch, func(t *testing.T) {
 			a.Arch = arch.goarch
-			p := linux.Package{App: a, Tree: tree(t, a), Depends: linux.DefaultDependsDeb, OutDir: t.TempDir()}
+			p := linux.Package{App: a, Tree: tree(t, a), Depends: config.DefaultDependsDeb, OutDir: t.TempDir()}
 			name, err := p.FileName("deb")
 			if err != nil {
 				t.Fatal(err)
@@ -139,7 +140,7 @@ func TestRPM(t *testing.T) {
 	for _, arch := range []struct{ goarch, rpm string }{{"amd64", "x86_64"}, {"arm64", "aarch64"}, {"riscv64", "riscv64"}} {
 		t.Run(arch.goarch, func(t *testing.T) {
 			a.Arch = arch.goarch
-			p := linux.Package{App: a, Tree: tree(t, a), Depends: linux.DefaultDependsRPM, OutDir: t.TempDir()}
+			p := linux.Package{App: a, Tree: tree(t, a), Depends: config.DefaultDependsRPM, OutDir: t.TempDir()}
 			path, err := p.Make("rpm")
 			if err != nil {
 				t.Fatal(err)
@@ -154,7 +155,7 @@ func TestRPM(t *testing.T) {
 			if r.Name != "hello-world" || r.Version != "1.2.0" || r.Release != "1" || r.Arch != arch.rpm || r.Summary != "Says hello" || r.License != "MIT" {
 				t.Errorf("header: %+v", r)
 			}
-			for _, d := range linux.DefaultDependsRPM {
+			for _, d := range config.DefaultDependsRPM {
 				if !slices.Contains(r.Requires, d) {
 					t.Errorf("requires %v, not %s", r.Requires, d)
 				}

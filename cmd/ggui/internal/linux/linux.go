@@ -17,9 +17,6 @@ import (
 // formats.
 var Arches = []string{"amd64", "arm64", "riscv64"}
 
-// Formats are what can be made from the install tree, beside it.
-var Formats = []string{"tar", "deb", "rpm"}
-
 // App is what the files of the tree say about the application.
 type App struct {
 	// Name is the name people see, the desktop entry's Name.

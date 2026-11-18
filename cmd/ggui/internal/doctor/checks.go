@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/config"
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
 	"github.com/ironpark/ggui/cmd/ggui/internal/i18n"
+	"github.com/ironpark/ggui/cmd/ggui/internal/linux"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 	"github.com/ironpark/ggui/cmd/ggui/internal/svgicon"
 	"github.com/ironpark/ggui/cmd/ggui/internal/windows"
@@ -242,7 +244,45 @@ func checkConfig(r *Report, o Options) *project.Project {
 		checkIcon(r, proj.Path(icon))
 	}
 	checkWindowsBuild(r, proj)
+	checkLinuxBuild(r, proj)
 	return proj
+}
+
+// checkLinuxBuild says what ggui build --target linux makes, which the
+// file's own validation has checked, and warns of what a package should
+// not ship without.
+func checkLinuxBuild(r *Report, proj *project.Project) {
+	cfg := proj.Config
+	l := cfg.Linux
+	name := "the main package's name"
+	if p := linux.PackageName(cfg.App.Name); p != "" {
+		name = p
+	}
+	entry := "desktop entry " + cfg.App.ID + ".desktop"
+	if cfg.App.ID == "" {
+		entry = "a desktop entry named for an ID made from the import path"
+	}
+	formats := "the install tree"
+	if len(l.Formats) > 0 {
+		formats += " and " + strings.Join(l.Formats, ", ")
+	}
+	detail := fmt.Sprintf("%s, version %s, %s; %s", name, linux.PackageVersion(cfg.App.Version), entry, formats)
+	packages := slices.Contains(l.Formats, "deb") || slices.Contains(l.Formats, "rpm")
+	var missing []string
+	if cfg.App.ID == "" {
+		missing = append(missing, "app.id, which names the desktop entry and the window class")
+	}
+	if packages && l.Maintainer == "" {
+		missing = append(missing, "linux.maintainer, which a Debian package names")
+	}
+	if packages && l.License == "" {
+		missing = append(missing, "linux.license")
+	}
+	if len(missing) > 0 {
+		r.warn("Linux build", detail, "set "+strings.Join(missing, "; ")+" in ggui.toml before shipping")
+		return
+	}
+	r.ok("Linux build", detail)
 }
 
 // checkTranslations sums up ggui i18n check, for a project with catalogs:

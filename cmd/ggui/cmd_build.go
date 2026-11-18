@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ironpark/ggui/cmd/ggui/internal/config"
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
 	"github.com/ironpark/ggui/cmd/ggui/internal/i18n"
 	"github.com/ironpark/ggui/cmd/ggui/internal/linux"
@@ -48,8 +49,9 @@ Targets:
   linux    an install tree, name-linux-arch, in the output directory: the
            program in usr/bin, built for the go command's GOARCH (amd64,
            arm64 or riscv64) without cgo, a desktop entry, the icon made
-           from app.icon in the hicolor sizes, and AppStream metadata.
-           Beside it what --format names: tar, the tarball
+           from app.icon in the hicolor sizes, and AppStream metadata,
+           from [app] and [linux]. Beside it what --format or
+           linux.formats names: tar, the tarball
            name-version-linux-arch.tar.gz (the default); deb, a Debian
            package; rpm, an RPM package.
   web      a directory for any static host: index.html, main.wasm and the
@@ -74,7 +76,7 @@ has the details.`,
 		out := fs.String("out", "", "the output `directory`, replacing build.output")
 		universal := fs.Bool("universal", false, "with --target macos, build for Apple silicon and Intel and join them with lipo (macOS only)")
 		console := fs.Bool("console", false, "with --target windows, link for the console, which Windows opens a window of, replacing windows.console")
-		format := fs.String("format", "", "with --target linux, what to make of the install tree: `formats` from tar, deb and rpm, comma-separated")
+		format := fs.String("format", "", "with --target linux, what to make of the install tree: `formats` from tar, deb and rpm, comma-separated, replacing linux.formats")
 		tags := fs.String("tags", "", "build `tags`, comma-separated, replacing build.tags")
 		ldflags := fs.String("ldflags", "", "linker `flags` after -s -w, replacing build.ldflags")
 		mf := macFlags{
@@ -164,7 +166,7 @@ has the details.`,
 			if *tgt != "windows" && isSet(fs, "console") {
 				return errors.New("--console is for a Windows build: add --target windows")
 			}
-			b.formats = []string{"tar"}
+			b.formats = cfg.Linux.Formats
 			if isSet(fs, "format") {
 				if *tgt != "linux" {
 					return errors.New("--format is for a Linux build: add --target linux")
@@ -227,8 +229,8 @@ func parseFormats(s string) ([]string, error) {
 		f = strings.ToLower(strings.TrimSpace(f))
 		switch {
 		case f == "":
-		case !slices.Contains(linux.Formats, f):
-			return nil, fmt.Errorf("--format %q: the formats are %s", f, strings.Join(linux.Formats, ", "))
+		case !slices.Contains(config.LinuxFormats, f):
+			return nil, fmt.Errorf("--format %q: the formats are %s", f, strings.Join(config.LinuxFormats, ", "))
 		case !slices.Contains(out, f):
 			out = append(out, f)
 		}
@@ -830,21 +832,29 @@ func (b *builder) windows(ctx context.Context) error {
 // linuxApp is what the Linux files say about the app.
 func (b *builder) linuxApp() linux.App {
 	cfg := b.proj.Config
+	l := cfg.Linux
 	return linux.App{
-		Name:    b.main.Name,
-		ID:      b.main.ID,
-		Package: linuxPackage(b.main),
-		Version: cfg.App.Version,
-		Arch:    b.arch,
+		Name:        b.main.Name,
+		GenericName: l.GenericName,
+		Summary:     l.Description,
+		ID:          b.main.ID,
+		Package:     linuxPackage(b.main),
+		Version:     cfg.App.Version,
+		Arch:        b.arch,
+		Categories:  l.Categories,
+		MIMETypes:   l.MIMETypes,
+		Homepage:    l.Homepage,
+		License:     l.License,
+		Maintainer:  l.Maintainer,
 	}
 }
 
 // depends returns what a package in format, deb or rpm, depends on.
 func (b *builder) depends(format string) []string {
 	if format == "deb" {
-		return linux.DefaultDependsDeb
+		return b.proj.Config.Linux.DependsDeb
 	}
-	return linux.DefaultDependsRPM
+	return b.proj.Config.Linux.DependsRPM
 }
 
 // linuxPackage is the package name, and the program's name in /usr/bin:
@@ -924,6 +934,9 @@ func (b *builder) linux(ctx context.Context) error {
 	}
 	if b.main.ID != cfg.App.ID {
 		log.Warn("app.id is not set, so the desktop entry is %s.desktop; set it in ggui.toml before shipping, since desktops match windows to entries by it", b.main.ID)
+	}
+	if cfg.Linux.Maintainer == "" && slices.Contains(b.formats, "deb") {
+		log.Warn("linux.maintainer is not set, so the Debian package names a placeholder; set it to \"Name <email>\" before shipping")
 	}
 	artifacts := []string{tree}
 
