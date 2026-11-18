@@ -230,6 +230,52 @@ version = {{.Version}}
 # Those like i18n.N: NAME, or NAME:ONE,OTHER when the singular and plural
 # forms are not the second and third arguments. As --plural.
 # plurals = ["trn"]
+
+[release]
+# ggui release builds the targets below for app.version, collects what
+# they make in build/release/VERSION with SHA256SUMS, and publishes it.
+# See docs/releasing.md.
+# The platforms to build: "macos", "windows" and "linux". Same as --targets.
+# targets = ["macos", "windows", "linux"]
+# The architectures each is built for where the target has them: "amd64",
+# "arm64", "386" and "riscv64". On a Mac, macOS is one universal build.
+# arches = ["amd64", "arm64"]
+# Where to publish: "github", "homebrew" and "choco". Same as --publish.
+# publish = ["github"]
+# The GitHub repository, "owner/repo". Default: the one git's origin names.
+# github = ""
+# The GitHub REST API, another for GitHub Enterprise.
+# github_api = "https://api.github.com"
+# What goes before app.version in the tag the release is made at.
+# tag_prefix = "v"
+# A Markdown file whose text describes the release. Same as --notes.
+# Default: a list of the files.
+# notes = ""
+
+# The Homebrew cask written into a tap for the macOS build.
+# [release.homebrew]
+# The tap's repository, which the token must be able to write.
+# tap = "owner/homebrew-tap"
+# The cask's token. Default: app.name, lowercased, with hyphens.
+# cask = ""
+# homepage = ""
+# One line on what the app does, not starting with "A" or the app's name.
+# desc = ""
+
+# The Chocolatey package made for the Windows build. The API key is read
+# from $CHOCOLATEY_API_KEY.
+# [release.chocolatey]
+# The package ID. Default: app.name, lowercased, with hyphens.
+# id = ""
+# authors = ""
+# project_url = ""
+# license_url = ""
+# icon_url = ""
+# tags = []
+# summary = ""
+# description = ""
+# The feed pushed to.
+# source = "https://push.chocolatey.org/"
 `))
 
 // Template returns the commented file ggui init writes.

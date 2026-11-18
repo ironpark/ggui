@@ -44,7 +44,63 @@ type Config struct {
 	Linux   Linux   `toml:"linux"`
 	Web     Web     `toml:"web"`
 	I18n    I18n    `toml:"i18n"`
+	Release Release `toml:"release"`
 }
+
+// Release is what ggui release builds and where it publishes it.
+type Release struct {
+	// Targets are the platforms built: "macos", "windows" and "linux".
+	Targets []string `toml:"targets"`
+	// Arches are the architectures each target is built for, where the
+	// target has them: "amd64", "arm64", "386" and "riscv64".
+	Arches []string `toml:"arches"`
+	// GitHub is the repository released to, "owner/repo"; empty is the
+	// one git's origin remote names.
+	GitHub string `toml:"github"`
+	// GitHubAPI is the REST API's root, another for GitHub Enterprise.
+	GitHubAPI string `toml:"github_api"`
+	// TagPrefix goes before the version to make the tag, v1.2.0.
+	TagPrefix string `toml:"tag_prefix"`
+	// Publish are the channels: "github", "homebrew" and "choco".
+	Publish []string `toml:"publish"`
+	// Notes is a Markdown file whose text is the release's description.
+	Notes      string     `toml:"notes"`
+	Homebrew   Homebrew   `toml:"homebrew"`
+	Chocolatey Chocolatey `toml:"chocolatey"`
+}
+
+// Homebrew is the cask ggui release writes into a tap.
+type Homebrew struct {
+	// Tap is the tap's repository, "owner/homebrew-name".
+	Tap string `toml:"tap"`
+	// Cask is the cask's token; empty is made from app.name.
+	Cask     string `toml:"cask"`
+	Homepage string `toml:"homepage"`
+	Desc     string `toml:"desc"`
+}
+
+// Chocolatey is the package ggui release makes for Chocolatey. The API key
+// comes from $CHOCOLATEY_API_KEY only.
+type Chocolatey struct {
+	// ID is the package's ID; empty is app.name lowercased.
+	ID          string   `toml:"id"`
+	Authors     string   `toml:"authors"`
+	ProjectURL  string   `toml:"project_url"`
+	LicenseURL  string   `toml:"license_url"`
+	IconURL     string   `toml:"icon_url"`
+	Tags        []string `toml:"tags"`
+	Summary     string   `toml:"summary"`
+	Description string   `toml:"description"`
+	// Source is the feed pushed to.
+	Source string `toml:"source"`
+}
+
+// What [release] may name.
+var (
+	ReleaseTargets  = []string{"macos", "windows", "linux"}
+	ReleaseArches   = []string{"amd64", "arm64", "386", "riscv64"}
+	ReleaseChannels = []string{"github", "homebrew", "choco"}
+)
 
 // I18n names the app's own functions that pass a message on to the i18n
 // package, for ggui i18n to read their calls as it reads i18n.T's and
@@ -304,6 +360,14 @@ func Defaults() Config {
 			DependsRPM: slices.Clone(DefaultDependsRPM),
 		},
 		Web: Web{Base: "/", WasmOpt: "-O2"},
+		Release: Release{
+			Targets:    slices.Clone(ReleaseTargets),
+			Arches:     []string{"amd64", "arm64"},
+			GitHubAPI:  "https://api.github.com",
+			TagPrefix:  "v",
+			Publish:    []string{"github"},
+			Chocolatey: Chocolatey{Source: "https://push.chocolatey.org/"},
+		},
 	}
 }
 
@@ -618,6 +682,7 @@ func (c *Config) validate() []problem {
 		}
 	}
 	ps = append(ps, c.Linux.validate()...)
+	ps = append(ps, c.Release.validate()...)
 	if !strings.HasPrefix(c.Web.Base, "/") {
 		add(fmt.Sprintf("web.base %q must be an absolute path such as / or /app/", c.Web.Base), "web", "base")
 	}
@@ -776,6 +841,117 @@ func (l *Linux) validate() []problem {
 		}
 	}
 	return ps
+}
+
+var (
+	// RepoRE matches a GitHub repository, owner/repo.
+	RepoRE = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]+$`)
+	// CaskTokenRE matches a Homebrew cask token.
+	CaskTokenRE = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*(?:@[a-z0-9.-]+)?$`)
+	// ChocoIDRE matches a Chocolatey package ID, which the community
+	// repository wants lowercase.
+	ChocoIDRE = regexp.MustCompile(`^[a-z0-9]+(?:[.-][a-z0-9]+)*$`)
+	// tagPrefixRE is what may go before the version in a git tag.
+	tagPrefixRE = regexp.MustCompile(`^[A-Za-z0-9._/-]*$`)
+)
+
+// validate checks [release] and its tables.
+func (r *Release) validate() []problem {
+	var ps []problem
+	add := func(msg string, key ...string) { ps = append(ps, problem{toml.Key(key), msg}) }
+	list := func(values, allowed []string, key string) {
+		if len(values) == 0 {
+			add(fmt.Sprintf("release.%s must name at least one of %s", key, quoteList(allowed)), "release", key)
+		}
+		for i, v := range values {
+			switch {
+			case !slices.Contains(allowed, v):
+				add(fmt.Sprintf("release.%s: %q must be one of %s", key, v, quoteList(allowed)), "release", key)
+			case slices.Index(values, v) != i:
+				add(fmt.Sprintf("release.%s names %q twice", key, v), "release", key)
+			}
+		}
+	}
+	list(r.Targets, ReleaseTargets, "targets")
+	list(r.Arches, ReleaseArches, "arches")
+	if r.GitHub != "" && !RepoRE.MatchString(r.GitHub) {
+		add(fmt.Sprintf(`release.github %q must be a repository, "owner/repo"`, r.GitHub), "release", "github")
+	}
+	if !httpURL(r.GitHubAPI) {
+		add(fmt.Sprintf("release.github_api %q must be an http or https URL, such as https://api.github.com or https://github.example.com/api/v3", r.GitHubAPI), "release", "github_api")
+	}
+	if !tagPrefixRE.MatchString(r.TagPrefix) || strings.Contains(r.TagPrefix, "..") || strings.HasPrefix(r.TagPrefix, "/") || strings.HasPrefix(r.TagPrefix, "-") {
+		add(fmt.Sprintf(`release.tag_prefix %q cannot begin a git tag; use letters, digits, ".", "_", "-" and "/", such as "v"`, r.TagPrefix), "release", "tag_prefix")
+	}
+	for i, v := range r.Publish {
+		switch {
+		case !slices.Contains(ReleaseChannels, v):
+			add(fmt.Sprintf("release.publish: %q must be one of %s", v, quoteList(ReleaseChannels)), "release", "publish")
+		case slices.Index(r.Publish, v) != i:
+			add(fmt.Sprintf("release.publish names %q twice", v), "release", "publish")
+		}
+	}
+	if strings.ContainsAny(r.Notes, "\n\r") {
+		add("release.notes must name one file", "release", "notes")
+	}
+
+	h := r.Homebrew
+	if h.Tap != "" && !RepoRE.MatchString(h.Tap) {
+		add(fmt.Sprintf(`release.homebrew.tap %q must be the tap's repository, "owner/homebrew-name"`, h.Tap), "release", "homebrew", "tap")
+	}
+	if h.Tap == "" && slices.Contains(r.Publish, "homebrew") {
+		add(`release.publish names "homebrew", which needs release.homebrew.tap, "owner/homebrew-name"`, "release", "publish")
+	}
+	if h.Cask != "" && !CaskTokenRE.MatchString(h.Cask) {
+		add(fmt.Sprintf("release.homebrew.cask %q is not a cask token: lowercase letters, digits and single hyphens, such as my-app", h.Cask), "release", "homebrew", "cask")
+	}
+	if h.Homepage != "" && !httpURL(h.Homepage) {
+		add(fmt.Sprintf("release.homebrew.homepage %q must be an http or https URL", h.Homepage), "release", "homebrew", "homepage")
+	}
+	if strings.ContainsAny(h.Desc, "\n\r") {
+		add("release.homebrew.desc must be one line", "release", "homebrew", "desc")
+	}
+
+	c := r.Chocolatey
+	if c.ID != "" && !ChocoIDRE.MatchString(c.ID) {
+		add(fmt.Sprintf("release.chocolatey.id %q is not a package ID: lowercase letters and digits, joined by single dots or hyphens, such as my-app", c.ID), "release", "chocolatey", "id")
+	}
+	for _, u := range []struct{ value, key string }{
+		{c.ProjectURL, "project_url"}, {c.LicenseURL, "license_url"}, {c.IconURL, "icon_url"},
+	} {
+		if u.value != "" && !httpURL(u.value) {
+			add(fmt.Sprintf("release.chocolatey.%s %q must be an http or https URL", u.key, u.value), "release", "chocolatey", u.key)
+		}
+	}
+	if !httpURL(c.Source) {
+		add(fmt.Sprintf("release.chocolatey.source %q must be an http or https URL, such as https://push.chocolatey.org/", c.Source), "release", "chocolatey", "source")
+	}
+	for _, t := range c.Tags {
+		if t == "" || strings.ContainsAny(t, " \t,\n") {
+			add(fmt.Sprintf("release.chocolatey.tags: %q must be one tag without spaces or commas; give each as its own string", t), "release", "chocolatey", "tags")
+		}
+	}
+	if strings.ContainsAny(c.Summary, "\n\r") {
+		add("release.chocolatey.summary must be one line", "release", "chocolatey", "summary")
+	}
+	return ps
+}
+
+func httpURL(s string) bool {
+	return strings.HasPrefix(s, "https://") && len(s) > len("https://") ||
+		strings.HasPrefix(s, "http://") && len(s) > len("http://")
+}
+
+// quoteList writes a, b and c as "a", "b" or "c".
+func quoteList(vs []string) string {
+	q := make([]string, len(vs))
+	for i, v := range vs {
+		q[i] = strconv.Quote(v)
+	}
+	if len(q) == 1 {
+		return q[0]
+	}
+	return strings.Join(q[:len(q)-1], ", ") + " or " + q[len(q)-1]
 }
 
 func hasExt(path string, exts ...string) bool {
