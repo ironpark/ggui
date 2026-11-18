@@ -743,9 +743,12 @@ The package is recognised by its import path, whatever name the file gives
 it, a dot import included. A Localizer is not: any method called `S` or
 `N`, in a file that imports the package, whose message argument is a
 string literal counts, so a method of another type with that name and
-those arguments would be read as one. A call to `i18n.T` or `i18n.N` whose
-message is not a literal, such as `i18n.T(key)`, cannot be checked or
-extracted, and is listed with its position.
+those arguments would be read as one. A constant of the call's package
+declared with a string literal, `const saved = "Saved"` in any of its
+files or in the function around the call, counts as that literal. A call
+to `i18n.T` or `i18n.N` whose message is neither, such as `i18n.T(key)`
+with `key` a variable or another package's constant, cannot be checked
+or extracted, and is listed with its position.
 
 Catalogs are of two forms. In Go, any composite literal of `i18n.Catalog`
 in the project, with its fields named; a translation that is not a literal
@@ -788,6 +791,49 @@ output, as lines to paste into its `Messages` and `Plurals`. With
 `--lang ko` it makes a new JSON catalog of every message instead, at
 `--out`, by default `locales/ko.json` in the project; a file already
 there is left alone.
+
+### Your own functions
+
+```sh
+ggui i18n check --func tr --plural trn
+ggui i18n check --func ui.T --func m.tr --func say:1 --plural count:0,1
+```
+
+An app that wraps the package in functions of its own, such as
+
+```go
+func tr(key string, args ...any) string { return loc.S(key, args...) }
+func trn(n int, one, other string, args ...any) string { return loc.N(n, one, other, args...) }
+```
+
+names them, so that their calls are read as `i18n.T`'s and `i18n.N`'s:
+`--func` for one like `T`, `--plural` for one like `N`, each repeated for
+more, or the same in [`ggui.toml`](#i18n), which the flags add to:
+
+```toml
+[i18n]
+funcs = ["tr", "ui.T"]
+plurals = ["trn"]
+```
+
+| Name | Matches |
+| --- | --- |
+| `tr` | a call of `tr`, and of any method called `tr`: `tr(…)`, `m.tr(…)`, `app.ui.tr(…)` |
+| `ui.T` | a call of `T` qualified by an import of a package called `ui`, by the name the file gives the import (`u.T(…)` after `import u "example.com/app/ui"`) or by the package's own; by anything else called `ui`, such as a variable; and `T(…)` unqualified in package `ui` itself or in a file that dot-imports it |
+| `NAME:POS` | with `--func`: the message is argument `POS`, from 0; 0 by default |
+| `NAME:ONE,OTHER` | with `--plural`: the singular and the plural form are arguments `ONE` and `OTHER`; `1,2` by default, after the count, as `i18n.N` has them |
+
+The source is read without its types, so a method is named by its name
+alone: `(*Model).tr` is refused, and `tr` matches a method called `tr` of
+any type. A package is matched by name, guessed from the last element of
+its import path (`gopkg.in/yaml.v3` is `yaml`, `example.com/go-ui/v2` is
+`ui`). A call of a wrapper counts in any file, not only those that import
+the i18n package, and `.Context("verb")` after it counts as after
+`i18n.T`. A wrapper's message that is not a literal or a constant is
+listed as one of `i18n.T`'s is, with the wrapper's name; but not inside a
+wrapper itself, where the message is one of its parameters passed on, as
+`key` is to `loc.S` above. A wrapper may be a function, a method, or a
+function literal assigned to a variable of its name.
 
 ## ggui record
 
@@ -1008,3 +1054,10 @@ What `ggui build --target linux` writes beyond `[app]`; see
 | `title` | `app.name` | The page title. |
 | `base` | `"/"` | The path the app is served below. An app using `router.Browser` passes the same path to it. |
 | `wasm_opt` | `"-O2"` | `wasm-opt` flags for `ggui build --target web`; `""` skips it. Without `wasm-opt` on `PATH` the binary ships as linked. |
+
+### [i18n]
+
+| Key | Default | Use |
+| --- | --- | --- |
+| `funcs` | none | The app's own functions that pass a message on as `i18n.T` does, for [`ggui i18n`](#your-own-functions) and `ggui doctor` to read: `"tr"`, `"ui.T"`, `"tr:1"`. As `--func`. |
+| `plurals` | none | Those that pass one on as `i18n.N` does: `"trn"`, `"trn:0,1"`. As `--plural`. |

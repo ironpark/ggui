@@ -220,6 +220,16 @@ version = {{.Version}}
 # ggui dev --web skips it unless --wasm-opt is given, to keep rebuilds
 # short. Without wasm-opt on PATH the binary ships as linked.
 # wasm_opt = "-O2"
+
+[i18n]
+# The app's own functions that pass a message on to the i18n package, for
+# ggui i18n check and extract to read their calls as i18n.T's: NAME, a
+# function or a method of any type called so, or pkg.Name, followed by
+# :POS when the message is not the first argument. As --func.
+# funcs = ["tr", "ui.T"]
+# Those like i18n.N: NAME, or NAME:ONE,OTHER when the singular and plural
+# forms are not the second and third arguments. As --plural.
+# plurals = ["trn"]
 `))
 
 // Template returns the commented file ggui init writes.

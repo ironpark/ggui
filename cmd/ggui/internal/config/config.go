@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/ironpark/ggui/cmd/ggui/internal/i18n"
 	"github.com/ironpark/zapp/pkg/dmg"
 	"github.com/ironpark/zapp/pkg/udif"
 )
@@ -42,6 +43,19 @@ type Config struct {
 	Windows Windows `toml:"windows"`
 	Linux   Linux   `toml:"linux"`
 	Web     Web     `toml:"web"`
+	I18n    I18n    `toml:"i18n"`
+}
+
+// I18n names the app's own functions that pass a message on to the i18n
+// package, for ggui i18n to read their calls as it reads i18n.T's and
+// i18n.N's, in the syntax of its --func and --plural.
+type I18n struct {
+	// Funcs are like i18n.T: NAME or NAME:POS, POS the index of the
+	// message's argument, 0 by default.
+	Funcs []string `toml:"funcs"`
+	// Plurals are like i18n.N: NAME or NAME:ONE,OTHER, the indexes of
+	// the singular and the plural form, 1,2 by default.
+	Plurals []string `toml:"plurals"`
 }
 
 // App names the application and says where its main package is.
@@ -611,6 +625,17 @@ func (c *Config) validate() []problem {
 		if !strings.HasPrefix(f, "-") {
 			add(fmt.Sprintf("web.wasm_opt %q must be wasm-opt flags such as -O2 or -Oz, or empty to skip it", c.Web.WasmOpt), "web", "wasm_opt")
 			break
+		}
+	}
+	for i, key := range []string{"funcs", "plurals"} {
+		list := c.I18n.Funcs
+		if i == 1 {
+			list = c.I18n.Plurals
+		}
+		for _, spec := range list {
+			if _, err := i18n.ParseFunc(spec, i == 1); err != nil {
+				add(fmt.Sprintf("i18n.%s: %v", key, err), "i18n", key)
+			}
 		}
 	}
 	return ps

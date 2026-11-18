@@ -83,7 +83,7 @@ func Run(ctx context.Context, o Options) *Report {
 	checkRemote(ctx, r, o, proj)
 	cfg := checkConfig(r, o)
 	if cfg != nil {
-		checkTranslations(r, cfg.Root)
+		checkTranslations(r, cfg.Root, cfg.Config.I18n)
 	}
 	checkPlatform(ctx, r, env)
 	checkTools(ctx, r, env)
