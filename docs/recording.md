@@ -13,6 +13,8 @@ every change to the UI.
 
 - [Writing a tour](#writing-a-tour)
 - [Driving the app](#driving-the-app)
+- [The pointer and the keyboard](#the-pointer-and-the-keyboard)
+- [The window frame](#the-window-frame)
 - [ggui record](#ggui-record)
 - [From Go](#from-go)
 - [The GIF](#the-gif)
@@ -56,6 +58,9 @@ func init() {
 | `Setup` | Runs under the probe's root owner before the tree is built, as `App.Setup` does: themes, the environment, demo state. |
 | `Build` | The root of the tree. Required. |
 | `Script` | The steps. Required. |
+| `Frame` | What is drawn around the app: `record.FrameNone` (the default) or `record.FrameMac`; see [the window frame](#the-window-frame). |
+| `Title` | The title `FrameMac` sets in its title bar, as the app's `Config.Title` would be. |
+| `TitlebarHidden` | Draw `FrameMac` as for a window whose `Config` sets `TitlebarHidden`: no bar, the window buttons over the content. |
 
 `Setup` and `Build` are the place for demo data. The tour runs in the
 app's process, but `ggui.Run` draws it before it would have opened a
@@ -105,6 +110,91 @@ names it, and no file is written.
 `Recorder.Elapsed()` returns the tour time drawn so far, for a script that
 times a step to something already on screen.
 
+## The pointer and the keyboard
+
+The probe's input teleports: `Tap` clicks with nothing on screen moving,
+and a viewer cannot tell what was clicked. The `Recorder`'s own pointer
+and keyboard steps do what a person would, a frame at a time at the
+tour's FPS, as `Hold` does, and draw a cursor that moves with them:
+
+```go
+Script: func(r *record.Recorder) {
+	r.Hold(time.Second)
+	r.ClickLabel("New file")                // glide there, click
+	r.Type("notes.md", 70*time.Millisecond) // a character at a time
+	r.Key("enter")
+	r.Hold(500 * time.Millisecond)
+	r.MoveToLabel("Search", 600*time.Millisecond)
+	r.Scroll(ggui.Pt(0, 240), 800*time.Millisecond)
+	r.MoveTo(ggui.Pt(40, 300), 500*time.Millisecond)
+	r.Drag(ggui.Pt(240, 300), time.Second) // select a range
+	r.Hold(time.Second)
+},
+```
+
+| Step | |
+| --- | --- |
+| `MoveTo(p, d)` | Glide to `p`, in logical pixels of the window, over `d`: eased in and out, along a slight curve. The app hears the pointer at each frame, so what it passes over lights up. A `d` of 0 puts it there without drawing a frame. |
+| `MoveToLabel(label, d)` | Glide to the middle of what `Probe.Find` finds by `label`: a button by its text, a field by its name or placeholder. |
+| `ClickLabel(label)` | Glide to `label`, taking 0.4 to 0.9 seconds by how far it is, and `Click`. |
+| `Click()` | Press the left button where the pointer is, hold it for 100 ms, in which the app shows its pressed look and the cursor is drawn a little smaller, let go, and wait 100 ms. A ring fades out around the click over 400 ms. |
+| `DoubleClick()`, `RightClick()` | Two clicks a frame apart; a click of the secondary button, as for a context menu. |
+| `Drag(to, d)` | Press, glide to `to` over `d`, let go. |
+| `Scroll(delta, d)` | Turn the wheel by `delta`, as `Probe.Scroll` takes it, over the pointer, spread over the frames of `d`. |
+| `Type(text, perChar)` | Type `text` into what has the focus, a character every `perChar`; characters closer than a frame land in the same one. |
+| `Key(chords...)` | Press each chord, as `Probe.Key` does (`"enter"`, `"cmd+a"`), holding 120 ms after each. |
+| `HideCursor()`, `ShowCursor()` | Stop and start drawing the cursor; the steps still move it. |
+| `Pointer()` | Where the pointer is: the middle of the window before the first pointer step. |
+
+A label nothing has ends the tour with an error that names it. Before the
+first pointer step the pointer is in the middle of the window and no cursor
+is drawn.
+
+The cursor is drawn over the frame at the tour's scale, as vector shapes in
+the usual desktop style, outlined and with a soft shadow: the arrow, black
+outlined in white as macOS draws it, the pointing hand where the app asks
+for `CursorShapePointer`, and the I-beam where it asks for
+`CursorShapeText`. The other shapes are drawn as the arrow. The
+`Cursor(false)` option leaves it out while the steps still move, hover and
+press as before. Steps taken through `Probe()` move the app's pointer but
+not the drawn cursor.
+
+## The window frame
+
+A tour draws the app's content, the size of `Tour.Size`. With
+`Frame: record.FrameMac`, or the `Frame(record.FrameMac)` option, each frame
+is drawn as a macOS window on a backdrop:
+
+- a title bar 28 points high with the tour's `Title` in the middle, in the
+  theme's font at 13 points, semibold;
+- the close, minimize and zoom buttons, 12 points across and 8 apart, the
+  first 14 points from the left edge, in their colors with a darker rim;
+- the corners rounded by 16 points, as macOS 26 rounds a window with a
+  title bar (`CornerRadius(pt)`; 10 is the radius of the releases before);
+- a hairline border, with a faint light edge inside it in a dark window;
+- a shadow in two layers, a wide ambient one and a key light's falling
+  below, on the backdrop: `DefaultBackdrop`, a neutral gray a light and a
+  dark window both stand out from, or `Backdrop(c)`. 48 points of backdrop
+  are left around the window for the shadow (`Margin(pt)`).
+
+The title bar is a shade of the background the app's theme sets
+(`Env.Background`, or the `Background` option): darker than a light one,
+lighter than a dark one, with the title in the theme's text color for it. A
+theme switched in the middle of a tour switches the frame with it. The
+frame is drawn at the tour's `Scale`, so `Scale: 2` draws it as crisply as
+the content; the image grows by the frame, and `Width` scales the framed
+image as a whole. The frame stays the same from frame to frame until the
+theme changes, so a GIF still stores only what changed in the content.
+
+`TitlebarHidden: true` draws the window as for an app whose `Config` sets
+`TitlebarHidden`, its content up to the top edge: no bar and no title, the
+buttons over the content.
+
+`Backdrop(color.Transparent)` leaves the backdrop clear. PNG frames keep
+the transparency, the shadow fading out to nothing, for a page that puts
+its own background behind them. A GIF has no partial transparency: there
+the clear backdrop is drawn over white.
+
 ## ggui record
 
 ```sh
@@ -112,6 +202,8 @@ ggui record                      # the default tour, to tour.gif
 ggui record intro -o docs/intro.gif --width 800 --fps 10
 ggui record --list
 ggui record --frames /tmp/frames # PNG frames instead of a GIF
+ggui record --frame mac --backdrop '#1f2430'  # in a macOS window
+ggui record --frame none --cursor=false       # the content alone
 ```
 
 `ggui record` builds the app with its release tags (`build.tags`) and runs
@@ -143,7 +235,9 @@ if err := tour.WriteGIF("tour.gif", record.FPS(10), record.Width(800)); err != n
 `WriteGIF` and `WritePNGs` take the same options as the command's flags:
 `FPS`, `Width`, `Colors`, `Dither`, `Loop`, and `Background`, which fills
 each frame with a color of your choosing instead of the background the
-tour's `Env` holds (`ggui.Env.Background`, which a theme sets).
+tour's `Env` holds (`ggui.Env.Background`, which a theme sets). `Frame`,
+`CornerRadius`, `Margin`, `Backdrop` and `Cursor` set the
+[frame](#the-window-frame) and the [cursor](#the-pointer-and-the-keyboard).
 
 Drawing needs the renderer, which the package brings up with no window:
 call them from the main goroutine, as `ggui.Run` is called, before any app
@@ -203,15 +297,17 @@ ffmpeg -framerate 15 -i /tmp/frames/%04d.png \
 
 A tour draws its tree, as a window's content, and nothing around it:
 
-- **No operating-system chrome**: no title bar, window frame or shadow.
-  Put the frame around the GIF in the README, or draw one in the tree.
+- **No operating-system chrome** but the one `FrameMac` draws: a macOS
+  window on any platform, not the system's own title bar, and none on
+  Windows' or Linux's pattern.
 - **No native menus or tray icon**: the macOS menu bar, a native context
   menu and a tray icon's menu belong to the system. Menus and popovers
   ggui draws itself, in the window, are drawn.
 - **No native dialogs**: the probe's file dialogs are stand-ins that pick
   nothing.
-- **No pointer**: the cursor is the system's. Hover and press states show;
-  the arrow does not.
+- **The cursor only where the Recorder moves it**: the cursor drawn is the
+  one the pointer steps move, in three shapes; input given through
+  `Probe()` shows its hover and press but no cursor.
 - **One window**: the tour is one tree in one probe, the size of
   `Tour.Size`. A window the app opens with `OpenWindow` is not part of it;
   a multi-window app records each window it wants to show as a tour of its

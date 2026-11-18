@@ -994,6 +994,7 @@ ggui record
 ggui record intro -o docs/intro.gif --fps 10 --width 800
 ggui record --list
 ggui record --frames /tmp/frames
+ggui record --frame mac --backdrop '#1f2430'
 ```
 
 `ggui record` draws a tour, a scripted walk through the app that the app
@@ -1025,6 +1026,9 @@ The GIF is `name.gif`, or `tour.gif`, in the project's directory, unless
 | `--colors n` | The GIF palette's size, 2 to 256 (256). |
 | `--dither s` | Ordered dithering, 0 (none, the default) to 1; 0.3 smooths gradients that band. |
 | `--loop n` | Play the GIF `n` times; 0 (the default) loops for ever. |
+| `--frame style` | Draw the frames in a window frame: `mac`, a macOS window with a title bar, rounded corners and a shadow on a backdrop, or `none`, the content alone; in place of the tour's `Frame`. |
+| `--backdrop color` | What a framed window is drawn on: `#RRGGBB`, or `transparent`, which PNG frames keep and a GIF draws over white. |
+| `--cursor=false` | Leave out the cursor the tour's pointer steps draw; the steps still drive the app. |
 | `--package pkg` | The main package, replacing `app.package`. |
 | `--tags tags` | Build tags, replacing `build.tags`. |
 | `--config file` | Read `file` instead of the `ggui.toml` found. |
