@@ -288,7 +288,21 @@ keeps its window and hides it rather than closing it:
 app.OnCloseRequest(func() bool { app.Hide(); return false })
 ```
 
-Work posted to a hidden window, like a tray action, still runs.
+`app.HideToTray()` does that for every window and, on macOS, takes the app out
+of the Dock and the ⌘-Tab switcher as well; `app.ShowFromTray()` puts it back,
+shows the windows `HideToTray` hid and brings the app forward:
+
+```go
+app.OnCloseRequest(func() bool { app.HideToTray(); return false })
+app.OnReopen(app.ShowFromTray)
+app.AddTray(ggui.TrayConfig{Icon: icon, Menu: []ggui.MenuItem{
+    ggui.MenuAction("Show", "", app.ShowFromTray),
+    ggui.MenuAction("Quit", "", app.Quit),
+}})
+```
+
+On macOS, `OnQuitRequest` tells ⌘Q from the close button. Work posted to a
+hidden window, like a tray action, still runs.
 
 ## Message dialogs
 
