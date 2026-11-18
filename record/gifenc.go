@@ -97,7 +97,7 @@ type frameEncoder struct {
 
 	idx, want, under []byte
 	lzw              lzwEncoder
-	parts            [3]encoded // the frame whole, and in two
+	parts            [5]encoded // the frame whole, in two, and the whole written the plainer ways
 	pending          *encoded   // the frame to write next
 	centis           int        // how long it shows
 	written          int
@@ -138,6 +138,20 @@ func (e *frameEncoder) frame(rect image.Rectangle, centis int, first bool) error
 	whole := &e.parts[0]
 	if err := e.encode(whole, rect, draw, clear); err != nil {
 		return err
+	}
+	if opt {
+		// Transparency and a tighter rectangle usually shorten what LZW
+		// writes, but not always: a frame whose drawn pixels are mostly
+		// new can come out longer with holes in it. The frame is also
+		// written without them, as level 0 writes it, and the shortest
+		// kept, so level 1 is never longer than level 0.
+		var err error
+		if whole, err = e.shorter(whole, &e.parts[3], rect, draw, -1, clear >= 0); err != nil {
+			return err
+		}
+		if whole, err = e.shorter(whole, &e.parts[4], rect, rect, -1, draw != rect); err != nil {
+			return err
+		}
 	}
 	if opt && e.level >= 2 && centis >= 2*splitLead {
 		// Two rectangles far apart, as the cursor and a control it
@@ -190,6 +204,21 @@ func (e *frameEncoder) encode(p *encoded, rect, draw image.Rectangle, clear int)
 	p.rect, p.clear = draw, clear
 	p.data.Reset()
 	return e.lzw.encode(&p.data, max(e.g.bits, 2), fc)
+}
+
+// shorter encodes draw into alt with clear when try is set, and returns
+// whichever of best and alt is the shorter.
+func (e *frameEncoder) shorter(best, alt *encoded, rect, draw image.Rectangle, clear int, try bool) (*encoded, error) {
+	if !try {
+		return best, nil
+	}
+	if err := e.encode(alt, rect, draw, clear); err != nil {
+		return nil, err
+	}
+	if alt.data.Len() < best.data.Len() {
+		return alt, nil
+	}
+	return best, nil
 }
 
 // show puts what p shows on the screen.
