@@ -454,6 +454,7 @@ func (l *frameLoop) tick(exact bool) error {
 	}
 	setRunning(l)
 	reactive.CheckStores()
+	l.world().fireTimers(clk.raw())
 	// Animations made outside every tree, such as one a test built before
 	// its probe, belong to a Base runtime's world, which this loop's flushes
 	// cover too.
@@ -669,9 +670,10 @@ func (l *frameLoop) settle(size Size) (err error) {
 type world struct {
 	parent *world // nil for a Base's own
 
-	anims animator
-	frame frameClock
-	busy  map[any]bool // see inputState.markBusyGroups
+	anims  animator
+	frame  frameClock
+	timers []*clockTimer // what Debounced waits for; see fireTimers
+	busy   map[any]bool  // see inputState.markBusyGroups
 	// delivered counts the events handed to this world's widgets; see
 	// RepaintAll.
 	delivered uint64
