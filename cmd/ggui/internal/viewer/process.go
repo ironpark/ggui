@@ -84,7 +84,7 @@ type Options struct {
 // Start starts the viewer exe listening on a socket of its own and waits
 // until it is ready.
 func Start(ctx context.Context, exe string, o Options) (*Process, error) {
-	dir, socket, err := socketPath()
+	dir, socket, err := SocketPath("v.sock")
 	if err != nil {
 		return nil, err
 	}
@@ -139,23 +139,25 @@ func Start(ctx context.Context, exe string, o Options) (*Process, error) {
 	return nil, err
 }
 
-// socketPath returns a new directory and the socket path in it. A unix
-// socket's path is limited to 104 bytes on macOS and 108 on Linux and
-// Windows, so the directory is short: the temporary directory when it
-// leaves room, /tmp otherwise. Windows has no /tmp, and its temporary
-// directory, under the user's profile, leaves room but for the longest
-// user names; then there is no socket, and the app opens its own window.
-func socketPath() (dir, socket string, err error) {
+// SocketPath returns a new directory, which only its user may enter, and
+// the path of a unix socket called name in it: the viewer's, and ggui
+// dev's channel for the state an app keeps. A unix socket's path is
+// limited to 104 bytes on macOS and 108 on Linux and Windows, so the
+// directory is short: the temporary directory when it leaves room, /tmp
+// otherwise. Windows has no /tmp, and its temporary directory, under the
+// user's profile, leaves room but for the longest user names; then there
+// is no socket, and the app opens its own window, or keeps no state.
+func SocketPath(name string) (dir, socket string, err error) {
 	const maxPath = 103 // with the 0 that ends it, in macOS's 104 bytes
 	base := ""
-	if len(os.TempDir())+len(`/ggui-1234567890/v.sock`) > maxPath && runtime.GOOS != "windows" {
+	if len(os.TempDir())+len(`/ggui-1234567890/`)+len(name) > maxPath && runtime.GOOS != "windows" {
 		base = "/tmp"
 	}
 	dir, err = os.MkdirTemp(base, "ggui-")
 	if err != nil {
 		return "", "", err
 	}
-	socket = filepath.Join(dir, "v.sock")
+	socket = filepath.Join(dir, name)
 	if len(socket) > maxPath {
 		os.RemoveAll(dir)
 		return "", "", fmt.Errorf("the viewer's socket would be %s, longer than a unix socket's %d bytes", socket, maxPath)

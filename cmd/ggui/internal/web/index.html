@@ -121,6 +121,27 @@ const pageStart = performance.now();
 if (!config.dev) $('build').remove();
 if (config.target) $('target').textContent = config.target;
 
+// The state the app keeps across ggui dev's restarts, StateValue.Keep's,
+// crosses the reload onto a new build in sessionStorage. The page hands it
+// to the app in gguiDev.state, which ggui finds when the app keeps its
+// first value and then sets gguiDev.save; keep asks that for the state
+// just before the reload. An app that is not running, one that failed to
+// load or crashed, hands on what it was handed. A reload by hand starts
+// afresh, since the page takes the state out as it loads.
+const keptKey = 'ggui-dev-state';
+if (config.dev) {
+  let state = null;
+  try { state = sessionStorage.getItem(keptKey); sessionStorage.removeItem(keptKey); } catch {}
+  window.gguiDev = { state };
+}
+const keep = () => {
+  const dev = window.gguiDev;
+  if (!dev) return;
+  let state = dev.state;
+  try { if (dev.save) state = dev.save() ?? state; } catch {}
+  try { if (state != null) sessionStorage.setItem(keptKey, state); } catch {}
+};
+
 const secs = (ms) => (ms / 1000).toFixed(1) + 's';
 const mb = (n) => (n / (1 << 20)).toFixed(1) + ' MB';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -166,6 +187,7 @@ $('retry').textContent = config.dev ? 'Rebuild and reload' : 'Reload';
 $('retry').onclick = async () => {
   if (config.dev) {
     try { await fetch('_rebuild', { cache: 'no-store' }); } catch {}
+    keep();
   }
   location.reload();
 };
@@ -199,7 +221,7 @@ const follow = () => {
     } else if (s.state === 'error') {
       if (running) devNotice('Build failed; the app is running the last build that succeeded.', s.error);
     } else if (s.state === 'ready') {
-      if ((running && s.id !== running) || failed) location.reload();
+      if ((running && s.id !== running) || failed) { keep(); location.reload(); }
       else devNotice('');
     }
   };

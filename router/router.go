@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/devstate"
 	"github.com/ironpark/ggui/internal/reactive"
 )
 
@@ -31,6 +32,8 @@ type Router struct {
 	viewMade bool
 	mounted  bool
 	post     func(func())
+	keep     string                   // the key Keep gave, or ""
+	kept     *ggui.StateValue[string] // the URL ggui dev keeps, while mounted under it
 
 	loc  *ggui.StateValue[Location]
 	path *ggui.StateValue[string]
@@ -73,6 +76,27 @@ func (r *Router) History(h History) *Router {
 	return r
 }
 
+// Keep has ggui dev keep the router's location across the restart that
+// follows each rebuild, under key, so that the app comes back on the page
+// it showed rather than on its first: one line that saves clicking back
+// to the screen being worked on after every save. Call it before View.
+//
+//	r := router.New(routes...).Keep("router")
+//
+// The location is kept as its URL, as StateValue.Keep keeps a value. When
+// View mounts with one handed over, that URL replaces the history's first
+// entry and is the page the first frame shows; the history behind it is
+// not kept. A URL that no route matches any more shows the not-found
+// screen, as it would if navigated to. Without ggui dev Keep does nothing,
+// and in a browser a reload keeps the location already, in the URL.
+func (r *Router) Keep(key string) *Router {
+	if r.viewMade {
+		panic("router: Keep configured after View")
+	}
+	r.keep = key
+	return r
+}
+
 // View returns the widget that renders the matched branch. Mount it once;
 // disposing it unsubscribes history and disposes every route.
 func (r *Router) View() ggui.Widget {
@@ -94,10 +118,27 @@ func (r *Router) View() ggui.Widget {
 			stop()
 			r.mounted = false
 			r.current = nil
+			r.kept = nil
 		})
-		r.traverse(r.history.Current())
+		r.traverse(r.start())
 		return ggui.Key(r.root, r.build)
 	})
+}
+
+// start is the entry View mounts on: the history's current one, or, under
+// ggui dev with a location kept by Keep, that location in its place.
+func (r *Router) start() Entry {
+	e := r.history.Current()
+	if r.keep == "" || !devstate.On() {
+		return e
+	}
+	r.kept = ggui.State(e.URL).Keep(r.keep)
+	if url := ggui.Peek(r.kept); url != e.URL {
+		if next, err := r.history.Replace(url); err == nil {
+			e = next
+		}
+	}
+	return e
 }
 
 // dispatched is implemented by adapters whose events arrive off the UI
@@ -200,6 +241,9 @@ func (r *Router) navigate(url string, replace bool) error {
 // commit publishes the location and match together, then reconciles.
 func (r *Router) commit(loc Location, leaf *route, params map[string]string) {
 	index, length := r.history.Position()
+	if r.kept != nil {
+		r.kept.Set(loc.String())
+	}
 	r.loc.Set(loc)
 	r.path.Set(loc.Path)
 	r.leaf.Set(leaf)
