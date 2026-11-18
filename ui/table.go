@@ -87,6 +87,8 @@ type TableWidget[T any, K comparable] struct {
 	rowH           float64
 	rowSet         bool // RowHeight chose rowH; otherwise it follows the theme
 	height         float64
+	maxH           float64 // MaxHeight's limit, 0 without one
+	maxRows        int     // MaxRows' limit, 0 without one
 	label          func(T) string
 
 	// The keyboard: the rows' Tab stop and focus, and the row Shift
@@ -158,11 +160,11 @@ func Table[T any, K comparable](rows ggui.Readable[[]T], key func(T) K, cols ...
 }
 
 // compose stacks the table's parts: the headings, the rows (scrolling under
-// a Height), then the footer where there is one. The caption is laid out
-// apart, under the column.
+// a Height or a maximum), then the footer where there is one. The caption
+// is laid out apart, under the column.
 func (t *TableWidget[T, K]) compose() {
 	parts := []ggui.Widget{t.headBox, t.body}
-	if t.height > 0 {
+	if t.scrolls() {
 		parts[1] = widget.Expanded(t.scroll)
 	}
 	if t.footBox != nil {
@@ -282,7 +284,7 @@ func (t *TableWidget[T, K]) OnSelect(fn func(T)) *TableWidget[T, K] { t.onSelect
 
 // RowHeight fixes every row's height. The default follows the theme: a
 // line of text inside the cell padding, 37 under the stock themes. With
-// Height the body then lays out only the rows in view.
+// Height, MaxHeight or MaxRows the body then lays out only the rows in view.
 func (t *TableWidget[T, K]) RowHeight(h float64) *TableWidget[T, K] {
 	defer property.Watch(&t.props, &t.rowH)()
 	h = max(1, h)
@@ -291,18 +293,47 @@ func (t *TableWidget[T, K]) RowHeight(h float64) *TableWidget[T, K] {
 	return t
 }
 
-// Height bounds the table and scrolls the body under a fixed heading.
-// Without it the table is as tall as its rows.
+// Height fixes the table's height, footer and caption included,
+// and scrolls the body under the fixed heading. Without it, or a
+// MaxHeight or MaxRows, the table is as tall as its rows. It wins over
+// MaxHeight and MaxRows; zero removes it.
 func (t *TableWidget[T, K]) Height(h float64) *TableWidget[T, K] {
+	return t.bound(func() { t.height = max(0, h) })
+}
+
+// MaxHeight lets the table be as tall as its rows up to h, footer and
+// caption included, and past that scrolls the body under the fixed
+// heading. Height wins over it; zero removes it.
+func (t *TableWidget[T, K]) MaxHeight(h float64) *TableWidget[T, K] {
+	return t.bound(func() { t.maxH = max(0, h) })
+}
+
+// MaxRows is MaxHeight in rows: the table is as tall as its rows up to n of
+// them under the heading, with the footer and caption, and past
+// that the body scrolls. The limit follows the row height at layout. With
+// MaxHeight too the lower limit applies; Height wins over both. Zero
+// removes it.
+func (t *TableWidget[T, K]) MaxRows(n int) *TableWidget[T, K] {
+	return t.bound(func() { t.maxRows = max(0, n) })
+}
+
+// bound runs set, which changes the height or a limit, and recomposes the
+// table if that starts or stops the body scrolling.
+func (t *TableWidget[T, K]) bound(set func()) *TableWidget[T, K] {
 	defer property.Watch(&t.props, &t.column)()
 	defer property.Watch(&t.props, &t.height)()
-	was := t.height > 0
-	t.height = h
-	if was != (h > 0) {
+	defer property.Watch(&t.props, &t.maxH)()
+	defer property.Watch(&t.props, &t.maxRows)()
+	was := t.scrolls()
+	set()
+	if was != t.scrolls() {
 		t.compose()
 	}
 	return t
 }
+
+// scrolls reports whether the body scrolls: under a Height or a maximum.
+func (t *TableWidget[T, K]) scrolls() bool { return t.height > 0 || t.maxH > 0 || t.maxRows > 0 }
 
 // RowName names each row for Probe.Find and the inspector; the default is
 // the key.
@@ -345,7 +376,7 @@ func (t *TableWidget[T, K]) move(i int, extend bool) {
 	case t.selected != nil:
 		t.selected.Set(k)
 	}
-	if t.height > 0 {
+	if t.scrolls() {
 		revealRow(t.offset, i, t.rowH, t.bodyH)
 	}
 }
@@ -378,7 +409,7 @@ func (t *TableWidget[T, K]) selectAt(rows []T, i int, extend, toggle bool) {
 
 // page is how many rows a Page key moves.
 func (t *TableWidget[T, K]) page() int {
-	if t.height <= 0 {
+	if !t.scrolls() {
 		return 10
 	}
 	return max(1, int(t.bodyH/t.rowH)-1)
@@ -440,8 +471,21 @@ func (t *TableWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		t.capSize = t.caption.Color(th.MutedFg).Layout(ggui.Loose(ggui.Sz(c.MaxW, c.MaxH)), env)
 		t.capH = t.capSize.H + 2*th.Space
 	}
-	if t.height > 0 {
+	around := t.headH + t.footH + t.capH // what is not the body
+	switch {
+	case t.height > 0:
 		h := min(t.height, c.MaxH)
+		c.MinH, c.MaxH = h, h
+	case t.scrolls():
+		// As tall as the rows, every one rowH, up to the limits.
+		h := around + float64(len(t.rows.Get()))*t.rowH
+		if t.maxH > 0 {
+			h = min(h, t.maxH)
+		}
+		if t.maxRows > 0 {
+			h = min(h, around+float64(t.maxRows)*t.rowH)
+		}
+		h = min(h, c.MaxH)
 		c.MinH, c.MaxH = h, h
 	}
 	c.MinH, c.MaxH = max(0, c.MinH-t.capH), max(0, c.MaxH-t.capH)
