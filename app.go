@@ -32,6 +32,7 @@ type App struct {
 	focus      atomic.Pointer[Window] // the window that last had the focus; read by native menus
 	menu       *menuSet               // the menu bar's
 	trays      []*Tray
+	toTray     []*Window // the windows HideToTray hid, for ShowFromTray
 	nextTray   int
 	quitAsked  []func()         // OnQuitRequest's
 	reopened   []func()         // OnReopen's
@@ -469,6 +470,59 @@ func SetDockIcon(visible bool) {
 	if appRunning.Load() {
 		ggwd.SetDockIcon(visible)
 	}
+}
+
+// HideToTray hides every window the app shows and takes the app out of the
+// Dock, so that it lives on in its tray icon alone; ShowFromTray brings
+// those windows back. It is what a tray app's close button does in place
+// of closing, and the windows keep everything they built:
+//
+//	app.OnCloseRequest(func() bool { app.HideToTray(); return false })
+//	app.OnReopen(app.ShowFromTray)
+//	app.AddTray(ggui.TrayConfig{Icon: icon, Menu: []ggui.MenuItem{
+//		ggui.MenuAction("Show", "", app.ShowFromTray),
+//		ggui.MenuAction("Quit", "", app.Quit),
+//	}})
+//
+// Call it on the UI thread, as a handler, a menu action or posted work
+// runs. Only macOS has a Dock; elsewhere the windows hide, and with them
+// their taskbar buttons.
+func (a *App) HideToTray() {
+	for _, w := range a.Windows() {
+		if w.Visible() {
+			if !slices.Contains(a.toTray, w) {
+				a.toTray = append(a.toTray, w)
+			}
+			w.Hide()
+		}
+	}
+	SetDockIcon(false)
+}
+
+// ShowFromTray undoes HideToTray: it puts the app back in the Dock, shows
+// the windows HideToTray hid that are still open, or else the window that
+// last had the focus, and brings the app forward with the focus in the window
+// that had it last. Call it on the UI thread.
+func (a *App) ShowFromTray() {
+	SetDockIcon(true)
+	shown := slices.DeleteFunc(a.toTray, (*Window).Closed)
+	a.toTray = nil
+	if len(shown) == 0 {
+		if w := a.activeWindow(); w != nil {
+			shown = []*Window{w}
+		}
+	}
+	if len(shown) == 0 {
+		return
+	}
+	focus := shown[0]
+	for _, w := range shown {
+		w.Show()
+		if w == a.focus.Load() {
+			focus = w
+		}
+	}
+	focus.Focus()
 }
 
 // SingleInstance makes the app the only one named id running for the
