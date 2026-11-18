@@ -30,10 +30,12 @@ and controls that bind directly to your data.
 | --- | --- |
 | Reactive state | State, lazy derived values, effects, and cancellable resources. |
 | Composable layouts | Rows, columns, flex, grids, stacks, scrolling, and virtualized keyed lists. |
-| Ready-made controls | Buttons, text fields, tables, tabs, dialogs, command search, and more. |
+| Ready-made controls | Buttons, text fields, tables, tabs, dialogs, command search, charts, chat components with Markdown, and more. |
 | Text and input | IME composition, grapheme-aware editing, clipboard support, and font fallbacks. |
 | Motion and themes | Tweens, springs, transitions, light/dark themes, and inherited style tokens. |
-| Developer tools | Headless interaction tests with `Probe` and an in-app widget inspector. |
+| The desktop | Several windows that reopen where they were closed, app menus, a tray icon, native file and message dialogs, and one running instance. |
+| Your language | Every word the controls say by themselves replaced in one place, right-to-left layout, and Korean, Japanese and Chinese input. |
+| Developer tools | The `ggui` command for live rebuilds and release bundles, headless interaction tests with `Probe`, and an in-app widget inspector. |
 
 ## Demos
 
@@ -53,18 +55,56 @@ API. The demo builds use `AccessibilityAlways`.
 
 ### Install
 
+The quickest way in is the `ggui` command, which creates an app, runs it
+with live rebuilds, and bundles it for release. Install it one of three ways:
+
+| With | Run |
+| --- | --- |
+| Homebrew (macOS, Linux) | `brew install ironpark/tap/ggui` |
+| Go | `go install github.com/ironpark/ggui/cmd/ggui@latest` |
+| A download | The archive for your system from the [releases](https://github.com/ironpark/ggui/releases), named `ggui command`: macOS, Linux and Windows, Intel and ARM. Put `ggui` on your `PATH`. |
+
+To use the library without the command, add it to your module:
+
 ```sh
-go get github.com/ironpark/ggui
+go get github.com/ironpark/ggui@latest
 ```
 
-**Requires Go 1.27+** for generic methods in the reactive API.
+**Requires Go 1.27+** for generic methods in the reactive API; the command
+builds your app with the `go` on your `PATH`.
 ggui itself does not use CGO or a WebView. ggfx's platform dependencies,
 inherited from Ebitengine, still apply, including Xcode command line tools on macOS and X11/ALSA development
 headers on Linux; the no-CGO claim does not cover every platform dependency.
+`ggui doctor` checks a machine for all of this and says what is missing.
 
-### Build a counter
+The library and the command are versioned apart: the library as `vX.Y.Z`,
+the command as `cmd/ggui/vX.Y.Z`. `ggui init` requires the latest library
+release in the app it creates.
 
-Save this as `main.go` in your Go module:
+### Start an app with the command
+
+```sh
+ggui init hello && cd hello
+ggui dev
+```
+
+`ggui init` writes a module with a counter to start from and a `ggui.toml`
+holding every setting. `ggui dev` runs it, and rebuilds and restarts it
+each time you save; state marked with `Keep` survives the restart, so you
+stay on the screen you were working on.
+
+| Command | Does |
+| --- | --- |
+| `ggui init [dir]` | Create a new application. |
+| `ggui dev` | Run it, rebuilding and restarting as you edit; `--web` serves it to a browser. |
+| `ggui build` | Bundle a release: a signed `.app`, disk image or installer on macOS, an `.exe` with its icon and version on Windows (`--target windows`, from any system), or a web bundle (`--target web`). |
+| `ggui doctor` | Check the machine and the project for what ggui needs. |
+
+See [the ggui command](docs/cli.md) for every flag and `ggui.toml`.
+
+### Or write it by hand
+
+Save this as `main.go` in a module that requires ggui:
 
 ```go
 package main
@@ -105,18 +145,6 @@ go run .
 
 `State` holds the count, `Textf` follows it, and the button updates it.
 No manual refresh or subscription wiring is needed.
-
-### Or start with the ggui command
-
-```sh
-brew install ironpark/tap/ggui   # or: go install github.com/ironpark/ggui/cmd/ggui@latest
-ggui init hello && cd hello
-ggui dev      # run it, rebuilding and restarting it as you edit
-ggui build    # a signed .app on macOS, an .exe with its icon on Windows; --target web for a browser
-ggui doctor   # check this machine has what ggui needs
-```
-
-See [the ggui command](docs/cli.md) for every command and `ggui.toml`.
 
 ## Examples
 
@@ -195,6 +223,10 @@ and the full topic list.
 | Charts | [Native charts, options, examples and visual validation](docs/charts.md) |
 | Carousel & Input OTP | [Composition, interaction, examples and visual validation](docs/carousel-and-otp.md) |
 | Look and feel | [Styling](docs/styling.md) · [Animation](docs/animation.md#animation) · [HiDPI](docs/rendering.md#hidpi) |
+| Windows and the desktop | [Several windows, placement, menus, tray, dialogs](docs/windows-and-platform.md) |
+| Other languages | [Localizing the controls' own words](docs/accessibility.md#localization) · [Right-to-left text](docs/fonts.md#right-to-left-text) |
+| The ggui command | [init, dev, build, doctor and ggui.toml](docs/cli.md) |
+| Custom widgets | [The widget protocol, setters and painting](docs/rendering.md#custom-widgets) · [API conventions](docs/api-conventions.md) |
 | Interaction and testing | [Input](docs/input.md#input) · [Headless testing](docs/testing.md#testing) · [Inspector](docs/inspector.md#inspector) |
 | Internals | [Frame lifecycle](docs/rendering.md#frame-lifecycle) · [Repository layout](docs/development.md#repository-layout) |
 

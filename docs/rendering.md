@@ -104,6 +104,41 @@ img := ggui.RenderText("Hello, 세계 👋", ggui.TextStyle{Size: 32}, 0)
 png.Encode(w, img)
 ```
 
+A widget with setters of its own writes them with the
+[`property`](../property/property.go) package, as `widget` and `ui` write
+theirs, so that they behave as the [conventions](api-conventions.md) say:
+a setter may be called after the widget is mounted, one that changes
+nothing costs nothing, and one that changes the size has the widget laid
+out again without an effect to own or dispose. The widget keeps a
+`property.Owner`, reads it as its `Layout` begins, and its setters tell it:
+
+```go
+type Gauge struct {
+	props property.Owner
+	width float64                 // a literal alone
+	level property.Value[float64] // a literal or a reader
+}
+
+func (g *Gauge) Width(w float64) *Gauge {
+	defer property.Watch(&g.props, &g.width)()
+	g.width = w
+	return g
+}
+
+func (g *Gauge) Level(v float64) *Gauge { property.Set(&g.props, &g.level, v); return g }
+
+func (g *Gauge) BindLevel(r ggui.Readable[float64]) *Gauge {
+	property.Bind(&g.props, &g.level, r, "Gauge.BindLevel")
+	return g
+}
+
+func (g *Gauge) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer g.props.Layout().EndLayout()
+	level := g.level.Get() // read in Layout, so a change measures again
+	// ...
+}
+```
+
 Paint children through `dst.Paint(child, r)` so the inspector can see them.
 The [custom example](../examples/custom) builds a dial on `Interactive`, a
 disclosure that calls `Invalidate`, and a virtualized list. For small
