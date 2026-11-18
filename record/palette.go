@@ -108,33 +108,76 @@ func cmpColor(a, b [3]float64) int {
 }
 
 // entry is a color counted, or a bin: how many pixels it counted and
-// their mean.
+// their mean, c, in sRGB until palette works in Oklab, and rgb, the
+// sRGB.
 type entry struct {
-	n float64
-	c [3]float64
+	n   float64
+	c   [3]float64
+	rgb [3]float64
 }
 
-// Channel weights for the distance between colors: the eye tells greens
-// apart best and blues worst.
-var weight = [3]float64{3, 4, 2}
-
+// The palette is chosen and colors mapped to it in Oklab, in which a
+// distance is about as visible wherever it is: in sRGB the steps of a
+// dark gradient, or of a shadow, are closer together to the eye than
+// those of a light one, and a palette chosen there spends too few colors
+// on them.
 func dist(a, b [3]float64) float64 {
 	d0, d1, d2 := a[0]-b[0], a[1]-b[1], a[2]-b[2]
-	return weight[0]*d0*d0 + weight[1]*d1*d1 + weight[2]*d2*d2
+	return d0*d0 + d1*d1 + d2*d2
 }
 
-// palette chooses at most k colors for what h counted: a median cut that
+// anchorShare is the share of the pixels counted a color needs to keep
+// a palette entry of its own: the flat colors of a UI, its backgrounds,
+// a frame's title bar and buttons, are kept exactly, rather than
+// averaged with the antialiasing and gradients around them.
+const anchorShare = 1.0 / 2000
+
+// palette chooses at most k colors for what h counted. A recording with
+// no more than k colors keeps them all, exactly. Otherwise the colors
+// that cover anchorShare of the pixels or more, up to a quarter of k, are
+// kept exactly, and the rest are chosen in Oklab: a median cut that
 // splits, again and again, the box of colors whose split lowers the
 // squared error most, where it lowers it most, and then a few rounds of
-// k-means to settle the colors on the pixels they stand for. A recording
-// with no more than k colors keeps them all, exactly.
+// k-means to settle the colors on the pixels they stand for, the exact
+// ones staying put.
 func (h *histogram) palette(k int) color.Palette {
 	entries := h.entries()
 	if len(entries) == 0 {
 		return color.Palette{color.RGBA{A: 0xff}}
 	}
+	if len(entries) <= k {
+		p := make(color.Palette, len(entries))
+		for i, e := range entries {
+			p[i] = color.RGBA{R: round8(e.c[0]), G: round8(e.c[1]), B: round8(e.c[2]), A: 0xff}
+		}
+		return p
+	}
+	var total float64
+	for i := range entries {
+		e := &entries[i]
+		total += e.n
+		e.rgb = e.c
+		e.c = oklab(e.c[0], e.c[1], e.c[2])
+	}
+	byCount := slices.Clone(entries)
+	slices.SortStableFunc(byCount, func(a, b entry) int {
+		switch {
+		case a.n > b.n:
+			return -1
+		case a.n < b.n:
+			return 1
+		}
+		return cmpColor(a.rgb, b.rgb)
+	})
+	var anchors []entry
+	for _, e := range byCount {
+		if e.n < total*anchorShare || len(anchors) >= k/4 {
+			break
+		}
+		anchors = append(anchors, e)
+	}
 	boxes := []box{newBox(entries)}
-	for len(boxes) < k {
+	for len(boxes) < k-len(anchors) {
 		best, gain := -1, 0.0
 		for i := range boxes {
 			if g := boxes[i].gain(); g > gain {
@@ -148,16 +191,23 @@ func (h *histogram) palette(k int) color.Palette {
 		boxes[best] = a
 		boxes = append(boxes, b)
 	}
-	centers := make([][3]float64, len(boxes))
-	for i, b := range boxes {
-		centers[i] = b.mean()
+	centers := make([][3]float64, 0, len(anchors)+len(boxes))
+	for _, a := range anchors {
+		centers = append(centers, a.c)
 	}
-	refine(entries, centers, 4)
+	for _, b := range boxes {
+		centers = append(centers, b.mean())
+	}
+	refine(entries, centers, len(anchors), 4)
 
 	p := make(color.Palette, 0, len(centers))
 	seen := map[color.RGBA]bool{}
-	for _, c := range centers {
-		rgba := color.RGBA{R: round8(c[0]), G: round8(c[1]), B: round8(c[2]), A: 0xff}
+	for i, c := range centers {
+		rgb := fromOklab(c)
+		if i < len(anchors) {
+			rgb = anchors[i].rgb
+		}
+		rgba := color.RGBA{R: round8(rgb[0]), G: round8(rgb[1]), B: round8(rgb[2]), A: 0xff}
 		if !seen[rgba] {
 			seen[rgba] = true
 			p = append(p, rgba)
@@ -187,7 +237,7 @@ func newBox(e []entry) box {
 		b.n += x.n
 		for c := range 3 {
 			b.sum[c] += x.n * x.c[c]
-			sq += weight[c] * x.n * x.c[c] * x.c[c]
+			sq += x.n * x.c[c] * x.c[c]
 		}
 	}
 	b.err = sq - sqNorm(b.sum)/b.n
@@ -195,7 +245,7 @@ func newBox(e []entry) box {
 	if len(e) < 2 {
 		return b
 	}
-	// The axis along which the colors spread most, weighted.
+	// The axis along which the colors spread most.
 	var lo, hi [3]float64
 	lo, hi = e[0].c, e[0].c
 	for _, x := range e {
@@ -205,7 +255,7 @@ func newBox(e []entry) box {
 		}
 	}
 	for c := range 3 {
-		if weight[c]*(hi[c]-lo[c]) > weight[b.axis]*(hi[b.axis]-lo[b.axis]) {
+		if hi[c]-lo[c] > hi[b.axis]-lo[b.axis] {
 			b.axis = c
 		}
 	}
@@ -241,9 +291,9 @@ func newBox(e []entry) box {
 	return b
 }
 
-// sqNorm is the weighted squared length of a sum of colors.
+// sqNorm is the squared length of a sum of colors.
 func sqNorm(s [3]float64) float64 {
-	return weight[0]*s[0]*s[0] + weight[1]*s[1]*s[1] + weight[2]*s[2]*s[2]
+	return s[0]*s[0] + s[1]*s[1] + s[2]*s[2]
 }
 
 // gain is how much splitting the box lowers the error, 0 when it cannot
@@ -264,8 +314,9 @@ func (b *box) mean() [3]float64 {
 }
 
 // refine moves each center to the mean of the entries nearest it, rounds
-// times: Lloyd's k-means, seeded by the median cut.
-func refine(entries []entry, centers [][3]float64, rounds int) {
+// times: Lloyd's k-means, seeded by the median cut. The first fixed
+// centers stay where they are.
+func refine(entries []entry, centers [][3]float64, fixed, rounds int) {
 	n := make([]float64, len(centers))
 	sum := make([][3]float64, len(centers))
 	for range rounds {
@@ -278,7 +329,7 @@ func refine(entries []entry, centers [][3]float64, rounds int) {
 				sum[i][c] += e.n * e.c[c]
 			}
 		}
-		for i := range centers {
+		for i := fixed; i < len(centers); i++ {
 			if n[i] > 0 {
 				centers[i] = [3]float64{sum[i][0] / n[i], sum[i][1] / n[i], sum[i][2] / n[i]}
 			}
@@ -299,7 +350,7 @@ func nearest(centers [][3]float64, c [3]float64) int {
 // mapper maps colors to the nearest of a palette's, remembering each
 // color it has mapped, and dithers when asked.
 type mapper struct {
-	pal    [][3]float64
+	pal    [][3]float64 // in Oklab
 	seen   map[uint32]uint8
 	last   uint32 // the color mapped last, +1, and its index: a run of one color looks up once
 	lastI  uint8
@@ -313,7 +364,7 @@ func newMapper(p color.Palette, dither float64) *mapper {
 	m := &mapper{seen: map[uint32]uint8{}, dither: dither * 32}
 	for _, c := range p {
 		r, g, b, _ := c.RGBA()
-		m.pal = append(m.pal, [3]float64{float64(r >> 8), float64(g >> 8), float64(b >> 8)})
+		m.pal = append(m.pal, oklab(float64(r>>8), float64(g>>8), float64(b>>8)))
 	}
 	return m
 }
@@ -347,7 +398,7 @@ func (m *mapper) index(r, g, b uint8, x, y int) uint8 {
 		if len(m.seen) >= maxSeen {
 			clear(m.seen)
 		}
-		i = uint8(nearest(m.pal, [3]float64{float64(r), float64(g), float64(b)}))
+		i = uint8(nearest(m.pal, oklab(float64(r), float64(g), float64(b))))
 		m.seen[key] = i
 	}
 	m.last, m.lastI = key+1, i

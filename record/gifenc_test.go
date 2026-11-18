@@ -188,3 +188,32 @@ func decodeLZW(t *testing.T, data []byte, lit, n int) []byte {
 	img := readGIF(t, path).Image[0]
 	return img.Pix[:n]
 }
+
+// The flat colors of a UI keep entries of their own in a palette too
+// small for every color, rather than being averaged with a gradient's.
+func TestPaletteKeepsFlatColors(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 512, 512))
+	flat := []color.RGBA{{R: 0xf6, G: 0xf6, B: 0xf7, A: 0xff}, {R: 0x80, G: 0x90, B: 0x44, A: 0xff}, {R: 0x30, G: 0xa0, B: 0x40, A: 0xff}}
+	for y := range 512 {
+		for x := range 512 {
+			c := color.RGBA{R: uint8(x / 2), G: uint8(y / 2), B: uint8((x + y) / 4), A: 0xff}
+			switch {
+			case y < 120:
+				c = flat[0]
+			case y < 140 && x < 40:
+				c = flat[1]
+			case y < 160 && x < 40:
+				c = flat[2]
+			}
+			img.SetRGBA(x, y, c)
+		}
+	}
+	h := new(histogram)
+	h.add(img, img.Rect)
+	p := h.palette(32)
+	for _, c := range flat {
+		if p[p.Index(c)] != color.Color(c) {
+			t.Errorf("%v became %v", c, p[p.Index(c)])
+		}
+	}
+}
