@@ -502,14 +502,14 @@ func (c *Config) validate() []problem {
 		add(fmt.Sprintf("app.version %q must be one to three numbers separated by dots, such as 1.2.0: macOS reads it as CFBundleShortVersionString", c.App.Version), "app", "version")
 	}
 	switch ext := strings.ToLower(filepath.Ext(c.App.Icon)); {
-	case c.App.Icon == "" || ext == ".png":
-	case ext == ".svg" || ext == ".svgz":
-		// Rasterizing SVG takes a renderer this command does not carry;
-		// any drawing program or rsvg-convert exports the PNG.
-		add(fmt.Sprintf("app.icon %q is an SVG; ggui makes icons from a PNG: export it at 1024×1024 pixels, as with rsvg-convert -w 1024 -h 1024 %s -o %s, and name the PNG here",
-			c.App.Icon, filepath.Base(c.App.Icon), strings.TrimSuffix(filepath.Base(c.App.Icon), filepath.Ext(c.App.Icon))+".png"), "app", "icon")
+	case c.App.Icon == "" || ext == ".png" || ext == ".svg":
+		// An SVG is drawn at build time by the project's own ggfx.
+	case ext == ".svgz":
+		base := filepath.Base(c.App.Icon)
+		add(fmt.Sprintf("app.icon %q is a compressed SVG; name the SVG it holds, as gunzip -c %s > %s writes it",
+			c.App.Icon, base, strings.TrimSuffix(base, filepath.Ext(base))+".svg"), "app", "icon")
 	default:
-		add(fmt.Sprintf("app.icon %q must be a PNG file, square, ideally 1024×1024", c.App.Icon), "app", "icon")
+		add(fmt.Sprintf("app.icon %q must be a PNG file, square, ideally 1024×1024, or an SVG with a square viewBox", c.App.Icon), "app", "icon")
 	}
 	if c.App.Package == "" {
 		add(`app.package must name the main package's directory; "." is the directory of this file`, "app", "package")

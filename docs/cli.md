@@ -446,10 +446,31 @@ transparency. The Windows icon keeps the edges. ggui does not cut the
 rounded square, or add the shadow: the artwork has its own shape. Without
 `icon_inset`, a build whose icon has opaque pixels near the edges says so.
 
-The icon must be a PNG. ggui carries no SVG renderer, so an `.svg`
-`app.icon` is refused with what to do: export it as a 1024×1024 PNG from
-the drawing program, or with `rsvg-convert -w 1024 -h 1024 icon.svg -o
-icon.png`, and name that.
+The icon is a PNG or an SVG. An `.svg` `app.icon` is drawn at 1024×1024
+when the build starts, by the `svg` package of the ggfx in the project's
+own module graph, at the version the app builds with: the ggui command
+carries no SVG renderer of its own. The document's viewBox (or, without
+one, its width and height) is scaled to fill the canvas, on
+transparency, and must be square; the PNG drawn then goes the way a PNG
+`app.icon` does, through `icon_inset` and into the Windows icon too. To
+draw it, `ggui build` compiles a small program in the project's module,
+given to the go command as an `-overlay` so no file is written into the
+project, built for the machine running the build whatever `--target` is,
+and with `-mod=readonly`, so `go.mod` and `go.sum` are left as they are.
+That takes:
+
+- a ggui project: a module that requires `github.com/ironpark/ggfx`,
+  which requiring ggui does, `// indirect` or not;
+- a ggfx with the `svg` package, from October 2026 on; an older one is
+  named in the error, and updating ggui brings a later one;
+- an SVG the package can draw: paths, shapes, groups, `use`, transforms,
+  gradients, opacity, clip paths, masks and markers, but not `filter`,
+  `image` or text. What it refuses is said with the file's name.
+
+The compile is the go command's, so a build after the first takes it
+from the build cache. A compressed `.svgz` is refused: name the SVG it
+holds. Artwork that relies on more than the package draws is exported as
+a 1024×1024 PNG from the drawing program instead.
 
 macOS draws the app's standard menu items and dialogs in a language only
 when `Info.plist` lists it in `CFBundleLocalizations`. When
@@ -613,7 +634,7 @@ It prints what to do under each line that is not ok, and exits with status
 | target | Whether ggfx and ggwd support `GOOS/GOARCH`; whether cgo is on, and on macOS whether the Xcode command line tools that a cgo build calls are installed. ggui needs no cgo, so `CGO_ENABLED=0` avoids needing them. |
 | ggui, ggfx, ggwd | The versions the project resolves, or the local directories that replace them, and whether ggfx and ggwd are the versions that ggui's go.mod requires. |
 | remote display | Whether `ggui dev` can show the app in its viewer, and why not. |
-| ggui.toml, icon | Whether the file is valid, and the icon a square PNG of at least 64 pixels, ideally 1024; under 256 it lacks Windows' largest size too. |
+| ggui.toml, icon | Whether the file is valid, and the icon a square PNG of at least 64 pixels, ideally 1024; under 256 it lacks Windows' largest size too. An SVG icon is only found: drawing it takes a compile, which the build does. |
 | Windows build | What `--target windows` takes from the file and macOS does not check: each number of `app.version` at most 65535, `app.name` a name Windows allows for a file, and `windows.manifest`, when set, a well-formed `<assembly>`. |
 | translations | In a project with [translation catalogs](#ggui-i18n) only: the errors `ggui i18n check` finds in each, as a warning, since the app still runs. |
 | platform | What ggwd and ggfx load when an app starts. |
@@ -755,7 +776,7 @@ base = "/hello/"
 | `name` | the main package directory's name | The name people see: the `.app` name, its menu title, `Name.exe` and the page title. |
 | `id` | made from the import path, such as `com.github.alice.hello` | The reverse-DNS bundle identifier. macOS keys settings, permissions and the Dock to it, so set it once and keep it. The Windows manifest names the program by it too. |
 | `version` | `"0.1.0"` | One to three numbers: `CFBundleShortVersionString` and `CFBundleVersion`, and the Windows file and product version, for which each is at most 65535. |
-| `icon` | none | A square PNG, ideally 1024×1024, for the macOS and Windows icons. Not an SVG: export one as a PNG. See `macos.icon_inset` for the margin a macOS icon has. |
+| `icon` | none | A square PNG, ideally 1024×1024, for the macOS and Windows icons, or an SVG with a square viewBox, which the build draws at 1024×1024 with the project's ggfx; see [The macOS bundle](#the-macos-bundle). See `macos.icon_inset` for the margin a macOS icon has. |
 | `package` | `"."` | The main package's directory. A package given on the command line replaces it. |
 
 ### [build]

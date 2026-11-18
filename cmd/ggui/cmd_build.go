@@ -17,6 +17,7 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/i18n"
 	"github.com/ironpark/ggui/cmd/ggui/internal/macos"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
+	"github.com/ironpark/ggui/cmd/ggui/internal/svgicon"
 	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
 	"github.com/ironpark/ggui/cmd/ggui/internal/web"
 	"github.com/ironpark/ggui/cmd/ggui/internal/windows"
@@ -378,6 +379,10 @@ func (b *builder) macos(ctx context.Context) error {
 		return err
 	}
 	defer os.RemoveAll(tmp)
+	icon, err := b.icon(ctx, tmp)
+	if err != nil {
+		return err
+	}
 
 	bin := filepath.Join(tmp, b.main.Executable)
 	arch := ""
@@ -427,7 +432,8 @@ func (b *builder) macos(ctx context.Context) error {
 		Category:             cfg.MacOS.Category,
 		Extra:                extra,
 		Binary:               bin,
-		Icon:                 b.proj.Path(cfg.App.Icon),
+		Icon:                 icon,
+		IconName:             b.proj.Path(cfg.App.Icon),
 		IconInset:            cfg.MacOS.IconInset,
 		OutDir:               dir,
 	})
@@ -538,6 +544,26 @@ func (b *builder) macos(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// icon returns the PNG the icons are made from, "" for none: app.icon
+// itself, or for an SVG the PNG drawn from it in dir by the project's
+// ggfx.
+func (b *builder) icon(ctx context.Context, dir string) (string, error) {
+	path := b.proj.Path(b.proj.Config.App.Icon)
+	if path == "" || !svgicon.Is(path) {
+		return path, nil
+	}
+	out := filepath.Join(dir, "icon.png")
+	log := ui.Stderr
+	name := filepath.Base(path)
+	size := fmt.Sprintf("%d×%d", svgicon.Size, svgicon.Size)
+	return out, step(ctx, "Drawing "+name+" at "+size+" with the project's ggfx", "Drew "+name+" at "+size, func() error {
+		return svgicon.Draw(ctx, svgicon.Options{
+			Dir: b.proj.Root, SVG: path, Name: b.proj.Config.App.Icon, Out: out,
+			Logf: func(format string, args ...any) { log.Println(log.Dim(fmt.Sprintf(format, args...))) },
+		})
+	})
 }
 
 // plistExtra returns the Info.plist keys [macos.plist] sets, with
@@ -674,12 +700,21 @@ func (b *builder) windows(ctx context.Context) error {
 		log.Info("%s links resources of its own from %s, so %s has those rather than ggui's icon, version information and manifest",
 			target(b.main), strings.Join(theirs, ", "), exe)
 	} else {
+		tmp, err := os.MkdirTemp("", "ggui-build-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(tmp)
+		icon, err := b.icon(ctx, tmp)
+		if err != nil {
+			return err
+		}
 		w := cfg.Windows
 		r := windows.Resources{
 			Arch: b.arch, Name: b.main.Name, Executable: b.main.Executable, ID: b.main.ID,
 			Version:     cfg.App.Version,
 			Description: w.Description, Company: w.Company, Copyright: w.Copyright,
-			Icon:     b.proj.Path(cfg.App.Icon),
+			Icon:     icon,
 			Manifest: b.proj.Path(w.Manifest),
 		}
 		what := "version and manifest"
@@ -692,7 +727,7 @@ func (b *builder) windows(ctx context.Context) error {
 			remove   func() error
 			warnings []string
 		)
-		err := step(ctx, "Writing the "+what+" of "+exe, "Wrote the "+what+" of "+exe, func() error {
+		err = step(ctx, "Writing the "+what+" of "+exe, "Wrote the "+what+" of "+exe, func() error {
 			obj, ws, err := windows.Object(r)
 			if err != nil {
 				return err

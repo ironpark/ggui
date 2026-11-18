@@ -109,6 +109,11 @@ type BuildOptions struct {
 	// directory, GOTMPDIR. A build that is cancelled is killed, and
 	// leaves its work directory behind for the caller to remove.
 	TmpDir string
+	// Mod is the -mod flag's value, or "" for the go command's choice.
+	Mod string
+	// Overlay is the -overlay flag's file, or "": source files the build
+	// reads in place of what is on disk, or as well.
+	Overlay string
 }
 
 // Args returns the go command line for o, without the program name.
@@ -122,6 +127,12 @@ func (o BuildOptions) Args() []string {
 	}
 	if o.LDFlags != "" {
 		args = append(args, "-ldflags", o.LDFlags)
+	}
+	if o.Mod != "" {
+		args = append(args, "-mod="+o.Mod)
+	}
+	if o.Overlay != "" {
+		args = append(args, "-overlay", o.Overlay)
 	}
 	return append(args, o.Package)
 }

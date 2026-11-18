@@ -30,7 +30,8 @@ id = {{.ID}}
 # program's file and product version, where each number is at most 65535.
 version = {{.Version}}
 # A square PNG, ideally 1024x1024, turned into the macOS app icon and the
-# Windows program's icon.
+# Windows program's icon; or an SVG with a square viewBox, which the build
+# draws at 1024x1024 with this module's ggfx.
 # Default: none, and the app has the generic icon.
 # icon = "icon.png"
 # The directory of the main package.

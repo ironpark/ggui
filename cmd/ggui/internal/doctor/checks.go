@@ -17,6 +17,7 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
 	"github.com/ironpark/ggui/cmd/ggui/internal/i18n"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
+	"github.com/ironpark/ggui/cmd/ggui/internal/svgicon"
 	"github.com/ironpark/ggui/cmd/ggui/internal/windows"
 )
 
@@ -330,7 +331,13 @@ func checkWindowsBuild(r *Report, proj *project.Project) {
 func checkIcon(r *Report, path string) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		r.fail("icon", err.Error(), "add the PNG, or remove app.icon from ggui.toml")
+		r.fail("icon", err.Error(), "add the PNG or SVG, or remove app.icon from ggui.toml")
+		return
+	}
+	if svgicon.Is(path) {
+		// Drawing it takes a compile; the build does that, and says
+		// what it cannot draw.
+		r.ok("icon", fmt.Sprintf("%s, an SVG, which ggui build draws at %d×%d with the project's ggfx", path, svgicon.Size, svgicon.Size))
 		return
 	}
 	cfg, err := png.DecodeConfig(bytes.NewReader(data))
