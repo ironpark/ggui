@@ -27,6 +27,7 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/gosrc"
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
 	"github.com/ironpark/ggui/cmd/ggui/internal/proc"
+	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
 	"github.com/ironpark/ggui/cmd/ggui/internal/viewer"
 	"github.com/ironpark/ggui/cmd/ggui/internal/watch"
 )
@@ -79,6 +80,9 @@ type Native struct {
 	parse   *bool              // whether this program parses the project's Go
 
 	viewer  Viewer
+	out     *ui.Output // Log, styled
+	step    *ui.Step   // the build of stepID, while it runs
+	stepID  int
 	tail    *tail     // the end of what the running app wrote to stderr
 	changed time.Time // when the change being built was seen
 	cause   string    // "the change", or "ggui dev started"
@@ -87,9 +91,17 @@ type Native struct {
 	shown   bool // the running app's first frame is up
 }
 
-func (n *Native) logf(format string, args ...any) {
-	fmt.Fprintf(n.Log, "ggui: "+format+"\n", args...)
+// say returns ggui's own messages' Output: Log, each line marked ggui.
+func (n *Native) say() *ui.Output {
+	if n.out == nil {
+		n.out = ui.For(n.Log).Prefixed("ggui")
+	}
+	return n.out
 }
+
+func (n *Native) logf(format string, args ...any) { n.say().Info(format, args...) }
+
+func (n *Native) warnf(format string, args ...any) { n.say().Warn(format, args...) }
 
 func (n *Native) tracef(format string, args ...any) {
 	if n.Tracef != nil {
@@ -151,7 +163,10 @@ func (n *Native) Run(ctx context.Context) error {
 		list := func(ctx context.Context) ([]string, error) {
 			return WatchSet(ctx, n.list, n.Package, n.Extra, ig)
 		}
+		// go list may have modules to download first.
+		s := n.say().Step("finding the files to watch", ui.QuietStart())
 		set, err := list(ctx)
+		s.Stop()
 		if err != nil {
 			if viewerReady != nil {
 				n.useViewer(<-viewerReady)
@@ -161,7 +176,7 @@ func (n *Native) Run(ctx context.Context) error {
 		n.w = watch.New(set, watch.Options{
 			List: list, Ignore: ig,
 			Settle: settleTime, Poll: pollInterval, SafetyNet: safetyNetInterval,
-			Logf: n.logf, Tracef: n.Tracef,
+			Logf: n.warnf, Tracef: n.Tracef,
 		})
 		changes = make(chan watch.Change)
 		go n.w.Run(ctx, changes)
@@ -204,7 +219,7 @@ func (n *Native) Run(ctx context.Context) error {
 		case <-dueC:
 			id, batch, since := n.plan.start()
 			n.changed, n.cause = since, "the change"
-			n.logf("%s changed, rebuilding", describe(n.Dir, batch))
+			n.logf("%s changed, rebuilding", n.say().Cyan(describe(n.Dir, batch)))
 			n.send(viewer.Command{Type: viewer.Building})
 			n.launch(ctx, id, batch)
 		case r := <-n.results:
@@ -226,7 +241,11 @@ func (n *Native) Run(ctx context.Context) error {
 				}
 				return nil
 			}
-			n.logf("the app %s; waiting for a change to start it again", msg)
+			if err != nil {
+				n.say().Error("the app %s; waiting for a change to start it again", msg)
+			} else {
+				n.warnf("the app %s; waiting for a change to start it again", msg)
+			}
 			n.send(viewer.Command{Type: viewer.AppExited, Status: msg, Output: n.tail.String()})
 		case ev, ok := <-events:
 			if !ok {
@@ -258,6 +277,7 @@ func (n *Native) change(c watch.Change) {
 		if n.plan.change(c.At, c.Real) {
 			n.tracef("%s changed during build %d: cancelling it", describe(n.Dir, c.Real), n.plan.id)
 			n.cancel()
+			n.step.Stop()
 		}
 		return
 	}
@@ -289,6 +309,13 @@ func (n *Native) launch(ctx context.Context, id int, batch []string) {
 	ctx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
 	n.tracef("build %d starts", id)
+	// The spinner turns only while no app runs: the app writes to the
+	// terminal unseen, and a frame would land in its output.
+	opts := []ui.StepOption{ui.QuietStart(), ui.NoElapsed()}
+	if n.app != nil {
+		opts = append(opts, ui.NoSpin())
+	}
+	n.step, n.stepID = n.say().Step("building the app", opts...), id
 	go func() {
 		defer cancel()
 		r := buildResult{id: id, batch: batch}
@@ -335,12 +362,16 @@ func (n *Native) finish(ctx context.Context, r buildResult) error {
 	}
 	if !n.plan.done(r.id) {
 		n.tracef("build %d is of sources that changed since; thrown away", r.id)
+		if r.id == n.stepID {
+			n.step.Stop()
+		}
 		if r.exe != "" {
 			os.Remove(r.exe)
 		}
 		return nil
 	}
 	if ctx.Err() != nil {
+		n.step.Stop()
 		return nil
 	}
 	if r.err != nil {
@@ -349,13 +380,13 @@ func (n *Native) finish(ctx context.Context, r buildResult) error {
 			what = "syntax error"
 		}
 		if n.app != nil {
-			n.logf("%s; the app keeps running the last build that succeeded:", what)
+			n.step.Fail(what + "; the app keeps running the last build that succeeded:")
 		} else {
-			n.logf("%s:", what)
+			n.step.Fail(what + ":")
 		}
 		// As the compiler wrote it, in the file:line:col form terminals
 		// and editors make links of; indenting would break them.
-		fmt.Fprintln(n.Log, r.err.Error())
+		fmt.Fprintln(n.say(), r.err.Error())
 		n.send(viewer.Command{Type: viewer.BuildFailed, Output: r.err.Error()})
 		if !n.Watch {
 			return r.err
@@ -363,7 +394,7 @@ func (n *Native) finish(ctx context.Context, r buildResult) error {
 		return nil
 	}
 	n.built = r.took
-	n.logf("built in %s", n.built.Round(time.Millisecond))
+	n.step.Done(fmt.Sprintf("built in %s", n.built.Round(time.Millisecond)))
 	if len(r.batch) > 0 && n.viewer != nil && n.Display.Stale(ctx, r.batch) {
 		n.logf("the viewer's dependencies changed; restarting it, and its window with it")
 		n.stop()
@@ -436,7 +467,7 @@ func (n *Native) windowClosing() bool {
 func (n *Native) useViewer(r startResult) {
 	if r.err != nil {
 		if !errors.Is(r.err, context.Canceled) {
-			n.logf("the app opens its own window: %v", r.err)
+			n.warnf("the app opens its own window: %v", r.err)
 		}
 		return
 	}
@@ -447,7 +478,7 @@ func (n *Native) useViewer(r startResult) {
 // opens its own window from then on, running the last build that
 // succeeded, as the one that showed in the viewer exits with it.
 func (n *Native) viewerLost() {
-	n.logf("the viewer ended (%s); the app opens its own window for the rest of this session", n.viewer.Exited())
+	n.warnf("the viewer ended (%s); the app opens its own window for the rest of this session", n.viewer.Exited())
 	n.dropViewer()
 	if n.exe == "" {
 		return
@@ -494,6 +525,8 @@ func (n *Native) restart(exe string) {
 
 // start starts the app on exe, in the viewer when there is one.
 func (n *Native) start(exe string) {
+	// A build's spinner stops turning before the app has the terminal.
+	n.step.Static()
 	env := proc.Environ(n.Env)
 	if n.viewer != nil {
 		if env == nil {
@@ -509,7 +542,7 @@ func (n *Native) start(exe string) {
 		Stderr: io.MultiWriter(n.Stderr, n.tail),
 	})
 	if err != nil {
-		n.logf("could not start the app: %v", err)
+		n.say().Error("could not start the app: %v", err)
 		n.send(viewer.Command{Type: viewer.AppExited, Status: "did not start", Output: err.Error()})
 		return
 	}
@@ -539,7 +572,7 @@ func (n *Native) stop() {
 		}
 	}()
 	if err := app.Stop(n.StopTimeout); errors.Is(err, proc.ErrKilled) {
-		n.logf("the app %s after %s", err, n.StopTimeout)
+		n.warnf("the app %s after %s", err, n.StopTimeout)
 	}
 }
 

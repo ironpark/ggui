@@ -10,13 +10,13 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
 	"unicode"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/config"
+	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 )
 
@@ -44,7 +44,7 @@ type Options struct {
 	Offline bool
 	// Force overwrites files that exist.
 	Force bool
-	Log   io.Writer // the go command's output
+	Log   io.Writer // the go command's output, for Init
 }
 
 // Result is what was written.
@@ -54,20 +54,71 @@ type Result struct {
 	Name    string
 	Files   []string
 	Fetched bool // whether ggui was added to go.mod
+	// Replaced is whether go.mod replaces ggui with a checkout.
+	Replaced bool
 }
 
 // Files are the files Init writes, in the order it writes them.
 var Files = []string{"go.mod", "main.go", config.FileName, ".gitignore"}
 
-// Init writes the application. It checks every file first, so that it
-// either writes all of them or, refusing to overwrite, none.
+// Init writes the application, then, unless Offline, runs the go commands
+// that add ggui to it, their output going to Log. It checks every file
+// first, so that it either writes all of them or, refusing to overwrite,
+// none.
 func Init(ctx context.Context, o Options) (*Result, error) {
+	r, err := Write(o)
+	if err != nil || o.Offline {
+		return r, err
+	}
+	for _, args := range r.Commands() {
+		if err := Go(ctx, r.Dir, o.Log, args...); err != nil {
+			if errors.Is(err, gotool.ErrNoGo) {
+				return r, fmt.Errorf("%w, then run %s in %s", err, r.Finish(), r.Dir)
+			}
+			return r, fmt.Errorf("go %s: %w; the files are written, so fix the cause and run it again in %s, or use --offline",
+				strings.Join(args, " "), err, r.Dir)
+		}
+	}
+	r.Fetched = true
+	return r, nil
+}
+
+// Commands returns the go commands, without the program name, that add
+// ggui to the module Write wrote, in order.
+func (r *Result) Commands() [][]string {
+	if r.Replaced {
+		return [][]string{{"mod", "tidy"}} // tidy adds the requirement the replace satisfies
+	}
+	return [][]string{{"get", GGUI + "@latest"}, {"mod", "tidy"}}
+}
+
+// Finish returns the command line that does what Commands do, for a
+// person to run.
+func (r *Result) Finish() string {
+	var lines []string
+	for _, args := range r.Commands() {
+		lines = append(lines, "go "+strings.Join(args, " "))
+	}
+	return strings.Join(lines, " && ")
+}
+
+// Go runs one of Commands in dir, its output going to out. GOWORK is off:
+// a go.work above the new directory belongs to another project, and go
+// get refuses to edit a module through one. When ctx is done the go
+// command is interrupted and given time to stop.
+func Go(ctx context.Context, dir string, out io.Writer, args ...string) error {
+	return gotool.Run(ctx, dir, []string{"GOWORK=off"}, out, args...)
+}
+
+// Write writes the application's files, checking every one first, so
+// that it either writes all of them or, refusing to overwrite, none.
+func Write(o Options) (*Result, error) {
 	dir, err := filepath.Abs(o.Dir)
 	if err != nil {
 		return nil, err
 	}
 	base := filepath.Base(dir)
-	r := &Result{Dir: dir, Module: o.Module, Name: o.Name}
+	r := &Result{Dir: dir, Module: o.Module, Name: o.Name, Replaced: o.Replace != ""}
 	if r.Module == "" {
 		r.Module = modulePath(base)
 		if r.Module == "" {
@@ -122,30 +173,6 @@ func Init(ctx context.Context, o Options) (*Result, error) {
 		}
 		r.Files = append(r.Files, f)
 	}
-
-	if o.Offline {
-		return r, nil
-	}
-	// GOWORK=off: a go.work above the new directory belongs to another
-	// project, and go get refuses to edit a module through one.
-	steps := [][]string{{"get", GGUI + "@latest"}, {"mod", "tidy"}}
-	if o.Replace != "" {
-		steps = steps[1:] // tidy adds the requirement the replace satisfies
-	}
-	for _, args := range steps {
-		cmd := exec.CommandContext(ctx, "go", args...)
-		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), "GOWORK=off")
-		cmd.Stdout, cmd.Stderr = o.Log, o.Log
-		if err := cmd.Run(); err != nil {
-			if errors.Is(err, exec.ErrNotFound) {
-				return r, errors.New("the go command is not on PATH: install Go from https://go.dev/dl/, then run go mod tidy in " + dir)
-			}
-			return r, fmt.Errorf("go %s: %w; the files are written, so fix the cause and run it again in %s, or use --offline",
-				strings.Join(args, " "), err, dir)
-		}
-	}
-	r.Fetched = true
 	return r, nil
 }
 

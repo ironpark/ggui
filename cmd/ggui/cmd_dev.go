@@ -15,6 +15,7 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/dev"
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
+	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
 	"github.com/ironpark/ggui/cmd/ggui/internal/viewer"
 )
 
@@ -89,24 +90,25 @@ which keeps running the last build that succeeded.`,
 				extra = append(extra, proj.Path(w))
 			}
 			outDir := proj.Path(cfg.Build.Output)
+			say := ui.Stderr.Prefixed("ggui")
 			var tracef func(string, ...any)
 			if *verbose || os.Getenv("GGUI_VERBOSE") != "" {
 				tracef = func(format string, args ...any) {
-					fmt.Fprintf(os.Stderr, "ggui: %s "+format+"\n", append([]any{time.Now().Format("15:04:05.000")}, args...)...)
+					say.Info("%s", say.Dim(fmt.Sprintf("%s "+format, append([]any{time.Now().Format("15:04:05.000")}, args...)...)))
 				}
 			}
 			lo := gotool.ListOptions{Tags: devTags}
 			if *webMode {
 				lo.GOOS, lo.GOARCH = "js", "wasm"
 			}
-			main, err := proj.ResolveMain(ctx, arg, lo)
+			main, err := resolveMain(ctx, say, proj, arg, lo)
 			if err != nil {
 				return err
 			}
 
 			if *webMode {
 				if len(rest) > 0 || len(cfg.Dev.Args) > 0 || len(cfg.Dev.Env) > 0 {
-					fmt.Fprintln(os.Stderr, "ggui: a page in a browser takes no arguments or environment; dev.args, dev.env and those after -- are not used with --web")
+					say.Warn("a page in a browser takes no arguments or environment; dev.args, dev.env and those after -- are not used with --web")
 				}
 				b := cfg.Web.Base
 				if isSet(fs, "base") {
@@ -145,7 +147,10 @@ which keeps running the last build that succeeded.`,
 				Env:   cfg.Dev.Env,
 				Extra: extra, OutDir: outDir, Watch: !*noWatch,
 				StopTimeout: *stopTimeout, Force: force,
-				Log: os.Stderr, Stdout: os.Stdout, Stderr: os.Stderr,
+				// The app's stdout is the terminal itself; its stderr
+				// goes through a pipe for the tail a viewer shows, and on
+				// through ui, above any spinner of ggui's.
+				Log: os.Stderr, Stdout: os.Stdout, Stderr: ui.Stderr,
 				Tracef: tracef,
 			}
 			mode := cfg.Dev.Display
@@ -178,16 +183,26 @@ func remoteDisplay(mode, dir string) (*dev.RemoteDisplay, error) {
 	}
 	if err := viewer.Supported(); err != nil {
 		if mode == "remote" {
-			fmt.Fprintf(os.Stderr, "ggui: the app opens its own window: %v\n", err)
+			ui.Stderr.Prefixed("ggui").Warn("the app opens its own window: %v", err)
 		}
 		return nil, nil
 	}
 	cache, err := viewer.CacheDir()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ggui: the app opens its own window: no cache directory for the viewer: %v\n", err)
+		ui.Stderr.Prefixed("ggui").Warn("the app opens its own window: no cache directory for the viewer: %v", err)
 		return nil, nil
 	}
-	return &dev.RemoteDisplay{Dir: dir, CacheDir: cache, Exe: os.Getenv("GGUI_VIEWER"), Stderr: os.Stderr, Log: os.Stderr}, nil
+	// The viewer's logs go through ui, so that they land above the
+	// build's spinner rather than in it.
+	return &dev.RemoteDisplay{Dir: dir, CacheDir: cache, Exe: os.Getenv("GGUI_VIEWER"), Stderr: ui.Stderr, Log: os.Stderr}, nil
+}
+
+// resolveMain finds the main package, which takes the go command a moment,
+// or longer when it has modules to download first: a spinner says so.
+func resolveMain(ctx context.Context, log *ui.Output, proj *project.Project, arg string, lo gotool.ListOptions) (*project.Main, error) {
+	s := log.Step("loading the package", ui.QuietStart())
+	defer s.Stop()
+	return proj.ResolveMain(ctx, arg, lo)
 }
 
 // target names the package for messages: its directory relative to the

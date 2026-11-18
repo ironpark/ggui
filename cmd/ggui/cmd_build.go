@@ -14,6 +14,7 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
 	"github.com/ironpark/ggui/cmd/ggui/internal/macos"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
+	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
 	"github.com/ironpark/ggui/cmd/ggui/internal/web"
 )
 
@@ -114,7 +115,7 @@ has the details.`,
 				}
 			}
 			b.mac = mf
-			if b.main, err = proj.ResolveMain(ctx, arg, lo); err != nil {
+			if b.main, err = resolveMain(ctx, ui.Stderr, proj, arg, lo); err != nil {
 				return err
 			}
 			switch *tgt {
@@ -245,9 +246,30 @@ func (b *builder) release(output string) gotool.BuildOptions {
 	}
 }
 
-func (b *builder) build(ctx context.Context, o gotool.BuildOptions) error {
-	fmt.Fprintln(os.Stderr, o)
-	return gotool.Build(ctx, o)
+// build compiles for target, GOOS/GOARCH, as a step under the go command
+// line it runs.
+func (b *builder) build(ctx context.Context, o gotool.BuildOptions, target string) error {
+	log := ui.Stderr
+	log.Println(log.Dim(o.String()))
+	return step(ctx, "Compiling for "+target, "Compiled for "+target, func() error {
+		return gotool.Build(ctx, o)
+	})
+}
+
+// step runs fn as a step called title, ending in done or in what went
+// wrong, which the caller returns for main to print.
+func step(ctx context.Context, title, done string, fn func() error) error {
+	s := ui.Stderr.Step(title)
+	err := fn()
+	switch {
+	case err != nil && ctx.Err() != nil:
+		s.Warn("Interrupted: " + title)
+	case err != nil:
+		s.Fail(title + " failed")
+	default:
+		s.Done(done)
+	}
+	return err
 }
 
 func (b *builder) native(ctx context.Context) error {
@@ -264,7 +286,7 @@ func (b *builder) native(ctx context.Context) error {
 		name += ".exe"
 	}
 	out := filepath.Join(dir, name)
-	if err := b.build(ctx, b.release(out)); err != nil {
+	if err := b.build(ctx, b.release(out), env["GOOS"]+"/"+env["GOARCH"]); err != nil {
 		return err
 	}
 	return report(out, env["GOOS"]+"/"+env["GOARCH"])
@@ -292,14 +314,17 @@ func (b *builder) macos(ctx context.Context) error {
 	}
 	defer func() {
 		if err := sg.Close(); err != nil {
-			fmt.Fprintln(os.Stderr, "ggui: warning: cleaning up after signing:", err)
+			ui.Stderr.Warn("cleaning up after signing: %v", err)
 		}
 	}()
-	if err := sg.Check(ctx); err != nil {
+	check := ui.Stderr.Step("Checking how to sign", ui.QuietStart())
+	err = sg.Check(ctx)
+	check.Stop()
+	if err != nil {
 		return err
 	}
 	if !sg.AdHoc() {
-		logf("signing as %s, from %s", sg.Identity, s.Describe())
+		logf("Signing as %s, from %s", sg.Identity, s.Describe())
 	}
 	makeDMG := b.mac.boolean("dmg", b.mac.dmg, cfg.MacOS.DMG.Make)
 	makePKG := b.mac.boolean("pkg", b.mac.pkg, cfg.MacOS.PKG.Make)
@@ -325,58 +350,63 @@ func (b *builder) macos(ctx context.Context) error {
 		for _, a := range []string{"arm64", "amd64"} {
 			o := b.release(bin + "-" + a)
 			o.GOOS, o.GOARCH = "darwin", a
-			if err := b.build(ctx, o); err != nil {
+			if err := b.build(ctx, o, "darwin/"+a); err != nil {
 				return err
 			}
 			halves = append(halves, o.Output)
 		}
-		if err := macos.Lipo(ctx, bin, halves...); err != nil {
+		err := step(ctx, "Joining arm64 and amd64 with lipo", "Joined arm64 and amd64 with lipo", func() error {
+			return macos.Lipo(ctx, bin, halves...)
+		})
+		if err != nil {
 			return err
 		}
 		arch = "arm64 + amd64"
 	} else {
-		o := b.release(bin)
-		o.GOOS = "darwin"
-		if err := b.build(ctx, o); err != nil {
-			return err
-		}
 		env, err := gotool.Env(ctx, b.proj.Root, []string{"GOOS=darwin"}, "GOARCH")
 		if err != nil {
 			return err
 		}
 		arch = env["GOARCH"]
+		o := b.release(bin)
+		o.GOOS = "darwin"
+		if err := b.build(ctx, o, "darwin/"+arch); err != nil {
+			return err
+		}
 	}
 
+	appName := b.main.Name + ".app"
+	assemble := ui.Stderr.Step("Assembling " + appName)
 	app, warnings, err := macos.Assemble(macos.Bundle{
-		Info: macos.Info{
-			Name: b.main.Name, Executable: b.main.Executable, ID: b.main.ID,
-			Version:              cfg.App.Version,
-			MinimumSystemVersion: cfg.MacOS.MinimumSystemVersion,
-			Category:             cfg.MacOS.Category,
-			Extra:                cfg.MacOS.Plist,
-		},
-		Binary: bin,
-		Icon:   b.proj.Path(cfg.App.Icon),
-		OutDir: dir,
+		Name: b.main.Name, Executable: b.main.Executable, ID: b.main.ID,
+		Version:              cfg.App.Version,
+		MinimumSystemVersion: cfg.MacOS.MinimumSystemVersion,
+		Category:             cfg.MacOS.Category,
+		Extra:                cfg.MacOS.Plist,
+		Binary:               bin,
+		Icon:                 b.proj.Path(cfg.App.Icon),
+		OutDir:               dir,
 	})
 	if err != nil {
+		assemble.Fail("Assembling " + appName + " failed")
 		return err
 	}
+	assemble.Done("Assembled " + appName)
 	for _, w := range warnings {
-		fmt.Fprintln(os.Stderr, "ggui: warning:", w)
+		ui.Stderr.Warn("%s", w)
 	}
 	if b.main.ID != cfg.App.ID {
-		logf("app.id is not set, so the bundle is %s; set it in ggui.toml before shipping, since macOS keys settings and permissions to it", b.main.ID)
+		ui.Stderr.Warn("app.id is not set, so the bundle is %s; set it in ggui.toml before shipping, since macOS keys settings and permissions to it", b.main.ID)
 	}
 
-	signed, err := sg.Sign(ctx, app)
+	signed, err := sign(ctx, sg, app)
 	switch {
 	case err != nil:
 		return err
 	case !signed:
-		logf("the bundle is not signed, since codesign needs macOS; sign it on a Mac before shipping it, or set macos.signing_identity and give a certificate")
+		ui.Stderr.Warn("The bundle is not signed, since codesign needs macOS; sign it on a Mac before shipping it, or set macos.signing_identity and give a certificate")
 	case sg.AdHoc():
-		logf("signed ad hoc, which runs on this Mac; set macos.signing_identity to ship it to others")
+		ui.Stderr.Note("%s", ui.Stderr.Dim("which runs on this Mac; set macos.signing_identity to ship it to others"))
 	}
 	artifacts := []string{app}
 	if notarize {
@@ -393,13 +423,15 @@ func (b *builder) macos(ctx context.Context) error {
 		if title == "" {
 			title = b.main.Name
 		}
-		err := macos.MakeDMG(ctx, macos.DMG{
-			App: app, Out: out, Title: title,
-			Icon: b.proj.Path(d.Icon), Background: b.proj.Path(d.Background),
-			Width: d.Window.Width, Height: d.Window.Height,
-			IconSize: d.IconSize, LabelSize: d.LabelSize,
-			AppPosition: d.AppPosition, ApplicationsPosition: d.ApplicationsPosition,
-			FS: d.FS, Format: d.Format,
+		err := step(ctx, "Making "+filepath.Base(out), "Made "+filepath.Base(out), func() error {
+			return macos.MakeDMG(ctx, macos.DMG{
+				App: app, Out: out, Title: title,
+				Icon: b.proj.Path(d.Icon), Background: b.proj.Path(d.Background),
+				Width: d.Window.Width, Height: d.Window.Height,
+				IconSize: d.IconSize, LabelSize: d.LabelSize,
+				AppPosition: d.AppPosition, ApplicationsPosition: d.ApplicationsPosition,
+				FS: d.FS, Format: d.Format,
+			})
 		})
 		if err != nil {
 			return err
@@ -407,7 +439,7 @@ func (b *builder) macos(ctx context.Context) error {
 		// An ad hoc signature on a disk image means nothing to another
 		// Mac, and the app inside is signed already.
 		if !sg.AdHoc() {
-			if _, err := sg.Sign(ctx, out); err != nil {
+			if _, err := sign(ctx, sg, out); err != nil {
 				return err
 			}
 			if notarize {
@@ -421,20 +453,22 @@ func (b *builder) macos(ctx context.Context) error {
 	if makePKG {
 		p := m.PKG
 		out := filepath.Join(dir, b.main.Name+".pkg")
-		err := macos.MakePKG(ctx, macos.PKG{
-			App: app, Out: out, ID: b.main.ID, Version: cfg.App.Version,
-			MinOS: m.MinimumSystemVersion, InstallLocation: p.InstallLocation,
-			Scripts: b.proj.Path(p.Scripts), License: b.proj.Path(p.License),
+		err := step(ctx, "Making "+filepath.Base(out), "Made "+filepath.Base(out), func() error {
+			return macos.MakePKG(ctx, macos.PKG{
+				App: app, Out: out, ID: b.main.ID, Version: cfg.App.Version,
+				MinOS: m.MinimumSystemVersion, InstallLocation: p.InstallLocation,
+				Scripts: b.proj.Path(p.Scripts), License: b.proj.Path(p.License),
+			})
 		})
 		if err != nil {
 			return err
 		}
-		signed, err := sg.Sign(ctx, out)
+		signed, err := sign(ctx, sg, out)
 		if err != nil {
 			return err
 		}
 		if !signed {
-			logf("the installer is not signed, since the app is signed ad hoc; macOS opens an unsigned installer only after a warning")
+			ui.Stderr.Warn("The installer is not signed, since the app is signed ad hoc; macOS opens an unsigned installer only after a warning")
 		} else if notarize {
 			if err := b.notarize(ctx, sg, out); err != nil {
 				return err
@@ -448,7 +482,7 @@ func (b *builder) macos(ctx context.Context) error {
 			return err
 		}
 		if !notarize {
-			logf("not notarized, so Gatekeeper refuses it on other Macs; add --notarize, or macos.notarize = true, to ship it")
+			ui.Stderr.Warn("Not notarized, so Gatekeeper refuses it on other Macs; add --notarize, or macos.notarize = true, to ship it")
 		}
 	}
 	if err := report(app, "macOS "+arch); err != nil {
@@ -462,28 +496,56 @@ func (b *builder) macos(ctx context.Context) error {
 	return nil
 }
 
+// sign signs path as a step, reporting whether it was signed: a step that
+// signs nothing, as away from a Mac, ends without a word.
+func sign(ctx context.Context, sg *macos.Signer, path string) (bool, error) {
+	title := "Signing " + filepath.Base(path)
+	s := ui.Stderr.Step(title)
+	signed, err := sg.Sign(ctx, path)
+	switch {
+	case err != nil && ctx.Err() != nil:
+		s.Warn("Interrupted: " + title)
+	case err != nil:
+		s.Fail(title + " failed")
+	case !signed:
+		s.Stop()
+	case sg.AdHoc():
+		s.Done("Signed " + filepath.Base(path) + " ad hoc")
+	default:
+		s.Done("Signed " + filepath.Base(path) + " as " + sg.Identity)
+	}
+	return signed, err
+}
+
 // notarize notarizes path, saying so, since it takes minutes.
 func (b *builder) notarize(ctx context.Context, sg *macos.Signer, path string) error {
-	logf("notarizing %s; Apple's notary service usually takes a few minutes", filepath.Base(path))
-	start := time.Now()
-	if err := sg.Notarize(ctx, path); err != nil {
-		return err
-	}
-	what := "notarized"
+	what := "Notarized"
 	if sg.Staples() {
 		what += " and stapled"
 	}
-	logf("%s %s in %s", what, filepath.Base(path), time.Since(start).Round(time.Second))
-	return nil
+	name := filepath.Base(path)
+	return step(ctx, "Notarizing "+name+"; Apple's notary service usually takes a few minutes", what+" "+name, func() error {
+		return sg.Notarize(ctx, path)
+	})
 }
 
 // verifyAll checks each artifact as a release, printing what was found,
 // and fails when a check does.
 func verifyAll(ctx context.Context, artifacts []string, notarized bool) error {
 	var failed []string
+	log := ui.Stderr
 	for _, a := range artifacts {
+		s := log.Step("Verifying " + filepath.Base(a))
 		r, fails := macos.Verify(ctx, a, notarized)
-		fmt.Fprint(os.Stderr, "ggui: verified ", r)
+		if len(fails) > 0 {
+			s.Fail("Verified " + filepath.Base(a) + ": " + fmt.Sprint(len(fails)) + " failed")
+		} else {
+			s.Done("Verified " + filepath.Base(a))
+		}
+		// The report's first line names the artifact; its checks follow.
+		if _, checks, ok := strings.Cut(r, "\n"); ok && checks != "" {
+			log.Printf("%s", log.Dim(checks))
+		}
 		for _, c := range fails {
 			failed = append(failed, fmt.Sprintf("%s: %s: %s", filepath.Base(a), c.Name, c.Detail))
 		}
@@ -495,9 +557,7 @@ func verifyAll(ctx context.Context, artifacts []string, notarized bool) error {
 }
 
 // logf says something on standard error, as ggui does.
-func logf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "ggui: "+format+"\n", args...)
-}
+func logf(format string, args ...any) { ui.Stderr.Info(format, args...) }
 
 func (b *builder) web(ctx context.Context) error {
 	cfg := b.proj.Config
@@ -513,22 +573,34 @@ func (b *builder) web(ctx context.Context) error {
 		title = b.main.Name
 	}
 	o := b.release("")
-	r, err := web.WriteBundle(ctx, web.BundleOptions{
-		BuildOptions: web.BuildOptions{
+	log := ui.Stderr
+	var r *web.Result
+	err := step(ctx, "Building for js/wasm", "Built for js/wasm", func() error {
+		var err error
+		r, err = web.WriteBundle(ctx, web.BundleOptions{
 			Dir: o.Dir, Package: o.Package, Tags: o.Tags, LDFlags: o.LDFlags, Trimpath: true,
 			WasmOpt: cfg.Web.WasmOpt,
 			Logf: func(format string, args ...any) {
-				fmt.Fprintf(os.Stderr, "ggui: "+format+"\n", args...)
+				// The go command line, dimmed as for the other
+				// targets; then what wasm-opt and gzip had to say.
+				if format == "%s" && len(args) == 1 {
+					if bo, ok := args[0].(gotool.BuildOptions); ok {
+						log.Println(log.Dim(bo.String()))
+						return
+					}
+				}
+				log.Info(format, args...)
 			},
-		},
-		OutDir: dir,
-		Title:  title,
-		Base:   cfg.Web.Base,
+			OutDir: dir,
+			Title:  title,
+			Base:   cfg.Web.Base,
+		})
+		return err
 	})
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "ggui: %s, %s gzipped; serve %s at %s\n", web.MB(r.Size), web.MB(r.GzSize), dir, web.CleanBase(cfg.Web.Base))
+	log.Success("%s, %s gzipped; serve %s at %s", web.MB(r.Size), web.MB(r.GzSize), log.Cyan(dir), web.CleanBase(cfg.Web.Base))
 	fmt.Println(dir)
 	return nil
 }
@@ -546,7 +618,7 @@ func report(path, what string) error {
 			rel = r
 		}
 	}
-	fmt.Fprintf(os.Stderr, "ggui: built %s (%s%s)\n", rel, what, size)
+	ui.Stderr.Success("Built %s (%s%s)", ui.Stderr.Cyan(rel), what, size)
 	fmt.Println(path)
 	return nil
 }

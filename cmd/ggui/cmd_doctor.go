@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/doctor"
+	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
 )
 
 // errFailed reports that doctor found a failure, which it has printed.
@@ -36,7 +37,11 @@ uses.`,
 				fmt.Fprintln(os.Stderr, "ggui doctor: takes no arguments")
 				return errUsage
 			}
+			// The checks run the go command, which may have modules to
+			// download first.
+			s := ui.Stderr.Step("Checking", ui.QuietStart())
 			r := doctor.Run(ctx, doctor.Options{Dir: ".", Config: *cfgPath})
+			s.Stop()
 			if *asJSON {
 				if err := r.PrintJSON(os.Stdout); err != nil {
 					return err

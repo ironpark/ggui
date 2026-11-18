@@ -25,6 +25,8 @@ import (
 	"os/signal"
 	"runtime/debug"
 	"syscall"
+
+	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
 )
 
 // command is one subcommand.
@@ -100,6 +102,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	// a running app asked to exit. ggui dev also counts a second.
 	ctx, stop := signal.NotifyContext(context.Background(), stopSignals...)
 	defer stop()
+	// A step a command left running, as one that returned early may,
+	// leaves no spinner behind on the terminal.
+	defer ui.Reset()
 	if err := runFn(ctx, pos, rest); err != nil {
 		if errors.Is(err, errUsage) {
 			fmt.Fprintf(stderr, "run 'ggui help %s' for usage\n", c.name)
@@ -109,7 +114,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return 1 // the report said why
 		}
 		if ctx.Err() == nil || !errors.Is(err, context.Canceled) {
-			fmt.Fprintf(stderr, "ggui %s: %v\n", c.name, err)
+			e := ui.For(stderr)
+			ui.Reset()
+			fmt.Fprintf(e, "%s %v\n", e.Red("ggui "+c.name+":"), err)
 		}
 		return 1
 	}
@@ -126,17 +133,18 @@ func find(name string) *command {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprint(w, `ggui creates, runs, checks and bundles ggui applications.
+	o := ui.For(w)
+	fmt.Fprintf(w, `ggui creates, runs, checks and bundles ggui applications.
 
-Usage:
+%s
 
 	ggui <command> [arguments]
 
-Commands:
+%s
 
-`)
+`, o.Bold("Usage:"), o.Bold("Commands:"))
 	for _, c := range commands {
-		fmt.Fprintf(w, "\t%-8s %s\n", c.name, c.summary)
+		fmt.Fprintf(w, "\t%s %s\n", o.Cyan(fmt.Sprintf("%-8s", c.name)), c.summary)
 	}
 	fmt.Fprintf(w, `
 Settings come from ggui.toml in the project (ggui init writes one), and
@@ -152,11 +160,12 @@ func (c *command) usage(w io.Writer, fs *flag.FlagSet) {
 		fs = flag.NewFlagSet("ggui "+c.name, flag.ContinueOnError)
 		c.flags(fs)
 	}
-	fmt.Fprintf(w, "Usage: ggui %s [flags] %s\n\n%s\n", c.name, c.args, c.help)
+	o := ui.For(w)
+	fmt.Fprintf(w, "%s ggui %s [flags] %s\n\n%s\n", o.Bold("Usage:"), c.name, c.args, c.help)
 	first := true
 	fs.VisitAll(func(f *flag.Flag) {
 		if first {
-			fmt.Fprint(w, "\nFlags:\n\n")
+			fmt.Fprintf(w, "\n%s\n\n", o.Bold("Flags:"))
 			first = false
 		}
 		name, help := flag.UnquoteUsage(f)
@@ -164,7 +173,7 @@ func (c *command) usage(w io.Writer, fs *flag.FlagSet) {
 		if name != "" {
 			line += " " + name
 		}
-		fmt.Fprintln(w, line)
+		fmt.Fprintln(w, o.Cyan(line))
 		fmt.Fprintf(w, "\t%s", help)
 		if f.DefValue != "" && f.DefValue != "false" {
 			fmt.Fprintf(w, " (default %q)", f.DefValue)

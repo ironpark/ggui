@@ -8,9 +8,11 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
+	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
 	"github.com/ironpark/ggui/cmd/ggui/internal/watch"
 	"github.com/ironpark/ggui/cmd/ggui/internal/web"
 )
@@ -36,14 +38,71 @@ type Web struct {
 	// Tracef, when set, is told each decision the watcher and the loop
 	// make.
 	Tracef func(format string, args ...any)
+
+	out  *ui.Output // Log, styled
+	mu   sync.Mutex
+	step *ui.Step // the build running
 }
 
+// logf takes the server's messages. The server says when a build starts,
+// by its go command, and how it ended; between the two the build is a
+// step, which may animate, since no program of the developer's writes to
+// this terminal. Builds run on the server's goroutines, and one that is
+// superseded says nothing more.
 func (w *Web) logf(format string, args ...any) {
-	fmt.Fprintf(w.Log, "ggui: "+format+"\n", args...)
+	o := w.out
+	if bo, ok := buildStarts(format, args); ok {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		w.step.Stop()
+		o.Info("%s", o.Dim(bo.String()))
+		w.step = o.Step("building "+w.Target, ui.QuietStart(), ui.NoElapsed())
+		return
+	}
+	msg := fmt.Sprintf(format, args...)
+	failed := strings.HasPrefix(format, "build failed")
+	if !failed && !strings.HasPrefix(format, "built ") {
+		o.Info("%s", msg)
+		return
+	}
+	w.mu.Lock()
+	s := w.step
+	w.step = nil
+	w.mu.Unlock()
+	head, rest, _ := strings.Cut(msg, "\n")
+	switch {
+	case failed && s != nil:
+		s.Fail(head)
+	case failed:
+		o.Error("%s", head)
+	case s != nil:
+		s.Done(head)
+	default:
+		o.Success("%s", head)
+	}
+	if rest != "" {
+		fmt.Fprintln(o, rest)
+	}
+}
+
+// buildStarts reports whether a message is web.Build's first: the go
+// command it runs.
+func buildStarts(format string, args []any) (gotool.BuildOptions, bool) {
+	if format != "%s" || len(args) != 1 {
+		return gotool.BuildOptions{}, false
+	}
+	bo, ok := args[0].(gotool.BuildOptions)
+	return bo, ok
 }
 
 // Run serves until ctx is done.
 func (w *Web) Run(ctx context.Context) error {
+	w.out = ui.For(w.Log).Prefixed("ggui")
+	defer func() {
+		w.mu.Lock()
+		w.step.Stop()
+		w.mu.Unlock()
+	}()
 	srv, err := web.NewServer(ctx, web.ServerOptions{
 		Build: web.BuildOptions{
 			Dir: w.Dir, Package: w.Package, Tags: w.Tags,
@@ -70,7 +129,7 @@ func (w *Web) Run(ctx context.Context) error {
 	hs := &http.Server{Handler: srv, ReadHeaderTimeout: 10 * time.Second}
 	served := make(chan error, 1)
 	go func() { served <- hs.Serve(ln) }()
-	w.logf("serving %s at %s", w.Target, url(ln.Addr(), w.Addr, srv.Base()))
+	w.out.Success("serving %s at %s", w.Target, w.out.Cyan(url(ln.Addr(), w.Addr, srv.Base())))
 
 	if w.Watch {
 		lo := gotool.ListOptions{Dir: w.Dir, Tags: w.Tags, GOOS: "js", GOARCH: "wasm"}
@@ -86,7 +145,7 @@ func (w *Web) Run(ctx context.Context) error {
 		wt := watch.New(set, watch.Options{
 			List: list, Ignore: ig,
 			Settle: settleTime, Poll: pollInterval, SafetyNet: safetyNetInterval,
-			Logf: w.logf, Tracef: w.Tracef,
+			Logf: w.out.Warn, Tracef: w.Tracef,
 		})
 		changes := make(chan watch.Change)
 		go wt.Run(ctx, changes)
@@ -129,12 +188,12 @@ func (w *Web) loop(ctx context.Context, changes <-chan watch.Change, srv *web.Se
 			if len(c.Real) > 0 {
 				p.change(c.At, c.Real)
 			} else if len(c.Cosmetic) > 0 && p.idle() {
-				w.logf("%s: comments only; not rebuilt — line numbers in traces now lag the source", describe(w.Dir, c.Cosmetic))
+				w.out.Info("%s: comments only; not rebuilt — line numbers in traces now lag the source", describe(w.Dir, c.Cosmetic))
 			}
 		case <-dueC:
 			id, batch, _ := p.start()
 			p.done(id)
-			w.logf("%s changed, rebuilding", describe(w.Dir, batch))
+			w.out.Info("%s changed, rebuilding", w.out.Cyan(describe(w.Dir, batch)))
 			srv.Rebuild()
 		}
 	}
