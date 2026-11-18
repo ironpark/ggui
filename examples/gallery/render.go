@@ -89,7 +89,7 @@ func (g *galleryAudit) step() (bool, error) {
 		img.Fill(theme.Bg)
 		app.Draw(img)
 	}
-	for frame := 0; frame < 3; frame++ {
+	for range 3 {
 		draw()
 		now = now.Add(time.Second)
 	}
@@ -191,7 +191,7 @@ func renderGalleryAudit(dir, only string) error {
 	names := auditNames
 	if only != "" {
 		names = nil
-		for _, name := range strings.Split(only, ",") {
+		for name := range strings.SplitSeq(only, ",") {
 			name = strings.TrimSpace(name)
 			if !slices.Contains(auditNames, name) {
 				return fmt.Errorf("unknown audit example %q", name)

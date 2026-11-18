@@ -44,8 +44,8 @@ func TestEveryThemeTokenIsDrawn(t *testing.T) {
 		})
 	}
 	typ := reflect.TypeFor[uitheme.Theme]()
-	for i := range typ.NumField() {
-		if f := typ.Field(i); f.IsExported() && !read[f.Name] {
+	for f := range typ.Fields() {
+		if f.IsExported() && !read[f.Name] {
 			t.Errorf("Theme.%s is never read by a control", f.Name)
 		}
 	}

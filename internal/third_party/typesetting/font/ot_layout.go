@@ -187,11 +187,9 @@ func newGSUB(table tables.Layout) (GSUB, error) {
 			}
 		}
 		out.Lookups[i] = GSUBLookup{
-			LookupOptions: LookupOptions{
-				Flag:             lk.LookupFlag,
-				MarkFilteringSet: lk.MarkFilteringSet,
-			},
-			Subtables: subtables,
+			Flag:             lk.LookupFlag,
+			MarkFilteringSet: lk.MarkFilteringSet,
+			Subtables:        subtables,
 		}
 	}
 	return out, nil
@@ -244,11 +242,9 @@ func newGPOS(table tables.Layout) (GPOS, error) {
 			}
 		}
 		out.Lookups[i] = GPOSLookup{
-			LookupOptions: LookupOptions{
-				Flag:             lk.LookupFlag,
-				MarkFilteringSet: lk.MarkFilteringSet,
-			},
-			Subtables: subtables,
+			Flag:             lk.LookupFlag,
+			MarkFilteringSet: lk.MarkFilteringSet,
+			Subtables:        subtables,
 		}
 	}
 	return out, nil

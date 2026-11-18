@@ -462,22 +462,8 @@ func ParseFeature(feature string) (Feature, error) {
 	return pr.parseOneFeature()
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func min8(a, b uint8) uint8 {
 	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
 		return a
 	}
 	return b

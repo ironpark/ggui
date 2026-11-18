@@ -122,7 +122,7 @@ func (o *overlay) render(w, h int, scale float64) (*image.RGBA, overlayLayout) {
 		hw := font.MeasureString(title.face, hint).Ceil()
 		drawText(img, title.face, pw-pad-hw, pad+title.ascent, hint, overlayDim)
 	}
-	for i := 0; i < rows; i++ {
+	for i := range rows {
 		y := header + i*lineHeight + mono.ascent + (lineHeight-mono.height)/2
 		drawText(img, mono.face, x, y, lines[o.scroll+i], overlayText)
 	}
@@ -183,10 +183,10 @@ func wrapText(s string, cols int) []string {
 		return nil
 	}
 	var lines []string
-	for _, l := range strings.Split(s, "\n") {
+	for l := range strings.SplitSeq(s, "\n") {
 		for utf8.RuneCountInString(l) > cols {
 			i := 0
-			for n := 0; n < cols; n++ {
+			for range cols {
 				_, size := utf8.DecodeRuneInString(l[i:])
 				i += size
 			}

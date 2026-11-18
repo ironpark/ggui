@@ -3,6 +3,7 @@ package harfbuzz
 import (
 	"fmt"
 	"math/bits"
+	"slices"
 
 	"github.com/ironpark/ggui/internal/third_party/typesetting/font"
 	"github.com/ironpark/ggui/internal/third_party/typesetting/font/opentype/tables"
@@ -30,12 +31,7 @@ func (l lookupGSUB) dispatchSubtables(ctx *getSubtablesContext) {
 }
 
 func (l lookupGSUB) dispatchApply(ctx *otApplyContext) bool {
-	for _, table := range l.Subtables {
-		if ctx.applyGSUB(table) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(l.Subtables, ctx.applyGSUB)
 }
 
 func (l lookupGSUB) wouldApply(ctx *wouldApplyContext, accel *otLayoutLookupAccelerator) bool {
@@ -46,12 +42,7 @@ func (l lookupGSUB) wouldApply(ctx *wouldApplyContext, accel *otLayoutLookupAcce
 		return false
 	}
 	// dispatch on subtables
-	for _, table := range l.Subtables {
-		if ctx.wouldApplyGSUB(table) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(l.Subtables, ctx.wouldApplyGSUB)
 }
 
 func (l lookupGSUB) isReverse() bool {
@@ -298,10 +289,5 @@ func (c *otApplyContext) applyOneLigature(lig tables.Ligature) bool {
 }
 
 func (c *otApplyContext) applySubsLigature(ligatureSet []tables.Ligature) bool {
-	for _, lig := range ligatureSet {
-		if c.applyOneLigature(lig) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(ligatureSet, c.applyOneLigature)
 }

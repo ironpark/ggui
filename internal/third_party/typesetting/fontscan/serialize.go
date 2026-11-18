@@ -28,10 +28,9 @@ func deserializeFloat(src []byte) float32 {
 }
 
 func serializeString(s string) []byte {
-	L := len(s)
-	if L > math.MaxUint16 { // never happen in practice
-		L = math.MaxUint16
-	}
+	L := min(len(s),
+		// never happen in practice
+		math.MaxUint16)
 	buffer := make([]byte, 2+L) // len as uint16 + data
 	binary.BigEndian.PutUint16(buffer, uint16(L))
 	copy(buffer[2:], s)
@@ -187,13 +186,6 @@ func (ff *fileFootprints) deserializeFrom(src []byte) error {
 
 const cacheFormatVersion = 6
 
-func max(i, j int) int {
-	if i > j {
-		return i
-	}
-	return j
-}
-
 // serialize into binary format, compressed with gzip
 func (index systemFontsIndex) serializeTo(w io.Writer) error {
 	// version as uint16 + len as uint32 + somewhat the minimum size for a footprint
@@ -247,7 +239,7 @@ func deserializeIndex(src io.Reader) (systemFontsIndex, error) {
 		return nil, fmt.Errorf("different index version format: found %d", version)
 	}
 	L := binary.BigEndian.Uint32(buf[2:])
-	for i := uint32(0); i < L; i++ {
+	for range L {
 		// size of the encoded footprint
 		if _, err := io.ReadFull(r, buf[:4]); err != nil {
 			return nil, fmt.Errorf("invalid index: %s", err)

@@ -173,13 +173,13 @@ func TestMorxMatchesItsBytes(t *testing.T) {
 				t.Fatalf("%s %d: %d chains, want %d", path, fi, len(f.Morx), nChains)
 			}
 			chain := 8
-			for ci := 0; ci < nChains; ci++ {
+			for ci := range nChains {
 				chainLength, nFeatures, nSubtables := u32(chain+4), u32(chain+8), u32(chain+12)
 				if len(f.Morx[ci].Subtables) != nSubtables {
 					t.Fatalf("%s %d: chain %d has %d subtables, want %d", path, fi, ci, len(f.Morx[ci].Subtables), nSubtables)
 				}
 				sub := chain + 16 + 12*nFeatures
-				for si := 0; si < nSubtables; si++ {
+				for si := range nSubtables {
 					length := u32(sub)
 					kind := raw[sub+7]
 					body := raw[sub+12 : sub+length]
@@ -290,7 +290,7 @@ func TestKern1MatchesItsBytes(t *testing.T) {
 				t.Fatalf("%s %d: %d kern subtables, want %d", path, fi, len(f.Kern), n)
 			}
 			sub := 8
-			for i := 0; i < n; i++ {
+			for i := range n {
 				length := int(binary.BigEndian.Uint32(raw[sub:]))
 				format := raw[sub+5]
 				if format == 1 {

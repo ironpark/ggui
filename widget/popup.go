@@ -413,10 +413,8 @@ func (p *PopupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // paintContent lays the content out for the room around the anchor and
 // paints it, on a scrim that closes the popup when clicked.
 func (p *PopupWidget) ownsFocus(dst *ggui.Canvas) bool {
-	for _, key := range p.contentKeys {
-		if dst.HasFocus(key) {
-			return true
-		}
+	if slices.ContainsFunc(p.contentKeys, dst.HasFocus) {
+		return true
 	}
 	for _, child := range p.children {
 		if (child.IsOpen() || child.restore || child.paintedOpen) && child.ownsFocus(dst) {

@@ -30,7 +30,7 @@ func parsePattern(path string) ([]seg, error) {
 		return nil, nil
 	}
 	var out []seg
-	for _, s := range strings.Split(p, "/") {
+	for s := range strings.SplitSeq(p, "/") {
 		switch {
 		case s == "":
 			return nil, fmt.Errorf("empty segment in %q", path)
@@ -121,7 +121,7 @@ func parseURL(s string) (parsedURL, error) {
 	if raw == "" {
 		return out, nil
 	}
-	for _, r := range strings.Split(raw, "/") {
+	for r := range strings.SplitSeq(raw, "/") {
 		if r == "" {
 			return parsedURL{}, fmt.Errorf("router: duplicate slash in %q", s)
 		}

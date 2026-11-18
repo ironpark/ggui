@@ -316,8 +316,8 @@ func (s *MessageScrollerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Si
 			s.offset = 0
 		}
 		if s.opening == ScrollLastAnchor {
-			for i := len(rows) - 1; i >= 0; i-- {
-				if rows[i].Anchor {
+			for i, row := range slices.Backward(rows) {
+				if row.Anchor {
 					s.offset = min(s.starts[i]-s.margin, s.limit())
 					break
 				}

@@ -10,7 +10,6 @@ import (
 
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/pkg/gem"
-	"github.com/ironpark/ggui/pkg/kinetics"
 	"github.com/ironpark/ggwd"
 )
 
@@ -825,13 +824,13 @@ func TestTouchFlingSpeedHoldAndInterruption(t *testing.T) {
 		paintFrame(&in, s, Sz(100, 100))
 		p := Pt(50, 80)
 		in.dispatch(frameInput{touch: true, pos: p, down: []MouseButton{MouseButtonLeft}})
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			now = now.Add(16 * time.Millisecond)
 			p.Y -= speed * .016
 			in.dispatch(frameInput{touch: true, pos: p})
 		}
 		if hold {
-			for i := 0; i < 30; i++ {
+			for range 30 {
 				now = now.Add(16 * time.Millisecond)
 				in.dispatch(frameInput{touch: true, pos: p})
 			}
@@ -843,7 +842,7 @@ func TestTouchFlingSpeedHoldAndInterruption(t *testing.T) {
 			now = now.Add(16 * time.Millisecond)
 			in.dispatch(frameInput{touch: true, pos: Pt(50, 50), down: []MouseButton{MouseButtonLeft}})
 		}
-		for i := 0; i < 180; i++ {
+		for range 180 {
 			now = now.Add(16 * time.Millisecond)
 			in.dispatch(frameInput{})
 		}
@@ -873,7 +872,7 @@ func TestTouchMomentumFrameRateAndBounds(t *testing.T) {
 		paintFrame(&in, s, Sz(100, 100))
 		target := in.topmost(func(r *hitRegion) bool { return r.pointer == s })
 		now := time.Unix(100, 0)
-		in.touchMotion = touchMotion{target: keep(target), Tracker: kinetics.Tracker{Last: now, Velocity: Pt(0, -1000)}}
+		in.touchMotion = touchMotion{target: keep(target), Last: now, Velocity: Pt(0, -1000)}
 		for elapsed := time.Duration(0); elapsed < time.Second; elapsed += step {
 			now = now.Add(step)
 			in.stepTouchMomentum(now)
@@ -898,7 +897,7 @@ func TestTouchMomentumStopsOnPauseOrMissingTarget(t *testing.T) {
 		paintFrame(&in, s, Sz(100, 100))
 		target := in.topmost(func(r *hitRegion) bool { return r.pointer == s })
 		now := time.Unix(100, 0)
-		in.touchMotion = touchMotion{target: keep(target), Tracker: kinetics.Tracker{Last: now, Velocity: Pt(0, -1000)}}
+		in.touchMotion = touchMotion{target: keep(target), Last: now, Velocity: Pt(0, -1000)}
 		dt := time.Second
 		if missing {
 			in.regions = nil
@@ -964,7 +963,7 @@ func (e *spaceEater) Paint(dst *Canvas, r Rect)    { dst.HitKey(r, e) }
 
 func TestShortcutsRunAroundTheFocusedWidget(t *testing.T) {
 	t.Parallel()
-	e := &spaceEater{focusable: focusable{child: sized(20, 20)}}
+	e := &spaceEater{child: sized(20, 20)}
 	p := NewProbe(e, Sz(50, 50))
 	defer p.Close()
 	runs := map[string]int{}

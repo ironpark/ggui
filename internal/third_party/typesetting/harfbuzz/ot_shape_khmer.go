@@ -186,7 +186,7 @@ func (khmerPlan *khmerShapePlan) reorderConsonantSyllable(buffer *Buffer, start,
 			numCoengs++
 
 			if info[i+1].complexCategory == khmSM_ex_Ra {
-				for j := 0; j < 2; j++ {
+				for j := range 2 {
 					info[i+j].Mask |= khmerPlan.maskArray[khmerPref]
 				}
 

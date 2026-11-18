@@ -384,7 +384,7 @@ func (li *LineIterator) Line() Line {
 // LineIterator returns an iterator on the lines
 // delimited in [Init].
 func (sg *Segmenter) LineIterator() *LineIterator {
-	return &LineIterator{attributeIterator: attributeIterator{src: sg, flag: lineBoundary}}
+	return &LineIterator{src: sg, flag: lineBoundary}
 }
 
 // Grapheme is the content of a grapheme delimited by the segmenter.
@@ -422,7 +422,7 @@ func (gr *GraphemeIterator) Grapheme() Grapheme {
 // GraphemeIterator returns an iterator over the graphemes
 // delimited in [Init].
 func (sg *Segmenter) GraphemeIterator() *GraphemeIterator {
-	return &GraphemeIterator{attributeIterator: attributeIterator{src: sg, flag: graphemeBoundary}}
+	return &GraphemeIterator{src: sg, flag: graphemeBoundary}
 }
 
 // Word is the content of a word delimited by the segmenter.
@@ -490,5 +490,5 @@ func (sg *Segmenter) WordIterator() *WordIterator {
 	if len(sg.text) != 0 {
 		inWord = ucd.IsWord(sg.text[0])
 	}
-	return &WordIterator{attributeIterator: attributeIterator{src: sg, flag: wordBoundary}, inWord: inWord}
+	return &WordIterator{src: sg, flag: wordBoundary, inWord: inWord}
 }

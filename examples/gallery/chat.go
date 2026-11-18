@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
@@ -229,9 +230,9 @@ func newChatPreviews() func() []ggui.Widget {
 	}
 }
 func repeatReview(n int) string {
-	out := ""
+	var out strings.Builder
 	for range min(n, 20) {
-		out += "The layout, keyboard behavior and state changes are being checked. "
+		out.WriteString("The layout, keyboard behavior and state changes are being checked. ")
 	}
-	return out
+	return out.String()
 }

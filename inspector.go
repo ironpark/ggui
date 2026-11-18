@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -233,9 +234,9 @@ func (s inspectSource) Semantic(i int) int {
 	e, w := &s.f.trace[i], s.widget(i)
 	sem := s.f.sem
 	if w == nil {
-		for j := len(sem) - 1; j >= 0; j-- {
+		for j, s := range slices.Backward(sem) {
 			mid := Pt(e.Rect.Origin.X+e.Rect.Size.W/2, e.Rect.Origin.Y+e.Rect.Size.H/2)
-			if !sem[j].node.Offscreen && sem[j].rect.Contains(mid) {
+			if !s.node.Offscreen && s.rect.Contains(mid) {
 				return j
 			}
 		}

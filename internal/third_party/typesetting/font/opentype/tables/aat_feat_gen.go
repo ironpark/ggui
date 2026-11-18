@@ -34,7 +34,7 @@ func ParseFeat(src []byte) (Feat, int, error) {
 		arrayLength := int(item.featureNameCount)
 
 		offset := 12
-		for i := 0; i < arrayLength; i++ {
+		for range arrayLength {
 			elem, read, err := ParseFeatureName(src[offset:], src)
 			if err != nil {
 				return item, 0, fmt.Errorf("reading Feat: %s", err)

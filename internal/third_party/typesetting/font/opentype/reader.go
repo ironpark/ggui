@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 )
 
 var (
@@ -193,7 +193,7 @@ func (ld *Loader) Tables() []Tag {
 	for tag := range ld.tables {
 		out = append(out, tag)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	slices.Sort(out)
 	return out
 }
 

@@ -182,8 +182,8 @@ func (in *inputState) hoverChanged(path []int32, pos Point) {
 		}
 		in.deliver(left, PointerEvent{Kind: PointerExit, Pos: pos})
 	}
-	for k := len(path) - 1; k >= 0; k-- {
-		now := &in.regions[path[k]]
+	for k, p := range slices.Backward(path) {
+		now := &in.regions[p]
 		if prev := in.matchOf(now, last); prev != nil && gem.Same(now.pointer, prev.pointer) {
 			continue
 		}
@@ -309,8 +309,8 @@ func (in *inputState) updateFocusWithin(focused *hitRegion) {
 			told = true
 		}
 	}
-	for k := len(path) - 1; k >= 0; k-- {
-		i := path[k]
+	for _, i := range slices.Backward(path) {
+
 		h := in.withinOf(i)
 		if prev := in.withinMatch(i, last); prev >= 0 && gem.Same(h, last.h[prev]) {
 			continue

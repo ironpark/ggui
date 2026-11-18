@@ -76,7 +76,7 @@ func ParseAvar(src []byte) (Avar, int, error) {
 	{
 
 		offset := 8
-		for i := 0; i < arrayLengthAxisSegmentMaps; i++ {
+		for range arrayLengthAxisSegmentMaps {
 			elem, read, err := ParseSegmentMaps(src[offset:])
 			if err != nil {
 				return item, 0, fmt.Errorf("reading Avar: %s", err)
@@ -289,7 +289,7 @@ func ParseGlyphVariationData(src []byte, axisCount int) (GlyphVariationData, int
 		arrayLength := int(item.tupleVariationCount & 0x0FFF)
 
 		offset := 4
-		for i := 0; i < arrayLength; i++ {
+		for range arrayLength {
 			elem, read, err := ParseTupleVariationHeader(src[offset:], axisCount)
 			if err != nil {
 				return item, 0, fmt.Errorf("reading GlyphVariationData: %s", err)
@@ -584,7 +584,7 @@ func ParseSharedTuples(src []byte, sharedTuplesCount int, valuesCount int) (Shar
 	{
 
 		offset := 0
-		for i := 0; i < sharedTuplesCount; i++ {
+		for range sharedTuplesCount {
 			elem, read, err := ParseTuple(src[offset:], valuesCount)
 			if err != nil {
 				return item, 0, fmt.Errorf("reading SharedTuples: %s", err)

@@ -151,8 +151,7 @@ func TestTextFieldForwardsEditorSetters(t *testing.T) {
 	t.Parallel()
 	editor := reflect.TypeFor[*widget.TextInputWidget]()
 	field := reflect.TypeFor[*ui.TextFieldWidget]()
-	for i := range editor.NumMethod() {
-		m := editor.Method(i)
+	for m := range editor.Methods() {
 		if m.Type.NumOut() != 1 || m.Type.Out(0) != editor {
 			continue // not a fluent setter
 		}

@@ -35,7 +35,7 @@ func ParseMorx(src []byte, valuesCount int) (Morx, int, error) {
 		arrayLength := int(item.nChains)
 
 		offset := 8
-		for i := 0; i < arrayLength; i++ {
+		for range arrayLength {
 			elem, read, err := ParseMorxChain(src[offset:], valuesCount)
 			if err != nil {
 				return item, 0, fmt.Errorf("reading Morx: %s", err)
@@ -78,7 +78,7 @@ func ParseMorxChain(src []byte, valuesCount int) (MorxChain, int, error) {
 		arrayLength := int(item.nSubtable)
 
 		offset := n
-		for i := 0; i < arrayLength; i++ {
+		for range arrayLength {
 			elem, read, err := ParseMorxChainSubtable(src[offset:], valuesCount)
 			if err != nil {
 				return item, 0, fmt.Errorf("reading MorxChain: %s", err)

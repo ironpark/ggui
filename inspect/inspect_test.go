@@ -66,7 +66,7 @@ func TestTreeHelpers(t *testing.T) {
 func TestDetailsPanes(t *testing.T) {
 	t.Parallel()
 	src := &fakeSource{boxes: map[int]Box{1: {Padding: Insets{Top: 4, Right: 4, Bottom: 4, Left: 4}, Border: 1, Content: layout.Sz(72, 72), Valid: true}}, semantic: 0}
-	sem := a11y.Build([]a11y.SemNode{{Node: a11y.Node{Role: a11y.RoleButton, Name: "Save", Checked: a11y.TriOn}, Rect: layout.Rct(layout.Pt(0, 0), layout.Sz(100, 100)), Parent: -1}}, -1)
+	sem := a11y.Build([]a11y.SemNode{{Role: a11y.RoleButton, Name: "Save", Checked: a11y.TriOn, Rect: layout.Rct(layout.Pt(0, 0), layout.Sz(100, 100)), Parent: -1}}, -1)
 	f := &Frame{Nodes: []Node{node("Button", 0, 0, 0, 100, 100), node("Box", 1, 0, 0, 100, 100)}, Sem: sem, Source: src}
 	f.Nodes[0].ID = "save"
 

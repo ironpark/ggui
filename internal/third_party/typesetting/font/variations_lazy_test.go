@@ -67,14 +67,12 @@ func TestGlyphVariationsDecodeConcurrently(t *testing.T) {
 	var wg sync.WaitGroup
 	results := make([][][]tupleVariation, 4)
 	for w := range results {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			results[w] = make([][]tupleVariation, n)
 			for i := range n {
 				results[w][i] = f.gvar.glyphVariations(gID(i))
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	for w := 1; w < len(results); w++ {

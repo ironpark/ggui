@@ -9,14 +9,14 @@ import (
 // focused text field, followed by a second root, in paint order.
 func sampleTree() *SemTree {
 	return Build([]SemNode{
-		{Node: Node{Role: RoleWindow, Name: "Main"}, Parent: -1},                      // 0
-		{Node: Node{Role: RoleToolbar}, Parent: 0},                                    // 1
-		{Node: Node{Role: RoleButton, Name: "Save"}, Parent: 1},                       // 2
-		{Node: Node{Role: RoleButton, Name: "Open", Disabled: true}, Parent: 1},       // 3
-		{Node: Node{Role: RoleTextField, Name: "Title", Value: "draft"}, Parent: 0},   // 4
-		{Node: Node{Role: RoleDialog, Name: "About"}, Parent: -1},                     // 5
-		{Node: Node{Role: RoleButton, Name: "OK", Actions: ActionPress}, Parent: 5},   // 6
-		{Node: Node{Role: RoleCheckbox, Name: "Agree", Checked: TriMixed}, Parent: 5}, // 7
+		{Role: RoleWindow, Name: "Main", Parent: -1},                      // 0
+		{Role: RoleToolbar, Parent: 0},                                    // 1
+		{Role: RoleButton, Name: "Save", Parent: 1},                       // 2
+		{Role: RoleButton, Name: "Open", Disabled: true, Parent: 1},       // 3
+		{Role: RoleTextField, Name: "Title", Value: "draft", Parent: 0},   // 4
+		{Role: RoleDialog, Name: "About", Parent: -1},                     // 5
+		{Role: RoleButton, Name: "OK", Actions: ActionPress, Parent: 5},   // 6
+		{Role: RoleCheckbox, Name: "Agree", Checked: TriMixed, Parent: 5}, // 7
 	}, 4)
 }
 

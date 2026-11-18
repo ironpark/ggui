@@ -2,6 +2,7 @@ package harfbuzz
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/ironpark/ggui/internal/third_party/typesetting/font"
 	"github.com/ironpark/ggui/internal/third_party/typesetting/font/opentype/tables"
@@ -29,12 +30,7 @@ func (l lookupGPOS) dispatchSubtables(ctx *getSubtablesContext) {
 }
 
 func (l lookupGPOS) dispatchApply(ctx *otApplyContext) bool {
-	for _, table := range l.Subtables {
-		if ctx.applyGPOS(table) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(l.Subtables, ctx.applyGPOS)
 }
 
 func (lookupGPOS) isReverse() bool { return false }
@@ -135,8 +131,8 @@ func positionFinishOffsetsGPOS(font *Font, buffer *Buffer) {
 				}
 			}
 		} else {
-			for i := len(pos) - 1; i >= 0; i-- {
-				if pos[i].attachChain != 0 {
+			for i, po := range slices.Backward(pos) {
+				if po.attachChain != 0 {
 					propagateAttachmentOffsets(pos, i, direction)
 				}
 			}

@@ -288,7 +288,7 @@ func ParseClipList(src []byte) (ClipList, int, error) {
 	{
 
 		offset := 5
-		for i := 0; i < arrayLengthClips; i++ {
+		for range arrayLengthClips {
 			elem, read, err := ParseClip(src[offset:], src)
 			if err != nil {
 				return item, 0, fmt.Errorf("reading ClipList: %s", err)
@@ -1663,7 +1663,7 @@ func ParseVariationRegionList(src []byte) (VariationRegionList, int, error) {
 	{
 
 		offset := 4
-		for i := 0; i < arrayLengthVariationRegions; i++ {
+		for range arrayLengthVariationRegions {
 			elem, read, err := ParseVariationRegion(src[offset:], int(item.axisCount))
 			if err != nil {
 				return item, 0, fmt.Errorf("reading VariationRegionList: %s", err)
@@ -1721,7 +1721,7 @@ func parseBaseGlyphList(src []byte) (baseGlyphList, int, error) {
 	{
 
 		offset := 4
-		for i := 0; i < arrayLengthPaintRecords; i++ {
+		for range arrayLengthPaintRecords {
 			elem, read, err := parseBaseGlyphPaintRecord(src[offset:], src)
 			if err != nil {
 				return item, 0, fmt.Errorf("reading baseGlyphList: %s", err)

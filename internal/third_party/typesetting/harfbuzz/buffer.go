@@ -173,10 +173,7 @@ func (b *Buffer) AddRunes(text []rune, itemOffset, itemLength int) {
 	}
 
 	// add post-context
-	s := itemOffset + itemLength + contextLength
-	if s > len(text) {
-		s = len(text)
-	}
+	s := min(itemOffset+itemLength+contextLength, len(text))
 	b.context[1] = text[itemOffset+itemLength : s]
 }
 
@@ -313,7 +310,7 @@ func (b *Buffer) replaceGlyphs(numIn int, codepoints []rune, glyphs []GID) {
 
 	Lplus := max(len(codepoints), len(glyphs))
 	b.outInfo = append(b.outInfo, make([]GlyphInfo, Lplus)...)
-	for i := 0; i < Lplus; i++ {
+	for i := range Lplus {
 		b.outInfo[L+i] = *origInfo
 		if replaceCodepoints {
 			b.outInfo[L+i].codepoint = codepoints[i]

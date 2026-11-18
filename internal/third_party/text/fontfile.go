@@ -23,6 +23,7 @@ import (
 	"image/png"
 	"io"
 	"math"
+	"slices"
 
 	"golang.org/x/image/tiff"
 
@@ -91,12 +92,9 @@ func NewGoTextFaceSourceAt(r io.ReaderAt, size int64, opts SourceOptions) (*GoTe
 		if rec.tag == tagSbix {
 			sbixRecord = rec
 		}
-		for _, t := range hide {
-			if rec.tag == t {
-				// A tag no parser asks for hides the table it names.
-				patched.patch(rec.tagOffset, []byte{'~', byte('a' + i%26), byte('a' + i/26%26), '~'})
-				break
-			}
+		if slices.Contains(hide, rec.tag) {
+			// A tag no parser asks for hides the table it names.
+			patched.patch(rec.tagOffset, []byte{'~', byte('a' + i%26), byte('a' + i/26%26), '~'})
 		}
 	}
 	res := fontResource{io.NewSectionReader(patched, 0, size), patched}

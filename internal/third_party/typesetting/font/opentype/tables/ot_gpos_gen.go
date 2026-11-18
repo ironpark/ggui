@@ -132,7 +132,7 @@ func ParseBaseArray(src []byte, offsetsCount int) (BaseArray, int, error) {
 	{
 
 		offset := 2
-		for i := 0; i < arrayLengthBaseRecords; i++ {
+		for range arrayLengthBaseRecords {
 			elem, read, err := parseAnchorOffsets(src[offset:], offsetsCount)
 			if err != nil {
 				return item, 0, fmt.Errorf("reading BaseArray: %s", err)
@@ -998,7 +998,7 @@ func ParseLigatureAttach(src []byte, offsetsCount int) (LigatureAttach, int, err
 	{
 
 		offset := 2
-		for i := 0; i < arrayLengthComponentRecords; i++ {
+		for range arrayLengthComponentRecords {
 			elem, read, err := parseAnchorOffsets(src[offset:], offsetsCount)
 			if err != nil {
 				return item, 0, fmt.Errorf("reading LigatureAttach: %s", err)
@@ -1028,7 +1028,7 @@ func ParseMark2Array(src []byte, offsetsCount int) (Mark2Array, int, error) {
 	{
 
 		offset := 2
-		for i := 0; i < arrayLengthMark2Records; i++ {
+		for range arrayLengthMark2Records {
 			elem, read, err := parseAnchorOffsets(src[offset:], offsetsCount)
 			if err != nil {
 				return item, 0, fmt.Errorf("reading Mark2Array: %s", err)

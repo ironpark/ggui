@@ -166,7 +166,7 @@ func ParseAATLoopkupExt4(src []byte) (AATLoopkupExt4, int, error) {
 		arrayLength := int(item.nUnits)
 
 		offset := 12
-		for i := 0; i < arrayLength; i++ {
+		for range arrayLength {
 			elem, read, err := parseLoopkupRecordExt4(src[offset:], src)
 			if err != nil {
 				return item, 0, fmt.Errorf("reading AATLoopkupExt4: %s", err)
@@ -293,7 +293,7 @@ func ParseKerx(src []byte, valuesCount int) (Kerx, int, error) {
 		arrayLength := int(item.nTables)
 
 		offset := 8
-		for i := 0; i < arrayLength; i++ {
+		for range arrayLength {
 			elem, read, err := ParseKerxSubtable(src[offset:], valuesCount)
 			if err != nil {
 				return item, 0, fmt.Errorf("reading Kerx: %s", err)

@@ -338,7 +338,7 @@ func unpackDeltas(data []byte, pointNumbersCount int) ([]int16, error) {
 				if len(data) < 1+2*int(count) {
 					return nil, errors.New("invalid packed deltas (EOF)")
 				}
-				for i := byte(0); i < count; i++ { // count < 64 -> no overflow
+				for i := range count { // count < 64 -> no overflow
 					out[nbRead] = int16(binary.BigEndian.Uint16(data[1+2*i:]))
 					nbRead++
 				}
@@ -347,7 +347,7 @@ func unpackDeltas(data []byte, pointNumbersCount int) ([]int16, error) {
 				if len(data) < 1+int(count) {
 					return nil, errors.New("invalid packed deltas (EOF)")
 				}
-				for i := byte(0); i < count; i++ { // count < 64 -> no overflow
+				for i := range count { // count < 64 -> no overflow
 					out[nbRead] = int16(int8(data[1+i]))
 					nbRead++
 				}

@@ -179,10 +179,8 @@ type Kern1 struct {
 // convert from non extended to extended
 func newKern1(k tables.KernData1) Kern1 {
 	class := tables.AATLoopkup8{
-		AATLoopkup8Data: tables.AATLoopkup8Data{
-			FirstGlyph: k.ClassTable.StartGlyph,
-			Values:     make([]uint16, len(k.ClassTable.Values)),
-		},
+		FirstGlyph: k.ClassTable.StartGlyph,
+		Values:     make([]uint16, len(k.ClassTable.Values)),
 	}
 	for i, b := range k.ClassTable.Values {
 		class.Values[i] = uint16(b)

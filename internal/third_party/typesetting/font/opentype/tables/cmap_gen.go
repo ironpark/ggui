@@ -289,7 +289,7 @@ func ParseCmap(src []byte) (Cmap, int, error) {
 		arrayLength := int(item.numTables)
 
 		offset := 4
-		for i := 0; i < arrayLength; i++ {
+		for range arrayLength {
 			elem, read, err := ParseEncodingRecord(src[offset:], src)
 			if err != nil {
 				return item, 0, fmt.Errorf("reading Cmap: %s", err)
@@ -450,7 +450,7 @@ func ParseCmapSubtable14(src []byte) (CmapSubtable14, int, error) {
 	{
 
 		offset := 10
-		for i := 0; i < arrayLengthVarSelectors; i++ {
+		for range arrayLengthVarSelectors {
 			elem, read, err := ParseVariationSelector(src[offset:], src)
 			if err != nil {
 				return item, 0, fmt.Errorf("reading CmapSubtable14: %s", err)

@@ -6,6 +6,7 @@
 package textedit
 
 import (
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -614,11 +615,11 @@ func runStart(s string, i, class int) int {
 		for j := line; j < i; j = NextGrapheme(s, j) {
 			starts = append(starts, j)
 		}
-		for k := len(starts) - 1; k >= 0; k-- {
-			if r, _ := utf8.DecodeRuneInString(s[starts[k]:]); runeClass(r) != class {
+		for _, start := range slices.Backward(starts) {
+			if r, _ := utf8.DecodeRuneInString(s[start:]); runeClass(r) != class {
 				return i
 			}
-			i = starts[k]
+			i = start
 		}
 	}
 	return i

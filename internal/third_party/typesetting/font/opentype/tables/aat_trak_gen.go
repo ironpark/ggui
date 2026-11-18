@@ -46,7 +46,7 @@ func ParseTrackData(src []byte, parentSrc []byte) (TrackData, int, error) {
 		arrayLength := int(item.nTracks)
 
 		offset := 8
-		for i := 0; i < arrayLength; i++ {
+		for range arrayLength {
 			elem, read, err := ParseTrackTableEntry(src[offset:], parentSrc, int(item.nSizes))
 			if err != nil {
 				return item, 0, fmt.Errorf("reading TrackData: %s", err)

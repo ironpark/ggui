@@ -103,16 +103,14 @@ func compactRuns(outputs []shaping.Output, spacing fixed.Int26_6) []shapedRun {
 		for j := range out.Glyphs {
 			gl := &out.Glyphs[j]
 			glyphs = append(glyphs, runGlyph{
-				shapedGlyph: shapedGlyph{
-					GlyphID:  gl.GlyphID,
-					Advance:  gl.Advance,
-					XOffset:  gl.XOffset,
-					YOffset:  gl.YOffset,
-					XBearing: gl.XBearing,
-					YBearing: gl.YBearing,
-				},
-				cluster: int32(gl.TextIndex()),
-				runes:   int32(gl.RunesCount()),
+				GlyphID:  gl.GlyphID,
+				Advance:  gl.Advance,
+				XOffset:  gl.XOffset,
+				YOffset:  gl.YOffset,
+				XBearing: gl.XBearing,
+				YBearing: gl.YBearing,
+				cluster:  int32(gl.TextIndex()),
+				runes:    int32(gl.RunesCount()),
 			})
 		}
 		advance := out.Advance

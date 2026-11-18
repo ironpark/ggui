@@ -24,7 +24,7 @@ func (s nodeSource) Fill(i int, dst *SemNode) {
 func randomNodes(r *rand.Rand, n int) []SemNode {
 	nodes := make([]SemNode, n)
 	for i := range nodes {
-		nodes[i] = SemNode{Node: Node{Role: RoleButton, Name: fmt.Sprint(r.IntN(3))}, Parent: -1}
+		nodes[i] = SemNode{Role: RoleButton, Name: fmt.Sprint(r.IntN(3)), Parent: -1}
 		if i > 0 && r.IntN(8) != 0 {
 			nodes[i].Parent = r.IntN(i)
 		}
