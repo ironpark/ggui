@@ -209,3 +209,26 @@ func readGIF(t *testing.T, path string) *gif.GIF {
 	}
 	return g
 }
+
+// The request's frame and backdrop are read as ggui record writes them.
+func TestParseFrameAndBackdrop(t *testing.T) {
+	if c, err := parseBackdrop("#20242a"); err != nil || c != (color.NRGBA{R: 0x20, G: 0x24, B: 0x2a, A: 0xff}) {
+		t.Errorf("#20242a: %v, %v", c, err)
+	}
+	if c, err := parseBackdrop("transparent"); err != nil || c != color.Transparent {
+		t.Errorf("transparent: %v, %v", c, err)
+	}
+	for _, s := range []string{"20242a", "#2024", "#20242g", "+20242a"} {
+		if _, err := parseBackdrop(s); err == nil {
+			t.Errorf("%q read as a backdrop", s)
+		}
+	}
+	for s, want := range map[string]FrameStyle{"mac": FrameMac, "none": FrameNone} {
+		if f, err := parseFrame(s); err != nil || f != want || f.String() != s {
+			t.Errorf("%s: %v, %v", s, f, err)
+		}
+	}
+	if _, err := parseFrame("round"); err == nil {
+		t.Error("a frame named round")
+	}
+}

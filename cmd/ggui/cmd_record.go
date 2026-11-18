@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
@@ -45,7 +46,13 @@ colors, and each frame after the first holds only what changed, so a
 tour that mostly holds still makes a small file. --fps keeps fewer
 frames than the tour draws, --width scales them down, --colors makes
 the palette smaller, and --dither mixes its colors where gradients
-band. docs/recording.md has the details.`,
+band. docs/recording.md has the details.
+
+--frame mac draws each frame as a macOS window, with a title bar,
+rounded corners and a shadow, on a backdrop that --backdrop sets, in
+place of the frame the tour asks for; --frame none draws the content
+alone. --cursor=false leaves out the cursor the tour's pointer steps
+draw.`,
 	flags: func(fs *flag.FlagSet) func(context.Context, []string, []string) error {
 		cfgPath := fs.String("config", "", "read `file` instead of the ggui.toml found from the current directory")
 		pkg := fs.String("package", "", "the main `package` to build, replacing app.package")
@@ -58,6 +65,9 @@ band. docs/recording.md has the details.`,
 		colors := fs.Int("colors", 256, "the GIF palette's `n` colors, 2 to 256")
 		dither := fs.Float64("dither", 0, "ordered dithering's `strength`, 0 (none) to 1; 0.3 smooths gradients that band")
 		loop := fs.Int("loop", 0, "play the GIF `n` times; 0 loops for ever")
+		frame := fs.String("frame", "", "draw the frames in a `style` of window frame, mac or none, in place of the tour's")
+		backdrop := fs.String("backdrop", "", "the `color` a framed window is drawn on, #RRGGBB or transparent")
+		cursor := fs.Bool("cursor", true, "draw the cursor the tour's pointer steps move")
 		return func(ctx context.Context, pos, rest []string) error {
 			if len(pos) > 1 || len(rest) > 0 {
 				fmt.Fprintln(os.Stderr, "ggui record: takes one tour name")
@@ -76,6 +86,10 @@ band. docs/recording.md has the details.`,
 				return fmt.Errorf("--dither %g: the strength is 0 to 1", *dither)
 			case *fps < 0 || *width < 0 || *loop < 0:
 				return errors.New("--fps, --width and --loop are not negative")
+			case *frame != "" && *frame != "mac" && *frame != "none":
+				return fmt.Errorf("--frame %s: the frames are mac and none", *frame)
+			case *backdrop != "" && !validBackdrop(*backdrop):
+				return fmt.Errorf("--backdrop %s: give #RRGGBB or transparent", *backdrop)
 			}
 			proj, err := project.Open(".", *pkg, *cfgPath)
 			if err != nil {
@@ -133,6 +147,7 @@ band. docs/recording.md has the details.`,
 				if *colors != 256 {
 					req.Colors = *colors
 				}
+				req.Frame, req.Backdrop, req.NoCursor = *frame, *backdrop, !*cursor
 			}
 			data, err := json.Marshal(req)
 			if err != nil {
@@ -192,7 +207,25 @@ type recordRequest struct {
 	Colors int     `json:"colors,omitempty"`
 	Dither float64 `json:"dither,omitempty"`
 	Loop   int     `json:"loop,omitempty"`
-	Report string  `json:"report,omitempty"`
+	// Frame is "mac" or "none", or "" for the tour's; Backdrop is
+	// "#RRGGBB" or "transparent".
+	Frame    string `json:"frame,omitempty"`
+	Backdrop string `json:"backdrop,omitempty"`
+	NoCursor bool   `json:"no_cursor,omitempty"`
+	Report   string `json:"report,omitempty"`
+}
+
+// validBackdrop reports whether s is a backdrop the app reads: #RRGGBB or
+// transparent.
+func validBackdrop(s string) bool {
+	if s == "transparent" {
+		return true
+	}
+	if len(s) != 7 || s[0] != '#' {
+		return false
+	}
+	_, err := strconv.ParseUint(s[1:], 16, 32)
+	return err == nil
 }
 
 // recordReport is what the app reports it did.
