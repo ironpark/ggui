@@ -58,9 +58,11 @@ func init() {
 | `Setup` | Runs under the probe's root owner before the tree is built, as `App.Setup` does: themes, the environment, demo state. |
 | `Build` | The root of the tree. Required. |
 | `Script` | The steps. Required. |
-| `Frame` | What is drawn around the app: `record.FrameNone` (the default) or `record.FrameMac`; see [the window frame](#the-window-frame). |
-| `Title` | The title `FrameMac` sets in its title bar, as the app's `Config.Title` would be. |
-| `TitlebarHidden` | Draw `FrameMac` as for a window whose `Config` sets `TitlebarHidden`: no bar, the window buttons over the content. |
+| `Frame` | What is drawn around the app: `record.FrameNone` (the default), `record.FrameMac` or another macOS window style; see [the window frame](#the-window-frame). |
+| `Title` | The title a `FrameMac` style sets in its title bar, as the app's `Config.Title` would be. |
+| `Subtitle` | The line `FrameMacUnified` sets under the title, as `NSWindow.subtitle`. |
+| `TitlebarHidden` | Draw any `FrameMac` style as `FrameMacHidden`, as for a window whose `Config` sets `TitlebarHidden`: no bar, the window buttons over the content. |
+| `ButtonInset` | Move `FrameMacHidden`'s buttons this many points right and down, into a sidebar the app draws inset from the window's edges. |
 
 `Setup` and `Build` are the place for demo data. The tour runs in the
 app's process, but `ggui.Run` draws it before it would have opened a
@@ -186,9 +188,61 @@ the content; the image grows by the frame, and `Width` scales the framed
 image as a whole. The frame stays the same from frame to frame until the
 theme changes, so a GIF still stores only what changed in the content.
 
-`TitlebarHidden: true` draws the window as for an app whose `Config` sets
-`TitlebarHidden`, its content up to the top edge: no bar and no title, the
-buttons over the content.
+### Window styles
+
+`FrameMac` is a window with a plain title bar. The other styles are the
+same window, corners, border, shadow and backdrop, with the title bar a
+Mac app of another kind shows. All measures are in points, drawn at the
+tour's `Scale`; the image is the content plus the bar, plus the margin.
+
+| Style | `--frame` | Bar | Buttons' centres | Title | Separator | For |
+| --- | --- | --- | --- | --- | --- | --- |
+| `FrameMac` | `mac` | 28 | y 14 | In the middle, 13 semibold | Yes | A plain window: a utility, a document, a settings window. |
+| `FrameMacTitleless` | `mac-titleless` | 28 | y 14 | None | Yes | A window that hides its title (`titleVisibility = .hidden`). |
+| `FrameMacUnified` | `mac-unified` | 52 | y 26 | After the buttons, 15 bold, with `Subtitle` under it in 11 regular | No | A unified toolbar (`toolbarStyle = .unified`), most apps since macOS 11. |
+| `FrameMacCompact` | `mac-compact` | 38 | y 19 | After the buttons, 13 semibold | No | A compact unified toolbar (`.unifiedCompact`). |
+| `FrameMacExpanded` | `mac-expanded` | 66: the 28 title row, a 38 toolbar row | y 14 | In the middle of the title row, 13 semibold | Yes, under the toolbar row | An expanded toolbar (`.expanded`), as in Mail's or Xcode's older look. |
+| `FrameMacHidden` | `mac-hidden` | 0 | y 14 (+ `ButtonInset`) | None | No | A hidden title bar and full-size content (`Config.TitlebarHidden`), an app that draws its own top. |
+
+The buttons are 12 points across, 8 apart, their centres at x 20, 40 and
+60 in every style, and in the middle of the bar's height (of the title row
+in the expanded style). A title after the buttons starts 14 points after
+the zoom button, at x 80. In a unified toolbar the title's baseline is 2
+points above the bar's middle and the subtitle's 12 below it, so the two
+lines sit together in the middle of the bar; with no subtitle the title's
+line is centred on the buttons. A title too long for the bar is cut where
+it would reach the buttons, or as near the right edge. The toolbar row of
+the expanded style is left plain: a tour draws the app's content, and the
+toolbar items are the system's, not the app's.
+
+The titles are set in the theme's font at those weights. A font of one
+weight draws them all in it: a tour draws in Go Regular, as a `Probe`
+does, unless its `Setup` sets a font (`ggui.SetDefaultFont`, or
+`gofont.Enable()` for Go Medium and Go Bold), so a tour that should look
+like the app on a Mac sets the font the app uses.
+
+The content is placed below the bar, the bar the height the table gives;
+in `FrameMacHidden` it reaches the window's top edge and the buttons are
+drawn over it. Every bar is the same shade of the theme's background as
+`FrameMac`'s, and follows the theme when it changes.
+
+The hairline separator between the bar and the content is what macOS
+shows: one under a title bar and an expanded toolbar, none under a unified
+or compact toolbar, which shows one only once the content scrolls under
+it. `Separator(true)` or `Separator(false)` draws or leaves it out in any
+style with a bar.
+
+`TitlebarHidden: true` draws any `FrameMac` style as `FrameMacHidden`, as
+for an app whose `Config` sets `TitlebarHidden`.
+
+**A sidebar inset from the window** (macOS 26's floating sidebar) is not
+a style of its own: the sidebar is part of the app's content, which the
+frame does not draw. An app that draws its own sidebar panel inset from
+the window, say 8 points from the edges, records with `FrameMacHidden` and
+`ButtonInset: 8` (or the `ButtonInset(8)` option), which moves the buttons
+8 points right and down, into the panel's top-left corner as they sit in
+the window's: the close button's centre at (28, 22). Nothing is drawn
+behind them that the app does not draw.
 
 `Backdrop(color.Transparent)` leaves the backdrop clear. PNG frames keep
 the transparency, the shadow fading out to nothing, for a page that puts
@@ -203,6 +257,7 @@ ggui record intro -o docs/intro.gif --width 800 --fps 10
 ggui record --list
 ggui record --frames /tmp/frames # PNG frames instead of a GIF
 ggui record --frame mac --backdrop '#1f2430'  # in a macOS window
+ggui record --frame mac-unified               # with a unified toolbar
 ggui record --frame none --cursor=false       # the content alone
 ```
 
@@ -237,8 +292,10 @@ if err := tour.WriteGIF("tour.gif", record.FPS(10), record.Width(800)); err != n
 which fills each frame with a color of your choosing instead of the
 background the tour's `Env` holds (`ggui.Env.Background`, which a theme
 sets). `Optimize` has no flag; [the GIF](#the-gif) describes it. `Frame`,
-`CornerRadius`, `Margin`, `Backdrop` and `Cursor` set the
-[frame](#the-window-frame) and the [cursor](#the-pointer-and-the-keyboard).
+`CornerRadius`, `Margin`, `Backdrop`, `Separator`, `ButtonInset` and
+`Cursor` set the [frame](#the-window-frame) and the
+[cursor](#the-pointer-and-the-keyboard); `Separator` and `ButtonInset`
+have no flag.
 
 Drawing needs the renderer, which the package brings up with no window:
 call them from the main goroutine, as `ggui.Run` is called, before any app
@@ -325,9 +382,10 @@ ffmpeg -framerate 15 -i /tmp/frames/%04d.png \
 
 A tour draws its tree, as a window's content, and nothing around it:
 
-- **No operating-system chrome** but the one `FrameMac` draws: a macOS
-  window on any platform, not the system's own title bar, and none on
-  Windows' or Linux's pattern.
+- **No operating-system chrome** but the one the `FrameMac` styles draw:
+  a macOS window on any platform, not the system's own title bar, and
+  none on Windows' or Linux's pattern. A toolbar's items, as a sidebar
+  toggle or a search field, are the system's and are not drawn.
 - **No native menus or tray icon**: the macOS menu bar, a native context
   menu and a tray icon's menu belong to the system. Menus and popovers
   ggui draws itself, in the window, are drawn.
