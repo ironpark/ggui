@@ -62,14 +62,17 @@ func Dither(strength float64) Option {
 // Loop makes a GIF play n times. Zero, the default, loops forever.
 func Loop(n int) Option { return func(s *settings) { s.loop = max(n, 0) } }
 
-// Optimize sets how hard a GIF is compressed without changing what it
-// shows. Level 1, the default, writes in each frame only the pixels whose
-// palette color changes, within the smallest rectangle around them, the
-// rest of it transparent so that LZW compresses it to almost nothing, as
-// gifsicle -O2 does. Level 0 writes the whole rectangle that changed,
-// which shows the same and is larger.
+// Optimize sets how hard a GIF is compressed. Level 1, the default,
+// writes in each frame only the pixels whose palette color changes,
+// within the smallest rectangle around them, the rest of it transparent
+// so that LZW compresses it to almost nothing, as gifsicle -O2 does; it
+// shows exactly what level 0 shows, which writes the whole rectangle that
+// changed. Level 2 also splits a frame whose changes are two regions far
+// apart, as the cursor and a control it changed, into two frames when
+// that is smaller: the first shows for 20 ms, the least a browser shows a
+// frame for, so one region changes up to 20 ms before the other.
 func Optimize(level int) Option {
-	return func(s *settings) { l := min(max(level, 0), 1); s.optimize = &l }
+	return func(s *settings) { l := min(max(level, 0), 2); s.optimize = &l }
 }
 
 // Lossy lets a GIF's compression write a pixel in a color near its own

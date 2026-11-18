@@ -88,6 +88,72 @@ func TestOptimizeShowsTheSame(t *testing.T) {
 	t.Logf("%d bytes at level 0, %d at level 1", sa.Size(), sb.Size())
 }
 
+// Level 2 splits frames whose changes are far apart: it shows what level
+// 1 does but in the 20 ms the first part of a split frame shows, and is
+// smaller.
+func TestOptimizeSplits(t *testing.T) {
+	dir := t.TempDir()
+	one, two := filepath.Join(dir, "1.gif"), filepath.Join(dir, "2.gif")
+	tour := func() Tour {
+		col := ggui.State(color.Color(red))
+		return Tour{
+			Size:  ggui.Sz(160, 100),
+			Scale: 2,
+			FPS:   15,
+			Build: func() ggui.Widget {
+				return ggui.View(col, func(c color.Color) ggui.Widget {
+					return widget.Column(widget.Box().Size(20, 20).Fill(c))
+				})
+			},
+			Setup: func(*ggui.Probe) {
+				ggui.SetEnv(ggui.Untrack(ggui.UseEnv).With(ggui.BackgroundKey, color.Color(white)))
+			},
+			Script: func(r *Recorder) {
+				// The cursor in one corner and a change in the other,
+				// each frame.
+				r.MoveTo(ggui.Pt(150, 90), 0)
+				r.Hold(100 * time.Millisecond)
+				for i := range 8 {
+					col.Set(color.RGBA{R: uint8(30 * i), G: 0x40, B: 0x80, A: 0xff})
+					r.MoveTo(ggui.Pt(150-float64(i)*3, 90-float64(i)*2), 70*time.Millisecond)
+				}
+			},
+		}
+	}
+	if err := tour().WriteGIF(one); err != nil {
+		t.Fatal(err)
+	}
+	if err := tour().WriteGIF(two, Optimize(2)); err != nil {
+		t.Fatal(err)
+	}
+	a := timeline(t, one)
+	g := readGIF(t, two)
+	b := timeline(t, two)
+	if len(a) != len(b) {
+		t.Fatalf("%d hundredths of a second, and %d split", len(a), len(b))
+	}
+	lead := make([]bool, len(b))
+	at, splits := 0, 0
+	for i, d := range g.Delay {
+		if d == splitLead && i+1 < len(g.Delay) {
+			lead[at], lead[at+1] = true, true
+			splits++
+		}
+		at += d
+	}
+	for i := range a {
+		if !lead[i] && !changed(a[i], b[i]).Empty() {
+			t.Fatalf("at %d hundredths the split GIF differs", i)
+		}
+	}
+	sa, _ := os.Stat(one)
+	sb, _ := os.Stat(two)
+	t.Logf("%d bytes at level 1, %d at level 2, %d frames split", sa.Size(), sb.Size(), splits)
+	if splits == 0 || sb.Size() >= sa.Size() {
+		t.Errorf("level 2 split %d frames into %d bytes, from %d", splits, sb.Size(), sa.Size())
+	}
+}
+
 // A lossy GIF keeps every pixel within its limit of the exact one, and
 // is smaller.
 func TestLossy(t *testing.T) {
