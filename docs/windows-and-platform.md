@@ -20,6 +20,7 @@ system appearance and a single running instance.
 - [Message dialogs](#message-dialogs)
 - [Light and dark](#light-and-dark)
 - [One instance](#one-instance)
+- [The app's id](#the-apps-id)
 - [System languages](#system-languages)
 - [Open at login](#open-at-login)
 - [Platform support](#platform-support)
@@ -121,10 +122,11 @@ connected, the window keeps its saved size and opens where `Screen` and
 `Position` put it, centered on the default display when they are empty.
 
 The placements of an app's windows live in `windows.json`, in a directory of
-`os.UserConfigDir()` named for the app: the id given to `app.SingleInstance`
-when there is one, such as `~/Library/Application Support/com.example.notes`,
-and otherwise the main window's title as `New` was given it, or the
-executable's name when it was given none. Each window of an
+`os.UserConfigDir()` named for the app: its [id](#the-apps-id) when it has
+one, from `ggui build` or `app.SingleInstance`, such as
+`~/Library/Application Support/com.example.notes`, and otherwise the main
+window's title as `New` was given it, or the executable's name when it was
+given none. Each window of an
 app needs a `Remember` name of its own. A file that cannot be read or written
 never stops the app: the window opens as its `Config` says, and the trouble is
 said once on stderr.
@@ -364,6 +366,49 @@ if errors.Is(err, runtime.ErrRunning) {
 The callback runs on the UI thread. The instances meet at a local socket that
 only the same user can reach.
 
+## The app's id
+
+`ggui.AppID()` is the reverse-DNS id the app is known by, `com.example.editor`:
+the first of
+
+1. on macOS, the bundle identifier of the bundle the app runs from;
+2. the id `ggui build` linked into the executable, the project's `id`, which
+   is also the bundle identifier of the bundle it makes and the name of the
+   Linux package's desktop file;
+3. the id given to `app.SingleInstance`, once it is called;
+4. the executable's name without its extension.
+
+A binary `ggui build` made returns its project's id from the start of `main`.
+A `go run` or `go build` has no linked id, so it returns the `SingleInstance`
+id, or before that call or without it the executable's name, which under `go
+run` is a temporary one. Give `SingleInstance` the project's id, and call it
+before reading `AppID`, to have a dev run and the built app agree. The id names
+the app's [login item](#open-at-login), the directory its windows'
+[placements](#reopening-where-it-was) are kept in, and its windows' class on
+Linux. It suits a directory of the app's own as well:
+
+```go
+dir, err := os.UserConfigDir()
+if err == nil {
+    dir = filepath.Join(dir, ggui.AppID())
+}
+```
+
+`ggui build` sets the id by linking with
+`-ldflags "-X github.com/ironpark/ggui.buildID=<id>"`; a build of another
+making can pass the same flag.
+
+On Linux, a dock or task bar finds the desktop file of a window through its
+X11 class, the `WM_CLASS` property, which it matches against the file's
+`StartupWMClass`. When the id comes from `ggui build` or `SingleInstance`, the
+windows' class is the id, so the `<id>.desktop` the package installs, with
+`StartupWMClass=<id>`, claims them; the instance half of `WM_CLASS` stays the
+executable's name. Without such an id the class is the executable's name,
+capitalised. The icon the dock shows comes from that desktop file. A window
+has an icon of its own only when `Config.Icon` or `SetIcon` gives it one,
+which title bars and the window switcher show and which a dock falls back on
+when no desktop file matches the window.
+
 ## System languages
 
 `ggui.SystemLanguages()` returns the languages the user prefers, most preferred
@@ -407,8 +452,9 @@ ui.Switch(ggui.Bind(openAtLogin.Get, func(v bool) {
 
 What is registered is the executable running now, links resolved, so call it
 from the installed app; an app inside a bundle registers its
-`Contents/MacOS/<name>`. The registration is named for the app: the bundle
-identifier on macOS when the app runs from a bundle, else the id given to
+`Contents/MacOS/<name>`. The registration is named for the
+[app's id](#the-apps-id): the bundle identifier on macOS when the app runs
+from a bundle, else the id `ggui build` linked in, else the id given to
 `app.SingleInstance`, else the executable's name. Keep it the same between
 releases, so a new version finds what an old one registered.
 
