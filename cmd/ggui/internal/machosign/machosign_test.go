@@ -12,12 +12,24 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/ironpark/zapp/pkg/plist"
 )
+
+// escapedName is a resource whose name CodeResources must escape: an
+// ampersand, and on systems that allow them in a file name, angle
+// brackets, which Windows does not.
+var escapedName = "Resources/sp ace&<x>.txt"
+
+func init() {
+	if runtime.GOOS == "windows" {
+		escapedName = "Resources/sp ace&'x'.txt"
+	}
+}
 
 // programs caches the test programs by GOARCH, built once a run.
 var programs struct {
@@ -133,7 +145,7 @@ func makeBundle(t *testing.T, dir string, exe []byte) string {
 		"Resources/sub/file.txt":               "hi\n",
 		"Resources/B.txt":                      "upper\n",
 		"Resources/a.txt":                      "lower\n",
-		"Resources/sp ace&<x>.txt":             "escaped\n",
+		escapedName:                            "escaped\n",
 	}
 	for name, data := range files {
 		p := filepath.Join(c, filepath.FromSlash(name))
@@ -388,7 +400,7 @@ func checkSeal(t *testing.T, contents string, seal []byte) {
 		}
 		return b
 	}
-	for _, name := range []string{"Resources/AppIcon.icns", "Resources/sub/file.txt", "Resources/a.txt", "Resources/B.txt", "Resources/sp ace&<x>.txt", "Resources/Base.lproj/Main.strings"} {
+	for _, name := range []string{"Resources/AppIcon.icns", "Resources/sub/file.txt", "Resources/a.txt", "Resources/B.txt", escapedName, "Resources/Base.lproj/Main.strings"} {
 		h1, h2 := sha1.Sum(read(name)), sha256.Sum256(read(name))
 		if got, _ := files[name].([]byte); !bytes.Equal(got, h1[:]) {
 			t.Errorf("files[%s] = %v", name, files[name])

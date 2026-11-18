@@ -66,8 +66,51 @@ const jitEntitlements = `<?xml version="1.0" encoding="UTF-8"?>
 </plist>
 `
 
-// Signing a bundle must give what codesign --force --sign - gives, byte
-// for byte, and pass codesign's strictest checks.
+// exact asks TestLikeCodesign for codesign's bytes, which hold only
+// against the codesign machosign was written against, macOS 27's.
+// macOS 26's wrote files about 18 KB larger for the same programs, so
+// with another codesign the test asks for the same signature instead:
+// what codesign -d says of it, and its checks.
+var exact = os.Getenv("GGUI_CODESIGN_EXACT") == "1"
+
+// sameSignature reports what codesign -d says differently of a and b,
+// where it would not say it differently of the same signature laid out
+// in a file of another size.
+func sameSignature(t *testing.T, a, b string) {
+	t.Helper()
+	x, y := signatureFacts(codesign(t, "-dvvv", a)), signatureFacts(codesign(t, "-dvvv", b))
+	if x != y {
+		t.Errorf("codesign -d says of machosign's signature\n%s\nand of codesign's\n%s", x, y)
+	}
+}
+
+// signatureFacts keeps the lines of codesign -dvvv that describe the
+// signature rather than the file: the identifier, format, flags, hash
+// and the sealed Info.plist and resources, with the CodeDirectory's size
+// and hash counts left out.
+func signatureFacts(out string) string {
+	var facts []string
+	for line := range strings.SplitSeq(out, "\n") {
+		switch {
+		case strings.HasPrefix(line, "CodeDirectory "):
+			for _, f := range strings.Fields(line) {
+				if strings.HasPrefix(f, "flags=") || strings.HasPrefix(f, "v=") {
+					facts = append(facts, f)
+				}
+			}
+		case strings.HasPrefix(line, "Identifier="), strings.HasPrefix(line, "Format="),
+			strings.HasPrefix(line, "Hash type="), strings.HasPrefix(line, "Signature="),
+			strings.HasPrefix(line, "Info.plist"), strings.HasPrefix(line, "Sealed Resources"),
+			strings.HasPrefix(line, "Internal requirements"), strings.HasPrefix(line, "Runtime"):
+			facts = append(facts, line)
+		}
+	}
+	return strings.Join(facts, "\n")
+}
+
+// Signing a bundle must give the signature codesign --force --sign -
+// gives, byte for byte under GGUI_CODESIGN_EXACT=1, and pass codesign's
+// strictest checks.
 func TestLikeCodesign(t *testing.T) {
 	if _, err := exec.LookPath("codesign"); err != nil {
 		t.Skip("no codesign")
@@ -133,7 +176,11 @@ func TestLikeCodesign(t *testing.T) {
 				t.Fatal(err)
 			}
 			codesign(t, append(args, apps[1])...)
-			sameTree(t, apps[0], apps[1])
+			if exact {
+				sameTree(t, apps[0], apps[1])
+			} else {
+				sameSignature(t, apps[0], apps[1])
+			}
 
 			out := codesign(t, "--verify", "--strict", "--deep", "-vv", apps[0])
 			if !strings.Contains(out, "valid on disk") || !strings.Contains(out, "satisfies its Designated Requirement") {
