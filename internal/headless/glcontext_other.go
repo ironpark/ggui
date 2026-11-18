@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !js
+//go:build !darwin && !linux
 
-package gfxtest
+package headless
 
-// newCanvasSurface does nothing: only the browser draws to a canvas.
-func newCanvasSurface() error {
-	return nil
+import "errors"
+
+func newGLContext() (interface{ MakeContextCurrent() error }, error) {
+	return nil, errors.New("no context can be made without a window system here")
 }

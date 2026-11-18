@@ -12,19 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package gfxtest
+//go:build !js
 
-import (
-	"syscall/js"
+package headless
 
-	"github.com/ironpark/ggfx/host"
-)
-
-// newCanvasSurface makes a surface of a new canvas in the page, for which the WebGL driver is
-// created and which the tests draw to.
+// newCanvasSurface does nothing: only the browser draws to a canvas.
 func newCanvasSurface() error {
-	c := js.Global().Get("document").Call("createElement", "canvas")
-	js.Global().Get("document").Get("body").Call("appendChild", c)
-	_, err := host.NewSurface(host.Canvas(c), false)
-	return err
+	return nil
 }

@@ -17,21 +17,17 @@ package gfxtest
 import (
 	"fmt"
 	"os"
-	"runtime"
 	"testing"
 
 	"github.com/ironpark/ggfx/host"
-)
 
-func init() {
-	// The renderer is initialized on the main thread, which init runs on.
-	runtime.LockOSThread()
-}
+	"github.com/ironpark/ggui/internal/headless"
+)
 
 // MainInFrame runs m inside one frame of the renderer, with no window: that is what makes
 // (*Image).At and the rest of the graphics API available to a test. OpenGL needs a context to
 // draw in, which the test gets of its own where it can (macOS); elsewhere a test runs with the
-// driver that needs none, or a surfaceless EGL context on Linux.
+// driver that needs none, or a surfaceless EGL context on Linux. See headless.Start.
 func MainInFrame(m *testing.M) {
 	code, err := runInFrame(m)
 	if err != nil {
@@ -41,30 +37,11 @@ func MainInFrame(m *testing.M) {
 }
 
 func runInFrame(m *testing.M) (int, error) {
-	if err := host.Init(nil); err != nil {
-		return 0, err
+	stop, err := headless.Start()
+	if err != nil {
+		return 0, fmt.Errorf("testing: %w", err)
 	}
-	var closeContext func()
-	defer func() {
-		host.Terminate()
-		if closeContext != nil {
-			closeContext()
-		}
-	}()
-
-	if err := newCanvasSurface(); err != nil {
-		return 0, err
-	}
-	if host.CurrentDriver().Library == host.GraphicsLibraryOpenGL && runtime.GOOS != "js" {
-		c, err := newGLContext()
-		if err != nil {
-			return 0, fmt.Errorf("testing: OpenGL needs a context: %w", err)
-		}
-		if closer, ok := any(c).(interface{ Close() }); ok {
-			closeContext = closer.Close
-		}
-		host.SetGLContext(c)
-	}
+	defer stop()
 
 	f, err := host.BeginFrame()
 	if err != nil {

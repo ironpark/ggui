@@ -12,12 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !darwin && !linux
+package headless
 
-package gfxtest
+import (
+	"syscall/js"
 
-import "errors"
+	"github.com/ironpark/ggfx/host"
+)
 
-func newGLContext() (interface{ MakeContextCurrent() error }, error) {
-	return nil, errors.New("no context can be made without a window system here")
+// newCanvasSurface makes a surface of a new canvas in the page, for which the WebGL driver is
+// created and which the tests draw to.
+func newCanvasSurface() error {
+	c := js.Global().Get("document").Call("createElement", "canvas")
+	js.Global().Get("document").Get("body").Call("appendChild", c)
+	_, err := host.NewSurface(host.Canvas(c), false)
+	return err
 }
