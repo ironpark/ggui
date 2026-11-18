@@ -5,6 +5,7 @@
 //	ggui build [package]   build a macOS .app, a Windows .exe, a web bundle or a program
 //	ggui doctor            check the machine and the project
 //	ggui i18n check|extract  check the translation catalogs, or fill them in
+//	ggui record [name]     draw a tour of it into an animated GIF
 //
 // It drives the go command on PATH rather than linking a toolchain in, so
 // a build is the one go build would make, with the developer's own
@@ -40,7 +41,7 @@ type command struct {
 	flags func(fs *flag.FlagSet) func(ctx context.Context, pos, rest []string) error
 }
 
-var commands = []*command{initCmd, devCmd, buildCmd, doctorCmd, i18nCmd}
+var commands = []*command{initCmd, devCmd, buildCmd, doctorCmd, i18nCmd, recordCmd}
 
 // stopSignals are the signals that stop a command: Ctrl-C, a polite kill,
 // and the terminal closing.
@@ -171,6 +172,9 @@ func (c *command) usage(w io.Writer, fs *flag.FlagSet) {
 		}
 		name, help := flag.UnquoteUsage(f)
 		line := "  --" + f.Name
+		if len(f.Name) == 1 {
+			line = "  -" + f.Name // as ggui record's -o is written
+		}
 		if name != "" {
 			line += " " + name
 		}
