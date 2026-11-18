@@ -11,30 +11,16 @@ import (
 	"github.com/goreleaser/nfpm/v2/rpm"
 )
 
-// DefaultDependsDeb are the Debian and Ubuntu packages of the libraries
-// ggwd and ggfx open at run time: Xlib and the X extensions, and the GL
-// dispatch libraries, libgl1 for libGL with GLX and libegl1 for EGL,
-// which ggwd makes an OpenGL ES context with. Each pulls in Mesa's
-// drivers, or a GPU vendor's driver stands in for them.
-var DefaultDependsDeb = []string{
-	"libx11-6", "libxrandr2", "libxi6", "libxcursor1", "libxinerama1", "libxext6", "libxrender1",
-	"libgl1", "libegl1",
-}
-
-// DefaultDependsRPM are the same for Fedora, RHEL and their kin: the
-// X libraries, and libglvnd's GLX and EGL dispatch libraries, each of
-// which requires Mesa's.
-var DefaultDependsRPM = []string{
-	"libX11", "libXrandr", "libXi", "libXcursor", "libXinerama", "libXext", "libXrender",
-	"libglvnd-glx", "libglvnd-egl",
-}
-
 // Package says what package to make of an install tree.
 type Package struct {
 	App
-	Tree    string   // the tree Assemble made
-	Depends []string // the package's dependencies, in its format's syntax
-	OutDir  string   // the directory the package is written to
+	Tree string // the tree Assemble made
+	// Depends are the package's dependencies, in its format's syntax.
+	// ggwd and ggfx open the system's libraries at run time, which a
+	// package manager cannot see, so they are named here; ggui.toml's
+	// defaults, config.DefaultDependsDeb and DefaultDependsRPM, list them.
+	Depends []string
+	OutDir  string // the directory the package is written to
 }
 
 // refreshScript runs after the package is installed or removed: it

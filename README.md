@@ -226,6 +226,7 @@ and the full topic list.
 | Windows and the desktop | [Several windows, placement, menus, tray, dialogs](docs/windows-and-platform.md) |
 | Other languages | [Translating an app](docs/i18n.md) · [Localizing the controls' own words](docs/accessibility.md#localization) · [Right-to-left text](docs/fonts.md#right-to-left-text) |
 | The ggui command | [init, dev, build, doctor and ggui.toml](docs/cli.md) |
+| Shipping to Linux | [The .deb, .rpm and tarball, their dependencies, and installing for one user](docs/linux.md) |
 | Custom widgets | [The widget protocol, setters and painting](docs/rendering.md#custom-widgets) · [API conventions](docs/api-conventions.md) |
 | Interaction and testing | [Input](docs/input.md#input) · [Headless testing](docs/testing.md#testing) · [Inspector](docs/inspector.md#inspector) |
 | Showing the app | [Recording a tour into an animated GIF](docs/recording.md) |

@@ -30,7 +30,7 @@ applications it runs. `ggui version` prints the version installed.
 | --- | --- |
 | [`ggui init [dir]`](#ggui-init) | Create a new application. |
 | [`ggui dev [package]`](#ggui-dev) | Run it, rebuilding and restarting it whenever its code changes; `--web` serves it to a browser instead. |
-| [`ggui build [package]`](#ggui-build) | Build a release: a macOS `.app`, a Windows `.exe`, a web bundle or a plain program. |
+| [`ggui build [package]`](#ggui-build) | Build a release: a macOS `.app`, a Windows `.exe`, a Linux install tree with its tarball and `.deb` and `.rpm` packages, a web bundle or a plain program. |
 | [`ggui doctor`](#ggui-doctor) | Check the machine and the project for what ggui needs. |
 | [`ggui i18n check\|extract [dir]`](#ggui-i18n) | Check the translation catalogs against the messages the app passes, or add what they lack. |
 | [`ggui record [name]`](#ggui-record) | Draw a tour the app registered into an animated GIF, or PNG frames. |
@@ -398,13 +398,16 @@ ggui build                    # macos on a Mac, windows on Windows, native elsew
 ggui build --target web
 ggui build --target macos --universal
 GOARCH=amd64 ggui build --target windows
+GOARCH=amd64 ggui build --target linux --format tar,deb,rpm
 ggui build --identity "Developer ID Application" --notarize --dmg
 ```
 
 Build makes a release build: without the development tags, with
-`-trimpath`, and with `-ldflags "-s -w"` followed by `build.ldflags`. ggui
-has no version variable of its own to stamp; to stamp yours, add
-`-X main.version=1.2.0` to `build.ldflags`. Output goes to `build.output`,
+`-trimpath`, and with `-ldflags "-s -w"` followed by `build.ldflags` and
+then `-X github.com/ironpark/ggui.buildID=<app.id>`, which tells the
+program its ID; on Linux it is the window class, which a desktop matches
+to the desktop entry. ggui has no version variable of its own to stamp; to
+stamp yours, add `-X main.version=1.2.0` to `build.ldflags`. Output goes to `build.output`,
 `build/` by default, or to `--out`. The path of what was built is printed
 on standard output, for scripts.
 
@@ -412,12 +415,14 @@ on standard output, for scripts.
 | --- | --- |
 | `macos` | `Name.app`: the program in `Contents/MacOS`, `Info.plist` from `[app]` and `[macos]`, and `Contents/Resources/AppIcon.icns` made from `app.icon`, signed with `macos.signing_identity`. With `--dmg` or `[macos.dmg]` also `Name.dmg`, and with `--pkg` or `[macos.pkg]` the installer `Name.pkg`; with `--notarize` each is notarized and stapled. See [Shipping to other Macs](#shipping-to-other-macs). |
 | `windows` | `Name.exe`, for the go command's `GOARCH`: `amd64`, `arm64` or `386`. Its icon is made from `app.icon`, its version information from `[app]` and `[windows]`, and it has a manifest; it is a GUI program, which opens no console. See [The Windows program](#the-windows-program). |
+| `linux` | `name-linux-arch/`, an install tree laid out as under `/`: the program in `usr/bin`, built for the go command's `GOARCH` (`amd64`, `arm64` or `riscv64`) without cgo, a desktop entry, the icon from `app.icon` in the hicolor sizes, and AppStream metadata. Beside it what `--format` or `linux.formats` asks for: `name-version-linux-arch.tar.gz` (the default), a `.deb` and an `.rpm`. See [The Linux packages](#the-linux-packages). |
 | `web` | A directory, `build/web/` by default, for any static host: `index.html`, `main.wasm` and the Go toolchain's `wasm_exec.js`, each beside a gzipped `.gz` copy. |
 | `native` | The program, for the `GOOS` and `GOARCH` the go command builds for, as `go build` makes it: on Windows without an icon or manifest, and opening a console. |
 
 | Flag | Use |
 | --- | --- |
-| `--target macos\|windows\|web\|native` | What to build. |
+| `--target macos\|windows\|linux\|web\|native` | What to build. |
+| `--format tar,deb,rpm` | With `--target linux`, what to make of the install tree, replacing `linux.formats`; `--format ""` makes the tree alone. |
 | `--out dir` | The output directory, replacing `build.output`. |
 | `--universal` | With `--target macos`, build for Apple silicon and Intel and join the two with `lipo`. Needs macOS with the Xcode command line tools. Same as `macos.universal`. |
 | `--console` | With `--target windows`, link the program for the console, so that Windows opens a console window for its output; `--console=false` makes a GUI program though `windows.console` is set. |
@@ -607,6 +612,58 @@ start from `Name.exe` as built, with Microsoft's `signtool`, or
 `osslsigncode` away from Windows, and with an installer tool such as
 Inno Setup, WiX or MSIX.
 
+### The Linux packages
+
+`ggui build --target linux` builds the program for `linux/$GOARCH` with
+`CGO_ENABLED=0`, from any host, and makes `name-linux-arch/` in the output
+directory, where `name` is the package name: `app.name` in lowercase, with
+each run of anything but letters, digits, `+` and `.` made one hyphen, so
+`Hello World` is `hello-world`. It is also the program's name in
+`/usr/bin`. The other files are named for `app.id`, the reverse-DNS ID:
+
+```
+hello-world-linux-amd64/usr/bin/hello-world
+                        usr/share/applications/com.example.hello.desktop
+                        usr/share/icons/hicolor/<N>x<N>/apps/com.example.hello.png   16 24 32 48 64 128 256 512
+                        usr/share/icons/hicolor/scalable/apps/com.example.hello.svg  when app.icon is an SVG
+                        usr/share/metainfo/com.example.hello.metainfo.xml
+```
+
+The program is mode 0755, everything else 0644. The icons are scaled from
+`app.icon` as the macOS and Windows ones are, without `macos.icon_inset`;
+a source smaller than 512 pixels leaves out the larger sizes. The desktop
+entry has `Name`, `Comment` from `linux.description`, `Exec`, `Icon`,
+`Categories` from `linux.categories`, `Terminal=false` and
+`StartupWMClass` set to the ID, which the program sets as its X11 window
+class, so that docks and task switchers group its windows under the entry.
+With `linux.mime_types` it also has `MimeType`, and `Exec` passes the
+files or URLs to open (`%U`). The AppStream metadata names the ID, name,
+summary, `linux.license` and `linux.homepage`, and launches the desktop
+entry.
+
+| Format | File | Contents |
+| --- | --- | --- |
+| `tar` | `name-version-linux-arch.tar.gz` | The tree, paths from `usr/`, owned by root. |
+| `deb` | `name_version_arch.deb` (`amd64`, `arm64`, `riscv64`) | The tree under `/usr`, depending on `linux.depends_deb`. |
+| `rpm` | `name-version-1.arch.rpm` (`x86_64`, `aarch64`, `riscv64`) | The tree under `/usr`, requiring `linux.depends_rpm`. |
+
+The packages are written in Go by [nfpm](https://nfpm.goreleaser.com/),
+so any host makes them. After installing and removing they run
+`update-desktop-database` and `gtk-update-icon-cache` where installed.
+`linux.maintainer`, `linux.homepage`, `linux.license` and
+`linux.description` fill their fields; a Debian package without a
+maintainer names a placeholder, which ggui warns of.
+
+The version is `app.version`. Should it be anything but numbers, the
+packages get a version both dpkg and rpm accept and sort as meant: a
+leading `v` is dropped, a pre-release after `-` becomes `~` (`1.2.0-rc.1`
+is `1.2.0~rc.1`, before `1.2.0`), `+metadata` is kept, other characters
+become `.`, and a version that does not start with a digit, such as `dev`,
+becomes `0~dev`, before every release.
+
+[Linux](linux.md) has what the packages depend on and why, installing the
+tarball for one user, and what Linux apps lack so far.
+
 ### The web bundle
 
 The page loads its files relative to `web.base`, which it writes as its
@@ -638,6 +695,7 @@ It prints what to do under each line that is not ok, and exits with status
 | remote display | Whether `ggui dev` can show the app in its viewer, and why not. |
 | ggui.toml, icon | Whether the file is valid, and the icon a square PNG of at least 64 pixels, ideally 1024; under 256 it lacks Windows' largest size too. An SVG icon is only found: drawing it takes a compile, which the build does. |
 | Windows build | What `--target windows` takes from the file and macOS does not check: each number of `app.version` at most 65535, `app.name` a name Windows allows for a file, and `windows.manifest`, when set, a well-formed `<assembly>`. |
+| Linux build | What `--target linux` makes: the package name, version, desktop entry and formats, warning when `app.id` is not set, or, for packages, `linux.maintainer` or `linux.license`. |
 | translations | In a project with [translation catalogs](#ggui-i18n) only: the errors `ggui i18n check` finds in each, as a warning, since the app still runs. |
 | platform | What ggwd and ggfx load when an app starts. |
 | tools | `wasm-opt`; on macOS `codesign`, and `lipo` for `--universal`. |
@@ -813,6 +871,12 @@ background = "dmg-background.png"
 company = "Example Ltd"
 copyright = "© 2026 Example Ltd"
 
+[linux]
+formats = ["tar", "deb", "rpm"]
+description = "Says hello"
+maintainer = "Example Ltd <hello@example.com>"
+license = "MIT"
+
 [web]
 base = "/hello/"
 ```
@@ -822,7 +886,7 @@ base = "/hello/"
 | Key | Default | Use |
 | --- | --- | --- |
 | `name` | the main package directory's name | The name people see: the `.app` name, its menu title, `Name.exe` and the page title. |
-| `id` | made from the import path, such as `com.github.alice.hello` | The reverse-DNS bundle identifier. macOS keys settings, permissions and the Dock to it, so set it once and keep it. The Windows manifest names the program by it too. |
+| `id` | made from the import path, such as `com.github.alice.hello` | The reverse-DNS bundle identifier. macOS keys settings, permissions and the Dock to it, so set it once and keep it. The Windows manifest names the program by it too, and on Linux it names the desktop entry, the icons and the AppStream component, and is the window class. |
 | `version` | `"0.1.0"` | One to three numbers: `CFBundleShortVersionString` and `CFBundleVersion`, and the Windows file and product version, for which each is at most 65535. |
 | `icon` | none | A square PNG, ideally 1024×1024, for the macOS and Windows icons, or an SVG with a square viewBox, which the build draws at 1024×1024 with the project's ggfx; see [The macOS bundle](#the-macos-bundle). See `macos.icon_inset` for the margin a macOS icon has. |
 | `package` | `"."` | The main package's directory. A package given on the command line replaces it. |
@@ -918,6 +982,24 @@ What `ggui build --target windows` puts in `Name.exe` beyond `[app]`; see
 | `copyright` | none | `LegalCopyright`. |
 | `console` | `false` | Link for the console, which Windows opens a window of for the program's output; see `--console`. |
 | `manifest` | none | An application manifest to link instead of the generated one, as for a program that must run as an administrator. |
+
+### [linux]
+
+What `ggui build --target linux` writes beyond `[app]`; see
+[The Linux packages](#the-linux-packages).
+
+| Key | Default | Use |
+| --- | --- | --- |
+| `formats` | `["tar"]` | What to make of the install tree, which is always made: `"tar"`, `"deb"`, `"rpm"`; see `--format`. |
+| `description` | `app.name` | One line on what the app does: the desktop entry's `Comment`, the AppStream summary and the packages' description. |
+| `generic_name` | none | What kind of program it is, such as `"Image Viewer"`: the desktop entry's `GenericName`. |
+| `categories` | `["Utility"]` | [Menu categories](https://specifications.freedesktop.org/menu-spec/latest/category-registry.html), such as `"Graphics"`, `"Office"` or `"Development"`. |
+| `mime_types` | `[]` | MIME types the app opens, such as `"image/png"` or `"x-scheme-handler/myapp"`; with any, it is started with the files or URLs it is asked to open. |
+| `maintainer` | none | `"Name <email>"`, the packages' maintainer, which a Debian package must name. |
+| `homepage` | none | An `http` or `https` URL. |
+| `license` | none | An SPDX license expression, such as `"MIT"` or `"MIT OR Apache-2.0"`. |
+| `depends_deb` | `["libx11-6", "libxrandr2", "libxi6", "libxcursor1", "libxinerama1", "libxext6", "libxrender1", "libgl1", "libegl1"]` | The Debian package's dependencies, each in Debian's syntax, such as `"libgl1 \| libgles2"`. |
+| `depends_rpm` | `["libX11", "libXrandr", "libXi", "libXcursor", "libXinerama", "libXext", "libXrender", "libglvnd-glx", "libglvnd-egl"]` | The RPM package's dependencies, as Fedora names them. |
 
 ### [web]
 

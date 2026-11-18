@@ -180,6 +180,35 @@ version = {{.Version}}
 # UTF-8 code page and long paths, and runs as the user who starts it.
 # manifest = ""
 
+[linux]
+# ggui build --target linux makes an install tree, name-linux-arch: the
+# program in usr/bin, a desktop entry named for app.id, app.icon in the
+# hicolor sizes, and AppStream metadata. What to make of it besides:
+# "tar" (name-version-linux-arch.tar.gz), "deb" and "rpm". Same as
+# --format.
+# formats = ["tar"]
+# One line on what the app does: the menu entry's comment, the software
+# centre's summary and the packages' description. Default: app.name.
+# description = ""
+# What kind of program it is, such as "Image Viewer".
+# generic_name = ""
+# Menu categories, from https://specifications.freedesktop.org/menu-spec/
+# such as "Graphics", "Office" or "Development".
+# categories = ["Utility"]
+# MIME types the app opens, such as "image/png" or
+# "x-scheme-handler/myapp"; with any, it is started with the files or
+# URLs it is asked to open.
+# mime_types = []
+# Who maintains the packages, "Name <email>"; a Debian package must say.
+# maintainer = ""
+# homepage = ""
+# The app's license, as an SPDX expression such as "MIT".
+# license = ""
+# What the packages depend on: the libraries the app opens at run time,
+# X11 and GL, which a package manager cannot see for itself.
+# depends_deb = ["libx11-6", "libxrandr2", "libxi6", "libxcursor1", "libxinerama1", "libxext6", "libxrender1", "libgl1", "libegl1"]
+# depends_rpm = ["libX11", "libXrandr", "libXi", "libXcursor", "libXinerama", "libXext", "libXrender", "libglvnd-glx", "libglvnd-egl"]
+
 [web]
 # The page title. Default: app.name.
 # title = ""
