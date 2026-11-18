@@ -3,6 +3,7 @@ package record
 import (
 	"encoding/json"
 	"fmt"
+	"image/color"
 	"io"
 	"os"
 	"strconv"
@@ -33,6 +34,12 @@ type request struct {
 	Colors int     `json:"colors,omitempty"`
 	Dither float64 `json:"dither,omitempty"`
 	Loop   int     `json:"loop,omitempty"`
+	// Frame is "mac" or "none", in place of the tour's Frame; "" keeps
+	// it. Backdrop is "#RRGGBB" or "transparent". NoCursor leaves the
+	// cursor out.
+	Frame    string `json:"frame,omitempty"`
+	Backdrop string `json:"backdrop,omitempty"`
+	NoCursor bool   `json:"no_cursor,omitempty"`
 	// Report is the file the report is written to, when set.
 	Report string `json:"report,omitempty"`
 }
@@ -110,12 +117,26 @@ func serveTo(raw string, stdout io.Writer) (int, error) {
 	if req.Out == "" {
 		return 2, fmt.Errorf("record: %s names no file to write", Env)
 	}
-	o := &settings{
-		fps: max(req.FPS, 0), width: max(req.Width, 0), colors: 256,
-		dither: min(max(req.Dither, 0), 1), loop: max(req.Loop, 0),
-	}
+	o := resolve(nil)
+	o.fps, o.width = max(req.FPS, 0), max(req.Width, 0)
+	o.dither, o.loop = min(max(req.Dither, 0), 1), max(req.Loop, 0)
 	if req.Colors != 0 {
 		Colors(req.Colors)(o)
+	}
+	o.noCursor = req.NoCursor
+	if req.Frame != "" {
+		f, err := parseFrame(req.Frame)
+		if err != nil {
+			return 2, err
+		}
+		o.frame = &f
+	}
+	if req.Backdrop != "" {
+		c, err := parseBackdrop(req.Backdrop)
+		if err != nil {
+			return 2, err
+		}
+		o.backdrop = c
 	}
 	var res result
 	var err error
@@ -167,4 +188,17 @@ func writeReport(path string, rep report) (int, error) {
 		return 1, fmt.Errorf("record: writing the report: %w", err)
 	}
 	return 0, nil
+}
+
+// parseBackdrop reads a backdrop as ggui record's --backdrop gives it:
+// "#RRGGBB", or "transparent".
+func parseBackdrop(s string) (color.Color, error) {
+	if s == "transparent" {
+		return color.Transparent, nil
+	}
+	v, err := strconv.ParseUint(strings.TrimPrefix(s, "#"), 16, 32)
+	if err != nil || len(s) != 7 || s[0] != '#' {
+		return nil, fmt.Errorf("record: the backdrop %q is not #RRGGBB or transparent", s)
+	}
+	return color.NRGBA{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v), A: 0xff}, nil
 }
