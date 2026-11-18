@@ -19,6 +19,7 @@ See [example conventions](README.md#start-here) before copying snippets.
 - [Readers, bindings, and lenses](#readers-bindings-and-lenses)
 - [Builders and components](#builders-and-components)
 - [State that outlives a rebuild](#state-that-outlives-a-rebuild)
+- [Keeping state while developing](#keeping-state-while-developing)
 - [Conditional and key blocks](#conditional-and-key-blocks)
 - [Keyed lists](#keyed-lists)
 - [Resources and await blocks](#resources-and-await-blocks)
@@ -35,6 +36,7 @@ Choose the smallest reactive boundary that expresses the change:
 | Run setup once and own local work | `Component` |
 | Replace a subtree when data changes | `View` or `Reactive` |
 | Keep state through those replacements | `Remember` |
+| Keep state through `ggui dev`'s restart after a save | `State(v).Keep(key)` |
 | Switch branches or reset an identity | `If` or `Key` |
 | Animate a branch out before removing it | `Presence` |
 | Build rows once from a plain slice | `List`, or `Children` for another container |
@@ -331,6 +333,59 @@ it does. `init` runs untracked under an owner of its own, so a `Derived` or
 
 Focus, the caret and a `Scroll`'s offset need none of this: a rebuilt
 control with the same `Key` takes them over from the one it replaced.
+
+## Keeping state while developing
+
+[`ggui dev`](cli.md#keeping-state-across-a-restart) restarts the app after
+each save. `Keep(key)` marks a state that should come through the restart,
+so that the form half filled in, the tab that was open and the page shown
+are there on the new build. It returns the state, so it chains onto
+`State`; the router keeps its location with one line of its own:
+
+```go
+func SettingsPage(c *router.Context) ggui.Widget {
+    return ggui.Component(func() ggui.Widget {
+        tab := ggui.State("general").Keep("settings.tab")
+        profile := ggui.State(Profile{}).Keep("settings.profile")
+        return widget.Column(
+            ui.ToggleGroup(tab).Options(settingsTabs),
+            profileForm(profile),
+        )
+    })
+}
+
+r := router.New(
+    router.Page("/", home),
+    router.Page("/settings", SettingsPage),
+).Keep("router")
+```
+
+Before the old instance stops, its kept values are encoded as JSON, read
+on the UI thread between frames; the new instance restores each one when
+`Keep` is called for its key, before `Keep` returns. A state kept in app
+setup therefore shows its value in the first frame, and one kept in a
+component that mounts later, as the settings page does once the router
+has restored `/settings`, takes it when it mounts. The router's kept URL
+replaces its history's first entry; the entries behind it are not kept.
+
+- **Claimed once.** A value is restored into the first state that keeps its
+  key; a component mounted again afterwards starts from its initial value,
+  as it would without `ggui dev`. A value no state has claimed yet, for a
+  page not shown since the restart, is handed on to the next build.
+- **Owned.** A state is kept while its owner lives, and let go with it:
+  one kept in a page that was closed is not handed over.
+- **One state a key.** A key kept by two states at once belongs to the one
+  kept last, and a `ggui_debug` build says so once. A component shown more
+  than once needs an ID in its key.
+- **Type changes.** A value is decoded over a JSON copy of the state's
+  initial value: a field added since keeps its initial value, one removed
+  is ignored. A value that no longer decodes is dropped, said once on
+  stderr, and the state keeps its initial value; one that does not encode,
+  a func say, is not kept. What JSON leaves out, unexported fields, is not
+  kept either, so keep plain data rather than a model with private parts.
+- **Free elsewhere.** Without `ggui dev`, as in a release build or a test,
+  `Keep` does nothing: it returns the state after one check, and nothing
+  runs, listens or is stored.
 
 ## Conditional and key blocks
 

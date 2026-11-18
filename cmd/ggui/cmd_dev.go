@@ -34,6 +34,11 @@ does not parse, prints the errors and leaves the running app alone. An app that 
 the next change. Ctrl-C stops the app and ggui; a second Ctrl-C kills
 the app at once.
 
+State the app marks with StateValue.Keep, and a router's location with
+Router.Keep, is asked of the app before it is stopped and handed to the
+new build as it starts, so that a save does not lose the screen being
+worked on; with --web the page carries it across its reload.
+
 On macOS the app's window is shown by a viewer, a process of its own
 that keeps the window open, where it was and as large as it was, while
 the app is rebuilt and restarts: the window shows the build's progress

@@ -475,6 +475,19 @@ cannot reveal entries outside the application, so `Hash` and `Browser`
 count only entries this router pushed in the current document; Back beyond
 them still delegates to the browser. `Go` is a no-op at a memory boundary.
 
+`Keep(key)` has `ggui dev` keep the router's location across the restart
+after each save, so the app comes back on the page being worked on rather
+than on its first (see
+[Keeping state while developing](reactivity.md#keeping-state-while-developing)).
+Configure it before `View`, as history is. When `View` mounts with a URL
+handed over, the URL replaces the history's first entry and the first frame
+shows its page; the entries behind it are not kept. Without `ggui dev` it
+does nothing.
+
+```go
+r := router.New(routes...).Keep("router")
+```
+
 Browser code stays behind js/wasm build constraints. Programmatic navigation
 publishes only after the backend mutation succeeds; browser traversal
 publishes from its event. Adapters preserve unrelated browser history state
@@ -544,6 +557,7 @@ func Redirect(path, to string) Route
 
 func New(routes ...Route) *Router            // validates; panics on conflicts
 func (*Router) History(History) *Router     // before View; panics afterwards
+func (*Router) Keep(key string) *Router     // ggui dev keeps the location; before View
 func (*Router) View() ggui.Widget           // mount once
 
 func (*Router) Navigate(url string) error

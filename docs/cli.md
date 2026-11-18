@@ -97,7 +97,8 @@ ggui dev --web --port 3000
 Dev builds the application with the development tags and runs it, then
 watches what it was built from. On a change it waits for the files to go
 quiet, rebuilds, and when the build succeeds stops the running app and
-starts the new one.
+starts the new one, handing it the state the old one
+[keeps](#keeping-state-across-a-restart).
 
 - **A failed build** prints the compiler's errors, in the
   `file:line:col` form editors follow, and leaves the running app alone;
@@ -118,6 +119,47 @@ the terminal's Ctrl-C reaches ggui rather than the app, and stopping the
 app also stops anything it started. On Windows the job ends with ggui
 however ggui ends, and on Linux the app is killed if ggui dies; on macOS
 an app outlives a ggui that is killed with `SIGKILL`.
+
+### Keeping state across a restart
+
+A restart starts the app afresh, which after every save would mean
+clicking back to the screen being worked on. State the app marks with
+`Keep` is carried over to the new build instead:
+
+```go
+count := ggui.State(0).Keep("count")
+form := ggui.State(Signup{}).Keep("signup.form")
+r := router.New(routes...).Keep("router") // the page it was on
+```
+
+Before dev stops the running app, it asks it for the values it keeps,
+which the app encodes as JSON, and holds them for the new build, which is
+handed them as it starts. A state is restored when `Keep` is called, so one
+kept in the app's setup shows its value in the first frame, and one kept in
+a page the router mounts takes its value when that page mounts. The app
+finds dev's channel, a unix socket in the temporary directory, in
+`GGUI_DEV_STATE`; started any other way, or built for release, it keeps
+nothing, and `Keep` costs a check. See
+[State and components](reactivity.md#keeping-state-while-developing) for
+what is kept and when.
+
+- **A type that changed** between builds is the normal case. A value is
+  decoded over a copy of the state's initial value, so a field the new
+  build added keeps its initial value and one it removed is ignored; a
+  value that no longer decodes is dropped, said once on stderr, and its
+  state starts from its initial value.
+- **A failed build**, or an app that exits or crashes, leaves the state
+  with dev: the next build that starts is handed the last state known.
+- **An app that does not answer** within half a second is stopped all the
+  same, which dev says in one line, and the new build starts with nothing
+  kept: a state that may have hung one build is not handed to the next.
+- **Both displays.** It works the same in the viewer and in a window of
+  the app's own. With `--no-watch` there is no restart and nothing is
+  kept. On Windows the socket needs Windows 10 1803 or later, as the
+  viewer does; without one dev says so once and keeps nothing.
+- **In a browser**, with `--web`, the page carries the state across its
+  reload onto the new build in its `sessionStorage`. A reload by hand
+  starts afresh.
 
 ### The window: remote display
 
@@ -301,7 +343,8 @@ the build, the download and the compile as they happen and steps aside
 once the app has painted.
 
 - **Every build is pushed to the page.** An open page follows the
-  server's builds and reloads itself onto each one that succeeds. One that
+  server's builds and reloads itself onto each one that succeeds, carrying
+  over the state the app [keeps](#keeping-state-across-a-restart). One that
   fails is shown over the page, which keeps running the build before it.
   A page whose own load failed reloads once a build succeeds.
 - **The binary is gzipped** once per build and sent compressed to a

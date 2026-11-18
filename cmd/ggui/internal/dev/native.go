@@ -79,16 +79,18 @@ type Native struct {
 	goVer   chan string        // go env GOVERSION, once known
 	parse   *bool              // whether this program parses the project's Go
 
-	viewer  Viewer
-	out     *ui.Output // Log, styled
-	step    *ui.Step   // the build of stepID, while it runs
-	stepID  int
-	tail    *tail     // the end of what the running app wrote to stderr
-	changed time.Time // when the change being built was seen
-	cause   string    // "the change", or "ggui dev started"
-	built   time.Duration
-	started time.Time
-	shown   bool // the running app's first frame is up
+	viewer   Viewer
+	keep     *keeper       // the state the app keeps across restarts, with Watch
+	handWait time.Duration // handTimeout, or a test's
+	out      *ui.Output    // Log, styled
+	step     *ui.Step      // the build of stepID, while it runs
+	stepID   int
+	tail     *tail     // the end of what the running app wrote to stderr
+	changed  time.Time // when the change being built was seen
+	cause    string    // "the change", or "ggui dev started"
+	built    time.Duration
+	started  time.Time
+	shown    bool // the running app's first frame is up
 }
 
 // say returns ggui's own messages' Output: Log, each line marked ggui.
@@ -143,6 +145,15 @@ func (n *Native) Run(ctx context.Context) error {
 	defer n.dropViewer()
 	defer n.stop()
 	n.results = make(chan buildResult)
+	if n.Watch {
+		k, err := newKeeper()
+		if err != nil {
+			n.warnf("state the app keeps is not kept across restarts: %v", err)
+		} else {
+			n.keep = k
+			defer k.close()
+		}
+	}
 
 	// The viewer starts, which may take a build of it, while the app
 	// builds.
@@ -397,6 +408,7 @@ func (n *Native) finish(ctx context.Context, r buildResult) error {
 	n.step.Done(fmt.Sprintf("built in %s", n.built.Round(time.Millisecond)))
 	if len(r.batch) > 0 && n.viewer != nil && n.Display.Stale(ctx, r.batch) {
 		n.logf("the viewer's dependencies changed; restarting it, and its window with it")
+		n.keepState()
 		n.stop()
 		n.dropViewer()
 		v, err := n.Display.Start(ctx)
@@ -483,6 +495,7 @@ func (n *Native) viewerLost() {
 	if n.exe == "" {
 		return
 	}
+	n.keepState()
 	n.stop()
 	n.start(n.exe)
 }
@@ -504,16 +517,12 @@ func (n *Native) send(c viewer.Command) {
 	}
 }
 
-// restart replaces the running app, if any, with one running exe.
-//
-// This is where a development channel to the app would attach, when ggui
-// dev learns to keep state across a restart: the old instance would be
-// asked for its state here before it is stopped, and the new one handed
-// it once started, both over a channel whose address the app finds in its
-// environment. For now the old instance is stopped and the new one started
-// fresh.
+// restart replaces the running app, if any, with one running exe. The
+// running one is asked for the state it keeps before it is stopped, and
+// the new one is handed it as it starts: see keeper.
 func (n *Native) restart(exe string) {
 	if n.app != nil {
+		n.keepState()
 		n.stop()
 	}
 	if n.exe != "" && n.exe != exe {
@@ -528,11 +537,18 @@ func (n *Native) start(exe string) {
 	// A build's spinner stops turning before the app has the terminal.
 	n.step.Static()
 	env := proc.Environ(n.Env)
+	var ours []string
 	if n.viewer != nil {
+		ours = append(ours, remoteSocketEnv+"="+n.viewer.Socket())
+	}
+	if n.keep != nil {
+		ours = append(ours, n.keep.handTo())
+	}
+	if len(ours) > 0 {
 		if env == nil {
 			env = os.Environ()
 		}
-		env = append(env, remoteSocketEnv+"="+n.viewer.Socket())
+		env = append(env, ours...)
 	}
 	n.tail = &tail{}
 	p, err := proc.Start(exe, slices.Clone(n.Args), proc.Options{
@@ -553,6 +569,24 @@ func (n *Native) start(exe string) {
 // remoteSocketEnv is ggwd/remote.EnvSocket, which this command, importing
 // nothing of ggui's, spells out.
 const remoteSocketEnv = "GGWD_REMOTE_SOCKET"
+
+// keepState asks the running app for the state it keeps, before it is
+// stopped to be replaced, for the instance that replaces it.
+func (n *Native) keepState() {
+	if n.keep == nil || n.app == nil {
+		return
+	}
+	wait := n.handWait
+	if wait == 0 {
+		wait = handTimeout
+	}
+	kept, err := n.keep.take(wait)
+	if err != nil {
+		n.warnf("the app did not hand over the state it keeps within %s; the new one starts without it", wait)
+		return
+	}
+	n.tracef("%d kept values for the new app", kept)
+}
 
 // stop stops the running app, asking first, killing it if it does not exit
 // within StopTimeout or when Force closes.

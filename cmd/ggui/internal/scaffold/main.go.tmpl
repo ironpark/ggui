@@ -12,8 +12,9 @@ import (
 )
 
 func main() {
-	// State is a signal: what reads it follows it.
-	count := ggui.State(0)
+	// State is a signal: what reads it follows it. Keep has ggui dev carry
+	// the count over to the build it restarts the app on after each save.
+	count := ggui.State(0).Keep("count")
 
 	app := ggui.New(ggui.Config{
 		Title:     {{printf "%q" .Name}},
