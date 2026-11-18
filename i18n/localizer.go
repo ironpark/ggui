@@ -2,6 +2,7 @@ package i18n
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/ironpark/ggui"
@@ -41,12 +42,8 @@ func New(lang ggui.Readable[string], catalogs ...*Catalog) *Localizer {
 			m = &Catalog{Lang: c.Lang, Messages: map[string]string{}, Plurals: map[string]Forms{}}
 			l.cats[tag] = m
 		}
-		for k, v := range c.Messages {
-			m.Messages[k] = v
-		}
-		for k, v := range c.Plurals {
-			m.Plurals[k] = v
-		}
+		maps.Copy(m.Messages, c.Messages)
+		maps.Copy(m.Plurals, c.Plurals)
 	}
 	return l
 }

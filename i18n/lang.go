@@ -17,8 +17,8 @@ func normalize(tag string) string {
 
 // base returns the language subtag of a normalized tag: "pt" of "pt-br".
 func base(tag string) string {
-	if i := strings.IndexByte(tag, '-'); i >= 0 {
-		return tag[:i]
+	if before, _, ok := strings.Cut(tag, "-"); ok {
+		return before
 	}
 	return tag
 }

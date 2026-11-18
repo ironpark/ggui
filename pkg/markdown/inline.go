@@ -644,7 +644,7 @@ func isURI(s string) bool {
 	if colon < 2 || colon > 32 {
 		return false
 	}
-	for i := 0; i < colon; i++ {
+	for i := range colon {
 		c := s[i]
 		letter := c|0x20 >= 'a' && c|0x20 <= 'z'
 		if i == 0 && !letter || !letter && !(c >= '0' && c <= '9') && c != '+' && c != '.' && c != '-' {
