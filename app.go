@@ -478,7 +478,8 @@ func SetDockIcon(visible bool) {
 // SingleInstance returns runtime.ErrRunning: return from main without
 // calling Run. The id also names the directory where windows keep the
 // placements Config.Remember asks for, which is otherwise named for the
-// main window's title.
+// main window's title, and the login item SetOpenAtLogin registers where
+// the app runs from no bundle with an identifier of its own.
 //
 // In the process that runs, fn receives every later launch on the UI
 // thread, where UseWindow is the window that last had the focus. It is
@@ -502,6 +503,7 @@ func (a *App) SingleInstance(id string, fn func(runtime.Launch)) error {
 	}
 	a.releaseInstance = release
 	a.instanceID = id
+	instanceName.Store(&id)
 	return nil
 }
 
