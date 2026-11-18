@@ -229,8 +229,9 @@ type SidebarWidget struct {
 	env                    ggui.Env
 	rtl                    bool
 	expand                 ggui.Motion
-	progress               float64 // 1 expanded, 0 collapsed
-	labelProgress          float64 // progress under an icon rail, where labels go; else 1
+	ease                   ggui.Easing // nil is EaseLinear
+	progress               float64     // 1 expanded, 0 collapsed
+	labelProgress          float64     // progress under an icon rail, where labels go; else 1
 	laidCollapsed          bool
 	cur, laidCur           int // the current destination: as paint finds it, as layout styled it
 	panelW, fullW          float64
@@ -366,10 +367,20 @@ func (s *SidebarWidget) FooterItems(entries ...SidebarEntry) *SidebarWidget {
 // SidebarCollapseIcon narrows it to a rail six units wide that keeps the
 // icons and hides labels, headings, badges, actions and sub-items;
 // SidebarCollapseNone ignores Collapsed. Either way the width moves over
-// the theme's MotionSlow at a constant speed.
+// the theme's MotionSlow, at a constant speed unless Easing gives a curve.
 func (s *SidebarWidget) Collapsible(mode SidebarCollapse) *SidebarWidget {
 	defer property.Watch(&s.props, &s.mode)()
 	s.mode = mode
+	return s
+}
+
+// Easing sets the curve the width follows as the sidebar collapses and
+// expands, in place of the constant speed: ggui.EaseInOutCubic starts and
+// ends gently. An easing that overshoots, as EaseOutBack, is not for a
+// width. Nil is the constant speed.
+func (s *SidebarWidget) Easing(e ggui.Easing) *SidebarWidget {
+	s.ease = e
+	s.props.Changed()
 	return s
 }
 
@@ -561,7 +572,7 @@ func (s *SidebarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	th := s.theme
 	collapsed := s.collapsed.Get() && s.mode != SidebarCollapseNone
 	s.laidCollapsed = collapsed
-	s.progress = s.expand.Easing(ggui.EaseLinear).LayoutToggle(env, !collapsed, th.MotionSlow)
+	s.progress = s.expand.Easing(pick(s.ease != nil, s.ease, ggui.EaseLinear)).LayoutToggle(env, !collapsed, th.MotionSlow)
 	s.labelProgress = pick(s.mode == SidebarCollapseIcon, s.progress, 1)
 	s.hidden = collapsed && s.mode == SidebarCollapseOffcanvas && s.progress <= 0
 	if s.hidden {

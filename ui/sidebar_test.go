@@ -404,3 +404,20 @@ func TestSidebarActionOnHover(t *testing.T) {
 		t.Fatalf("the action ran %d times", pressed)
 	}
 }
+
+// The rows of a group stand a gap apart, as shadcn/ui's gap-1 menu does,
+// so the highlight of one does not run into the next.
+func TestSidebarRowsStandApart(t *testing.T) {
+	t.Parallel()
+	bar := ui.Sidebar(ggui.State("a"), ui.SidebarItem("a", "Alpha"), ui.SidebarItem("b", "Beta"))
+	p := ggui.NewProbe(bar, ggui.Sz(300, 300))
+	defer p.Close()
+	alpha, _ := p.FindRole(ggui.RoleTab, "Alpha")
+	beta, ok := p.FindRole(ggui.RoleTab, "Beta")
+	if !ok {
+		t.Fatal("no Beta row")
+	}
+	if got := beta.Center().Y - alpha.Center().Y; got != 36 {
+		t.Fatalf("rows are %v apart, want a 32px row and a 4px gap", got)
+	}
+}

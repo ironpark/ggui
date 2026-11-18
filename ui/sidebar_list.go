@@ -27,6 +27,7 @@ type sidebarMetrics struct {
 	badge     float64 // the side of a badge or an action: size-5
 	subIndent float64 // from a row's start to the line beside its sub-items: mx-3.5
 	subPad    float64 // from that line to the sub-items: px-2.5
+	rowGap    float64 // between the rows of a group: gap-1
 	subGap    float64 // between sub-items: gap-1
 	subY      float64 // above and below them: py-0.5
 	line      float64
@@ -36,7 +37,7 @@ func sidebarMetricsOf(t *uitheme.Theme) sidebarMetrics {
 	u := t.Space
 	return sidebarMetrics{
 		pad: u, row: 4 * u, rowSm: 3.5 * u, rowLg: 6 * u, icon: t.IconSize, gap: u, edge: u / 2, badge: 2.5 * u,
-		subIndent: 1.75 * u, subPad: 1.25 * u, subGap: u / 2, subY: u / 4, line: t.BorderWidth,
+		subIndent: 1.75 * u, subPad: 1.25 * u, rowGap: u / 2, subGap: u / 2, subY: u / 4, line: t.BorderWidth,
 	}
 }
 
@@ -55,6 +56,8 @@ type sidebarNode struct {
 	bones                [2]*SkeletonWidget // a skeleton's icon and its line
 	open                 bool               // a collapsible row's own state
 	reveal               ggui.Motion
+	lit                  ggui.Motion // how far the row's highlight has come in
+	litSeen              bool        // whether the row was painted before: its first frame does not fade
 
 	openProgress float64 // how far the fold is open
 	progress     float64 // how much of what is under the row shows: the fold, and the rail
@@ -269,7 +272,10 @@ func (s *SidebarWidget) layoutGroup(n *sidebarNode, w float64, env ggui.Env, m s
 	}
 	n.progress, n.kidsH = n.openProgress, 0
 	if n.progress > 0 {
-		for _, k := range n.kids {
+		for i, k := range n.kids {
+			if i > 0 {
+				n.kidsH += m.rowGap
+			}
 			n.kidsH += s.layoutNode(k, w, env, m)
 		}
 	}
@@ -468,7 +474,10 @@ func (s *SidebarWidget) paintGroup(dst, face *ggui.Canvas, n *sidebarNode, x, y,
 		h := n.kidsH * n.progress
 		bd, bf := s.fold(dst, face, n, ggui.Rct(ggui.Pt(x-m.pad, y), ggui.Sz(w+2*m.pad, h)))
 		ky := y
-		for _, k := range n.kids {
+		for i, k := range n.kids {
+			if i > 0 {
+				ky += m.rowGap
+			}
 			ky += s.paintNode(bd, bf, k, x, ky, w, m)
 		}
 	}
@@ -497,13 +506,21 @@ func (s *SidebarWidget) paintItem(dst, face *ggui.Canvas, n *sidebarNode, row gg
 		dst.HitCursor(row, ggui.CursorShapePointer)
 	}
 	lit := n.index == s.cur || (!inert && n.index == s.hover)
-	fg := t.Fg
-	var fill color.Color
-	if n.e.outline {
-		fill = t.Bg
+	// The highlight comes in and goes out over the theme's MotionFast, as
+	// a Tailwind transition-colors does, so the pointer crossing the rows
+	// does not flash each one. A row first painted lit starts lit.
+	d := s.env.Motion(t.MotionFast)
+	if !n.litSeen {
+		n.litSeen, d = true, 0
 	}
-	if lit {
-		fill, fg = t.Accent, t.AccentFg
+	k := n.lit.Easing(t.Ease.Easing()).Toggle(lit, ggui.FrameTime(), d)
+	fg := mix(t.Fg, t.AccentFg, k)
+	var fill color.Color
+	switch {
+	case n.e.outline:
+		fill = mix(t.Bg, t.Accent, k)
+	case k > 0:
+		fill = fade(t.Accent, k)
 	}
 	if disabled {
 		fg = t.Disabled(fg)
@@ -512,7 +529,7 @@ func (s *SidebarWidget) paintItem(dst, face *ggui.Canvas, n *sidebarNode, row gg
 		}
 	}
 	if n.e.outline {
-		ring := pick(lit, t.Accent, t.Border)
+		ring := mix(t.Border, t.Accent, k)
 		dst.StrokeRoundRect(row.Grow(t.BorderWidth), t.RadiusSm+t.BorderWidth, t.BorderWidth, pick(disabled, t.Disabled(ring), ring))
 	}
 	if fill != nil {
