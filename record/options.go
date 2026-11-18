@@ -18,6 +18,7 @@ type settings struct {
 	radius   float64     // the window's corner radius, logical; negative is DefaultCornerRadius
 	margin   float64     // around the window, logical; negative is DefaultMargin
 	backdrop color.Color // nil is DefaultBackdrop
+	noCursor bool
 	// flatten draws a transparent backdrop over white, for a GIF, which
 	// has no partial transparency.
 	flatten bool
@@ -83,3 +84,8 @@ func Margin(pt float64) Option { return func(s *settings) { s.margin = max(pt, 0
 // transparency, and the shadow falls on nothing; a GIF, which has no
 // partial transparency, is drawn over white.
 func Backdrop(c color.Color) Option { return func(s *settings) { s.backdrop = c } }
+
+// Cursor draws the pointer the Recorder's pointer steps move, true by
+// default. Cursor(false) leaves it out; the steps still move, press and
+// hover as they did.
+func Cursor(on bool) Option { return func(s *settings) { s.noCursor = !on } }
