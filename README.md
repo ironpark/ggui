@@ -36,6 +36,8 @@ and controls that bind directly to your data.
 | The desktop | Several windows that reopen where they were closed, app menus, a tray icon, native file and message dialogs, and one running instance. |
 | Your language | Every word the controls say by themselves replaced in one place, right-to-left layout, and Korean, Japanese and Chinese input. |
 | Developer tools | The `ggui` command for live rebuilds and release bundles, headless interaction tests with `Probe`, and an in-app widget inspector. |
+| Shipping | Bundles for macOS, Windows and Linux (`.app`, `.exe`, `.deb`, `.rpm`) built from any system, macOS signing and notarizing from a Mac, Linux or Windows, and one command that publishes a GitHub release, a Homebrew cask and a Chocolatey package. |
+| Showing it off | Scripted tours recorded to an animated GIF offscreen, in a macOS window frame with a cursor that moves and clicks. |
 
 ## Demos
 
@@ -97,7 +99,10 @@ stay on the screen you were working on.
 | --- | --- |
 | `ggui init [dir]` | Create a new application. |
 | `ggui dev` | Run it, rebuilding and restarting as you edit; `--web` serves it to a browser. |
-| `ggui build` | Bundle a release: a signed `.app`, disk image or installer on macOS, an `.exe` with its icon and version on Windows (`--target windows`, from any system), or a web bundle (`--target web`). |
+| `ggui build` | Bundle a release: a signed `.app`, disk image or installer for macOS, an `.exe` with its icon and version for Windows, an install tree, `.tar.gz`, `.deb` and `.rpm` for Linux, or a web bundle. `--target` picks one, from any system. |
+| `ggui release` | Build every target and publish them: a GitHub release, a Homebrew cask in your tap, a Chocolatey package. `--dry-run` shows what it would do. |
+| `ggui record` | Run the app's scripted tour offscreen and save it as an animated GIF. |
+| `ggui i18n check` | Find the app's messages without a translation, and translations that no longer fit them. |
 | `ggui doctor` | Check the machine and the project for what ggui needs. |
 
 See [the ggui command](docs/cli.md) for every flag and `ggui.toml`.
