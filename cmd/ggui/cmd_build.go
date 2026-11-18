@@ -1033,6 +1033,6 @@ func report(path, what string) error {
 		}
 	}
 	ui.Stderr.Success("Built %s (%s%s)", ui.Stderr.Cyan(rel), what, size)
-	fmt.Println(path)
+	fmt.Fprintln(reportOut, path)
 	return nil
 }
