@@ -1,3 +1,5 @@
+//go:build darwin || (cgo && (amd64 || arm64) && (linux || (windows && ggui_rcodesign)))
+
 package macos
 
 import (
@@ -11,6 +13,9 @@ import (
 // Verify checks the app, disk image or installer at path as a release:
 // its bundle, its signature and what Gatekeeper makes of it, with zapp's
 // checks. It returns the report, as text, and the checks that failed.
+// Away from a Mac the signatures of an app's binaries are checked with
+// rcodesign, and Gatekeeper, and a disk image's or installer's signature
+// integrity, are skipped.
 //
 // Gatekeeper rejects what is signed but not notarized, so when notarized
 // is false that verdict is expected: the report shows it as a warning,

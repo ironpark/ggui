@@ -65,12 +65,13 @@ goes in its web/ subdirectory. --out names the directory instead.
 
 Signing with an identity uses the keychain on macOS, or a certificate:
 --p12-file, macos.p12_file, or base64 text in $GGUI_P12_BASE64, its
-password in --p12-password-file or $GGUI_P12_PASSWORD. Signing with an
-identity and notarizing take a Mac; signing ad hoc, and --universal,
-work on any host. Notarizing
-uses a notarytool profile, an App Store Connect API key, or an Apple ID
-with its app-specific password in $GGUI_NOTARY_PASSWORD. docs/cli.md
-has the details.`,
+password in --p12-password-file or $GGUI_P12_PASSWORD. Notarizing uses
+a notarytool profile, an App Store Connect API key, or an Apple ID with
+its app-specific password in $GGUI_NOTARY_PASSWORD. Signing ad hoc, and
+--universal, work on any host. On Linux and Windows a build of ggui with
+zapp's rcodesign library, as the release binaries are, signs with a
+certificate and notarizes with an API key; elsewhere signing with an
+identity takes a Mac. docs/cli.md has the details.`,
 	flags: func(fs *flag.FlagSet) func(context.Context, []string, []string) error {
 		cfgPath := fs.String("config", "", "read `file` instead of the ggui.toml found from the current directory")
 		tgt := fs.String("target", defaultTarget(), "what to build: `macos`, windows, linux, web or native")
