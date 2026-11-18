@@ -7,21 +7,26 @@ import (
 	"testing"
 )
 
-func TestChooseLoginID(t *testing.T) {
-	t.Parallel()
-	for _, c := range []struct{ bundle, instance, exe, want string }{
+// TestLoginID is not parallel: it sets the app's id, which parallel tests
+// read.
+func TestLoginID(t *testing.T) {
+	if bundleID() != "" {
+		t.Skip("the test runs from a bundle, whose identifier names it")
+	}
+	for _, c := range []struct{ build, instance, exe, want string }{
 		{"com.example.app", "com.example.other", "/x/App", "com.example.app"},
 		{"", "com.example.editor", "/x/editor", "com.example.editor"},
 		{"", "", "/usr/local/bin/hello", "hello"},
 		{"", "", `C:\Apps\Hello World.exe`, "Hello World"},
 		{"", "a/b:c", "/x/y", "a_b_c"},
 	} {
+		setAppID(t, c.build, c.instance)
 		exe := c.exe
 		if strings.Contains(exe, `\`) && filepath.Separator == '/' {
 			exe = strings.ReplaceAll(exe, `\`, "/")
 		}
-		if got := chooseLoginID(c.bundle, c.instance, exe); got != c.want {
-			t.Errorf("chooseLoginID(%q, %q, %q) = %q, want %q", c.bundle, c.instance, exe, got, c.want)
+		if got := loginID(exe); got != c.want {
+			t.Errorf("loginID(%q) with build id %q, instance %q = %q, want %q", exe, c.build, c.instance, got, c.want)
 		}
 	}
 }

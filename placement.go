@@ -253,12 +253,14 @@ func placementDirName(id string) string {
 	return name
 }
 
-// identity is the name the app's placements are kept under: the id given
-// to SingleInstance, which is the app's reverse-DNS name, or else the main
-// window's title as New was given it, or else the executable's name.
+// identity is the name the app's placements are kept under: the app's id
+// where it was given one, as AppID orders them (the bundle identifier, the
+// id ggui build linked in, the id given to this App's SingleInstance), or
+// else the main window's title as New was given it, or else the
+// executable's name.
 func (a *App) identity() string {
-	if a.instanceID != "" {
-		return a.instanceID
+	if id, src := chooseAppID(bundleID(), buildID, a.instanceID, ""); src > idExecutable {
+		return id
 	}
 	if a.title != "" {
 		return a.title
