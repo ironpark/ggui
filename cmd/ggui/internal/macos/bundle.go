@@ -83,7 +83,10 @@ type Bundle struct {
 	Info
 	Binary string // the built program, copied into the bundle
 	Icon   string // a PNG, or ""
-	OutDir string // the directory Name.app is made in
+	// IconInset scales the icon into the body of Apple's icon grid, 824
+	// of 1024 pixels, for artwork drawn edge to edge.
+	IconInset bool
+	OutDir    string // the directory Name.app is made in
 }
 
 // Assemble makes OutDir/Name.app, replacing one already there, and returns
@@ -103,12 +106,15 @@ func Assemble(b Bundle) (app string, warnings []string, err error) {
 		return "", nil, err
 	}
 	if b.Icon != "" {
-		skipped, err := WriteIcon(filepath.Join(contents, "Resources", iconName+".icns"), b.Icon)
+		skipped, fullBleed, err := writeIcon(filepath.Join(contents, "Resources", iconName+".icns"), b.Icon, b.IconInset)
 		if err != nil {
 			return "", nil, fmt.Errorf("icon %s: %w", b.Icon, err)
 		}
 		if len(skipped) > 0 {
 			warnings = append(warnings, fmt.Sprintf("icon %s is smaller than 1024×1024, so the icon has no %v pixel images; macOS scales the largest it has", b.Icon, skipped))
+		}
+		if fullBleed && !b.IconInset {
+			warnings = append(warnings, fmt.Sprintf("icon %s is drawn to the edges of its canvas, so it looks larger than other apps' in the Dock, which sit in the middle 824×824 of 1024; set macos.icon_inset = true to scale it in, or leave the margin in the artwork", b.Icon))
 		}
 		b.HasIcon = true
 	}
@@ -174,21 +180,34 @@ func plistValue(v any) any {
 // WriteIcon writes the .icns made from the PNG src to dst, and returns
 // the pixel sizes it lacks because src is smaller.
 func WriteIcon(dst, src string) ([]int, error) {
+	skipped, _, err := writeIcon(dst, src, false)
+	return skipped, err
+}
+
+// writeIcon is WriteIcon, scaling src into Apple's icon grid first when
+// inset is set, and also reports whether src is drawn edge to edge.
+func writeIcon(dst, src string, inset bool) (skipped []int, fullBleed bool, err error) {
 	f, err := os.Open(src)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer f.Close()
 	img, err := png.Decode(f)
 	if err != nil {
-		return nil, fmt.Errorf("not a PNG: %w", err)
+		return nil, false, fmt.Errorf("not a PNG: %w", err)
+	}
+	if b := img.Bounds(); b.Dx() == b.Dy() {
+		fullBleed = icns.FullBleed(img)
+		if inset {
+			img = icns.Inset(img)
+		}
 	}
 	var buf bytes.Buffer
-	skipped, err := icns.Encode(&buf, img)
+	skipped, err = icns.Encode(&buf, img)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return skipped, os.WriteFile(dst, buf.Bytes(), 0o644)
+	return skipped, fullBleed, os.WriteFile(dst, buf.Bytes(), 0o644)
 }
 
 func copyFile(dst, src string, mode os.FileMode) error {

@@ -100,6 +100,19 @@ func TestDefaultsKeptForUnsetKeys(t *testing.T) {
 }
 
 // errorsOf returns the problems Parse reported.
+// An SVG icon is refused with what to do instead, since ggui carries no
+// SVG renderer.
+func TestSVGIcon(t *testing.T) {
+	es := errorsOf(t, "[app]\nicon = \"art/icon.svg\"\n")
+	if len(es) != 1 || es[0].Line != 2 || !strings.Contains(es[0].Msg, "export it at 1024×1024") || !strings.Contains(es[0].Msg, "-o icon.png") {
+		t.Errorf("errors = %v", es)
+	}
+	cfg, err := Parse("ggui.toml", []byte("[macos]\nicon_inset = true\n"))
+	if err != nil || !cfg.MacOS.IconInset || Defaults().MacOS.IconInset {
+		t.Errorf("icon_inset: %v, %v", cfg.MacOS.IconInset, err)
+	}
+}
+
 func errorsOf(t *testing.T, src string) Errors {
 	t.Helper()
 	_, err := Parse("ggui.toml", []byte(src))

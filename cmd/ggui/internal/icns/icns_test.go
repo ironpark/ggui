@@ -46,6 +46,36 @@ func disc(size int) *image.NRGBA {
 	return img
 }
 
+// Inset puts the artwork in the middle 824 of 1024 pixels, transparent
+// around it, at any size of source.
+func TestInset(t *testing.T) {
+	full := image.NewNRGBA(image.Rect(0, 0, 1024, 1024))
+	for i := range full.Pix {
+		full.Pix[i] = 255
+	}
+	if !FullBleed(full) || FullBleed(disc(1024)) {
+		t.Error("FullBleed is wrong")
+	}
+	in := Inset(full)
+	if in.Bounds().Dx() != 1024 {
+		t.Fatalf("inset is %v", in.Bounds())
+	}
+	for _, p := range []struct {
+		x, y   int
+		opaque bool
+	}{{99, 512, false}, {100, 512, true}, {923, 512, true}, {924, 512, false}, {512, 99, false}, {512, 100, true}, {0, 0, false}, {512, 512, true}} {
+		if a := in.NRGBAAt(p.x, p.y).A; (a == 255) != p.opaque || (!p.opaque && a != 0) {
+			t.Errorf("(%d, %d) alpha %d, want opaque %v", p.x, p.y, a, p.opaque)
+		}
+	}
+	if FullBleed(in) {
+		t.Error("an inset icon counted as full bleed")
+	}
+	if small := Inset(full.SubImage(image.Rect(0, 0, 512, 512))); small.NRGBAAt(49, 256).A != 0 || small.NRGBAAt(50, 256).A != 255 {
+		t.Error("a 512 source is not inset by 50")
+	}
+}
+
 func TestEncodeReadBack(t *testing.T) {
 	var buf bytes.Buffer
 	skipped, err := Encode(&buf, disc(1024))

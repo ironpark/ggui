@@ -75,8 +75,8 @@ func TestAssemble(t *testing.T) {
 	if filepath.Base(app) != "Hello & Goodbye.app" {
 		t.Errorf("bundle is %s", app)
 	}
-	if len(warnings) != 1 || !strings.Contains(warnings[0], "1024") {
-		t.Errorf("warnings = %q, want one about the 512-pixel icon", warnings)
+	if len(warnings) != 2 || !strings.Contains(warnings[0], "1024") || !strings.Contains(warnings[1], "macos.icon_inset") {
+		t.Errorf("warnings = %q, want one about the 512-pixel icon and one about its edges", warnings)
 	}
 	exe, err := os.Stat(filepath.Join(app, "Contents", "MacOS", "hello"))
 	if err != nil {
@@ -115,6 +115,43 @@ func TestAssemble(t *testing.T) {
 			t.Errorf("plutil -lint: %s", out)
 		}
 	}
+
+	// Inset, the 512-pixel image has the artwork in its middle 412 and
+	// nothing about the edges to warn of.
+	b.IconInset = true
+	_, warnings, err = Assemble(b)
+	if err != nil {
+		t.Fatalf("rebuilding inset: %v", err)
+	}
+	if len(warnings) != 1 {
+		t.Errorf("inset warnings = %q", warnings)
+	}
+	data, _ = os.ReadFile(filepath.Join(app, "Contents", "Resources", "AppIcon.icns"))
+	family, err = icns.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, e := range family.Elements {
+		if e.Type != "ic14" { // 256pt @2x: 512 pixels
+			continue
+		}
+		found = true
+		img, err := png.Decode(bytes.NewReader(e.Data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, _, a := img.At(49, 256).RGBA(); a != 0 {
+			t.Errorf("inset icon has alpha %d in its margin", a)
+		}
+		if _, _, _, a := img.At(256, 256).RGBA(); a == 0 {
+			t.Error("inset icon is transparent in its middle")
+		}
+	}
+	if !found {
+		t.Error("the inset icon has no 512-pixel image")
+	}
+	b.IconInset = false
 
 	// A second build replaces the bundle; anything else of that name is
 	// left alone.
