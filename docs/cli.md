@@ -1026,6 +1026,7 @@ The GIF is `name.gif`, or `tour.gif`, in the project's directory, unless
 | `--colors n` | The GIF palette's size, 2 to 256 (256). |
 | `--dither s` | Ordered dithering, 0 (none, the default) to 1; 0.3 smooths gradients that band. |
 | `--loop n` | Play the GIF `n` times; 0 (the default) loops for ever. |
+| `--lossy n` | Let the GIF's compression write a pixel in a color up to n/1000 from its own in Oklab where that compresses better, 0 (exact, the default) to 200; 20 to 40 is hard to see. |
 | `--frame style` | Draw the frames in a window frame: `mac`, a macOS window with a title bar, rounded corners and a shadow on a backdrop, or `none`, the content alone; in place of the tour's `Frame`. |
 | `--backdrop color` | What a framed window is drawn on: `#RRGGBB`, or `transparent`, which PNG frames keep and a GIF draws over white. |
 | `--cursor=false` | Leave out the cursor the tour's pointer steps draw; the steps still drive the app. |
