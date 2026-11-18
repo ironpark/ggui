@@ -40,6 +40,15 @@ type App struct {
 
 	releaseInstance func() // gives up SingleInstance's claim
 
+	// instanceID is the id SingleInstance claimed and title the main
+	// window's title as New was given it: what the app is known by where
+	// its windows keep their placements (see identity). placements is that
+	// store, made when a window first asks for it; a test points it at a
+	// file of its own.
+	instanceID string
+	title      string
+	placements *placementStore
+
 	wakeQueued atomic.Bool // a WakeEvent is on its way
 	draining   atomic.Bool // posted work is running outside a frame
 }
@@ -58,7 +67,7 @@ func New(cfg Config, build Builder) *App {
 		systemUIFonts()
 		SystemFonts()
 	}()
-	a := &App{}
+	a := &App{title: cfg.Title}
 	a.Window = newWindow(a, rt, cfg, build)
 	a.windows = []*Window{a.Window}
 	return a
@@ -467,7 +476,9 @@ func SetDockIcon(visible bool) {
 // it before Run. When another process already runs the app, that process
 // is handed this launch's arguments and working directory, and
 // SingleInstance returns runtime.ErrRunning: return from main without
-// calling Run.
+// calling Run. The id also names the directory where windows keep the
+// placements Config.Remember asks for, which is otherwise named for the
+// main window's title.
 //
 // In the process that runs, fn receives every later launch on the UI
 // thread, where UseWindow is the window that last had the focus. It is
@@ -490,6 +501,7 @@ func (a *App) SingleInstance(id string, fn func(runtime.Launch)) error {
 		return err
 	}
 	a.releaseInstance = release
+	a.instanceID = id
 	return nil
 }
 

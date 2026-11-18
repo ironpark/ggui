@@ -11,6 +11,7 @@ system appearance and a single running instance.
 
 - [Several windows](#several-windows)
 - [Controlling a window](#controlling-a-window)
+- [Reopening where it was](#reopening-where-it-was)
 - [Reaching the host from a widget](#reaching-the-host-from-a-widget)
 - [Slow calls from a handler](#slow-calls-from-a-handler)
 - [App menus](#app-menus)
@@ -77,6 +78,45 @@ status := ggui.Combine(w.Focused(), w.Viewport(), func(focused bool, size ggui.S
 `Focused` follows the keyboard focus, `Viewport` the content size, and `State`
 whether the window is normal, minimized, maximized or fullscreen, whether the
 app, the user or the OS changed it.
+
+## Reopening where it was
+
+`Config.Remember` names a window's placement, and the window reopens where it
+was last closed: the same position, the same size, and maximized if it was.
+
+```go
+app := ggui.New(ggui.Config{
+    Title: "Notes", Width: 900, Height: 640, Resizable: true,
+    Remember: "main",
+}, build)
+prefs, err := app.OpenWindow(ggui.Config{Title: "Preferences", Remember: "preferences"}, settings)
+```
+
+The window keeps its placement when it closes, by its close button, `Close`,
+`app.Close`, `app.Quit` or the platform's Quit. What it keeps is the frame it
+had while it was last shown normally: closed maximized, it reopens maximized,
+and `Restore` takes it back to that frame. A frame it had while minimized or
+fullscreen is never kept.
+
+When the window opens, a saved placement takes the place of `Position`,
+`Width`, `Height` and `Maximized`. The size stays within `MinWidth`,
+`MinHeight`, `MaxWidth` and `MaxHeight`, and within the display. A window opens
+on the main display, so a position saved on another one, or one that would put
+the window's top edge out of reach, as after a display was unplugged or its
+resolution lowered, is dropped: the window keeps its saved size and opens where
+`Position` puts it, centered when that is nil.
+
+The placements of an app's windows live in `windows.json`, in a directory of
+`os.UserConfigDir()` named for the app: the id given to `app.SingleInstance`
+when there is one, such as `~/Library/Application Support/com.example.notes`,
+and otherwise the main window's title as `New` was given it, or the
+executable's name when it was given none. Each window of an
+app needs a `Remember` name of its own. A file that cannot be read or written
+never stops the app: the window opens as its `Config` says, and the trouble is
+said once on stderr.
+
+Nothing is kept under a `Probe` or a `WindowProbe`, in a browser, or in the
+viewer of `ggui dev`, whose one window is the viewer's.
 
 ## Reaching the host from a widget
 
@@ -293,6 +333,7 @@ only the same user can reach.
 | Feature | macOS | Windows | Linux | Browser |
 | --- | --- | --- | --- | --- |
 | Several windows, window control | Yes | Yes | Yes | One window |
+| `Config.Remember` | Yes | Yes | Yes | No |
 | App menus in the menu bar | Yes | Drawn with `ui.AppMenubar` | Drawn with `ui.AppMenubar` | Drawn with `ui.AppMenubar` |
 | Native context menus | Yes | Widget fallback | Widget fallback | Widget fallback |
 | Tray icon | Yes | No | No | No |
