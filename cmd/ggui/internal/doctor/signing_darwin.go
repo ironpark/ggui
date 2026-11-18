@@ -50,34 +50,6 @@ func checkIdentities(ctx context.Context, r *Report, m config.MacOS) {
 		"name one of the identities above, or \"-\" to sign ad hoc")
 }
 
-// checkCertificate reports a certificate ggui.toml or the environment
-// gives for signing in place of the keychain.
-func checkCertificate(r *Report, m config.MacOS, proj *project.Project) {
-	var from string
-	switch {
-	case m.P12File != "":
-		path := m.P12File
-		if proj != nil {
-			path = proj.Path(path)
-		}
-		if _, err := os.Stat(path); err != nil {
-			r.fail("certificate", "macos.p12_file: "+err.Error(), "export the Developer ID certificate with its private key as .p12, or remove the key")
-			return
-		}
-		from = "macos.p12_file " + path
-	case m.P12Base64Env != "" && os.Getenv(m.P12Base64Env) != "":
-		from = "$" + m.P12Base64Env
-	default:
-		return
-	}
-	detail := "signs with the PKCS#12 certificate in " + from + " instead of the keychain"
-	if m.P12PasswordFile == "" && (m.P12PasswordEnv == "" || os.Getenv(m.P12PasswordEnv) == "") {
-		r.warn("certificate", detail+", with no password", "set $"+m.P12PasswordEnv+" or macos.p12_password_file if the certificate has one")
-		return
-	}
-	r.ok("certificate", detail)
-}
-
 // checkNotarization reports the tools notarizing takes and the
 // credentials ggui.toml and the environment give it.
 func checkNotarization(ctx context.Context, r *Report, m config.MacOS, proj *project.Project) {

@@ -9,7 +9,7 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 )
 
-// Away from a Mac checkSigning reports through checkSigningElsewhere only.
+// Away from a Mac checkSigning reports through checkSigningElsewhere,
+// which checks the certificate with checkCertificate.
 func checkIdentities(context.Context, *Report, config.MacOS)                     {}
-func checkCertificate(*Report, config.MacOS, *project.Project)                   {}
 func checkNotarization(context.Context, *Report, config.MacOS, *project.Project) {}
