@@ -324,3 +324,49 @@ func TestThePlacementsDirectoryIsNamedForTheApp(t *testing.T) {
 		}
 	}
 }
+
+// Under ggui dev a Config edited since the window was last closed is what
+// the developer just asked for, so it wins over the placement kept; the
+// same Config, and any Config in an app run by itself, leaves the
+// placement its say.
+func TestAnEditedConfigWinsOverThePlacementUnderDev(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name          string
+		dev, edited   bool
+		width, height int
+	}{
+		{"dev, edited", true, true, 800, 480},
+		{"dev, as it was", true, false, 1000, 700},
+		{"by itself, edited", false, true, 1000, 700},
+	} {
+		dir := t.TempDir()
+		a := rememberingApp(t, dir)
+		openRemembering(a.Window)
+		a.remembered = placement{Position: &Point{X: 120, Y: 90}, Width: 1000, Height: 700, Screen: &placementScreen{ID: "s22-left"}}
+		a.Close()
+
+		b := rememberingApp(t, dir)
+		b.placements.dev = c.dev
+		if c.edited {
+			b.cfg.Width = 800
+		}
+		openRemembering(b.Window)
+		if b.cfg.Width != c.width || b.cfg.Height != c.height {
+			t.Errorf("%s: opened %dx%d, want %dx%d", c.name, b.cfg.Width, b.cfg.Height, c.width, c.height)
+		}
+		// Closed untouched, the edited Config is what was asked for from
+		// now on: the next run keeps this window's placement again.
+		b.remembered = placement{Position: &Point{X: 10, Y: 20}, Width: 900, Height: 500, Screen: &placementScreen{ID: "s22-left"}}
+		b.Close()
+		d := rememberingApp(t, dir)
+		d.placements.dev = c.dev
+		if c.edited {
+			d.cfg.Width = 800
+		}
+		openRemembering(d.Window)
+		if d.cfg.Width != 900 || d.cfg.Height != 500 {
+			t.Errorf("%s: the run after opened %dx%d, want the 900x500 it was closed at", c.name, d.cfg.Width, d.cfg.Height)
+		}
+	}
+}

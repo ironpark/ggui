@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ironpark/ggui/internal/devstate"
 	"github.com/ironpark/ggui/internal/platform/remotedisplay"
 )
 
@@ -40,6 +41,42 @@ type placement struct {
 	// Screen is the display the window was on, which Position is on; nil
 	// when the window could not tell.
 	Screen *placementScreen `json:"screen,omitempty"`
+	// Asked is what the Config asked for when the window that left this
+	// placement opened, for ggui dev to tell a Config edited since; see
+	// placementAsk.
+	Asked *placementAsk `json:"asked,omitempty"`
+}
+
+// placementAsk is the part of a Config a placement overrides, as the code
+// had it. An app run by ggui dev compares it with its Config now: where
+// they differ the code was edited to place the window otherwise, and the
+// window opens as the code says, which is what was just asked for, rather
+// than where the last run left it. An app run by itself never looks: its
+// user's placement outlives a release that changes the defaults.
+type placementAsk struct {
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+	Position  *Point `json:"position,omitempty"`
+	Screen    string `json:"screen,omitempty"`
+	Maximized bool   `json:"maximized,omitempty"`
+}
+
+// askOf returns what cfg asks for of a window's placement.
+func askOf(cfg Config) placementAsk {
+	a := placementAsk{Width: cfg.Width, Height: cfg.Height, Screen: cfg.Screen, Maximized: cfg.Maximized}
+	if cfg.Position != nil {
+		at := *cfg.Position
+		a.Position = &at
+	}
+	return a
+}
+
+// same reports whether a and b ask for the same placement.
+func (a placementAsk) same(b placementAsk) bool {
+	if (a.Position == nil) != (b.Position == nil) || a.Position != nil && *a.Position != *b.Position {
+		return false
+	}
+	return a.Width == b.Width && a.Height == b.Height && a.Screen == b.Screen && a.Maximized == b.Maximized
 }
 
 // placementScreen names the display a placement was taken on by its ID,
@@ -166,6 +203,9 @@ func into(pos Point, size Size, area Rect) Point {
 // store with no path keeps nothing. It is used on the UI thread only.
 type placementStore struct {
 	path string
+	// dev is set in an app ggui dev runs, where a Config edited since a
+	// placement was kept wins over it; see placementAsk.
+	dev bool
 }
 
 // placementFile returns the store the app's windows remember their
@@ -173,7 +213,7 @@ type placementStore struct {
 // dev shows in its viewer, whose one window is the viewer's.
 func (a *App) placementFile() *placementStore {
 	if a.placements == nil {
-		a.placements = &placementStore{path: placementPath(a.identity())}
+		a.placements = &placementStore{path: placementPath(a.identity()), dev: os.Getenv(devstate.Env) != ""}
 	}
 	if a.placements.path == "" {
 		return nil
@@ -306,6 +346,10 @@ func placementTrouble(err error) {
 	})
 }
 
+// placementEdited says once that a Config edited under ggui dev won over a
+// kept placement.
+var placementEdited sync.Once
+
 // restorePlacement applies the placement kept under the window's Remember
 // name to the Config it is about to open with, measured against screens,
 // and returns the store to keep its placement in when it closes: nil when
@@ -322,8 +366,15 @@ func (w *Window) restorePlacement(screens []Screen) *placementStore {
 	if store == nil {
 		return nil
 	}
+	w.asked = askOf(w.cfg)
 	if p, ok := store.load(w.cfg.Remember); ok {
-		w.cfg = placed(w.cfg, p, screens)
+		if store.dev && p.Asked != nil && !p.Asked.same(w.asked) {
+			placementEdited.Do(func() {
+				fmt.Fprintf(os.Stderr, "ggui: the window %q opens as its Config now says, not where it was last closed: the Config was edited\n", w.cfg.Remember)
+			})
+		} else {
+			w.cfg = placed(w.cfg, p, screens)
+		}
 	}
 	return store
 }
@@ -388,6 +439,8 @@ func (w *Window) savePlacement() {
 	}
 	// The last move may not have reached the window as an event yet.
 	w.notePlacement()
+	asked := w.asked
+	w.remembered.Asked = &asked
 	w.remember.save(w.cfg.Remember, w.remembered)
 	w.remember = nil
 }
