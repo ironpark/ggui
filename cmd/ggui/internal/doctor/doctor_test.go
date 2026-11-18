@@ -3,6 +3,7 @@ package doctor
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"image"
 	"image/png"
 	"os"
@@ -14,16 +15,56 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 )
 
-// Away from a Mac ggui does not sign, which matters only when ggui.toml
-// asks for a signature.
+// Away from a Mac a build of ggui without rcodesign does not sign, which
+// matters only when ggui.toml asks for a signature.
 func TestCheckSigningElsewhere(t *testing.T) {
+	cannot := errors.New("this build of ggui cannot sign")
 	m := config.Defaults().MacOS
 	r := &Report{}
-	checkSigningElsewhere(r, m)
+	checkSigningElsewhere(r, m, nil, cannot)
 	m.SigningIdentity = "Developer ID Application"
-	checkSigningElsewhere(r, m)
-	if r.Checks[0].Status != OK || r.Checks[1].Status != Fail {
+	checkSigningElsewhere(r, m, nil, cannot)
+	if len(r.Checks) != 2 || r.Checks[0].Status != OK || r.Checks[1].Status != Fail || !strings.Contains(r.Checks[1].Detail, cannot.Error()) {
 		t.Errorf("checks = %v", r.Checks)
+	}
+}
+
+// A build with rcodesign signs with a certificate and notarizes with an
+// API key; a keychain identity, or notarizing without a key, fails.
+func TestCheckSigningElsewhereWithRcodesign(t *testing.T) {
+	statuses := func(r *Report) map[string]Status {
+		s := map[string]Status{}
+		for _, c := range r.Checks {
+			s[c.Name] = c.Status
+		}
+		return s
+	}
+	m := config.Defaults().MacOS
+	t.Setenv(m.P12Base64Env, "")
+	r := &Report{}
+	checkSigningElsewhere(r, m, nil, nil)
+	if got := statuses(r); len(got) != 1 || got["macOS signing"] != OK {
+		t.Errorf("ad hoc: %v", r.Checks)
+	}
+
+	m.SigningIdentity = "Developer ID Application"
+	m.Notarize = true
+	r = &Report{}
+	checkSigningElsewhere(r, m, nil, nil)
+	if got := statuses(r); got["signing identity"] != Fail || got["notarization"] != Fail {
+		t.Errorf("a keychain identity, notarizing without a key: %v", r.Checks)
+	}
+
+	t.Setenv(m.P12Base64Env, "AAAA")
+	t.Setenv(m.P12PasswordEnv, "secret")
+	m.Notary.APIKeyFile = filepath.Join(t.TempDir(), "key.json")
+	if err := os.WriteFile(m.Notary.APIKeyFile, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r = &Report{}
+	checkSigningElsewhere(r, m, nil, nil)
+	if got := statuses(r); got["certificate"] != OK || got["notarization"] != OK || got["signing identity"] != "" {
+		t.Errorf("a certificate and an API key: %v", r.Checks)
 	}
 }
 
