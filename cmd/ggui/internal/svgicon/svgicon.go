@@ -200,7 +200,7 @@ func Draw(ctx context.Context, o Options) error {
 // virtualDir returns the name of a directory of dir that does not exist,
 // for the overlay to put the program in.
 func virtualDir(dir string) (string, error) {
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		name := "ggui_svgicon"
 		if i > 0 {
 			name += strconv.Itoa(i)
