@@ -1,10 +1,13 @@
 package ui_test
 
 import (
+	"math"
 	"strconv"
 	"testing"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func manyPeople(n int) []person {
@@ -86,5 +89,55 @@ func TestTableMaxRowsCountsRowsAndHeightWins(t *testing.T) {
 	p.Frame()
 	if last := semNode(t, p, ggui.RoleRow, "p50"); last.Rect.Origin.Y != 40+49*30 {
 		t.Fatalf("last row at %v without limits, want at %v", last.Rect, 40+49*30)
+	}
+}
+
+func buttonTable(rows ggui.Readable[[]person]) *ui.TableWidget[person, int] {
+	return ui.Table(rows, func(p person) int { return p.ID },
+		ui.TextCol("Name", func(p person) string { return p.Name }),
+		ui.Col("", func(r ggui.Readable[person]) ggui.Widget {
+			return ui.Button("Edit "+ggui.Untrack(r.Get).Name, func() {})
+		}).W(120),
+	).RowName(func(p person) string { return p.Name })
+}
+
+func TestTableRowGrowsToAButtonInACell(t *testing.T) {
+	t.Parallel()
+	p := ggui.NewProbe(buttonTable(people()), ggui.Sz(400, 500))
+	defer p.Close()
+	natural := ggui.NewProbe(widget.Column(ui.Button("Edit Ada", func() {})), ggui.Sz(400, 500))
+	want := semNode(t, natural, ggui.RoleButton, "Edit Ada").Rect.Size.H
+	natural.Close()
+	button := semNode(t, p, ggui.RoleButton, "Edit Ada")
+	if button.Rect.Size.H != want {
+		t.Fatalf("button is %v tall in the row, want its own %v", button.Rect.Size.H, want)
+	}
+	// The row is the button in the cell padding; the next starts under it.
+	ada, grace := semNode(t, p, ggui.RoleRow, "Ada"), semNode(t, p, ggui.RoleRow, "Grace")
+	if ada.Rect.Origin.Y != 40 || ada.Rect.Size.H != want+16 || grace.Rect.Origin.Y != 40+want+16 {
+		t.Fatalf("rows at %v and %v, want %v tall from 40", ada.Rect, grace.Rect, want+16)
+	}
+	if math.Abs(button.Rect.Center().Y-ada.Rect.Center().Y) > .01 {
+		t.Fatalf("button at %v, want centered in its row %v", button.Rect, ada.Rect)
+	}
+}
+
+func TestTableScrollingRowsKeepOneHeight(t *testing.T) {
+	t.Parallel()
+	tbl := buttonTable(people()).MaxRows(10)
+	p := ggui.NewProbe(tbl, ggui.Sz(400, 500))
+	defer p.Close()
+	// Under a scrolling body rows keep the text row's height ...
+	if ada := semNode(t, p, ggui.RoleRow, "Ada"); ada.Rect.Size.H != 37 {
+		t.Fatalf("row is %v tall under MaxRows, want 37", ada.Rect.Size.H)
+	}
+	// ... unless RowHeight makes room for the button.
+	tbl.RowHeight(53)
+	p.Frame()
+	if ada := semNode(t, p, ggui.RoleRow, "Ada"); ada.Rect.Size.H != 53 {
+		t.Fatalf("row is %v tall under RowHeight(53), want 53", ada.Rect.Size.H)
+	}
+	if sz := p.Frame(); sz.H != 40+3*53 {
+		t.Fatalf("height = %v, want a heading and three 53px rows", sz.H)
 	}
 }
