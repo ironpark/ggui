@@ -334,6 +334,39 @@ func TestCrossAlignPlacesAndStretches(t *testing.T) {
 	}
 }
 
+// A stretched Row in a vertical Scroll has no height to fill, so its
+// children come out as tall as the tallest, like CSS cards in a row.
+func TestStretchedRowInScrollMakesChildrenEqualHeight(t *testing.T) {
+	t.Parallel()
+	var short, tall ggui.Rect
+	left := recordRect(Box(Box().Size(40, 20)).Pad(8), &short)
+	right := recordRect(Box(Box().Size(40, 70)).Pad(8), &tall)
+	row := Row(Expanded(left), Expanded(right)).Gap(10).Stretch()
+	s := Scroll(row)
+	s.Paint(nil, ggui.Rct(ggui.Pt(0, 0), s.Layout(ggui.Tight(ggui.Sz(200, 300)), ggui.Env{})))
+	if short.Size.H != 86 || tall.Size.H != 86 {
+		t.Fatalf("cards %v and %v high, want both 86", short.Size.H, tall.Size.H)
+	}
+}
+
+// recordRect lays child out unchanged and records the Rect it is painted in.
+func recordRect(child ggui.Widget, got *ggui.Rect) ggui.Widget {
+	return ggui.FromFuncs(child.Layout, func(dst *ggui.Canvas, r ggui.Rect) { *got = r; child.Paint(dst, r) })
+}
+
+// A stretched Column with no width to fill makes its children as wide as
+// the widest.
+func TestStretchedColumnWithUnboundedWidthMatchesWidest(t *testing.T) {
+	t.Parallel()
+	var narrow ggui.Rect
+	col := Column(probe(10, 10, &narrow), Box().Size(50, 10)).Stretch()
+	size := col.Layout(ggui.Constraints{MaxW: ggui.Unbounded, MaxH: 100}, ggui.Env{})
+	col.Paint(nil, ggui.Rct(ggui.Pt(0, 0), size))
+	if size.W != 50 || narrow.Size.W != 50 {
+		t.Fatalf("column %v wide, child %v; want both 50", size.W, narrow.Size.W)
+	}
+}
+
 func TestFlexIsTransparentOutsideAFlow(t *testing.T) {
 	t.Parallel()
 	if got := Expanded(Box().Size(7, 7)).Layout(ggui.Loose(ggui.Sz(100, 100)), ggui.Env{}); got != (ggui.Size{W: 7, H: 7}) {

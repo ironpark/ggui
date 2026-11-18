@@ -92,8 +92,10 @@ type Measurement struct {
 }
 
 // MeasureFunc measures child index under c. It must return a size satisfying c,
-// except that absent children may return zero. Flow, Wrap, Stack, Box and Align
-// measure each child once; Grid measures twice when its width is unbounded.
+// except that absent children may return zero. Wrap, Stack, Box and Align
+// measure each child once. Flow does too, except that under AlignStretch with
+// an unbounded cross axis it measures a child smaller across than the biggest
+// a second time. Grid measures twice when its width is unbounded.
 // Measurement may update caller-owned state, but must not mutate the active
 // layout's inputs or reenter the same Scratch.
 type MeasureFunc func(index int, c Constraints) Measurement
@@ -115,8 +117,9 @@ type Result struct {
 // Do not copy a Scratch after first use. Child counts must be nonnegative.
 // It does not cache measurements or retain callbacks or caller objects.
 type Scratch struct {
-	measured []Measurement
-	rects    []Rect
+	measured   []Measurement
+	rects      []Rect
+	mainBounds [][2]float64 // Flow: each child's main-axis min and max
 }
 
 func (s *Scratch) reset(n int) {

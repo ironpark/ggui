@@ -49,7 +49,9 @@ percentage resolution, or browser intrinsic-size algorithm.
 - Constraints flow into `MeasureFunc`; return a size satisfying those constraints.
   Maximums may be `math.Inf(1)`. For contradictory bounds, minimums take priority.
 - Flow measures rigid children first, then weighted children. Every child is
-  measured once. It initially reserves gaps for every child and adjusts the gap
+  measured once, except under `AlignStretch` with an unbounded cross axis:
+  then a child smaller across than the biggest is measured again, tight
+  across at the biggest one's size, like CSS `align-items: stretch`. It initially reserves gaps for every child and adjusts the gap
   count after measuring rigid children, matching ggui's existing behavior.
 - Wrap, Stack, Box, and Align measure each child once. Grid measures each child
   twice when width is unbounded: natural width first, then tight cell width.

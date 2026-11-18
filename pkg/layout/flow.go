@@ -2,6 +2,7 @@ package layout
 
 import (
 	"math"
+	"slices"
 )
 
 // Justify distributes slack along the main axis. Values other than JustifyStart
@@ -24,6 +25,11 @@ const (
 	AlignStart CrossAlign = iota
 	AlignCenter
 	AlignEnd
+	// AlignStretch gives every child the flow's cross size. When that is
+	// bounded each child is measured at it; when it is not, the flow is as
+	// big as its biggest child and the smaller ones are measured again at
+	// that size, as CSS stretches the items of a flex line with an auto
+	// cross size.
 	AlignStretch
 	AlignBaseline // horizontal flows only; vertical flows treat it as AlignStart
 )
@@ -83,9 +89,13 @@ func baselineOrBottom(m Measurement) float64 {
 // Flow measures rigid children in input order against remaining space, then
 // weighted children against their shares. It preserves input order in Result.
 // It implements ggui's constrained flow semantics, including no flex-shrink.
+// Under AlignStretch with an unbounded cross axis, it then measures each
+// present child smaller across than the biggest once more, tight across at
+// that size and with the main-axis bounds it was first given.
 func (s *Scratch) Flow(c Constraints, f FlowStyle, items []Item, measure MeasureFunc) Result {
 	n := len(items)
 	s.reset(n)
+	s.mainBounds = slices.Grow(s.mainBounds[:0], n)[:n]
 	mainMax, crossMax := f.main(c.Max()), f.cross(c.Max())
 	crossMin := f.stretched(crossMax, 0)
 	gaps := f.Gap * float64(max(n-1, 0))
@@ -96,7 +106,8 @@ func (s *Scratch) Flow(c Constraints, f FlowStyle, items []Item, measure Measure
 			totalFlex += item.Weight
 			continue
 		}
-		m := measure(i, f.constraints(0, max(mainMax-used, 0), crossMin, crossMax))
+		s.mainBounds[i] = [2]float64{0, max(mainMax-used, 0)}
+		m := measure(i, f.constraints(0, s.mainBounds[i][1], crossMin, crossMax))
 		s.measured[i] = m
 		used += f.main(m.Size)
 		if m.Absent {
@@ -116,8 +127,12 @@ func (s *Scratch) Flow(c Constraints, f FlowStyle, items []Item, measure Measure
 			if item.Loose {
 				minimum = 0
 			}
+			s.mainBounds[i] = [2]float64{minimum, extent}
 			s.measured[i] = measure(i, f.constraints(minimum, extent, crossMin, crossMax))
 		}
+	}
+	if f.Align == AlignStretch && math.IsInf(crossMax, 1) {
+		s.stretchUnbounded(f, f.cross(Size{W: c.MinW, H: c.MinH}), measure)
 	}
 	content, crossUsed := gaps, 0.0
 	for _, m := range s.measured {
@@ -176,4 +191,23 @@ func (s *Scratch) Flow(c Constraints, f FlowStyle, items []Item, measure Measure
 		}
 	}
 	return s.result(size)
+}
+
+// stretchUnbounded measures again, tight across at the biggest present
+// child's cross size (or floor, when that is bigger), every present child
+// that came out smaller, keeping the main-axis bounds it was measured with.
+func (s *Scratch) stretchUnbounded(f FlowStyle, floor float64, measure MeasureFunc) {
+	cross := floor
+	for _, m := range s.measured {
+		if !m.Absent {
+			cross = max(cross, f.cross(m.Size))
+		}
+	}
+	for i, m := range s.measured {
+		if m.Absent || f.cross(m.Size) >= cross {
+			continue
+		}
+		b := s.mainBounds[i]
+		s.measured[i] = measure(i, f.constraints(b[0], b[1], cross, cross))
+	}
 }
