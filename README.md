@@ -112,7 +112,7 @@ No manual refresh or subscription wiring is needed.
 brew install ironpark/tap/ggui   # or: go install github.com/ironpark/ggui/cmd/ggui@latest
 ggui init hello && cd hello
 ggui dev      # run it, rebuilding and restarting it as you edit
-ggui build    # a signed .app on macOS; --target web for a browser
+ggui build    # a signed .app on macOS, an .exe with its icon on Windows; --target web for a browser
 ggui doctor   # check this machine has what ggui needs
 ```
 

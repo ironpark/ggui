@@ -35,11 +35,12 @@ const FileName = "ggui.toml"
 // Config is the whole file. Paths in it are relative to the directory the
 // file is in, which Project resolves.
 type Config struct {
-	App   App   `toml:"app"`
-	Build Build `toml:"build"`
-	Dev   Dev   `toml:"dev"`
-	MacOS MacOS `toml:"macos"`
-	Web   Web   `toml:"web"`
+	App     App     `toml:"app"`
+	Build   Build   `toml:"build"`
+	Dev     Dev     `toml:"dev"`
+	MacOS   MacOS   `toml:"macos"`
+	Windows Windows `toml:"windows"`
+	Web     Web     `toml:"web"`
 }
 
 // App names the application and says where its main package is.
@@ -51,7 +52,8 @@ type App struct {
 	ID string `toml:"id"`
 	// Version is the user-visible version, up to three numbers.
 	Version string `toml:"version"`
-	// Icon is a square PNG, ideally 1024×1024, made into the bundle icon.
+	// Icon is a square PNG, ideally 1024×1024, made into the bundle icon
+	// and the Windows program's.
 	Icon string `toml:"icon"`
 	// Package is the main package, as a directory relative to the file.
 	Package string `toml:"package"`
@@ -165,6 +167,27 @@ const (
 	DefaultDMGIconSize  = 128
 	DefaultDMGLabelSize = 14
 )
+
+// Windows holds what only the Windows program uses: what its version
+// information says beyond [app], and how it is linked. Its icon is
+// app.icon's, its version app.version.
+type Windows struct {
+	// Description is the version information's FileDescription, which
+	// Task Manager and the taskbar's menus call the program by; empty is
+	// the app's name.
+	Description string `toml:"description"`
+	// Company and Copyright are its CompanyName and LegalCopyright, left
+	// out when empty.
+	Company   string `toml:"company"`
+	Copyright string `toml:"copyright"`
+	// Console links the program for the console, which Windows opens a
+	// window of for it, as for a build whose output is to be read; by
+	// default it is a GUI program and opens none.
+	Console bool `toml:"console"`
+	// Manifest is an application manifest to link instead of the one
+	// ggui writes, as for a program that must run as an administrator.
+	Manifest string `toml:"manifest"`
+}
 
 // Web holds what only the js/wasm bundle and its page use.
 type Web struct {

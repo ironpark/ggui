@@ -234,5 +234,9 @@ func gitignore(exe string) string {
 # What go build leaves in the directory.
 /%[1]s
 /%[1]s.exe
+
+# The resources ggui build --target windows links in, written for the
+# build and removed after it, unless the build is killed.
+ggui_windows_*.syso
 `, exe)
 }

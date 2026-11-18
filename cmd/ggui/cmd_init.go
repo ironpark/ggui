@@ -82,7 +82,7 @@ then writes none of them.`,
 			}
 			out.Printf("  %s     check this machine has what ggui apps need\n", out.Cyan("ggui doctor"))
 			out.Printf("  %s        run the app, rebuilding and restarting it as you edit\n", out.Cyan("ggui dev"))
-			out.Printf("  %s      bundle it: a .app on macOS, a program elsewhere, --target web for a browser\n", out.Cyan("ggui build"))
+			out.Printf("  %s      bundle it: a .app on macOS, an .exe on Windows, a program elsewhere, --target web for a browser\n", out.Cyan("ggui build"))
 			return nil
 		}
 	},

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -16,29 +17,35 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
 	"github.com/ironpark/ggui/cmd/ggui/internal/web"
+	"github.com/ironpark/ggui/cmd/ggui/internal/windows"
 )
 
 var buildCmd = &command{
 	name:    "build",
 	args:    "[package]",
-	summary: "build a release: a macOS .app, a web bundle or a program",
+	summary: "build a release: a macOS .app, a Windows .exe, a web bundle or a program",
 	help: `Build makes a release build of the application, without the development
 tags: -trimpath, and -ldflags "-s -w" followed by build.ldflags.
 
 Targets:
 
-  macos   Name.app in the output directory: the program, Info.plist from
-          [app] and [macos], the icon made from app.icon, signed with
-          macos.signing_identity (ad hoc by default). With --dmg or
-          [macos.dmg] also Name.dmg, and with --pkg or [macos.pkg]
-          Name.pkg; with --notarize each is notarized and stapled. A
-          build signed with an identity is verified at the end. The
-          default on macOS.
-  web     a directory for any static host: index.html, main.wasm and the
-          Go toolchain's wasm_exec.js, each with a precompressed .gz copy,
-          the binary run through wasm-opt (web.wasm_opt) when installed.
-  native  the program for the go command's GOOS and GOARCH. The default
-          elsewhere.
+  macos    Name.app in the output directory: the program, Info.plist from
+           [app] and [macos], the icon made from app.icon, signed with
+           macos.signing_identity (ad hoc by default). With --dmg or
+           [macos.dmg] also Name.dmg, and with --pkg or [macos.pkg]
+           Name.pkg; with --notarize each is notarized and stapled. A
+           build signed with an identity is verified at the end. The
+           default on macOS.
+  windows  Name.exe in the output directory, for the go command's GOARCH
+           (amd64, arm64 or 386), with the icon made from app.icon,
+           version information from [app] and [windows], and a manifest,
+           linked as a GUI program that opens no console (--console keeps
+           it). The default on Windows.
+  web      a directory for any static host: index.html, main.wasm and the
+           Go toolchain's wasm_exec.js, each with a precompressed .gz copy,
+           the binary run through wasm-opt (web.wasm_opt) when installed.
+  native   the program for the go command's GOOS and GOARCH. The default
+           elsewhere.
 
 The output directory is build.output, build/ by default; the web bundle
 goes in its web/ subdirectory. --out names the directory instead.
@@ -52,9 +59,10 @@ with its app-specific password in $GGUI_NOTARY_PASSWORD. docs/cli.md
 has the details.`,
 	flags: func(fs *flag.FlagSet) func(context.Context, []string, []string) error {
 		cfgPath := fs.String("config", "", "read `file` instead of the ggui.toml found from the current directory")
-		tgt := fs.String("target", defaultTarget(), "what to build: `macos`, web or native")
+		tgt := fs.String("target", defaultTarget(), "what to build: `macos`, windows, web or native")
 		out := fs.String("out", "", "the output `directory`, replacing build.output")
 		universal := fs.Bool("universal", false, "with --target macos, build for Apple silicon and Intel and join them with lipo (macOS only)")
+		console := fs.Bool("console", false, "with --target windows, link for the console, which Windows opens a window of, replacing windows.console")
 		tags := fs.String("tags", "", "build `tags`, comma-separated, replacing build.tags")
 		ldflags := fs.String("ldflags", "", "linker `flags` after -s -w, replacing build.ldflags")
 		mf := macFlags{
@@ -93,16 +101,33 @@ has the details.`,
 				b.ldflags = *ldflags
 			}
 			b.universal = cfg.MacOS.Universal || *universal
+			b.console = cfg.Windows.Console
+			if isSet(fs, "console") {
+				b.console = *console
+			}
 
 			lo := gotool.ListOptions{Tags: b.tags}
 			switch *tgt {
 			case "macos":
 				lo.GOOS = "darwin"
+			case "windows":
+				// The architecture is resolved first, as the files the
+				// package is built from, its .syso files among them,
+				// depend on it.
+				env, err := gotool.Env(ctx, proj.Root, []string{"GOOS=windows"}, "GOARCH")
+				if err != nil {
+					return err
+				}
+				b.arch = env["GOARCH"]
+				if !slices.Contains(windows.Arches, b.arch) {
+					return fmt.Errorf("GOARCH=%s: ggui builds Windows programs for %s; set GOARCH to one of them", b.arch, strings.Join(windows.Arches, ", "))
+				}
+				lo.GOOS, lo.GOARCH = "windows", b.arch
 			case "web":
 				lo.GOOS, lo.GOARCH = "js", "wasm"
 			case "native":
 			default:
-				return fmt.Errorf("unknown --target %q: use macos, web or native", *tgt)
+				return fmt.Errorf("unknown --target %q: use macos, windows, web or native", *tgt)
 			}
 			if *universal && *tgt != "macos" {
 				return errors.New("--universal makes a macOS bundle: add --target macos")
@@ -114,6 +139,9 @@ has the details.`,
 					}
 				}
 			}
+			if *tgt != "windows" && isSet(fs, "console") {
+				return errors.New("--console is for a Windows build: add --target windows")
+			}
 			b.mac = mf
 			if b.main, err = resolveMain(ctx, ui.Stderr, proj, arg, lo); err != nil {
 				return err
@@ -121,6 +149,8 @@ has the details.`,
 			switch *tgt {
 			case "macos":
 				return b.macos(ctx)
+			case "windows":
+				return b.windows(ctx)
 			case "web":
 				return b.web(ctx)
 			default:
@@ -130,10 +160,15 @@ has the details.`,
 	},
 }
 
-// defaultTarget is the bundle the host makes most use of.
+// defaultTarget is the bundle the host makes most use of: on macOS and
+// Windows the program as people there run it, elsewhere the program
+// itself.
 func defaultTarget() string {
-	if runtime.GOOS == "darwin" {
+	switch runtime.GOOS {
+	case "darwin":
 		return "macos"
+	case "windows":
+		return "windows"
 	}
 	return "native"
 }
@@ -146,6 +181,8 @@ type builder struct {
 	ldflags   string
 	universal bool
 	mac       macFlags
+	console   bool   // link a Windows program for the console
+	arch      string // the GOARCH of a Windows build
 }
 
 // macFlags are the flags that sign, notarize and package a macOS build.
@@ -558,6 +595,103 @@ func verifyAll(ctx context.Context, artifacts []string, notarized bool) error {
 
 // logf says something on standard error, as ggui does.
 func logf(format string, args ...any) { ui.Stderr.Info(format, args...) }
+
+// windows builds Name.exe: the program for windows/arch with its icon,
+// version information and manifest linked in, as a GUI program unless
+// asked for the console. The resources go in a .syso file in the main
+// package's directory, the one place the go command links them from,
+// for the build only.
+//
+// Signing the program and making an installer come after this, from
+// Name.exe as it is, and are not done here.
+func (b *builder) windows(ctx context.Context) error {
+	if err := b.proj.CheckIcon(); err != nil {
+		return err
+	}
+	cfg := b.proj.Config
+	if err := windows.CheckFileName(b.main.Name); err != nil {
+		return err
+	}
+	dir, err := b.proj.OutDir(b.out)
+	if err != nil {
+		return err
+	}
+	exe := b.main.Name + ".exe"
+	log := ui.Stderr
+
+	// The linker takes one resource section per program, so a package
+	// that links resources of its own is built with them.
+	var theirs []string
+	for _, f := range b.main.SysoFiles {
+		if f != windows.SysoName(b.arch) && windows.HasResources(filepath.Join(b.main.Dir, f)) {
+			theirs = append(theirs, f)
+		}
+	}
+	if len(theirs) > 0 {
+		log.Info("%s links resources of its own from %s, so %s has those rather than ggui's icon, version information and manifest",
+			target(b.main), strings.Join(theirs, ", "), exe)
+	} else {
+		w := cfg.Windows
+		r := windows.Resources{
+			Arch: b.arch, Name: b.main.Name, Executable: b.main.Executable, ID: b.main.ID,
+			Version:     cfg.App.Version,
+			Description: w.Description, Company: w.Company, Copyright: w.Copyright,
+			Icon:     b.proj.Path(cfg.App.Icon),
+			Manifest: b.proj.Path(w.Manifest),
+		}
+		what := "version and manifest"
+		if r.Icon != "" {
+			what = "icon, " + what
+		}
+		var (
+			path     string
+			leftover bool
+			remove   func() error
+			warnings []string
+		)
+		err := step(ctx, "Writing the "+what+" of "+exe, "Wrote the "+what+" of "+exe, func() error {
+			obj, ws, err := windows.Object(r)
+			if err != nil {
+				return err
+			}
+			warnings = ws
+			path, leftover, remove, err = windows.Place(b.main.Dir, b.arch, obj)
+			return err
+		})
+		if err != nil {
+			return err
+		}
+		// Removed however the build ends, failed or interrupted too: the
+		// file belongs to this build, not to the sources.
+		defer func() {
+			if err := remove(); err != nil {
+				log.Warn("removing %s: %v; delete it before building for another target", path, err)
+			}
+		}()
+		for _, w := range warnings {
+			log.Warn("%s", w)
+		}
+		if leftover {
+			log.Note("%s", log.Dim("replacing the "+filepath.Base(path)+" a build that was stopped left behind"))
+		}
+		log.Note("%s", log.Dim("linked from "+shortPath(path)+", which is removed after the build"))
+	}
+
+	o := b.release(filepath.Join(dir, exe))
+	o.GOOS, o.GOARCH = "windows", b.arch
+	if !b.console {
+		// The GUI subsystem: Windows opens no console for the program,
+		// and its standard streams go nowhere unless redirected.
+		o.LDFlags += " -H=windowsgui"
+	}
+	if err := b.build(ctx, o, "windows/"+b.arch); err != nil {
+		return err
+	}
+	if runtime.GOOS != "windows" && b.arch == runtime.GOARCH && b.arch != "amd64" && os.Getenv("GOARCH") == "" {
+		log.Note("%s", log.Dim("for "+b.arch+", this machine's architecture; most PCs need GOARCH=amd64"))
+	}
+	return report(o.Output, "windows/"+b.arch)
+}
 
 func (b *builder) web(ctx context.Context) error {
 	cfg := b.proj.Config

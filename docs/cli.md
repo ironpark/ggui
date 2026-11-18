@@ -25,7 +25,7 @@ own; `go install github.com/ironpark/ggui/cmd/ggui@vX.Y.Z` installs one.
 | --- | --- |
 | [`ggui init [dir]`](#ggui-init) | Create a new application. |
 | [`ggui dev [package]`](#ggui-dev) | Run it, rebuilding and restarting it whenever its code changes; `--web` serves it to a browser instead. |
-| [`ggui build [package]`](#ggui-build) | Build a release: a macOS `.app`, a web bundle or a plain program. |
+| [`ggui build [package]`](#ggui-build) | Build a release: a macOS `.app`, a Windows `.exe`, a web bundle or a plain program. |
 | [`ggui doctor`](#ggui-doctor) | Check the machine and the project for what ggui needs. |
 
 `ggui help <command>` prints a command's flags. Settings come from
@@ -66,7 +66,7 @@ default, creating it if needed:
 | `go.mod` | The module, `--module` or one made from the directory's name, requiring the latest ggui. |
 | `main.go` | A small counter using `ggui`, `widget` and `ui`, with the inspector on F1 in development builds. |
 | `ggui.toml` | Every setting, each documented, the defaults commented out. |
-| `.gitignore` | `build/` and the program `go build` leaves in the directory. |
+| `.gitignore` | `build/`, the program `go build` leaves in the directory, and the resources a Windows build that was killed can leave. |
 
 It then runs `go get github.com/ironpark/ggui@latest` and `go mod tidy`,
 with `GOWORK=off`. If either fails, or is interrupted with Ctrl-C, the files
@@ -326,9 +326,10 @@ again.
 ## ggui build
 
 ```sh
-ggui build                    # macos on a Mac, native elsewhere
+ggui build                    # macos on a Mac, windows on Windows, native elsewhere
 ggui build --target web
 ggui build --target macos --universal
+GOARCH=amd64 ggui build --target windows
 ggui build --identity "Developer ID Application" --notarize --dmg
 ```
 
@@ -342,14 +343,16 @@ on standard output, for scripts.
 | Target | Writes |
 | --- | --- |
 | `macos` | `Name.app`: the program in `Contents/MacOS`, `Info.plist` from `[app]` and `[macos]`, and `Contents/Resources/AppIcon.icns` made from `app.icon`, signed with `macos.signing_identity`. With `--dmg` or `[macos.dmg]` also `Name.dmg`, and with `--pkg` or `[macos.pkg]` the installer `Name.pkg`; with `--notarize` each is notarized and stapled. See [Shipping to other Macs](#shipping-to-other-macs). |
+| `windows` | `Name.exe`, for the go command's `GOARCH`: `amd64`, `arm64` or `386`. Its icon is made from `app.icon`, its version information from `[app]` and `[windows]`, and it has a manifest; it is a GUI program, which opens no console. See [The Windows program](#the-windows-program). |
 | `web` | A directory, `build/web/` by default, for any static host: `index.html`, `main.wasm` and the Go toolchain's `wasm_exec.js`, each beside a gzipped `.gz` copy. |
-| `native` | The program, for the `GOOS` and `GOARCH` the go command builds for. |
+| `native` | The program, for the `GOOS` and `GOARCH` the go command builds for, as `go build` makes it: on Windows without an icon or manifest, and opening a console. |
 
 | Flag | Use |
 | --- | --- |
-| `--target macos\|web\|native` | What to build. |
+| `--target macos\|windows\|web\|native` | What to build. |
 | `--out dir` | The output directory, replacing `build.output`. |
 | `--universal` | With `--target macos`, build for Apple silicon and Intel and join the two with `lipo`. Needs macOS with the Xcode command line tools. Same as `macos.universal`. |
+| `--console` | With `--target windows`, link the program for the console, so that Windows opens a console window for its output; `--console=false` makes a GUI program though `windows.console` is set. |
 | `--identity name` | Sign as this keychain identity, replacing `macos.signing_identity`; `-` signs ad hoc. |
 | `--p12-file file`, `--p12-password-file file` | Sign with this PKCS#12 certificate and its password, replacing `macos.p12_file` and `macos.p12_password_file`. |
 | `--notarize` | Notarize and staple, replacing `macos.notarize`; `--notarize=false` turns it off. |
@@ -436,6 +439,62 @@ when asked to sign. zapp could sign on Linux and Windows through a Rust
 library, but only a cgo build links it, and linking it would ask every
 build of ggui with a C compiler there to link 30 MB it would not use.
 
+### The Windows program
+
+`ggui build --target windows` makes `Name.exe`, named for `app.name`,
+which must therefore be a name Windows allows for a file. It carries:
+
+- **An icon**, made from `app.icon` in the sizes Explorer, the taskbar
+  and the Start menu ask for, from 16 to 256 pixels, scaled down in linear
+  light as the macOS icon is; 256 is stored as PNG, the rest as bitmaps,
+  as Visual Studio writes them. A source smaller than 256 pixels gives an
+  icon without the larger sizes, which Windows scales up from the largest
+  it has. This is the icon of the file; the window's own, in its title bar
+  and taskbar button, is the one the app gives `Config.Icon`.
+- **Version information**, which Explorer shows under Properties, Details,
+  and Task Manager names the process by: `app.version` as the file and
+  product version, `app.name` as the product name, and `[windows]`'s
+  description, company and copyright. Windows keeps each part of a
+  version in 16 bits, so `app.version` must keep each number at most
+  65535 for this target.
+- **A manifest**, which asks for per-monitor DPI awareness (v2, falling
+  back to per-monitor where Windows does not know v2), the themed common
+  controls 6 for the dialogs the app opens, Windows 10 and 11
+  compatibility, the UTF-8 code page for the system's ANSI functions,
+  paths past `MAX_PATH` where the system allows them, and running as the
+  user who starts it. `windows.manifest` names one to link instead.
+
+It is linked with `-H=windowsgui`, after `build.ldflags`, so Windows opens
+no console window for it, and what it writes to standard output and
+error goes nowhere unless redirected. `--console`, or `windows.console`,
+keeps the console, for reading that output while debugging.
+
+The program is built for the go command's `GOARCH` for Windows, as the
+macOS bundle is: `GOARCH=amd64 ggui build --target windows` builds for
+the Intel and AMD PCs most people have, and `GOARCH=arm64` for Windows on
+Arm. Cross-building from an Apple silicon Mac, or from an Arm Linux
+machine, the default is `arm64`, which ggui points out.
+
+The resources are written by ggui itself, in Go, as a COFF object, so a
+program cross-built on macOS or Linux has them too, with no `rc.exe`,
+`windres` or `go generate` step. The go command links the `.syso` files
+it finds in the directories of the packages it builds, and only those on
+disk: an overlay (`go build -overlay`) adds a `.syso` to the package in
+`go list`'s view, but the build then reads the file from its path on disk
+and fails.
+So for the build ggui writes `ggui_windows_<arch>.syso` beside the main
+package's sources, a name only a build for that target links, and
+removes it when the build ends, failed or interrupted with Ctrl-C too. A
+file of that name, left by a build that was killed, is replaced. A
+package that links resources of its own from a `.syso`, as from
+go-winres, rsrc or windres, is built with those instead, since a program
+has one resource section; ggui says so and adds none.
+
+Signing the program and making an installer are not done here: both
+start from `Name.exe` as built, with Microsoft's `signtool`, or
+`osslsigncode` away from Windows, and with an installer tool such as
+Inno Setup, WiX or MSIX.
+
 ### The web bundle
 
 The page loads its files relative to `web.base`, which it writes as its
@@ -465,7 +524,8 @@ It prints what to do under each line that is not ok, and exits with status
 | target | Whether ggfx and ggwd support `GOOS/GOARCH`; whether cgo is on, and on macOS whether the Xcode command line tools that a cgo build calls are installed. ggui needs no cgo, so `CGO_ENABLED=0` avoids needing them. |
 | ggui, ggfx, ggwd | The versions the project resolves, or the local directories that replace them, and whether ggfx and ggwd are the versions that ggui's go.mod requires. |
 | remote display | Whether `ggui dev` can show the app in its viewer, and why not. |
-| ggui.toml, icon | Whether the file is valid, and the icon a square PNG of at least 64 pixels, ideally 1024. |
+| ggui.toml, icon | Whether the file is valid, and the icon a square PNG of at least 64 pixels, ideally 1024; under 256 it lacks Windows' largest size too. |
+| Windows build | What `--target windows` takes from the file and macOS does not check: each number of `app.version` at most 65535, `app.name` a name Windows allows for a file, and `windows.manifest`, when set, a well-formed `<assembly>`. |
 | platform | What ggwd and ggfx load when an app starts. |
 | tools | `wasm-opt`; on macOS `codesign`, and `lipo` for `--universal`. |
 | signing | On macOS: the keychain's signing identities and whether `macos.signing_identity` is one; a certificate `ggui.toml` or `$GGUI_P12_BASE64` gives; `notarytool` and `stapler`, which come with the Xcode command line tools; and the notarization credentials. Elsewhere: whether this ggui can sign at all. |
@@ -513,6 +573,10 @@ profile = "example"
 [macos.dmg]
 background = "dmg-background.png"
 
+[windows]
+company = "Example Ltd"
+copyright = "© 2026 Example Ltd"
+
 [web]
 base = "/hello/"
 ```
@@ -521,10 +585,10 @@ base = "/hello/"
 
 | Key | Default | Use |
 | --- | --- | --- |
-| `name` | the main package directory's name | The name people see: the `.app` name, its menu title and the page title. |
-| `id` | made from the import path, such as `com.github.alice.hello` | The reverse-DNS bundle identifier. macOS keys settings, permissions and the Dock to it, so set it once and keep it. |
-| `version` | `"0.1.0"` | One to three numbers: `CFBundleShortVersionString` and `CFBundleVersion`. |
-| `icon` | none | A square PNG, ideally 1024×1024, for the macOS icon. |
+| `name` | the main package directory's name | The name people see: the `.app` name, its menu title, `Name.exe` and the page title. |
+| `id` | made from the import path, such as `com.github.alice.hello` | The reverse-DNS bundle identifier. macOS keys settings, permissions and the Dock to it, so set it once and keep it. The Windows manifest names the program by it too. |
+| `version` | `"0.1.0"` | One to three numbers: `CFBundleShortVersionString` and `CFBundleVersion`, and the Windows file and product version, for which each is at most 65535. |
+| `icon` | none | A square PNG, ideally 1024×1024, for the macOS and Windows icons. |
 | `package` | `"."` | The main package's directory. A package given on the command line replaces it. |
 
 ### [build]
@@ -604,6 +668,19 @@ makes one without it, `--pkg=false` skips it.
 | `install_location` | `"/Applications"` | Where the app is installed. |
 | `scripts` | none | A directory with `preinstall` and `postinstall` scripts. |
 | `license` | none | A plain-text license the installer shows. |
+
+### [windows]
+
+What `ggui build --target windows` puts in `Name.exe` beyond `[app]`; see
+[The Windows program](#the-windows-program).
+
+| Key | Default | Use |
+| --- | --- | --- |
+| `description` | `app.name` | The version information's `FileDescription`, which Task Manager and the taskbar's menus call the program by. |
+| `company` | none | `CompanyName`. |
+| `copyright` | none | `LegalCopyright`. |
+| `console` | `false` | Link for the console, which Windows opens a window of for the program's output; see `--console`. |
+| `manifest` | none | An application manifest to link instead of the generated one, as for a program that must run as an administrator. |
 
 ### [web]
 

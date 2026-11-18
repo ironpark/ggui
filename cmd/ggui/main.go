@@ -2,7 +2,7 @@
 //
 //	ggui init [dir]        create a new application
 //	ggui dev [package]     run it, rebuilding and restarting it on every change
-//	ggui build [package]   build a macOS .app, a web bundle or a program
+//	ggui build [package]   build a macOS .app, a Windows .exe, a web bundle or a program
 //	ggui doctor            check the machine and the project
 //
 // It drives the go command on PATH rather than linking a toolchain in, so

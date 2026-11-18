@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/config"
+	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 )
 
 // Away from a Mac ggui does not sign, which matters only when ggui.toml
@@ -59,6 +60,7 @@ func TestCheckIcon(t *testing.T) {
 	}{
 		{write("big.png", 1024, 1024), OK},
 		{write("small.png", 256, 256), Warn},
+		{write("tiny.png", 128, 128), Warn},
 		{write("wide.png", 200, 100), Fail},
 		{filepath.Join(dir, "missing.png"), Fail},
 	} {
@@ -66,6 +68,35 @@ func TestCheckIcon(t *testing.T) {
 		checkIcon(r, tc.path)
 		if got := r.Checks[0].Status; got != tc.want {
 			t.Errorf("%s: %s (%s), want %s", filepath.Base(tc.path), got, r.Checks[0].Detail, tc.want)
+		}
+	}
+}
+
+// What a Windows build takes from ggui.toml that macOS does not check: a
+// version in 16-bit parts, a name a file can have, a manifest that parses.
+func TestCheckWindowsBuild(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "good.manifest"), []byte(`<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0"/>`), 0o644)
+	os.WriteFile(filepath.Join(dir, "bad.manifest"), []byte(`<assembly`), 0o644)
+	for _, tc := range []struct {
+		name, src string
+		want      Status
+	}{
+		{"defaults", "", OK},
+		{"own manifest", "[windows]\nmanifest = \"good.manifest\"\nconsole = true\n", OK},
+		{"date version", "[app]\nversion = \"20261118\"\n", Fail},
+		{"name with a colon", "[app]\nname = \"Notes: Pro\"\n", Fail},
+		{"broken manifest", "[windows]\nmanifest = \"bad.manifest\"\n", Fail},
+		{"missing manifest", "[windows]\nmanifest = \"none.manifest\"\n", Fail},
+	} {
+		cfg, err := config.Parse("ggui.toml", []byte(tc.src))
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		r := &Report{}
+		checkWindowsBuild(r, &project.Project{Root: dir, File: filepath.Join(dir, "ggui.toml"), Config: cfg})
+		if len(r.Checks) != 1 || r.Checks[0].Status != tc.want {
+			t.Errorf("%s: %+v, want %s", tc.name, r.Checks, tc.want)
 		}
 	}
 }

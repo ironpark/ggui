@@ -29,7 +29,8 @@ ggui dev
 ```
 
 `ggui doctor` checks that the machine has what ggui needs, and
-`ggui build` bundles the app as a macOS `.app` or for the web.
+`ggui build` bundles the app as a macOS `.app`, a Windows `.exe` with its
+icon and version information, or for the web.
 
 The repository requires Go 1.27+ for generic methods. The core package provides
 layout, state, rendering, and input; `github.com/ironpark/ggui/ui` provides themed
