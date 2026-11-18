@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"image/color"
 	"slices"
 	"strings"
@@ -22,24 +23,26 @@ const comboboxListHeight = 244
 // typed in, and chooses one of them. Keep it mounted to retain what was
 // typed.
 type ComboboxWidget[T comparable] struct {
-	props       property.Owner
-	value       ggui.Binding[T]
-	options     []T
-	optionProp  property.Value[[]T]
-	label       func(T) string
-	placeholder string
-	text        *ggui.StateValue[string] // what the input shows
-	query       *ggui.StateValue[string] // what the list is filtered by
-	typed       bool                     // text was typed since a value was last shown in the input
-	input       *widget.TextInputWidget
-	field       *comboboxField
-	chevron     *comboboxAddon
-	clear       *comboboxAddon
-	clearable   bool
-	content     *widget.BoxWidget // the list, as wide as the field
-	popup       *widget.PopupWidget
-	search      *CommandWidget
-	onChange    func(T)
+	props          property.Owner
+	value          ggui.Binding[T]
+	options        []T
+	optionProp     property.Value[[]T]
+	label          func(T) string
+	placeholder    string                   // as Placeholder set it
+	placeholderSet bool                     // Placeholder was called; otherwise the Strings give it
+	words          *Strings                 // the Strings of the last layout
+	text           *ggui.StateValue[string] // what the input shows
+	query          *ggui.StateValue[string] // what the list is filtered by
+	typed          bool                     // text was typed since a value was last shown in the input
+	input          *widget.TextInputWidget
+	field          *comboboxField
+	chevron        *comboboxAddon
+	clear          *comboboxAddon
+	clearable      bool
+	content        *widget.BoxWidget // the list, as wide as the field
+	popup          *widget.PopupWidget
+	search         *CommandWidget
+	onChange       func(T)
 }
 
 // Combobox creates a field holding an editable input and a muted chevron,
@@ -53,8 +56,8 @@ type ComboboxWidget[T comparable] struct {
 // puts back the chosen option's label. The options slice is
 // shallow-copied.
 func Combobox[T comparable](value ggui.Binding[T]) *ComboboxWidget[T] {
-	c := &ComboboxWidget[T]{value: value, label: sprint[T], placeholder: "Select…", text: ggui.State(""), query: ggui.State("")}
-	c.input = widget.TextInput(c.text).Placeholder(c.placeholder).MinWidth(0)
+	c := &ComboboxWidget[T]{value: value, label: sprint[T], text: ggui.State(""), query: ggui.State("")}
+	c.input = widget.TextInput(c.text).MinWidth(0)
 	c.input.OnKey(c.key).OnChange(c.typing).OnCommit(func(string) {
 		if !c.input.Focused() {
 			c.left()
@@ -63,13 +66,11 @@ func Combobox[T comparable](value ggui.Binding[T]) *ComboboxWidget[T] {
 	c.input.OnDescribe(c.describe).OnAction(c.act)
 	c.chevron = &comboboxAddon{icon: icons.ChevronDown, onTap: c.toggle, chevron: true}
 	c.chevron.Role = ggui.RoleButton
-	c.chevron.SetName("Show options")
 	c.chevron.expands = func() bool { return c.popup.IsOpen() }
 	c.clear = &comboboxAddon{icon: icons.Close, onTap: c.clearValue}
 	c.clear.Role = ggui.RoleButton
-	c.clear.SetName("Clear")
 	c.field = &comboboxField{input: c.input, open: c.toggleFromInput}
-	c.search = Command(c.query).Name("Search options").Height(comboboxListHeight).Empty("No items found.")
+	c.search = Command(c.query).Height(comboboxListHeight)
 	c.search.menuRows, c.search.bare = true, true
 	c.content = widget.Box(c.search)
 	c.popup = widget.Popup(c.field, menuSurface(&comboboxList{input: c.input, content: c.content})).
@@ -154,13 +155,13 @@ func (c *ComboboxWidget[T]) Name(s string) *ComboboxWidget[T] { c.input.Name(s);
 // the value is not among the options and nothing is typed.
 func (c *ComboboxWidget[T]) Placeholder(s string) *ComboboxWidget[T] {
 	defer property.Watch(&c.props, &c.placeholder)()
-	c.placeholder = s
+	c.placeholder, c.placeholderSet = s, true
 	c.input.Placeholder(s)
 	return c
 }
 
-// Empty sets what the list says when nothing matches what was typed; "No
-// items found." by default.
+// Empty sets what the list says when nothing matches what was typed; the
+// Strings' NoItemsFound, "No items found.", by default.
 func (c *ComboboxWidget[T]) Empty(s string) *ComboboxWidget[T] { c.search.Empty(s); return c }
 
 // ClearButton shows a button at the end of the field that clears the
@@ -314,7 +315,7 @@ func (c *ComboboxWidget[T]) key(ev ggui.KeyEvent) bool {
 func (c *ComboboxWidget[T]) describe(n *ggui.Node) {
 	n.Role = ggui.RoleCombobox
 	if !c.input.HasName() {
-		n.Name = "Choose option"
+		n.Name = c.words.orDefault().ChooseOption
 	}
 	open := c.popup.IsOpen()
 	n.Expanded = ggui.Expandable(open)
@@ -340,6 +341,12 @@ func (c *ComboboxWidget[T]) inert() bool { return c.field.IsInert() || c.input.I
 // Layout implements ggui.Widget.
 func (c *ComboboxWidget[T]) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
+	c.words = stringsOf(env)
+	if !c.placeholderSet {
+		c.input.Placeholder(c.words.ComboboxPlaceholder)
+	}
+	c.chevron.SetName(c.words.ShowOptions)
+	c.clear.SetName(c.words.ClearValue)
 	c.setOptions(c.optionProp.Get())
 	c.field.Sync()
 	if c.field.IsInert() {
@@ -380,7 +387,7 @@ func (c *ComboboxWidget[T]) Semantics() (ggui.Role, string) {
 	if c.input.HasName() {
 		return ggui.RoleCombobox, c.input.SemanticName()
 	}
-	return ggui.RoleCombobox, "Choose option"
+	return ggui.RoleCombobox, c.words.orDefault().ChooseOption
 }
 
 // BindDisabled follows r and closes the popup while disabled.
@@ -575,23 +582,25 @@ func (a *comboboxAddon) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // mutates the caller's slice. Values absent from Options remain visible
 // as removable chips.
 type ComboboxMultipleWidget[T comparable] struct {
-	props       property.Owner
-	values      ggui.Binding[[]T]
-	options     []T
-	optionProp  property.Value[[]T]
-	label       func(T) string
-	placeholder string
-	input       *widget.TextInputWidget // after the chips, filtering the list
-	popup       *widget.PopupWidget
-	content     *widget.BoxWidget // the list, as wide as the field
-	query       *ggui.StateValue[string]
-	search      *CommandWidget
-	field       *comboboxChips[T]
-	chips       []*comboboxChip
-	shown       []T
-	built       bool // the chips and entries follow label
-	onChange    func([]T)
-	key         any
+	props          property.Owner
+	values         ggui.Binding[[]T]
+	options        []T
+	optionProp     property.Value[[]T]
+	label          func(T) string
+	placeholder    string                  // as Placeholder set it
+	placeholderSet bool                    // Placeholder was called; otherwise the Strings give it
+	words          *Strings                // the Strings of the last layout
+	input          *widget.TextInputWidget // after the chips, filtering the list
+	popup          *widget.PopupWidget
+	content        *widget.BoxWidget // the list, as wide as the field
+	query          *ggui.StateValue[string]
+	search         *CommandWidget
+	field          *comboboxChips[T]
+	chips          []*comboboxChip
+	shown          []T
+	built          bool // the chips and entries follow label
+	onChange       func([]T)
+	key            any
 }
 
 // ComboboxMultiple creates a searchable multiple selection control, as
@@ -603,8 +612,8 @@ type ComboboxMultipleWidget[T comparable] struct {
 // the input empties it too.
 func ComboboxMultiple[T comparable](values ggui.Binding[[]T]) *ComboboxMultipleWidget[T] {
 	property.Require(values, "ComboboxMultiple")
-	c := &ComboboxMultipleWidget[T]{values: values, label: sprint[T], placeholder: "Select…", query: ggui.State("")}
-	c.input = widget.TextInput(c.query).Placeholder(c.placeholder).MinWidth(0)
+	c := &ComboboxMultipleWidget[T]{values: values, label: sprint[T], query: ggui.State("")}
+	c.input = widget.TextInput(c.query).MinWidth(0)
 	c.input.OnKey(c.handleKey).OnChange(func(string) { c.open() }).OnCommit(func(string) {
 		// Leaving the input closes the list and drops what was typed.
 		if !c.input.Focused() {
@@ -613,7 +622,7 @@ func ComboboxMultiple[T comparable](values ggui.Binding[[]T]) *ComboboxMultipleW
 		}
 	})
 	c.input.OnDescribe(c.describe).OnAction(c.Act)
-	c.search = Command(c.query).Name("Search options").Height(comboboxListHeight).Empty("No items found.")
+	c.search = Command(c.query).Height(comboboxListHeight)
 	c.search.menuRows, c.search.keepOpen, c.search.bare = true, true, true
 	c.field = &comboboxChips[T]{c: c}
 	c.content = widget.Box(c.search)
@@ -675,13 +684,13 @@ func (c *ComboboxMultipleWidget[T]) HasName() bool { return c.input.HasName() }
 // is empty.
 func (c *ComboboxMultipleWidget[T]) Placeholder(v string) *ComboboxMultipleWidget[T] {
 	defer property.Watch(&c.props, &c.placeholder)()
-	c.placeholder = v
+	c.placeholder, c.placeholderSet = v, true
 	c.input.Placeholder(v)
 	return c
 }
 
-// Empty sets what the list says when nothing matches what was typed; "No
-// items found." by default.
+// Empty sets what the list says when nothing matches what was typed; the
+// Strings' NoItemsFound, "No items found.", by default.
 func (c *ComboboxMultipleWidget[T]) Empty(s string) *ComboboxMultipleWidget[T] {
 	c.search.Empty(s)
 	return c
@@ -747,7 +756,7 @@ func (c *ComboboxMultipleWidget[T]) Act(a ggui.Action) bool {
 func (c *ComboboxMultipleWidget[T]) describe(n *ggui.Node) {
 	n.Role = ggui.RoleCombobox
 	if !c.input.HasName() {
-		n.Name = "Choose options"
+		n.Name = c.words.orDefault().ChooseOptions
 	}
 	open := c.popup.IsOpen()
 	n.Expanded = ggui.Expandable(open)
@@ -765,7 +774,7 @@ func (c *ComboboxMultipleWidget[T]) Semantics() (ggui.Role, string) {
 	if c.input.HasName() {
 		return ggui.RoleCombobox, c.input.SemanticName()
 	}
-	return ggui.RoleCombobox, "Choose options"
+	return ggui.RoleCombobox, c.words.orDefault().ChooseOptions
 }
 
 // inert reports whether the control takes no input.
@@ -826,6 +835,10 @@ func (c *ComboboxMultipleWidget[T]) handleKey(e ggui.KeyEvent) bool {
 // Layout implements ggui.Widget.
 func (c *ComboboxMultipleWidget[T]) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
+	c.words = stringsOf(env)
+	if !c.placeholderSet {
+		c.input.Placeholder(c.words.ComboboxPlaceholder)
+	}
 	c.field.Sync()
 	inert := c.field.IsInert()
 	options := c.optionProp.Get()
@@ -849,16 +862,16 @@ func (c *ComboboxMultipleWidget[T]) Layout(cs ggui.Constraints, env ggui.Env) gg
 		c.chips = c.chips[:0]
 		for j, v := range values {
 			label := c.label(v)
-			remove := ButtonOf(widget.Box(), func() { c.selectValue(v, false) }).Ghost().Size(ButtonIconExtraSmall).Name("Remove " + label)
+			remove := ButtonOf(widget.Box(), func() { c.selectValue(v, false) }).Ghost().Size(ButtonIconExtraSmall)
 			if c.key != nil {
 				remove.Key(childKey{owner: c.key, part: j})
 			}
-			c.chips = append(c.chips, &comboboxChip{text: caption(widget.Text(label)).NoWrap().Weight(ggui.WeightMedium), remove: remove})
+			c.chips = append(c.chips, &comboboxChip{label: label, text: caption(widget.Text(label)).NoWrap().Weight(ggui.WeightMedium), remove: remove})
 		}
 	}
 	c.built = true
 	for _, chip := range c.chips {
-		chip.remove.Disabled(inert)
+		chip.remove.Disabled(inert).Name(fmt.Sprintf(c.words.RemoveFormat, chip.label))
 	}
 	if inert {
 		c.popup.Hide()
@@ -977,6 +990,7 @@ func (f *comboboxChips[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // comboboxChip is one selected value in a multiple combobox's field: its
 // label on a muted pill, and a button that removes it.
 type comboboxChip struct {
+	label    string // the value's, which names the remove button
 	text     *widget.TextWidget
 	remove   *ButtonWidget
 	textSize ggui.Size

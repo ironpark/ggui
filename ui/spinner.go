@@ -18,19 +18,21 @@ type SpinnerWidget struct {
 	color   color.Color // nil is the text color around it
 	ink     color.Color // what it is painted in, from the last Layout
 	name    string      // what a screen reader calls it; empty is nothing
+	named   bool        // Name was called; otherwise the Strings' Loading names it
 	env     ggui.Env
 	reduced bool
 }
 
 // Spinner creates an indicator the size of the theme's icons, in the color
-// of the text around it. A screen reader reads it as a status named
-// "Loading"; add adjacent text to describe the operation to everyone.
-func Spinner() *SpinnerWidget { return &SpinnerWidget{size: -1, name: "Loading"} }
+// of the text around it. A screen reader reads it as a status named by the
+// Strings' Loading, "Loading"; add adjacent text to describe the operation
+// to everyone.
+func Spinner() *SpinnerWidget { return &SpinnerWidget{size: -1} }
 
 // Name sets what a screen reader calls the spinner in place of "Loading":
-// the operation, or the word in another language. An empty name leaves the
+// the operation, or a word of the app's own. An empty name leaves the
 // spinner out of what is read, for one beside text that says it all.
-func (s *SpinnerWidget) Name(label string) *SpinnerWidget { s.name = label; return s }
+func (s *SpinnerWidget) Name(label string) *SpinnerWidget { s.name, s.named = label, true; return s }
 
 // Size sets the requested diameter in logical pixels.
 func (s *SpinnerWidget) Size(px float64) *SpinnerWidget {
@@ -52,6 +54,9 @@ func (s *SpinnerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer s.props.Layout().EndLayout()
 	t := uitheme.Of(env)
 	s.env, s.reduced = env, env.ReducedMotion()
+	if !s.named {
+		s.name = stringsOf(env).Loading
+	}
 	s.ink = ggui.ResolveColor(colorOr(s.color, colorOr(env.Text().Color, t.Fg)), env)
 	side := pick(s.size >= 0, s.size, t.IconSize)
 	return c.Constrain(ggui.Sz(side, side))

@@ -15,6 +15,7 @@ type ContextMenuWidget struct {
 	rect    ggui.Rect
 	at      *ggui.Point
 	theme   *uitheme.Theme
+	words   *Strings // the Strings of the last layout
 
 	// entries makes a ContextMenuFunc's entries into lazy as the menu opens.
 	nativeEntries func() []ggui.MenuItem
@@ -183,6 +184,7 @@ func (c *ContextMenuWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 		c.build()
 	}
 	c.theme = uitheme.Of(env)
+	c.words = stringsOf(env)
 	t := c.theme
 	c.menu.chrome(t)
 	return c.Popup().Layout(cs, env)
@@ -287,7 +289,7 @@ func (c *ContextMenuWidget) BindDisabled(r ggui.Readable[bool]) *ContextMenuWidg
 }
 
 func (c *ContextMenuWidget) name() string {
-	return pick(c.SemanticName() != "", c.SemanticName(), "Context menu")
+	return pick(c.SemanticName() != "", c.SemanticName(), c.words.orDefault().ContextMenuName)
 }
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.

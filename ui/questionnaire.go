@@ -71,16 +71,16 @@ type QuestionnaireWidget struct {
 	pendingFocus   bool
 	focusChoice    int
 	shortcuts      QuestionnaireShortcuts
-	submitLabel    string
+	submitLabel    string   // as SubmitLabel set it; empty is the Strings' Submit
+	words          *Strings // the Strings of the last layout
 	onSubmit       func(QuestionAnswers)
 	onItem         func(string)
 	onStatus       func(string, QuestionStatus)
 }
 
 func Questionnaire(answers ggui.Binding[QuestionAnswers], items ...Question) *QuestionnaireWidget {
-	q := &QuestionnaireWidget{answers: answers, initial: cloneAnswers(ggui.Untrack(answers.Get)), revision: ggui.State(0), errors: map[string]string{}, externalErrors: map[string]string{}, submitLabel: "Submit", focusChoice: -1}
+	q := &QuestionnaireWidget{answers: answers, initial: cloneAnswers(ggui.Untrack(answers.Get)), revision: ggui.State(0), errors: map[string]string{}, externalErrors: map[string]string{}, focusChoice: -1}
 	q.Role = ggui.RoleGroup
-	q.SetName("Questionnaire")
 	q.AutoKey()
 	q.SetItems(items...)
 	first := ""
@@ -298,7 +298,7 @@ func (q *QuestionnaireWidget) validate(i int) bool {
 	a := q.answer(item)
 	err := q.externalErrors[item.Name]
 	if status(a) == QuestionUnanswered {
-		err = pick(item.Required, "Choose an answer to continue.", "Choose an answer or skip this question.")
+		err = unansweredError
 	}
 	if err == "" && item.Validate != nil {
 		err = item.Validate(a)
@@ -385,7 +385,30 @@ func (q *QuestionnaireWidget) SetError(name, message string) {
 	}
 	q.changed()
 }
-func (q *QuestionnaireWidget) Error(name string) string { return q.errors[name] }
+
+// Error returns the message the question named name shows, or "" for none.
+func (q *QuestionnaireWidget) Error(name string) string {
+	return q.errorText(name, q.words.orDefault())
+}
+
+// unansweredError is what errors holds for a question left unanswered,
+// which no message can be: what it says is worded in the Strings where it
+// is shown, and so follows them.
+const unansweredError = "\x00unanswered"
+
+// errorText is the message of the question named name in words.
+func (q *QuestionnaireWidget) errorText(name string, words *Strings) string {
+	err := q.errors[name]
+	if err != unansweredError {
+		return err
+	}
+	for _, item := range q.items {
+		if item.Name == name && item.Required {
+			return words.AnswerRequired
+		}
+	}
+	return words.AnswerOrSkip
+}
 func (q *QuestionnaireWidget) Progress() (current, total int) {
 	indices := q.enabled()
 	return slices.Index(indices, q.current()) + 1, len(indices)
@@ -399,7 +422,11 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	q.input = nil
 	i := q.current()
 	if i < 0 {
-		return Empty("No questions", "There are no enabled questions.")
+		empty := Empty(english().NoQuestions, english().NoQuestionsDetail)
+		return localize(empty, func(s *Strings) {
+			empty.title.Content(s.NoQuestions)
+			empty.description.Content(s.NoQuestionsDetail)
+		})
 	}
 	item := q.items[i]
 	current, total := q.Progress()
@@ -415,8 +442,11 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	// the description follows it with no gap, and without one the title's
 	// mb-4 is the gap to the choices. One gap between every part here is
 	// the same thing.
+	// The words are put on the parts at layout, in the Strings the
+	// questionnaire is laid out under: see the localize below.
+	progress := Caption("").Weight(ggui.WeightMedium)
 	body := []ggui.Widget{
-		&questionProgress{Caption(fmt.Sprintf("Question %d of %d", current, total)).Weight(ggui.WeightMedium), current, total},
+		&questionProgress{Widget: progress, current: current, total: total},
 		widget.Column(heading...).Gap(0).Align(widget.AlignStretch),
 	}
 	rows := []ggui.Widget{}
@@ -458,24 +488,43 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 		rows = append(rows, &questionInput{q.input})
 	}
 	body = append(body, widget.Column(rows...).Gap(8).Align(widget.AlignStretch))
-	if message := q.errors[item.Name]; message != "" {
+	var message *widget.TextWidget
+	if q.errors[item.Name] != "" {
 		// The error's mt-2, beside the gap.
-		body = append(body, widget.Box(&questionError{widget.Text(message)}).Pad(8, 0, 0, 0))
+		message = widget.Text("")
+		body = append(body, widget.Box(&questionError{message}).Pad(8, 0, 0, 0))
 	}
+	var previous, skip *questionButton
 	actions := []ggui.Widget{}
 	if current > 1 {
-		actions = append(actions, q.button("Previous", q.Previous, true))
+		previous = q.button(q.Previous, true)
+		actions = append(actions, previous)
 	}
 	if !item.Required {
-		actions = append(actions, q.button("Skip", func() { q.Skip() }, true))
+		skip = q.button(func() { q.Skip() }, true)
+		actions = append(actions, skip)
 	}
-	label := pick(current == total, q.submitLabel, "Next")
-	actions = append(actions, q.button(label, func() { q.Next() }, false))
+	next := q.button(func() { q.Next() }, false)
+	actions = append(actions, next)
 	body = append(body, &questionActions{children: actions, previous: current > 1})
-	return &questionStack{widget.Column(body...).Align(widget.AlignStretch)}
+	return localize(&questionStack{widget.Column(body...).Align(widget.AlignStretch)}, func(s *Strings) {
+		progress.Content(fmt.Sprintf(s.QuestionFormat, current, total))
+		if message != nil {
+			message.Content(q.errorText(item.Name, s))
+		}
+		if previous != nil {
+			previous.relabel(s.Previous)
+		}
+		if skip != nil {
+			skip.relabel(s.Skip)
+		}
+		next.relabel(pick(current == total, pick(q.submitLabel != "", q.submitLabel, s.Submit), s.Next))
+	})
 }
-func (q *QuestionnaireWidget) button(label string, fn func(), outline bool) ggui.Widget {
-	b := Button(label, fn)
+
+// button makes an action button, worded at layout.
+func (q *QuestionnaireWidget) button(fn func(), outline bool) *questionButton {
+	b := Button("", fn)
 	if outline {
 		b.Outline()
 	}
@@ -522,6 +571,7 @@ func (q *QuestionnaireWidget) shortcut(ev ggui.KeyEvent) bool {
 }
 func (q *QuestionnaireWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer q.props.Layout().EndLayout()
+	q.words = stringsOf(env)
 	size := q.view.Layout(c, env)
 	// The choices are built before a Key given after Questionnaire, so
 	// they take the questionnaire's identity here; see childKey.
@@ -554,8 +604,15 @@ func (q *QuestionnaireWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		q.pendingFocus = false
 	}
 }
+func (q *QuestionnaireWidget) name() string {
+	return pick(q.SemanticName() != "", q.SemanticName(), q.words.orDefault().QuestionnaireName)
+}
+
+// Semantics implements ggui.Semantic, including the built-in fallback name.
+func (q *QuestionnaireWidget) Semantics() (ggui.Role, string) { return q.Role, q.name() }
+
 func (q *QuestionnaireWidget) Describe() ggui.Node {
-	return ggui.Node{Role: ggui.RoleGroup, Name: q.SemanticName()}
+	return ggui.Node{Role: ggui.RoleGroup, Name: q.name()}
 }
 
 type questionTextBinding struct {
@@ -577,10 +634,16 @@ func (b questionTextBinding) Set(s string) {
 type questionProgress struct {
 	ggui.Widget
 	current, total int
+	words          *Strings // the Strings of the last layout
+}
+
+func (p *questionProgress) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	p.words = stringsOf(env)
+	return p.Widget.Layout(c, env)
 }
 
 func (p *questionProgress) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	dst.Node(r, ggui.Node{Role: ggui.RoleProgress, Name: "Questionnaire progress", Min: 0, Max: float64(p.total), Now: float64(p.current)}, func(dst *ggui.Canvas) { dst.Paint(p.Widget, r) })
+	dst.Node(r, ggui.Node{Role: ggui.RoleProgress, Name: p.words.orDefault().QuestionnaireProgress, Min: 0, Max: float64(p.total), Now: float64(p.current)}, func(dst *ggui.Canvas) { dst.Paint(p.Widget, r) })
 }
 
 type questionButton struct {

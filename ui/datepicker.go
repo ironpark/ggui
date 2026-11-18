@@ -12,22 +12,24 @@ import (
 // DatePickerWidget opens a Calendar in a focus-trapped popup. Build one with
 // DatePicker for a single date or DateRangePicker for a range.
 type DatePickerWidget struct {
-	props       property.Owner
-	value       ggui.Binding[time.Time]
-	rangeValue  ggui.Binding[DateRange]
-	formatRange func(DateRange) string
-	calendar    *CalendarWidget
-	button      *ButtonWidget
-	popup       *widget.PopupWidget
-	panel       *widget.BoxWidget
-	format      func(time.Time) string
-	placeholder string
+	props          property.Owner
+	value          ggui.Binding[time.Time]
+	rangeValue     ggui.Binding[DateRange]
+	formatRange    func(DateRange) string
+	calendar       *CalendarWidget
+	button         *ButtonWidget
+	popup          *widget.PopupWidget
+	panel          *widget.BoxWidget
+	format         func(time.Time) string // as Format set it; nil follows the Strings' DateLayout
+	placeholder    string                 // as Placeholder set it
+	placeholderSet bool                   // Placeholder was called; otherwise the Strings give it
+	words          *Strings               // the Strings of the last layout
 }
 
 // DatePicker selects a single date and closes once one is picked. Zero
-// displays "Choose date".
+// displays the Strings' ChooseDate, "Choose date".
 func DatePicker(value ggui.Binding[time.Time]) *DatePickerWidget {
-	d := newDatePicker(Calendar(value), "Choose date")
+	d := newDatePicker(Calendar(value))
 	d.value = value
 	d.calendar.onPick = d.popup.Hide
 	return d
@@ -35,24 +37,27 @@ func DatePicker(value ggui.Binding[time.Time]) *DatePickerWidget {
 
 // DateRangePicker selects an inclusive range of dates from a CalendarRange
 // showing two months. Its popup stays open while the range is picked;
-// Escape or a click outside closes it. An empty range displays "Choose
-// dates". Configure the range's limits on Calendar.
+// Escape or a click outside closes it. An empty range displays the
+// Strings' ChooseDates, "Choose dates". Configure the range's limits on
+// Calendar.
 func DateRangePicker(value ggui.Binding[DateRange]) *DatePickerWidget {
-	d := newDatePicker(CalendarRange(value).Months(2), "Choose dates")
+	d := newDatePicker(CalendarRange(value).Months(2))
 	d.rangeValue = value
 	d.formatRange = func(r DateRange) string {
 		if r.End.IsZero() || r.End.Equal(r.Start) {
-			return d.format(r.Start)
+			return d.formatDate(r.Start)
 		}
-		return d.format(r.Start) + " – " + d.format(r.End)
+		return d.formatDate(r.Start) + " – " + d.formatDate(r.End)
 	}
 	return d
 }
 
-func newDatePicker(calendar *CalendarWidget, placeholder string) *DatePickerWidget {
-	d := &DatePickerWidget{calendar: calendar, placeholder: placeholder, format: func(t time.Time) string { return t.Format("2006-01-02") }}
+// newDatePicker makes the picker around calendar. Its placeholder, the
+// trigger's name while it has none, and how a date shows come from the
+// Strings at layout, unless Placeholder, Name and Format gave them.
+func newDatePicker(calendar *CalendarWidget) *DatePickerWidget {
+	d := &DatePickerWidget{calendar: calendar}
 	d.button = Button("", func() { d.popup.Toggle() }).Outline()
-	d.button.defaultName = placeholder
 	d.button.value = func() string { return ggui.Untrack(d.text) }
 	// The panel is as wide as its calendar, as shadcn's w-auto popover is,
 	// and lines up with the trigger's start.
@@ -72,9 +77,24 @@ func (d *DatePickerWidget) text() string {
 		return ""
 	}
 	if v := d.value.Get(); !v.IsZero() {
-		return d.format(d.calendar.date(v))
+		return d.formatDate(d.calendar.date(v))
 	}
 	return ""
+}
+
+// formatDate is t as the trigger shows it: through Format, or in the
+// Strings' DateLayout.
+func (d *DatePickerWidget) formatDate(t time.Time) string {
+	if d.format != nil {
+		return d.format(t)
+	}
+	return t.Format(d.words.orDefault().DateLayout)
+}
+
+// emptyText is what the trigger says with nothing chosen, and what it is
+// called while it has no name of its own.
+func (d *DatePickerWidget) emptyText() string {
+	return pick(d.rangeValue != nil, d.words.orDefault().ChooseDates, d.words.orDefault().ChooseDate)
 }
 
 // datePickerKey keeps the trigger, calendar and popup keys distinct while all
@@ -109,7 +129,7 @@ func (d *DatePickerWidget) Name(s string) *DatePickerWidget {
 // Placeholder sets the text shown for a zero date.
 func (d *DatePickerWidget) Placeholder(s string) *DatePickerWidget {
 	defer property.Watch(&d.props, &d.placeholder)()
-	d.placeholder = s
+	d.placeholder, d.placeholderSet = s, true
 	return d
 }
 
@@ -174,6 +194,8 @@ func (d *DatePickerWidget) Act(a ggui.Action) bool {
 // Layout implements ggui.Widget.
 func (d *DatePickerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer d.props.Layout().EndLayout()
+	d.words = stringsOf(env)
+	d.button.defaultName = d.emptyText()
 	d.button.Sync()
 	if d.button.IsInert() {
 		d.popup.Hide()
@@ -184,7 +206,8 @@ func (d *DatePickerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	// as shadcn's date picker sets p-0 on the popover around it.
 	panelShadow(d.panel, t).Fill(t.Popover).Border(t.BorderWidth, fade(t.Fg, .1)).Radius(t.Radius).Padding(ggui.EdgeInsets{})
 	text := d.text()
-	d.button.label.Content(pick(text == "", d.placeholder, text))
+	placeholder := pick(d.placeholderSet, d.placeholder, d.emptyText())
+	d.button.label.Content(pick(text == "", placeholder, text))
 	return d.popup.Layout(c, env)
 }
 

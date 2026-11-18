@@ -133,6 +133,7 @@ type ChartPointContext struct {
 // a widget before mounting, or use a reactive boundary to replace its options.
 type ChartWidget struct {
 	props       property.Owner
+	words       *Strings // the Strings of the last layout
 	pointer     pointerMotion
 	tickPaint   func(*ggui.Canvas, ChartPointContext)
 	activeRing  bool
@@ -184,7 +185,6 @@ func ChartContainer(kind ChartKind, data []ChartDatum, config ChartConfig) *Char
 		corner: 4, stroke: 2, opacity: .4, separators: true, tooltipCursor: true, duration: 1500 * time.Millisecond,
 		active: -1, selected: -1, cacheRevision: ^uint64(0)}
 	c.Role = ggui.RoleGroup
-	c.SetName("Chart")
 	c.AutoKey()
 	switch kind {
 	case ChartBar:
@@ -411,6 +411,7 @@ func (c *ChartWidget) Replay() { c.started = time.Time{} }
 func (c *ChartWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
 	c.env = env
+	c.words = stringsOf(env)
 	c.theme = uitheme.Of(env)
 	c.reduced = env.ReducedMotion()
 	c.gridLine = fade(c.theme.Border, .5) // shadcn strokes the grid at border/50
@@ -509,6 +510,13 @@ func seriesLabel(s ChartSeries) string {
 	}
 	return s.Key
 }
+func (c *ChartWidget) name() string {
+	return pick(c.SemanticName() != "", c.SemanticName(), c.words.orDefault().ChartName)
+}
+
+// Semantics implements ggui.Semantic, including the built-in fallback name.
+func (c *ChartWidget) Semantics() (ggui.Role, string) { return c.Role, c.name() }
+
 func (c *ChartWidget) Describe() ggui.Node {
 	var b strings.Builder
 	i := c.active
@@ -523,7 +531,7 @@ func (c *ChartWidget) Describe() ggui.Node {
 			}
 		}
 	}
-	return ggui.Node{Role: ggui.RoleGroup, Name: c.SemanticName(), Value: b.String(), Description: "Chart. Use arrow keys to explore values; Enter selects a category.", Min: 0, Max: float64(max(0, len(c.data)-1)), Now: float64(max(0, i)), Actions: ggui.ActionFocus | ggui.ActionIncrement | ggui.ActionDecrement | ggui.ActionSetValue}
+	return ggui.Node{Role: ggui.RoleGroup, Name: c.name(), Value: b.String(), Description: c.words.orDefault().ChartHelp, Min: 0, Max: float64(max(0, len(c.data)-1)), Now: float64(max(0, i)), Actions: ggui.ActionFocus | ggui.ActionIncrement | ggui.ActionDecrement | ggui.ActionSetValue}
 }
 
 // Act lets assistive technologies explore chart categories without a pointer.

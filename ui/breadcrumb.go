@@ -51,6 +51,7 @@ type BreadcrumbWidget struct {
 	custom     ggui.Widget // what SeparatorOf set, drawn between steps
 	limit      int
 	name       string
+	named      bool // Name was called; otherwise the Strings name the trail
 
 	row      *widget.WrapWidget
 	muted    []*widget.TextWidget // text separators and the steps that are no link
@@ -62,7 +63,7 @@ type BreadcrumbWidget struct {
 // plain text in the normal color, with no click of its own. A chevron
 // pointing along the reading direction separates the steps.
 func Breadcrumb(crumbs ...BreadcrumbEntry) *BreadcrumbWidget {
-	return &BreadcrumbWidget{crumbs: crumbs, name: "Breadcrumb"}
+	return &BreadcrumbWidget{crumbs: crumbs}
 }
 
 // Separator draws the text s between steps in place of the chevron, such as
@@ -100,7 +101,7 @@ func (b *BreadcrumbWidget) Name(s string) *BreadcrumbWidget {
 		b.props.Changed()
 	}
 	defer property.Watch(&b.props, &b.name)()
-	b.name = s
+	b.name, b.named = s, true
 	return b
 }
 
@@ -148,7 +149,7 @@ func (b *BreadcrumbWidget) build() {
 		last := i == len(crumbs)-1
 		switch {
 		case c.elided:
-			parts = append(parts, &moreIcon{icon: Icon(icons.MoreHorizontal).Alt("More"), muted: true, side: func(t *uitheme.Theme) float64 { return t.IconSize + 4 }})
+			parts = append(parts, &moreIcon{icon: Icon(icons.MoreHorizontal), alt: func(s *Strings) string { return s.BreadcrumbMore }, muted: true, side: func(t *uitheme.Theme) float64 { return t.IconSize + 4 }})
 		case last:
 			b.current = widget.Text(c.label).NoWrap()
 			parts = append(parts, b.current)
@@ -168,6 +169,8 @@ func (b *BreadcrumbWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer b.props.Layout().EndLayout()
 	if b.nameReader != nil {
 		b.name = b.nameReader.Get()
+	} else if !b.named {
+		b.name = stringsOf(env).BreadcrumbName
 	}
 	if b.row == nil {
 		b.build()
@@ -293,6 +296,7 @@ func (s *breadcrumbSeparatorOf) Paint(dst *ggui.Canvas, r ggui.Rect) { s.child.P
 // icon's Alt.
 type moreIcon struct {
 	icon  *icons.Widget
+	alt   func(*Strings) string // what a screen reader calls it, in the Strings it is laid out under
 	side  func(*uitheme.Theme) float64
 	muted bool // drawn in the muted color rather than the text color
 	size  ggui.Size
@@ -300,7 +304,7 @@ type moreIcon struct {
 
 func (m *moreIcon) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := uitheme.Of(env)
-	m.icon.Size(t.IconSize).Color(pick(m.muted, t.MutedFg, t.Fg))
+	m.icon.Alt(m.alt(stringsOf(env))).Size(t.IconSize).Color(pick(m.muted, t.MutedFg, t.Fg))
 	m.size = m.icon.Layout(c.Loosen(), env)
 	side := m.side(t)
 	return c.Constrain(ggui.Sz(side, side))

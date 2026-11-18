@@ -217,11 +217,12 @@ func (s *RangeSliderWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 			s.Pressed = false
 			s.active = -1
 		}
+		words := stringsOf(env)
 		name := s.SemanticName()
 		if name == "" {
-			name = "Value"
+			name = words.SliderValue
 		}
-		name = fmt.Sprintf("%s %d", name, i+1)
+		name = fmt.Sprintf(words.SliderThumbFormat, name, i+1)
 		if i < len(s.names) && s.names[i] != "" {
 			name = s.names[i]
 		}

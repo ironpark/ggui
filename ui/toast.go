@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"slices"
 	"time"
 
@@ -265,7 +266,8 @@ func (t *ToasterWidget) fill(e *toastEntry, message ToastMessage) {
 	e.remaining, e.duration, e.persistent = message.duration, message.duration, message.duration <= 0
 	e.last, e.held = ggui.Now(), false
 	closeIcon := Icon(icons.Close)
-	e.dismiss = ButtonOf(closeIcon, func() { t.Dismiss(e.id) }).Variant(toastClose).Size(ButtonIconSmall).Name("Dismiss " + message.title)
+	// The close button is named at layout, in the Strings around the toaster.
+	e.dismiss = ButtonOf(closeIcon, func() { t.Dismiss(e.id) }).Variant(toastClose).Size(ButtonIconSmall)
 	e.dismiss.Key(e)
 	e.action = nil
 	if message.actionLabel != "" {
@@ -538,6 +540,7 @@ type toastPanel struct {
 
 func (p *toastPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	p.theme = uitheme.Of(env)
+	p.entry.dismiss.Name(fmt.Sprintf(stringsOf(env).DismissFormat, p.entry.title))
 	t := p.theme
 	if p.body == nil {
 		text := []ggui.Widget{p.title}

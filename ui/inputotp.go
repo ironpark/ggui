@@ -285,16 +285,17 @@ func (o *InputOTPWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
 	return size
 }
 func (o *InputOTPWidget) Semantics() (ggui.Role, string) {
-	return ggui.RoleTextField, pick(o.SemanticName() != "", o.SemanticName(), "One-time password")
+	return ggui.RoleTextField, pick(o.SemanticName() != "", o.SemanticName(), stringsOf(o.env).OneTimePassword)
 }
 func (o *InputOTPWidget) Describe() ggui.Node {
 	n := o.input.Describe()
 	n.Role, n.Name = o.Semantics()
 	n.Disabled = o.disabled
 	n.Runs = nil
-	n.Description = fmt.Sprintf("%d-character code", o.maxLength)
+	words := stringsOf(o.env)
+	n.Description = fmt.Sprintf(words.CodeLengthFormat, o.maxLength)
 	if o.invalid {
-		n.Description += "; invalid code"
+		n.Description += words.InvalidCode
 	}
 	return n
 }

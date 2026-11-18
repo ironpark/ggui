@@ -2,7 +2,8 @@
 
 [Documentation](README.md) · [Project README](../README.md)
 
-Expose meaningful names and actions, and support text scaling and reduced motion.
+Expose meaningful names and actions, support text scaling and reduced motion,
+and word the controls in the user's language.
 
 Examples use `ggui`, `widget` and `ui` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
@@ -116,3 +117,45 @@ For status updates that should be spoken without moving focus, use
 `app.Announce("Saved", ggui.Polite)`. `ggui.Assertive` requests an interrupting
 announcement. Announcements may be queued from any goroutine; native delivery
 requires the active macOS bridge.
+
+## Localization
+
+The words `ui`'s controls produce by themselves, a dialog's "Close", a pager's
+"Previous" and "Next", a command list's "No results", the calendar's month and
+weekday names, the names a screen reader hears for an icon button, are a
+`ui.Strings`. `ui.ProvideStrings` gives a subtree its own, in any language;
+put it around the root for the whole app, since popups, dialogs and toasts take
+the Strings of where they are placed. A field left empty keeps the English of
+`ui.DefaultStrings()`, so an app can replace a few words and leave the rest:
+
+```go
+ko := ui.Strings{
+	Close: "닫기", Previous: "이전", Next: "다음",
+	NoResults: "결과 없음", CopyCode: "코드 복사",
+	Weekdays: [7]string{"일", "월", "화", "수", "목", "금", "토"},
+	Months: [12]string{"1월", "2월", "3월", "4월", "5월", "6월",
+		"7월", "8월", "9월", "10월", "11월", "12월"},
+	MonthTitleFormat: "%[2]d년 %[1]s", // 2026년 11월
+	DismissFormat:    "%s 닫기",
+}
+root := ggui.Provide(ggui.LanguageKey, "ko", ui.ProvideStrings(ko, app))
+```
+
+Fields ending in `Format` are `fmt` formats whose arguments each field's
+comment lists; an explicit index such as `%[2]d` puts them in the order a
+language needs. A control reads its Strings from its Env as it lays out, so
+`ui.BindStrings(lang, root)` switches the language of a mounted tree when the
+`lang` signal changes, with nothing rebuilt. A custom widget words itself the
+same way, with `ui.StringsFrom(env)` in `Layout`.
+
+A setter on a control still wins over the Strings around it: `Name`,
+`Placeholder`, `Pagination.Labels`, `Command.Empty` and `HintLabels`,
+`Calendar.WeekdayLabels`, `MonthLabel` and `MonthNames`,
+`Questionnaire.SubmitLabel`, `AlertDialog.Confirm` and `Cancel`,
+`EditorTab.CloseName`, `DatePicker.Format`.
+
+Strings carry words only. `ggui.LanguageKey` is the language text is shaped
+in, which picks a script's forms, and `ggui.Directionality` the direction it
+reads in; see [right-to-left text](fonts.md#right-to-left-text). An app in
+Arabic provides all three. Numbers, a calendar day's ISO date name and the
+glyphs between parts (`·`, `–`, `↑↓`) are not words and stay as they are.

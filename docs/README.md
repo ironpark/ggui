@@ -54,6 +54,7 @@ from the repository root unless a guide says otherwise.
 | Handle pointer input, shortcuts, scrolling, and focus | [Input and focus](input.md) |
 | Accept dropped files or open a native file dialog | [Drag and drop](input.md#drag-and-drop) · [File dialogs](input.md#native-file-dialogs) |
 | Support assistive technology | [Accessibility](accessibility.md) |
+| Translate the words controls show and say, such as "Close" and "No results" | [Localization](accessibility.md#localization) |
 | Test and inspect a UI | [Testing](testing.md) · [Widget inspector](inspector.md) |
 | Write a custom widget or understand rendering | [Custom widgets and rendering](rendering.md) |
 | Understand API conventions and runtime setters | [Public API conventions](api-conventions.md) |

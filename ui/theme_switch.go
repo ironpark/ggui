@@ -16,24 +16,51 @@ import (
 //	app.Setup(func() { theme.BindMode(mode, theme.Dark(), theme.Default()) })
 //	ui.ThemeMode(mode)
 //
-// Its default accessible name is "Theme". It is a ToggleGroup, so its
-// options, format and icons can be changed as one's are.
+// Its default accessible name is the Strings' ThemeModeName, "Theme", and
+// its options read as their ThemeLight, ThemeDark and ThemeSystem. It is a
+// ToggleGroup, so its options, format and icons can be changed as one's
+// are.
 func ThemeMode(mode ggui.Binding[uitheme.Mode]) *ToggleGroupWidget[uitheme.Mode] {
-	return ToggleGroup(mode).Options(uitheme.Modes()).Name("Theme")
+	g := ToggleGroup(mode).Options(uitheme.Modes())
+	g.defaultName = func(s *Strings) string { return s.ThemeModeName }
+	g.defaultFormat = func(s *Strings, m uitheme.Mode) string {
+		switch m {
+		case uitheme.ModeLight:
+			return s.ThemeLight
+		case uitheme.ModeDark:
+			return s.ThemeDark
+		}
+		return s.ThemeSystem
+	}
+	return g
 }
 
 // ThemeSwitchWidget is a day/night switch bound to whether dark mode is enabled.
 // Like Switch, it updates its binding; the application applies the chosen theme.
 type ThemeSwitchWidget struct {
 	*SwitchWidget
+	words *Strings // the Strings of the last layout
 }
 
 // ThemeSwitch shows an animated sun and moon. True means dark mode.
-// Its default accessible name is "Dark mode"; no text label is drawn.
+// Its default accessible name is the Strings' DarkMode, "Dark mode"; no
+// text label is drawn.
 func ThemeSwitch(dark ggui.Binding[bool]) *ThemeSwitchWidget {
-	s := &ThemeSwitchWidget{SwitchWidget: Switch(dark, "")}
-	s.SetName("Dark mode")
-	return s
+	return &ThemeSwitchWidget{SwitchWidget: Switch(dark, "")}
+}
+
+func (s *ThemeSwitchWidget) name() string {
+	return pick(s.SemanticName() != "", s.SemanticName(), s.words.orDefault().DarkMode)
+}
+
+// Semantics implements ggui.Semantic, including the built-in fallback name.
+func (s *ThemeSwitchWidget) Semantics() (ggui.Role, string) { return s.Role, s.name() }
+
+// Describe implements ggui.Describer: the switch's, with the fallback name.
+func (s *ThemeSwitchWidget) Describe() ggui.Node {
+	n := s.SwitchWidget.Describe()
+	n.Name = s.name()
+	return n
 }
 
 // Name sets the accessible name without adding a visible label.
@@ -59,6 +86,7 @@ func (s *ThemeSwitchWidget) BindDisabled(r ggui.Readable[bool]) *ThemeSwitchWidg
 
 // Layout implements ggui.Widget.
 func (s *ThemeSwitchWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	s.words = stringsOf(env)
 	size := s.layout(c, env, ggui.Sz(64, 36))
 	s.motion = env.Motion(s.theme.MotionSlow)
 	return size

@@ -809,7 +809,7 @@ func (s *SidebarWidget) Adopt(prev any) {
 func (s *SidebarWidget) BindDisabled(r ggui.Readable[bool]) *SidebarWidget { s.BindInert(r); return s }
 
 func (s *SidebarWidget) name() string {
-	return pick(s.SemanticName() != "", s.SemanticName(), "Sidebar")
+	return pick(s.SemanticName() != "", s.SemanticName(), stringsOf(s.env).SidebarName)
 }
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 
@@ -26,6 +27,8 @@ type PaginationWidget struct {
 	row                      *widget.WrapWidget
 	shape                    paginationShape // what row was built for
 	onChange                 func(int)
+	labels                   [2]string // as Labels set them; empty follows the Strings
+	words                    *Strings  // the Strings of the last layout
 }
 
 // paginationShape is which of its parts a pager shows: enough to tell
@@ -40,14 +43,16 @@ type paginationShape struct {
 func Pagination(page ggui.Binding[int], pages ggui.Readable[int]) *PaginationWidget {
 	p := &PaginationWidget{page: page, pages: pages}
 	p.previousIcon, p.nextIcon = Icon(icons.ChevronLeft), Icon(icons.ChevronRight)
-	p.previousLabel, p.nextLabel = widget.Text("Previous").NoWrap(), widget.Text("Next").NoWrap()
-	p.previous = ButtonOf(widget.Row(p.previousIcon, p.previousLabel).Gap(paginationGap), func() { p.move(-1) }).Name("Previous").Ghost()
-	p.next = ButtonOf(widget.Row(p.nextLabel, p.nextIcon).Gap(paginationGap), func() { p.move(1) }).Name("Next").Ghost()
+	// The words on Previous and Next, which name them, and the pages'
+	// names come from the Strings at layout, unless Labels gave them.
+	p.previousLabel, p.nextLabel = widget.Text("").NoWrap(), widget.Text("").NoWrap()
+	p.previous = ButtonOf(widget.Row(p.previousIcon, p.previousLabel).Gap(paginationGap), func() { p.move(-1) }).Ghost()
+	p.next = ButtonOf(widget.Row(p.nextLabel, p.nextIcon).Gap(paginationGap), func() { p.move(1) }).Ghost()
 	for i := range p.numbers {
 		p.numbers[i] = Button("", func() { p.selectPage(p.targets[i]) }).Size(ButtonIcon)
 	}
 	for i := range p.gaps {
-		p.gaps[i] = &moreIcon{icon: Icon(icons.MoreHorizontal).Alt("More pages"), side: func(t *uitheme.Theme) float64 { return ButtonIcon.Style(*t).Height }}
+		p.gaps[i] = &moreIcon{icon: Icon(icons.MoreHorizontal), alt: func(s *Strings) string { return s.MorePages }, side: func(t *uitheme.Theme) float64 { return ButtonIcon.Style(*t).Height }}
 	}
 	return p
 }
@@ -57,13 +62,22 @@ func Pagination(page ggui.Binding[int], pages ggui.Readable[int]) *PaginationWid
 const paginationGap = 6.0
 
 // Labels replaces the words on the Previous and Next buttons, which also
-// name them, for an application in another language.
+// name them, in place of the Strings' Previous and Next. An empty one keeps
+// the Strings' word.
 func (p *PaginationWidget) Labels(previous, next string) *PaginationWidget {
+	p.labels = [2]string{previous, next}
+	p.word()
+	return p
+}
+
+// word puts the words of Labels, or of the Strings, on Previous and Next.
+func (p *PaginationWidget) word() {
+	words := p.words.orDefault()
+	previous, next := pick(p.labels[0] != "", p.labels[0], words.Previous), pick(p.labels[1] != "", p.labels[1], words.Next)
 	p.previousLabel.Content(previous)
 	p.nextLabel.Content(next)
 	p.previous.Name(previous)
 	p.next.Name(next)
-	return p
 }
 
 // Disabled disables all navigation.
@@ -89,6 +103,8 @@ func (p *PaginationWidget) selectPage(page int) {
 // Layout implements ggui.Widget.
 func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	p.Sync()
+	p.words = stringsOf(env)
+	p.word()
 	t := uitheme.Of(env)
 	// Previous and Next are default-size buttons with less padding on the
 	// side their chevron is on.
@@ -115,8 +131,8 @@ func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		if p.targets[i] != target {
 			p.targets[i] = target
 			b.label.Content(strconv.Itoa(target))
-			b.SetName("Page " + strconv.Itoa(target))
 		}
+		b.SetName(fmt.Sprintf(p.words.PageFormat, target))
 		b.selected = target == current
 		if target == current {
 			b.Outline()
@@ -143,11 +159,12 @@ func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 }
 
 // Paint implements ggui.Widget. The buttons are one group, named by Name
-// or else "Pagination", so a screen reader reads them as one navigation.
+// or else the Strings' PaginationName, so a screen reader reads them as one
+// navigation.
 func (p *PaginationWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	name := p.SemanticName()
 	if name == "" {
-		name = "Pagination"
+		name = p.words.orDefault().PaginationName
 	}
 	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Name: name}, func(dst *ggui.Canvas) {
 		dst.Paint(p.row, r)

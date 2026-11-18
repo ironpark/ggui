@@ -13,6 +13,7 @@ import (
 // itself is focusable so even a row of noninteractive files can be scrolled.
 type AttachmentGroupWidget struct {
 	ggui.Interactive
+	words                     *Strings // the Strings of the last layout
 	children                  []*AttachmentWidget
 	sizes                     []ggui.Size
 	starts                    []float64
@@ -31,7 +32,6 @@ func AttachmentGroup(cards ...*AttachmentWidget) *AttachmentGroupWidget {
 	g := &AttachmentGroupWidget{children: cards}
 	g.paintCardsFn = g.paintCards
 	g.Role = ggui.RoleGroup
-	g.SetName("Attachments")
 	g.AutoKey()
 	return g
 }
@@ -48,6 +48,7 @@ func (g *AttachmentGroupWidget) scrollTo(v float64) { g.offset = max(0, min(v, g
 // Layout implements Widget.
 func (g *AttachmentGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	g.theme = uitheme.Of(env)
+	g.words = stringsOf(env)
 	g.gap, g.padY, g.fadeLen = g.theme.Space*1.5, g.theme.Space/2, g.theme.Space*2
 	g.sizes, g.starts = g.sizes[:0], g.starts[:0]
 	width, height := 0.0, 0.0
@@ -112,9 +113,16 @@ func (g *AttachmentGroupWidget) paintCards(dst *ggui.Canvas) {
 	}
 }
 
+func (g *AttachmentGroupWidget) name() string {
+	return pick(g.SemanticName() != "", g.SemanticName(), g.words.orDefault().AttachmentsName)
+}
+
+// Semantics implements ggui.Semantic, including the built-in fallback name.
+func (g *AttachmentGroupWidget) Semantics() (ggui.Role, string) { return g.Role, g.name() }
+
 // Describe implements ggui.Describer.
 func (g *AttachmentGroupWidget) Describe() ggui.Node {
-	return ggui.Node{Role: ggui.RoleGroup, Name: g.SemanticName(), Actions: ggui.ActionFocus | ggui.ActionScrollIntoView}
+	return ggui.Node{Role: ggui.RoleGroup, Name: g.name(), Actions: ggui.ActionFocus | ggui.ActionScrollIntoView}
 }
 func (g *AttachmentGroupWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	if ev.Kind != ggui.PointerScroll {

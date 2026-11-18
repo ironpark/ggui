@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"image/color"
 	"math"
 	"time"
@@ -178,12 +179,17 @@ func (t *EditorTabWidget) closeButton(hover, focus *ggui.StateValue[bool]) ggui.
 		}
 		return 0
 	})
-	name := t.closeName
-	if name == "" {
-		name = "Close " + t.label
-	}
-	btn := widget.Opacity(ButtonOf(Icon(icons.Close).Size(13), t.onClose).Ghost().Pad(3).Radius(4).Name(name), 0).
-		BindOpacity(shown)
+	// Without a CloseName the button is named in the Strings it is laid
+	// out under.
+	button := ButtonOf(Icon(icons.Close).Size(13), t.onClose).Ghost().Pad(3).Radius(4)
+	named := localize(button, func(s *Strings) {
+		if t.closeName != "" {
+			button.Name(t.closeName)
+		} else {
+			button.Name(fmt.Sprintf(s.CloseTabFormat, t.label))
+		}
+	})
+	btn := widget.Opacity(named, 0).BindOpacity(shown)
 	if !t.dirty {
 		return btn
 	}

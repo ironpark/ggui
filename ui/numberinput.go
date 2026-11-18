@@ -52,8 +52,6 @@ func NumberInput(value ggui.Binding[float64]) *NumberInputWidget {
 	n.dec = &numberStepper{n: n, dir: -1}
 	n.inc = &numberStepper{n: n, dir: 1}
 	n.dec.Role, n.inc.Role = ggui.RoleButton, ggui.RoleButton
-	n.dec.SetName("Decrement")
-	n.inc.SetName("Increment")
 	// The text follows the value, so a write from outside -- or a commit
 	// that normalised what was typed -- shows at once.
 	ggui.Observe(func() {
@@ -344,6 +342,8 @@ type numberStepper struct {
 
 func (s *numberStepper) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s.env = env
+	words := stringsOf(env)
+	s.SetName(pick(s.dir < 0, words.NumberDecrement, words.NumberIncrement))
 	side := uitheme.Of(env).IconSize * 1.25
 	return c.Constrain(ggui.Sz(side, side))
 }

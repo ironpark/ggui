@@ -350,7 +350,7 @@ func (h *accordionHeader) HandlePointer(ev ggui.PointerEvent) bool {
 }
 
 func (a *AccordionWidget) name() string {
-	return pick(a.SemanticName() != "", a.SemanticName(), "Accordion")
+	return pick(a.SemanticName() != "", a.SemanticName(), stringsOf(a.env).AccordionName)
 }
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.

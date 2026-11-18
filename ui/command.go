@@ -88,10 +88,14 @@ type CommandWidget struct {
 	height             float64
 	stable, borderless bool
 	hints              bool
-	hintNav, hintSel   string
-	emptyText          string
-	dismiss            func() // closes the dialog it is in, set by CommandDialog
-	inDialog           bool   // rows take the dialog's larger radius
+	hintNav, hintSel   string   // as HintLabels set them; empty follows the Strings
+	emptyText          string   // as Empty set it
+	emptySet           bool     // Empty was called: emptyText wins over the Strings
+	placeholderSet     bool     // Placeholder was called
+	nameSet            bool     // Name was called
+	words              *Strings // the Strings of the last layout
+	dismiss            func()   // closes the dialog it is in, set by CommandDialog
+	inDialog           bool     // rows take the dialog's larger radius
 	// menuRows draws the list as a combobox's: a menu's rows, padding and
 	// panel, and a muted empty line.
 	menuRows bool
@@ -116,9 +120,10 @@ const commandListHeight = 276
 // and End go to the first and last, and Enter runs the highlighted action.
 // IME composition and the other editing keys stay with widget.TextInput.
 func Command(query ggui.Binding[string], entries ...CommandEntry) *CommandWidget {
-	c := &CommandWidget{query: query, highlight: -1, height: commandListHeight, offset: ggui.State(0.0),
-		hintNav: "Navigate", hintSel: "Select", emptyText: "No results"}
-	c.field = TextField(query).Placeholder("Search commands…").Name("Search commands").OnKey(c.key)
+	c := &CommandWidget{query: query, highlight: -1, height: commandListHeight, offset: ggui.State(0.0)}
+	// The search field's name and placeholder come from the Strings at
+	// layout, unless Name and Placeholder set them.
+	c.field = TextField(query).OnKey(c.key)
 	if c.field.input.HitID() == nil {
 		c.field.input.Key(c)
 	}
@@ -173,21 +178,34 @@ func (c *CommandWidget) Entries(entries ...CommandEntry) *CommandWidget {
 func CommandDialog(open ggui.Binding[bool], command *CommandWidget) *DialogWidget {
 	command.dismiss = func() { open.Set(false) }
 	command.inDialog = true
-	return Dialog(open, command.Borderless()).CloseButton(false).Compact().Name("Commands").Width(384).TopAt(1.0 / 3)
+	d := Dialog(open, command.Borderless()).CloseButton(false).Compact().Width(384).TopAt(1.0 / 3)
+	d.defaultName = func(s *Strings) string { return s.Commands }
+	return d
 }
 
-// Placeholder sets the search hint.
-func (c *CommandWidget) Placeholder(s string) *CommandWidget { c.field.Placeholder(s); return c }
+// Placeholder sets the search hint, in place of the Strings'
+// SearchCommandsHint.
+func (c *CommandWidget) Placeholder(s string) *CommandWidget {
+	c.placeholderSet = true
+	c.field.Placeholder(s)
+	return c
+}
 
-// Name names the search field for tests and the inspector.
-func (c *CommandWidget) Name(s string) *CommandWidget { c.field.Name(s); return c }
+// Name names the search field for tests and the inspector, in place of the
+// Strings' SearchCommands.
+func (c *CommandWidget) Name(s string) *CommandWidget {
+	c.nameSet = true
+	c.field.Name(s)
+	return c
+}
 
 // InsetSearch does nothing: the search field is always a rounded pill
 // inset in the panel. It remains for code written when that was an option.
 func (c *CommandWidget) InsetSearch() *CommandWidget { return c }
 
-// HintLabels words the footer Hints shows, as "Navigate" and "Select" in
-// the application's language.
+// HintLabels words the footer Hints shows, "Navigate" and "Select" in the
+// Strings' HintNavigate and HintSelect, for this list alone. An empty one
+// keeps the Strings' word.
 func (c *CommandWidget) HintLabels(navigate, choose string) *CommandWidget {
 	defer property.Watch(&c.props, &c.hintNav)()
 	defer property.Watch(&c.props, &c.hintSel)()
@@ -199,17 +217,51 @@ func (c *CommandWidget) HintLabels(navigate, choose string) *CommandWidget {
 }
 
 // hintText is the footer Hints shows.
-func (c *CommandWidget) hintText() string { return "↑↓ " + c.hintNav + "   ↵ " + c.hintSel }
+func (c *CommandWidget) hintText() string {
+	words := c.words.orDefault()
+	navigate, choose := c.hintNav, c.hintSel
+	if navigate == "" {
+		navigate = words.HintNavigate
+	}
+	if choose == "" {
+		choose = words.HintSelect
+	}
+	return "↑↓ " + navigate + "   ↵ " + choose
+}
 
-// Empty sets what the list says when nothing matches; "No results" by
-// default.
+// Empty sets what the list says when nothing matches, in place of the
+// Strings' NoResults; a Combobox's list says their NoItemsFound.
 func (c *CommandWidget) Empty(s string) *CommandWidget {
 	defer property.Watch(&c.props, &c.emptyText)()
-	c.emptyText = s
+	c.emptyText, c.emptySet = s, true
 	if c.results.empty != nil {
 		c.results.empty.Content(s)
 	}
 	return c
+}
+
+// emptyLabel is what the list says when nothing matches.
+func (c *CommandWidget) emptyLabel() string {
+	if c.emptySet {
+		return c.emptyText
+	}
+	return pick(c.menuRows, c.words.orDefault().NoItemsFound, c.words.orDefault().NoResults)
+}
+
+// localize words the search field and the hints in the Strings of env,
+// where no setter worded them. A Combobox's list, whose search field is
+// the Combobox's own input, is named for searching options.
+func (c *CommandWidget) localize(env ggui.Env) {
+	c.words = stringsOf(env)
+	if !c.nameSet {
+		c.field.Name(pick(c.menuRows, c.words.SearchOptions, c.words.SearchCommands))
+	}
+	if !c.placeholderSet {
+		c.field.Placeholder(c.words.SearchCommandsHint)
+	}
+	if c.hint != nil {
+		c.hint.Content(c.hintText())
+	}
 }
 
 // Hints shows a compact keyboard navigation footer.
@@ -345,6 +397,7 @@ func (c *CommandWidget) key(ev ggui.KeyEvent) bool {
 func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
 	c.env = env
+	c.localize(env)
 	c.filter()
 	t := uitheme.Of(env)
 	c.theme = t
@@ -504,8 +557,9 @@ func (r *commandResults) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		// far above the panel's own padding, with no group around it; a
 		// combobox's is muted and 8 from either side.
 		if r.empty == nil {
-			r.empty = widget.Text(c.emptyText)
+			r.empty = widget.Text("")
 		}
+		r.empty.Content(c.emptyLabel())
 		room := t.Space * 6
 		if c.menuRows {
 			r.empty.Color(t.MutedFg)

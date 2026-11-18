@@ -69,6 +69,7 @@ func (w *CarouselContentWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 type CarouselWidget struct {
 	props property.Owner
 	ggui.Interactive
+	words                                      *Strings // the Strings of the last layout
 	selected                                   ggui.Binding[int]
 	items                                      []*CarouselItemWidget
 	prev, next                                 *CarouselNavigationWidget
@@ -100,7 +101,6 @@ type CarouselWidget struct {
 func Carousel(selected ggui.Binding[int], items ...ggui.Widget) *CarouselWidget {
 	c := &CarouselWidget{selected: selected, height: 240, gap: 16, align: .5, controls: true, dragEnabled: true, duration: 1800 * time.Millisecond, stopOnInteraction: true}
 	c.Role = ggui.RoleGroup
-	c.SetName("Carousel")
 	c.AutoKey()
 	var add func(ggui.Widget)
 	add = func(w ggui.Widget) {
@@ -302,6 +302,7 @@ func (c *CarouselWidget) Layout(con ggui.Constraints, e ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
 	c.Sync()
 	c.env, c.theme, c.reduced = e, uitheme.Of(e), e.ReducedMotion()
+	c.words = stringsOf(e)
 	if !c.rtlSet {
 		c.rtl = e.Direction() == ggui.DirRTL
 	}
@@ -464,7 +465,7 @@ func (c *CarouselWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 				at.Origin.X += pos
 				at.Size.W = c.extents[i]
 			}
-			clip.Node(at, ggui.Node{Role: ggui.RoleGroup, Name: fmt.Sprintf("Slide %d of %d", i+1, len(c.items))}, func(dst *ggui.Canvas) { dst.Paint(c.items[i], at) })
+			clip.Node(at, ggui.Node{Role: ggui.RoleGroup, Name: fmt.Sprintf(c.words.orDefault().SlideFormat, i+1, len(c.items))}, func(dst *ggui.Canvas) { dst.Paint(c.items[i], at) })
 		}
 		c.FocusRing(d, v, c.theme.Radius, c.theme.Ring)
 		side := carouselButtonSide(c.theme)
@@ -481,8 +482,15 @@ func (c *CarouselWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 		}
 	})
 }
+func (c *CarouselWidget) name() string {
+	return pick(c.SemanticName() != "", c.SemanticName(), c.words.orDefault().CarouselName)
+}
+
+// Semantics implements ggui.Semantic, including the built-in fallback name.
+func (c *CarouselWidget) Semantics() (ggui.Role, string) { return c.Role, c.name() }
+
 func (c *CarouselWidget) Describe() ggui.Node {
-	return ggui.Node{Role: ggui.RoleGroup, Name: c.SemanticName(), Value: fmt.Sprintf("Slide %d of %d", c.Selected()+1, len(c.snaps)), Disabled: c.IsInert(), Min: 0, Max: float64(max(0, len(c.snaps)-1)), Now: float64(max(0, c.Selected())), Actions: ggui.ActionFocus | ggui.ActionIncrement | ggui.ActionDecrement | ggui.ActionSetValue}
+	return ggui.Node{Role: ggui.RoleGroup, Name: c.name(), Value: fmt.Sprintf(c.words.orDefault().SlideFormat, c.Selected()+1, len(c.snaps)), Disabled: c.IsInert(), Min: 0, Max: float64(max(0, len(c.snaps)-1)), Now: float64(max(0, c.Selected())), Actions: ggui.ActionFocus | ggui.ActionIncrement | ggui.ActionDecrement | ggui.ActionSetValue}
 }
 func (c *CarouselWidget) Act(a ggui.Action) bool {
 	if c.IsInert() {
@@ -646,9 +654,20 @@ func CarouselNext(c *CarouselWidget) *CarouselNavigationWidget { return carousel
 func carouselNavigation(c *CarouselWidget, prev bool) *CarouselNavigationWidget {
 	b := &CarouselNavigationWidget{carousel: c, previous: prev}
 	b.Role = ggui.RoleButton
-	b.SetName(pick(prev, "Previous slide", "Next slide"))
 	return b
 }
+
+// name is the button's name, or the Strings' PreviousSlide or NextSlide.
+func (b *CarouselNavigationWidget) name() string {
+	if b.SemanticName() != "" {
+		return b.SemanticName()
+	}
+	words := stringsOf(b.env)
+	return pick(b.previous, words.PreviousSlide, words.NextSlide)
+}
+
+// Semantics implements ggui.Semantic, including the built-in fallback name.
+func (b *CarouselNavigationWidget) Semantics() (ggui.Role, string) { return b.Role, b.name() }
 func (b *CarouselNavigationWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
 	b.env, b.theme = e, uitheme.Of(e)
 	b.style, b.motion = ButtonOutline.Style(*b.theme), e.Motion(b.theme.MotionFast)
@@ -717,7 +736,7 @@ func (b *CarouselNavigationWidget) ConsumesKey(e ggui.KeyEvent) bool {
 	return ggui.Activates(e) || b.carousel.ConsumesKey(e)
 }
 func (b *CarouselNavigationWidget) Describe() ggui.Node {
-	return ggui.Node{Role: ggui.RoleButton, Name: b.SemanticName(), Disabled: !b.enabled(), Actions: ggui.ActionPress | ggui.ActionFocus}
+	return ggui.Node{Role: ggui.RoleButton, Name: b.name(), Disabled: !b.enabled(), Actions: ggui.ActionPress | ggui.ActionFocus}
 }
 func (b *CarouselNavigationWidget) Act(a ggui.Action) bool {
 	if a.Kind != ggui.ActionPress || !b.enabled() {
