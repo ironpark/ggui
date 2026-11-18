@@ -156,7 +156,7 @@ func (a *App) Close() {
 		a.releaseInstance()
 		a.releaseInstance = nil
 	}
-	reactive.UnmarkUIThread()
+	reactive.UnmarkUIThread(a.runtime())
 }
 
 // Quit ends Run as Close does, from any goroutine: the windows close at the

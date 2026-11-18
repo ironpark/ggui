@@ -87,6 +87,42 @@ trackpad's gesture, which stays with the view that took it.
 `Perform` queues the action and runs a frame. Test the resulting binding or
 semantic state.
 
+## Writes from the wrong goroutine
+
+Run an app's tests with `-tags ggui_debug` as well:
+
+```sh
+go test -tags ggui_debug ./...
+```
+
+In that build a `Probe` or `WindowProbe` checks, as an app's window does,
+that its state is touched only on the goroutine running its frames. A worker
+that writes a signal directly, `go func() { m.Results.Set(rows) }()`, panics at
+the `Set`, naming both goroutines, instead of racing the next frame; hand the
+result back with `p.Post` (`App.Post`, `ggui.Async` or `ggui.Resource` in the
+app) and it runs in the frame, where nothing is reported.
+
+What is checked is every `Get` and `Set` of a `State` and every `Get` of a
+`Derived`, and the creation of an `Effect`, a `Resource` or a `Debounced`, a
+`Resource.Reload`, `UIThread`, the font settings and router navigation. Each
+probe's frames mark its own reactive runtime, and the base runtime of the
+goroutine that made the probe, with the goroutine running them. A signal
+belongs to the runtime it was made in: its owner's, or with none its
+goroutine's base, as state a test makes before building its probe does. An
+access is reported only when that runtime's frames run on another goroutine.
+So:
+
+- Parallel tests, each with its own probe, never trip each other.
+- A test may make and set state before its probe's first frame, and between
+  frames, on its own goroutine.
+- Work posted from a worker runs on the frame's goroutine and passes; state
+  a worker makes for itself and hands over through `Post` is the worker's,
+  and is not checked.
+- Closing a probe ends the check of its runtime, and the next probe's first
+  frame starts it again on the goroutine that runs that probe.
+
+The release build carries none of this.
+
 ## Pixels
 
 A probe on its own paints with no renderer, so a test cannot read what it

@@ -6,6 +6,8 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggwd"
+
+	"github.com/ironpark/ggui/internal/reactive"
 )
 
 // WindowProbe runs a widget tree through a Window's own frames with no
@@ -115,6 +117,7 @@ func (p *WindowProbe) Screen() *ggfx.Image { return p.screen }
 // Close closes the window and disposes everything built under it.
 func (p *WindowProbe) Close() {
 	p.w.Close()
+	reactive.UnmarkUIThread(p.w.runtime())
 	p.screen.Deallocate()
 }
 

@@ -181,8 +181,12 @@ thread safety. A worker receives an immutable input snapshot and posts its
 result with `App.Post`. Inside a mounted component or app setup,
 `UIThread()` returns the owner's dispatcher. Closing an app drops queued
 work; component-specific work must additionally check its lifetime, as
-`Resource` does automatically. Debug builds (`-tags ggui_debug`) diagnose
-reactive operations from the wrong goroutine while the app is running. The
+`Resource` does automatically. Debug builds (`-tags ggui_debug`) panic on a
+reactive operation from the wrong goroutine: a signal read or written on a
+goroutine other than the one running the frames of the app or probe it was
+made for, from that app's or probe's first frame until it closes. Run tests
+with the tag to catch a worker that writes state instead of posting it; see
+[Testing](testing.md#writes-from-the-wrong-goroutine). The
 [settings example](../examples/settings) saves on a worker this way.
 
 `TextOf` and `Textf` borrow their inputs and read during layout; constructing them

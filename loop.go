@@ -408,11 +408,14 @@ func (l *frameLoop) hasPosted() bool {
 // caches age by the frames they go unused, so a window or a headless run
 // showing thousands of strings over its frames lets go of those it stopped
 // showing. The loop becomes the running goroutine's, so that the handlers
-// the frame runs reach its host through UseHost. Then the OnFrame handlers
-// run, in registration order, and the work posted before the frame.
+// the frame runs reach its host through UseHost, and in a ggui_debug build
+// the goroutine is marked as the one its world's state belongs to; see
+// reactive.MarkUIThread. Then the OnFrame handlers run, in registration
+// order, and the work posted before the frame.
 func (l *frameLoop) beginFrame() {
 	text.AdvanceTick()
 	setRunning(l)
+	reactive.MarkUIThread(l.runtime())
 	for _, fn := range l.frame {
 		fn()
 	}
@@ -621,6 +624,7 @@ func endPaint(f *frameState) {
 // before running user effects. Both App and Probe use this exact ordering.
 func (l *frameLoop) settle(size Size) (err error) {
 	setRunning(l)
+	reactive.MarkUIThread(l.runtime())
 	l.settles++
 	rt := l.runtime()
 	for pass := range reactive.MaxFlushPasses {
