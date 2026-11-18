@@ -84,7 +84,12 @@ func TestSigningDescribe(t *testing.T) {
 			t.Error("description shows the certificate")
 		}
 	}
+	// A notarytool profile names the credentials on a Mac; elsewhere an
+	// API key does.
 	n := Notary{Profile: "ggui", Password: "secret", Timeout: time.Hour}
+	if !onMac {
+		n = Notary{APIKeyFile: "ggui-key.json", Password: "secret", Timeout: time.Hour}
+	}
 	if d := n.Describe(); strings.Contains(d, "secret") || !strings.Contains(d, "ggui") {
 		t.Errorf("notary: %q", d)
 	}
