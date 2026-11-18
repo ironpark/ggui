@@ -233,9 +233,10 @@ if err := tour.WriteGIF("tour.gif", record.FPS(10), record.Width(800)); err != n
 ```
 
 `WriteGIF` and `WritePNGs` take the same options as the command's flags:
-`FPS`, `Width`, `Colors`, `Dither`, `Loop`, and `Background`, which fills
-each frame with a color of your choosing instead of the background the
-tour's `Env` holds (`ggui.Env.Background`, which a theme sets). `Frame`,
+`FPS`, `Width`, `Colors`, `Dither`, `Loop`, `Lossy`, and `Background`,
+which fills each frame with a color of your choosing instead of the
+background the tour's `Env` holds (`ggui.Env.Background`, which a theme
+sets). `Optimize` has no flag; [the GIF](#the-gif) describes it. `Frame`,
 `CornerRadius`, `Margin`, `Backdrop` and `Cursor` set the
 [frame](#the-window-frame) and the [cursor](#the-pointer-and-the-keyboard).
 
@@ -254,12 +255,20 @@ The GIF is written in pure Go, in two passes, so nothing else needs to be
 installed:
 
 - **One palette** of up to 256 colors for the whole recording, chosen from
-  the colors of every frame: a median cut that splits the colors where the
-  error drops most, then a few rounds of k-means. A UI of fewer colors
-  than the palette holds keeps every one exactly; a flat background
-  never shifts between frames.
-- **Only what changed**: each frame after the first is the rectangle that
-  differs from the frame before, drawn over it. A frame that changes
+  the colors of every frame. A UI of fewer colors than the palette holds
+  keeps every one exactly. Otherwise the colors that cover a 2000th of the
+  pixels or more, up to a quarter of the palette, are kept exactly, so the
+  flat backgrounds, a frame's title bar and its buttons never shift; the
+  rest are chosen in Oklab, where a distance looks about as large wherever
+  it is, so dark gradients and shadows get their share: a median cut that
+  splits the colors where the error drops most, then a few rounds of
+  k-means. Colors are mapped to it in Oklab too, each looked up once.
+- **Only what changed**: each frame after the first holds the smallest
+  rectangle around the pixels whose palette color changed, drawn over the
+  frame before. Inside it, a pixel that shows the same color already may
+  be written as a transparent index the frame does not otherwise use,
+  whichever continues the LZW string being matched, so the unchanged parts
+  compress to almost nothing (as `gifsicle -O2` does). A frame that changes
   nothing lengthens the one before instead of adding another. A tour that
   holds still for seconds costs a few bytes for them.
 - **Bounded memory**: the first pass draws the frames, counts their colors
@@ -273,6 +282,25 @@ installed:
 | `Colors(n)` | `--colors n` | A smaller palette, 2 to 256: a smaller file, and gradients band sooner. |
 | `Dither(s)` | `--dither s` | Ordered (Bayer) dithering, 0 to 1, where a color falls between two of the palette's. Off by default: flat UI needs none, and dithering costs size. 0.2 to 0.4 smooths gradients and soft shadows that band. The pattern is fixed to the pixel, so a part that does not change does not shimmer. |
 | `Loop(n)` | `--loop n` | Play `n` times; 0, the default, loops for ever. |
+| `Lossy(n)` | `--lossy n` | Let the compression write a pixel in a palette color up to n/1000 from its own in Oklab, or leave it as it shows, where that makes an LZW string longer, as `gifsicle --lossy` does; 0 to 200, 0 (exact) by default. Oklab's 0.02 is about the least difference the eye sees, so 20 to 40 is hard to see in UI; more speckles gradients and shadows. |
+| `Optimize(level)` | | 1, the default, is the above: exactly what level 0 shows, which writes each changed rectangle whole, in fewer bytes. 2 also splits a frame whose changes are two regions far apart, as the cursor and a control, into two frames when that is smaller; the first shows for 20 ms, the least a browser shows a frame for, so one region changes that much before the other. |
+
+The demo recording behind these numbers is 360×220 at `Scale: 2`, 5.9
+seconds at 15 frames a second: a button clicked, a name typed and a dark
+mode switched on. Sizes in KB:
+
+| | Before | Level 1 | Level 2 | `Lossy(30)` | Level 2, `Lossy(30)` |
+| --- | --- | --- | --- | --- | --- |
+| `FrameMac` and the cursor, 912×688 | 130.8 | 125.1 | 115.7 | 92.2 | 83.6 |
+| The same, `Width(720)` | 116.7 | 107.2 | 100.5 | 78.1 | 71.9 |
+| The content alone, 720×440 | 37.7 | 33.8 | 33.7 | 27.9 | 27.9 |
+| The same, `Width(360)` | 17.0 | 15.4 | 15.4 | 13.7 | 13.7 |
+
+"Before" is the encoder that wrote each changed rectangle whole, with the
+palette chosen in RGB. Encoding takes no measurable time beside drawing:
+each of these recordings takes as long at every setting, 0.2 to 0.3
+seconds, or about a second for `Width(720)`, which scales the framed
+image.
 
 ## PNG frames and ffmpeg
 
