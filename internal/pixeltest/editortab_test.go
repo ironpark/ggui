@@ -20,14 +20,13 @@ func TestMain(m *testing.M) { ggtest.Main(m) }
 // An editor tab's close button shows only while the pointer is over the
 // tab, which it tints; the selected tab is raised all the while.
 func TestEditorTabShowsItsCloseButtonOnHover(t *testing.T) {
-	size := ggui.Sz(200, 40)
+	size := ggui.Sz(260, 40)
 	p := ggui.NewProbe(widget.Row(
 		// Wide enough that its label ends well before its close button.
 		ui.EditorTab("main.go", func() {}).OnClose(func() {}).MinWidth(120),
 		ui.EditorTab("go.mod", func() {}).Selected(true),
-	), ggui.Sz(260, 40))
+	), size)
 	defer p.Close()
-	size = ggui.Sz(260, 40)
 	away := ggtest.Render(p, size, 1)
 	closeAt, ok := p.Find("Close main.go")
 	if !ok {
