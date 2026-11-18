@@ -34,16 +34,21 @@ type Config struct {
 	MaxWidth  int
 	MaxHeight int
 
-	// Position is where the window opens on the screen, in logical pixels;
-	// nil centers it.
+	// Position is where the window opens on its screen, in logical pixels
+	// from the screen's top-left corner; nil centers it.
 	Position *Point
+	// Screen is the ID of the display the window opens on (see Screen.ID),
+	// which Position is on. Empty, or a display not connected, is the one
+	// windows open on by default.
+	Screen string
 
 	// Remember names the window's placement, such as "main", so that it
-	// reopens where it was last closed: its position, size and whether it
-	// was maximized, kept for the user under os.UserConfigDir. A saved
-	// placement overrides Position, Width, Height and Maximized, within the
-	// size limits; one that would leave the window out of reach, as on a
-	// display since unplugged, keeps the size and leaves the position to
+	// reopens where it was last closed: on the same display, at the same
+	// position and size, and maximized if it was, kept for the user under
+	// os.UserConfigDir. A saved placement overrides Screen, Position,
+	// Width, Height and Maximized, within the size limits and the display's
+	// work area; one whose display is gone, or that would leave the window
+	// out of reach, keeps the size and leaves the place to Screen and
 	// Position. Each window of an app needs a name of its own. Empty, the
 	// default, keeps nothing. A browser, and the viewer of ggui dev, keep
 	// nothing either.
@@ -257,14 +262,18 @@ func (w *Window) open() error {
 	w.start()
 	w.ax.Start(w.Perform, w.cfg.Accessibility)
 	placements := w.restorePlacement(Screens())
-	nw, err := ggwd.NewWindow(w.cfg.options())
+	o := w.cfg.options()
+	// Placed on its display before it is first shown, so it never shows on
+	// another first.
+	o.Monitor = monitorByID(w.cfg.Screen)
+	nw, err := ggwd.NewWindow(o)
 	if err != nil {
 		w.release()
 		return err
 	}
 	w.window.Store(nw)
 	// Kept from here, so a window that never opened leaves what was saved.
-	w.trackPlacement(placements)
+	w.trackPlacement(placements, w.Screen())
 	nw.SetTextInputEnabled(false)
 	if len(w.cfg.Icon) > 0 {
 		nw.SetIcon(w.cfg.Icon)
@@ -955,7 +964,9 @@ func (w *Window) SetSize(size Size) {
 	w.native(func(nw *ggwd.Window) { nw.SetSize(float64(w.cfg.Width), float64(w.cfg.Height)) })
 }
 
-// Position returns where the window is on the screen, in logical pixels.
+// Position returns where the window is on its screen, in logical pixels
+// from the screen's top-left corner: Screen().Position plus it is where
+// the window is in the desktop.
 func (w *Window) Position() Point {
 	if nw := w.window.Load(); nw != nil {
 		return Pt(nw.Position())
@@ -966,7 +977,7 @@ func (w *Window) Position() Point {
 	return Point{}
 }
 
-// SetPosition moves the window to p on the screen, in logical pixels.
+// SetPosition moves the window to p on its screen, in logical pixels.
 func (w *Window) SetPosition(p Point) {
 	w.cfg.Position = &p
 	w.native(func(nw *ggwd.Window) { nw.SetPosition(p.X, p.Y) })
@@ -1096,16 +1107,49 @@ func windowState(s ggwd.WindowState) WindowState {
 
 // Screen describes a display.
 type Screen struct {
+	// Name is the display's name, for people. Two displays of one model
+	// may share it, and on Windows most are "Generic PnP Monitor".
 	Name string
+	// ID tells the display from every other connected, and the display
+	// keeps it across restarts: what to save to open a window on it again,
+	// with Config.Screen. It is empty in a browser.
+	ID string
+	// Position is the display's top-left corner in the desktop, which
+	// every display is placed in, in logical pixels: on macOS from the main
+	// display's corner, elsewhere the desktop's pixels divided by this
+	// display's Scale. A window's Position is on its display, from here.
+	Position Point
 	// Size is the display's size in logical pixels.
 	Size Size
+	// WorkArea is the part of the display the menu bar, the dock and the
+	// taskbar leave to windows, from the display's top-left corner.
+	WorkArea Rect
 	// Scale is the display's physical pixels per logical pixel.
 	Scale float64
 }
 
 func screenOf(m *ggwd.Monitor) Screen {
 	width, height := m.Size()
-	return Screen{Name: m.Name(), Size: Sz(float64(width), float64(height)), Scale: m.DeviceScaleFactor()}
+	x, y := m.Position()
+	ax, ay, aw, ah := m.WorkArea()
+	return Screen{
+		Name: m.Name(), ID: m.ID(), Position: Pt(x, y),
+		Size: Sz(width, height), WorkArea: Rct(Pt(ax, ay), Sz(aw, ah)),
+		Scale: m.DeviceScaleFactor(),
+	}
+}
+
+// monitorByID is the connected display whose ID is id, or nil.
+func monitorByID(id string) *ggwd.Monitor {
+	if id == "" || !appRunning.Load() {
+		return nil
+	}
+	for _, m := range ggwd.AppendMonitors(nil) {
+		if m.ID() == id {
+			return m
+		}
+	}
+	return nil
 }
 
 // Screen returns the display the window is on, or the zero Screen before

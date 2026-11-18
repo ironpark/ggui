@@ -7,52 +7,108 @@ import (
 	"testing"
 )
 
-// testScreens are a laptop's display, which windows open on, and an
-// external one beside it.
+// testScreens are a laptop's display, the primary, and two external
+// displays of one model beside it, which share a name: the left one above
+// the laptop's top edge, so its corner is negative.
 var testScreens = []Screen{
-	{Name: "Built-in", Size: Sz(1440, 900), Scale: 2},
-	{Name: "External", Size: Sz(2560, 1440), Scale: 1},
+	{Name: "Built-in", ID: "laptop", Size: Sz(1440, 900), WorkArea: Rct(Pt(0, 25), Sz(1440, 875)), Scale: 2},
+	{Name: "S22", ID: "s22-right", Position: Pt(1440, 0), Size: Sz(1080, 1920), WorkArea: Rct(Pt(0, 0), Sz(1080, 1920)), Scale: 1},
+	{Name: "S22", ID: "s22-left", Position: Pt(-1080, -300), Size: Sz(1080, 1920), WorkArea: Rct(Pt(0, 0), Sz(1080, 1920)), Scale: 1},
+}
+
+// on is a placement of 800x500 at pos on the display id.
+func on(id string, pos Point) placement {
+	return placement{Position: &pos, Width: 800, Height: 500, Screen: &placementScreen{ID: id}}
 }
 
 func TestPlacedKeepsAReachableFrame(t *testing.T) {
 	t.Parallel()
 	got := placed(Config{Width: 800, Height: 600}, placement{
 		Position: &Point{X: 100, Y: 80}, Width: 1000, Height: 700,
-		Screen: &placementScreen{Name: "Built-in"},
+		Screen: &placementScreen{ID: "laptop", Name: "Built-in"},
 	}, testScreens)
-	if got.Position == nil || *got.Position != Pt(100, 80) || got.Width != 1000 || got.Height != 700 || got.Maximized {
-		t.Fatalf("placed = position %v, %dx%d, maximized %t; want (100,80), 1000x700, not maximized", got.Position, got.Width, got.Height, got.Maximized)
+	if got.Screen != "laptop" || got.Position == nil || *got.Position != Pt(100, 80) || got.Width != 1000 || got.Height != 700 || got.Maximized {
+		t.Fatalf("placed = screen %q, position %v, %dx%d, maximized %t; want laptop, (100,80), 1000x700, not maximized", got.Screen, got.Position, got.Width, got.Height, got.Maximized)
 	}
 }
 
-func TestPlacedLeavesAnUnreachablePositionToTheConfig(t *testing.T) {
+func TestPlacedReopensOnASecondaryDisplay(t *testing.T) {
 	t.Parallel()
-	at := Pt(30, 40)
-	for _, c := range []struct {
-		name string
-		p    placement
-	}{
-		{"past the right edge", placement{Position: &Point{X: 5000, Y: 100}}},
-		{"below the bottom", placement{Position: &Point{X: 100, Y: 5000}}},
-		{"title bar above the top", placement{Position: &Point{X: 100, Y: -200}}},
-		{"all but a sliver off the left", placement{Position: &Point{X: -790, Y: 100}}},
-		{"on a display since unplugged", placement{Position: &Point{X: 100, Y: 100}, Screen: &placementScreen{Name: "Projector"}}},
-		{"on a display windows do not open on", placement{Position: &Point{X: 100, Y: 100}, Screen: &placementScreen{Name: "External"}}},
-	} {
-		c.p.Width, c.p.Height = 800, 500
-		for _, cfg := range []Config{{Width: 640, Height: 480}, {Width: 640, Height: 480, Position: &at}} {
-			got := placed(cfg, c.p, testScreens)
-			if got.Position != cfg.Position {
-				t.Errorf("%s, Config.Position %v: position %v; want the Config's", c.name, cfg.Position, got.Position)
-			}
-			if got.Width != 800 || got.Height != 500 {
-				t.Errorf("%s: size %dx%d; want the saved 800x500 kept", c.name, got.Width, got.Height)
-			}
+	got := placed(Config{Width: 640, Height: 480}, on("s22-right", Pt(200, 1000)), testScreens)
+	if got.Screen != "s22-right" || got.Position == nil || *got.Position != Pt(200, 1000) || got.Width != 800 || got.Height != 500 {
+		t.Fatalf("placed = screen %q at %v %dx%d; want s22-right at (200,1000) 800x500", got.Screen, got.Position, got.Width, got.Height)
+	}
+}
+
+func TestPlacedTellsDisplaysOfOneNameApart(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"s22-left", "s22-right"} {
+		if got := placed(Config{}, on(id, Pt(100, 100)), testScreens); got.Screen != id {
+			t.Errorf("a placement on %s reopened on %q", id, got.Screen)
 		}
 	}
 }
 
-func TestPlacedKeepsTheSizeWithinTheLimitsAndTheScreen(t *testing.T) {
+func TestPlacedFollowsADisplayThatWasRearranged(t *testing.T) {
+	t.Parallel()
+	// The right display was moved above the laptop, and listed first.
+	moved := []Screen{testScreens[1], testScreens[0], testScreens[2]}
+	moved[0].Position = Pt(0, -1920)
+	got := placed(Config{}, on("s22-right", Pt(200, 1000)), moved)
+	if got.Screen != "s22-right" || got.Position == nil || *got.Position != Pt(200, 1000) {
+		t.Fatalf("placed = screen %q at %v; want s22-right at (200,1000), on the display wherever it is", got.Screen, got.Position)
+	}
+}
+
+func TestPlacedLeavesThePlaceToTheConfigWhenTheDisplayIsGone(t *testing.T) {
+	t.Parallel()
+	at := Pt(30, 40)
+	unplugged := testScreens[:1]
+	for _, p := range []placement{
+		on("s22-right", Pt(200, 1000)),
+		{Position: &Point{X: 100, Y: 100}, Width: 800, Height: 500}, // no display named
+	} {
+		for _, cfg := range []Config{{Width: 640, Height: 480}, {Width: 640, Height: 480, Position: &at, Screen: "laptop"}} {
+			got := placed(cfg, p, unplugged)
+			if got.Position != cfg.Position || got.Screen != cfg.Screen {
+				t.Errorf("display %v gone, Config at %v on %q: reopened at %v on %q; want the Config's", p.Screen, cfg.Position, cfg.Screen, got.Position, got.Screen)
+			}
+			if got.Width != 800 || got.Height != 500 {
+				t.Errorf("display %v gone: size %dx%d; want the saved 800x500 kept", p.Screen, got.Width, got.Height)
+			}
+		}
+	}
+	// The size is fit to the display the Config opens on.
+	got := placed(Config{Screen: "laptop"}, placement{Width: 1080, Height: 1900, Screen: &placementScreen{ID: "gone"}}, unplugged)
+	if got.Width != 1080 || got.Height != 875 {
+		t.Fatalf("a tall window from a display gone is %dx%d; want 1080x875, the laptop's work area", got.Width, got.Height)
+	}
+}
+
+func TestPlacedBringsAnUnreachablePositionIntoTheWorkArea(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name string
+		at   Point
+		want Point
+	}{
+		{"past the right edge", Pt(5000, 100), Pt(640, 100)},
+		{"below the bottom", Pt(100, 5000), Pt(100, 400)},
+		{"title bar under the menu bar", Pt(100, -200), Pt(100, 25)},
+		{"all but a sliver off the left", Pt(-790, 100), Pt(0, 100)},
+	} {
+		got := placed(Config{}, on("laptop", c.at), testScreens)
+		if got.Screen != "laptop" || got.Position == nil || *got.Position != c.want || got.Width != 800 || got.Height != 500 {
+			t.Errorf("%s: reopened on %q at %v %dx%d; want laptop at %v 800x500", c.name, got.Screen, got.Position, got.Width, got.Height, c.want)
+		}
+	}
+	// Partly off the edge but within reach, it stays where the user left it.
+	if got := placed(Config{}, on("laptop", Pt(1000, 100)), testScreens); got.Position == nil || *got.Position != Pt(1000, 100) {
+		t.Errorf("a reachable window partly off the edge moved to %v", got.Position)
+	}
+}
+
+func TestPlacedKeepsTheSizeWithinTheLimitsAndTheWorkArea(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
 		name         string
@@ -60,13 +116,13 @@ func TestPlacedKeepsTheSizeWithinTheLimitsAndTheScreen(t *testing.T) {
 		w, h         float64
 		wantW, wantH int
 	}{
-		{"larger than the screen", Config{}, 3000, 2000, 1440, 900},
+		{"larger than the work area", Config{}, 3000, 2000, 1440, 875},
 		{"beyond the maximum", Config{MaxWidth: 1000, MaxHeight: 500}, 1200, 800, 1000, 500},
 		{"below the minimum", Config{MinWidth: 300, MinHeight: 200}, 100, 50, 300, 200},
-		{"a minimum larger than the screen", Config{MinWidth: 2000}, 3000, 600, 2000, 600},
+		{"a minimum larger than the display", Config{MinWidth: 2000}, 3000, 600, 2000, 600},
 		{"a fraction", Config{}, 640.6, 480.4, 641, 480},
 	} {
-		got := placed(c.cfg, placement{Width: c.w, Height: c.h}, testScreens)
+		got := placed(c.cfg, placement{Width: c.w, Height: c.h, Screen: &placementScreen{ID: "laptop"}}, testScreens)
 		if got.Width != c.wantW || got.Height != c.wantH {
 			t.Errorf("%s: %dx%d; want %dx%d", c.name, got.Width, got.Height, c.wantW, c.wantH)
 		}
@@ -75,17 +131,17 @@ func TestPlacedKeepsTheSizeWithinTheLimitsAndTheScreen(t *testing.T) {
 
 func TestPlacedReopensMaximizedOverTheNormalFrame(t *testing.T) {
 	t.Parallel()
-	got := placed(Config{Width: 800, Height: 600}, placement{
-		Position: &Point{X: 50, Y: 60}, Width: 900, Height: 650, Maximized: true,
-	}, testScreens)
+	p := on("s22-left", Pt(50, 60))
+	p.Maximized = true
+	got := placed(Config{Width: 800, Height: 600}, p, testScreens)
 	if !got.Maximized {
 		t.Fatal("a placement saved maximized reopened normal")
 	}
-	if got.Position == nil || *got.Position != Pt(50, 60) || got.Width != 900 || got.Height != 650 {
-		t.Fatalf("the frame Restore returns to is %v %dx%d; want (50,60) 900x650", got.Position, got.Width, got.Height)
+	if got.Screen != "s22-left" || got.Position == nil || *got.Position != Pt(50, 60) || got.Width != 800 || got.Height != 500 {
+		t.Fatalf("the frame Restore returns to is %v %dx%d on %q; want (50,60) 800x500 on s22-left", got.Position, got.Width, got.Height, got.Screen)
 	}
 	// What the user left wins over what the app asks for.
-	if placed(Config{Maximized: true}, placement{Width: 900, Height: 650}, testScreens).Maximized {
+	if placed(Config{Maximized: true}, on("laptop", Pt(10, 30)), testScreens).Maximized {
 		t.Fatal("a window closed normal reopened maximized because its Config says so")
 	}
 }
@@ -98,13 +154,13 @@ func TestPlacedWithNothingToGoOnLeavesTheConfig(t *testing.T) {
 		p       placement
 		screens []Screen
 	}{
-		"no screens":     {placement{Position: &Point{X: 100, Y: 100}, Width: 900, Height: 700}, nil},
-		"no size":        {placement{Position: &Point{X: 100, Y: 100}}, testScreens},
-		"negative width": {placement{Width: -5, Height: 700}, testScreens},
+		"no screens":     {on("laptop", Pt(100, 100)), nil},
+		"no size":        {placement{Position: &Point{X: 100, Y: 100}, Screen: &placementScreen{ID: "laptop"}}, testScreens},
+		"negative width": {placement{Width: -5, Height: 700, Screen: &placementScreen{ID: "laptop"}}, testScreens},
 	} {
 		got := placed(cfg, c.p, c.screens)
-		if got.Position != cfg.Position || got.Width != 640 || got.Height != 480 || !got.Maximized {
-			t.Errorf("%s: the Config changed to %v %dx%d maximized %t", name, got.Position, got.Width, got.Height, got.Maximized)
+		if got.Position != cfg.Position || got.Screen != "" || got.Width != 640 || got.Height != 480 || !got.Maximized {
+			t.Errorf("%s: the Config changed to %v on %q %dx%d maximized %t", name, got.Position, got.Screen, got.Width, got.Height, got.Maximized)
 		}
 	}
 }
@@ -122,7 +178,7 @@ func rememberingApp(t *testing.T, dir string) *App {
 // openRemembering does what Window.open does with the window's placement,
 // without the native window: restores it and starts keeping it.
 func openRemembering(w *Window) {
-	w.trackPlacement(w.restorePlacement(testScreens))
+	w.trackPlacement(w.restorePlacement(testScreens), screenWithID(w.cfg.Screen, testScreens))
 }
 
 func TestARememberedPlacementComesBackAfterClose(t *testing.T) {
@@ -130,38 +186,38 @@ func TestARememberedPlacementComesBackAfterClose(t *testing.T) {
 	dir := t.TempDir()
 	a := rememberingApp(t, dir)
 	openRemembering(a.Window)
-	// What notePlacement takes from a window moved and resized, then
-	// maximized.
-	a.remembered = placement{Position: &Point{X: 120, Y: 90}, Width: 1000, Height: 700, Screen: &placementScreen{Name: "Built-in"}}
+	// What notePlacement takes from a window moved onto the left external
+	// display and resized, then maximized there.
+	a.remembered = placement{Position: &Point{X: 120, Y: 90}, Width: 1000, Height: 700, Screen: &placementScreen{ID: "s22-left", Name: "S22"}}
 	a.remembered.Maximized = true
 	a.Close()
 
 	b := rememberingApp(t, dir)
 	openRemembering(b.Window)
-	if b.cfg.Position == nil || *b.cfg.Position != Pt(120, 90) || b.cfg.Width != 1000 || b.cfg.Height != 700 || !b.cfg.Maximized {
-		t.Fatalf("reopened at %v %dx%d maximized %t; want (120,90) 1000x700 maximized", b.cfg.Position, b.cfg.Width, b.cfg.Height, b.cfg.Maximized)
+	if b.cfg.Screen != "s22-left" || b.cfg.Position == nil || *b.cfg.Position != Pt(120, 90) || b.cfg.Width != 1000 || b.cfg.Height != 700 || !b.cfg.Maximized {
+		t.Fatalf("reopened on %q at %v %dx%d maximized %t; want s22-left (120,90) 1000x700 maximized", b.cfg.Screen, b.cfg.Position, b.cfg.Width, b.cfg.Height, b.cfg.Maximized)
 	}
 	// Closed again untouched, it keeps what it opened with.
 	b.Close()
 	c := rememberingApp(t, dir)
 	openRemembering(c.Window)
-	if c.cfg.Position == nil || *c.cfg.Position != Pt(120, 90) || c.cfg.Width != 1000 || !c.cfg.Maximized {
-		t.Fatalf("a window closed as it opened lost its placement: %v %dx%d maximized %t", c.cfg.Position, c.cfg.Width, c.cfg.Height, c.cfg.Maximized)
+	if c.cfg.Screen != "s22-left" || c.cfg.Position == nil || *c.cfg.Position != Pt(120, 90) || c.cfg.Width != 1000 || !c.cfg.Maximized {
+		t.Fatalf("a window closed as it opened lost its placement: %q %v %dx%d maximized %t", c.cfg.Screen, c.cfg.Position, c.cfg.Width, c.cfg.Height, c.cfg.Maximized)
 	}
 }
 
-func TestARememberedPlacementOffEveryScreenOpensWhereTheConfigSays(t *testing.T) {
+func TestARememberedPlacementOnADisplaySinceUnpluggedOpensWhereTheConfigSays(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	a := rememberingApp(t, dir)
 	openRemembering(a.Window)
-	a.remembered = placement{Position: &Point{X: 4000, Y: 3000}, Width: 900, Height: 600}
+	a.remembered = placement{Position: &Point{X: 400, Y: 300}, Width: 900, Height: 600, Screen: &placementScreen{ID: "projector"}}
 	a.Close()
 
 	b := rememberingApp(t, dir)
 	openRemembering(b.Window)
-	if b.cfg.Position != nil || b.cfg.Width != 900 || b.cfg.Height != 600 {
-		t.Fatalf("reopened at %v %dx%d; want centered at the saved 900x600", b.cfg.Position, b.cfg.Width, b.cfg.Height)
+	if b.cfg.Screen != "" || b.cfg.Position != nil || b.cfg.Width != 900 || b.cfg.Height != 600 {
+		t.Fatalf("reopened on %q at %v %dx%d; want centered on the default display at the saved 900x600", b.cfg.Screen, b.cfg.Position, b.cfg.Width, b.cfg.Height)
 	}
 }
 
