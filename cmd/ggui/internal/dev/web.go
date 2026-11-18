@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -33,8 +34,11 @@ type Web struct {
 	Addr    string // host:port to listen on
 	Extra   []string
 	OutDir  string // where ggui build writes, never watched
-	Watch   bool
-	Log     io.Writer
+	// Config is ggui.toml's path: a change to it is rebuilt for, and said
+	// to need the server started again.
+	Config string
+	Watch  bool
+	Log    io.Writer
 	// Tracef, when set, is told each decision the watcher and the loop
 	// make.
 	Tracef func(format string, args ...any)
@@ -194,6 +198,11 @@ func (w *Web) loop(ctx context.Context, changes <-chan watch.Change, srv *web.Se
 			id, batch, _ := p.start()
 			p.done(id)
 			w.out.Info("%s changed, rebuilding", w.out.Cyan(describe(w.Dir, batch)))
+			if w.Config != "" && slices.Contains(batch, w.Config) {
+				// The server was made with the file's settings; the
+				// desktop loop takes them up again, this one does not.
+				w.out.Warn("%s changed: start ggui dev --web again for its settings to take effect", displayPath(w.Config))
+			}
 			srv.Rebuild()
 		}
 	}

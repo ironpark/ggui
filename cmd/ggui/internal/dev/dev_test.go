@@ -192,3 +192,60 @@ func TestDescribe(t *testing.T) {
 		t.Errorf("describe = %q, want %q", got, want)
 	}
 }
+
+// ggui.toml edited while dev runs: its settings are read again, the app is
+// rebuilt and started with them, and a file that cannot be read leaves
+// the settings in use.
+func TestNativeReloadsItsSettings(t *testing.T) {
+	dir := module(t, "v1")
+	cfg := filepath.Join(dir, "ggui.toml")
+	write := func(s string) {
+		t.Helper()
+		if err := os.WriteFile(cfg, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		future := time.Now().Add(time.Duration(len(s)) * time.Second)
+		os.Chtimes(cfg, future, future)
+	}
+	write("one")
+	var out, log syncBuffer
+	n := &Native{
+		Dir: dir, Package: ".", Watch: true,
+		Args: []string{"a"}, Env: map[string]string{"DEV_TEST": "one"},
+		Extra: []string{cfg}, Config: cfg,
+		StopTimeout: 5 * time.Second,
+		Log:         &log, Stdout: &out, Stderr: &out,
+	}
+	// The file's content stands for the settings it holds.
+	n.Reload = func() (Settings, []string, error) {
+		b, err := os.ReadFile(cfg)
+		if err != nil {
+			return Settings{}, nil, err
+		}
+		if string(b) == "broken" {
+			return Settings{}, nil, os.ErrInvalid
+		}
+		return Settings{
+			Args: []string{"a", "b"}, Env: map[string]string{"DEV_TEST": string(b)}, Extra: []string{cfg},
+		}, []string{"dev.display changed: start ggui dev again"}, nil
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- n.Run(ctx) }()
+
+	waitFor(t, &out, "v1 one 1")
+	write("two")
+	waitFor(t, &out, "v1 two 2")
+	waitFor(t, &log, "read again")
+	waitFor(t, &log, "dev.display changed")
+
+	write("broken")
+	waitFor(t, &log, "the settings it had stay in use")
+	writeMsg(t, dir, "v2")
+	waitFor(t, &out, "v2 two 2")
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}

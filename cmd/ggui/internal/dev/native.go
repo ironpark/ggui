@@ -53,6 +53,15 @@ type Native struct {
 	// Force, when closed, kills the app at once instead of waiting out
 	// StopTimeout: a second Ctrl-C.
 	Force <-chan struct{}
+	// Config is ggui.toml's path, and Reload reads it again: when the file
+	// changes while Run watches, the settings Reload returns replace Tags,
+	// Args, Env and Extra, for the build the change starts and the app
+	// that build is run as. Notes are said as they are: what in the file
+	// changed that only starting ggui dev again takes up. A file that
+	// cannot be read is said, and the settings in use stay. Without
+	// Reload the settings are those Run started with.
+	Config string
+	Reload func() (s Settings, notes []string, err error)
 	// Display, when set, shows the app in a viewer's window rather than
 	// in its own: remote display. When there is no viewer to be had, or
 	// it goes away, the app opens its own window for the rest of the
@@ -66,11 +75,14 @@ type Native struct {
 	// make: ggui dev --verbose.
 	Tracef func(format string, args ...any)
 
-	tmp  string
-	seq  int
-	app  *proc.Process
-	exe  string // the build app is running, or the last that built
-	w    *watch.Watcher
+	tmp string
+	seq int
+	app *proc.Process
+	exe string // the build app is running, or the last that built
+	w   *watch.Watcher
+	// set guards list and Extra, which the watcher lists the sources with
+	// on a goroutine of its own while a reload replaces them.
+	set  sync.Mutex
 	list gotool.ListOptions
 
 	plan    plan
@@ -91,6 +103,15 @@ type Native struct {
 	built    time.Duration
 	started  time.Time
 	shown    bool // the running app's first frame is up
+}
+
+// Settings are what ggui.toml gives a running session that it can take up
+// without starting again.
+type Settings struct {
+	Tags  []string
+	Args  []string
+	Env   map[string]string
+	Extra []string
 }
 
 // say returns ggui's own messages' Output: Log, each line marked ggui.
@@ -172,7 +193,10 @@ func (n *Native) Run(ctx context.Context) error {
 	if n.Watch {
 		ig := watch.NewIgnore(n.OutDir)
 		list := func(ctx context.Context) ([]string, error) {
-			return WatchSet(ctx, n.list, n.Package, n.Extra, ig)
+			n.set.Lock()
+			lo, extra := n.list, n.Extra
+			n.set.Unlock()
+			return WatchSet(ctx, lo, n.Package, extra, ig)
 		}
 		// go list may have modules to download first.
 		s := n.say().Step("finding the files to watch", ui.QuietStart())
@@ -231,6 +255,9 @@ func (n *Native) Run(ctx context.Context) error {
 			id, batch, since := n.plan.start()
 			n.changed, n.cause = since, "the change"
 			n.logf("%s changed, rebuilding", n.say().Cyan(describe(n.Dir, batch)))
+			if n.Config != "" && slices.Contains(batch, n.Config) {
+				n.reload()
+			}
 			n.send(viewer.Command{Type: viewer.Building})
 			n.launch(ctx, id, batch)
 		case r := <-n.results:
@@ -277,6 +304,36 @@ func (n *Native) Run(ctx context.Context) error {
 				return nil
 			}
 		}
+	}
+}
+
+// reload takes ggui.toml's settings up again after it changed: the build
+// about to start is of them, and the app it is run as has their arguments
+// and environment. The sources are listed again, since the tags and
+// dev.watch decide which files are watched.
+func (n *Native) reload() {
+	if n.Reload == nil {
+		return
+	}
+	s, notes, err := n.Reload()
+	if err != nil {
+		n.say().Error("%s: %v; the settings it had stay in use", displayPath(n.Config), err)
+		return
+	}
+	tags := slices.Clone(s.Tags)
+	if n.Display != nil {
+		tags = append(tags, RemoteTag)
+	}
+	n.set.Lock()
+	n.Tags, n.Args, n.Env, n.Extra = tags, s.Args, s.Env, s.Extra
+	n.list.Tags = tags
+	n.set.Unlock()
+	n.logf("%s read again", displayPath(n.Config))
+	for _, note := range notes {
+		n.warnf("%s", note)
+	}
+	if n.w != nil {
+		n.w.Relist()
 	}
 }
 
@@ -327,6 +384,7 @@ func (n *Native) launch(ctx context.Context, id int, batch []string) {
 		opts = append(opts, ui.NoSpin())
 	}
 	n.step, n.stepID = n.say().Step("building the app", opts...), id
+	tags := n.Tags // a reload may replace them while this build runs
 	go func() {
 		defer cancel()
 		r := buildResult{id: id, batch: batch}
@@ -340,7 +398,7 @@ func (n *Native) launch(ctx context.Context, id int, batch []string) {
 			r.err = os.MkdirAll(work, 0o755)
 			if r.err == nil {
 				r.err = gotool.Build(ctx, gotool.BuildOptions{
-					Dir: n.Dir, Package: n.Package, Output: exe, Tags: n.Tags, TmpDir: work,
+					Dir: n.Dir, Package: n.Package, Output: exe, Tags: tags, TmpDir: work,
 				})
 				// A cancelled build is killed, and leaves the go command's
 				// work directory behind.
