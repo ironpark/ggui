@@ -1,4 +1,4 @@
-package gfxtest
+package headless
 
 import (
 	"fmt"
