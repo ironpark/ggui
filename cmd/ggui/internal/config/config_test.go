@@ -95,12 +95,10 @@ func errorsOf(t *testing.T, src string) Errors {
 	if err == nil {
 		t.Fatalf("no error for:\n%s", src)
 	}
-	var es Errors
-	if errors.As(err, &es) {
+	if es, ok := errors.AsType[Errors](err); ok {
 		return es
 	}
-	var e *Error
-	if errors.As(err, &e) {
+	if e, ok := errors.AsType[*Error](err); ok {
 		return Errors{e}
 	}
 	t.Fatalf("error %T %v is not a config error", err, err)

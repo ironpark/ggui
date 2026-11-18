@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -150,8 +151,8 @@ func DefaultID(importPath string) string {
 	var out []string
 	if host := parts[0]; strings.Contains(host, ".") {
 		hp := strings.Split(host, ".")
-		for i := len(hp) - 1; i >= 0; i-- {
-			out = append(out, hp[i])
+		for _, h := range slices.Backward(hp) {
+			out = append(out, h)
 		}
 		parts = parts[1:]
 	} else {

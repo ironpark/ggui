@@ -220,8 +220,7 @@ func (b *Binary) Ensure(ctx context.Context) (built bool, err error) {
 	if err := gotool.Build(ctx, gotool.BuildOptions{Dir: b.Dir, Package: Package, Output: tmp.Name()}); err != nil {
 		os.Remove(tmp.Name())
 		os.Remove(dir) // if no other session builds there
-		var be *gotool.BuildError
-		if errors.As(err, &be) {
+		if be, ok := errors.AsType[*gotool.BuildError](err); ok {
 			return false, fmt.Errorf("building the viewer failed:\n%s", be.Error())
 		}
 		return false, err

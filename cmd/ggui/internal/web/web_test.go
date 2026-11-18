@@ -85,10 +85,10 @@ func TestWriteBundle(t *testing.T) {
 	dir := tinyApp(t)
 	out := filepath.Join(dir, "build", "web")
 	r, err := WriteBundle(t.Context(), BundleOptions{
-		BuildOptions: BuildOptions{Dir: dir, Package: ".", LDFlags: "-s -w", Trimpath: true},
-		OutDir:       out,
-		Title:        "Tiny",
-		Base:         "/tiny/",
+		Dir: dir, Package: ".", LDFlags: "-s -w", Trimpath: true,
+		OutDir: out,
+		Title:  "Tiny",
+		Base:   "/tiny/",
 	})
 	if err != nil {
 		t.Fatal(err)

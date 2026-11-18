@@ -116,7 +116,7 @@ func (ig *Ignore) Filter(paths []string) []bool {
 
 // fallback is the rule without git: a path in node_modules is ignored.
 func fallback(path string) bool {
-	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
+	for part := range strings.SplitSeq(filepath.ToSlash(path), "/") {
 		if slices.Contains(fallbackIgnored, part) {
 			return true
 		}
@@ -177,7 +177,7 @@ func (ig *Ignore) checkIgnore(top string, paths []string, idx []int) (ignored ma
 		}
 	}
 	ignored = map[int]bool{}
-	for _, name := range bytes.Split(out, []byte{0}) {
+	for name := range bytes.SplitSeq(out, []byte{0}) {
 		if i, found := byName[string(name)]; found {
 			ignored[i] = true
 		}
