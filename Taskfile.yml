@@ -136,6 +136,39 @@ tasks:
       - 'GOOS=windows GOARCH=amd64 "{{.GO}}" test -c -o /dev/null ./internal/platform/a11ybridge'
       - 'GOOS=windows GOARCH=arm64 "{{.GO}}" test -c -o /dev/null ./internal/platform/a11ybridge'
 
+  vet:linux:
+    desc: Type-check and vet the Linux build from any host
+    cmds:
+      - 'GOOS=linux GOARCH=amd64 "{{.GO}}" vet ./...'
+      - 'GOOS=linux GOARCH=amd64 "{{.GO}}" vet -C cmd/ggui ./...'
+
+  check:
+    desc: What a push most often fails CI for, without running the tests
+    # Of the runs that failed on main, a third failed staticcheck alone and
+    # most of the rest in code only Windows or Linux compiles: neither shows
+    # in fmt, vet and test on the one system at hand. This is the lint job
+    # and the other systems' type-checks, in a minute or two.
+    cmds:
+      - task: fmt
+      - task: vet
+      - task: vet:windows
+      - task: vet:linux
+      - task: lint
+
+  hooks:
+    desc: Have git run task check before each push
+    cmds:
+      - |
+        hook="$(git rev-parse --git-path hooks/pre-push)"
+        if [ -e "$hook" ] && ! grep -q 'task check' "$hook"; then
+          echo "$hook exists and is not this one; add 'task check' to it yourself" >&2
+          exit 1
+        fi
+        mkdir -p "$(dirname "$hook")"
+        printf '#!/bin/sh\n# Installed by task hooks: the checks CI most often fails a push for.\n# Skip once with git push --no-verify.\nexec task check\n' > "$hook"
+        chmod +x "$hook"
+        echo "installed $hook"
+
   lint:
     desc: Run staticcheck for every platform the tree has code for
     # Code a platform does not compile looks unused on it, so each platform

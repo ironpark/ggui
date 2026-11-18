@@ -24,6 +24,8 @@ On macOS, install it with `brew install go-task`.
 | `task test` | Run `go test ./...`. |
 | `task vet` | Run `go vet ./...`. |
 | `task lint` | Run `staticcheck` once per platform, since code one platform does not compile looks unused on it. |
+| `task check` | Format, vet for this system, Windows and Linux, and lint: what CI most often fails a push for, without running the tests. |
+| `task hooks` | Install a git `pre-push` hook that runs `task check`; `git push --no-verify` skips it once. |
 | `task fuzz FUZZTIME=1m` | Run every fuzz target for `FUZZTIME` each, 10s by default. |
 | `task fmt` | Format Go sources. |
 | `task tidy` | Update module dependency metadata. |
