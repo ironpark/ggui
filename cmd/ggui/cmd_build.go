@@ -15,6 +15,7 @@ import (
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
 	"github.com/ironpark/ggui/cmd/ggui/internal/i18n"
+	"github.com/ironpark/ggui/cmd/ggui/internal/linux"
 	"github.com/ironpark/ggui/cmd/ggui/internal/macos"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 	"github.com/ironpark/ggui/cmd/ggui/internal/svgicon"
@@ -44,6 +45,11 @@ Targets:
            version information from [app] and [windows], and a manifest,
            linked as a GUI program that opens no console (--console keeps
            it). The default on Windows.
+  linux    an install tree, name-linux-arch, in the output directory: the
+           program in usr/bin, built for the go command's GOARCH (amd64,
+           arm64 or riscv64) without cgo, a desktop entry, the icon made
+           from app.icon in the hicolor sizes, and AppStream metadata.
+           Also the tarball name-version-linux-arch.tar.gz of the tree.
   web      a directory for any static host: index.html, main.wasm and the
            Go toolchain's wasm_exec.js, each with a precompressed .gz copy,
            the binary run through wasm-opt (web.wasm_opt) when installed.
@@ -62,7 +68,7 @@ with its app-specific password in $GGUI_NOTARY_PASSWORD. docs/cli.md
 has the details.`,
 	flags: func(fs *flag.FlagSet) func(context.Context, []string, []string) error {
 		cfgPath := fs.String("config", "", "read `file` instead of the ggui.toml found from the current directory")
-		tgt := fs.String("target", defaultTarget(), "what to build: `macos`, windows, web or native")
+		tgt := fs.String("target", defaultTarget(), "what to build: `macos`, windows, linux, web or native")
 		out := fs.String("out", "", "the output `directory`, replacing build.output")
 		universal := fs.Bool("universal", false, "with --target macos, build for Apple silicon and Intel and join them with lipo (macOS only)")
 		console := fs.Bool("console", false, "with --target windows, link for the console, which Windows opens a window of, replacing windows.console")
@@ -126,11 +132,21 @@ has the details.`,
 					return fmt.Errorf("GOARCH=%s: ggui builds Windows programs for %s; set GOARCH to one of them", b.arch, strings.Join(windows.Arches, ", "))
 				}
 				lo.GOOS, lo.GOARCH = "windows", b.arch
+			case "linux":
+				env, err := gotool.Env(ctx, proj.Root, []string{"GOOS=linux"}, "GOARCH")
+				if err != nil {
+					return err
+				}
+				b.arch = env["GOARCH"]
+				if !slices.Contains(linux.Arches, b.arch) {
+					return fmt.Errorf("GOARCH=%s: ggui packages Linux programs for %s; set GOARCH to one of them", b.arch, strings.Join(linux.Arches, ", "))
+				}
+				lo.GOOS, lo.GOARCH = "linux", b.arch
 			case "web":
 				lo.GOOS, lo.GOARCH = "js", "wasm"
 			case "native":
 			default:
-				return fmt.Errorf("unknown --target %q: use macos, windows, web or native", *tgt)
+				return fmt.Errorf("unknown --target %q: use macos, windows, linux, web or native", *tgt)
 			}
 			if *universal && *tgt != "macos" {
 				return errors.New("--universal makes a macOS bundle: add --target macos")
@@ -154,6 +170,8 @@ has the details.`,
 				return b.macos(ctx)
 			case "windows":
 				return b.windows(ctx)
+			case "linux":
+				return b.linux(ctx)
 			case "web":
 				return b.web(ctx)
 			default:
@@ -185,7 +203,7 @@ type builder struct {
 	universal bool
 	mac       macFlags
 	console   bool   // link a Windows program for the console
-	arch      string // the GOARCH of a Windows build
+	arch      string // the GOARCH of a Windows or Linux build
 }
 
 // macFlags are the flags that sign, notarize and package a macOS build.
@@ -274,12 +292,20 @@ func (b *builder) signing() (s macos.Signing, notarize bool, err error) {
 	return s, f.boolean("notarize", f.notarize, m.Notarize), nil
 }
 
-// release returns the options every release build shares.
+// buildIDVar is the variable of the ggui package the linker sets to the
+// app's ID, which the program then knows itself by: on X11 its window
+// class, which a desktop matches to the desktop entry of that name.
+const buildIDVar = "github.com/ironpark/ggui.buildID"
+
+// release returns the options every release build shares: stripped, the
+// app's ID set in the ggui package, after build.ldflags so that it is
+// the ID the files of a bundle are named for.
 func (b *builder) release(output string) gotool.BuildOptions {
 	ld := "-s -w"
 	if b.ldflags != "" {
 		ld += " " + b.ldflags
 	}
+	ld += " -X " + buildIDVar + "=" + b.main.ID
 	return gotool.BuildOptions{
 		Dir: b.proj.Root, Package: b.main.Package, Output: output,
 		Tags: b.tags, LDFlags: ld, Trimpath: true,
@@ -769,6 +795,118 @@ func (b *builder) windows(ctx context.Context) error {
 		log.Note("%s", log.Dim("for "+b.arch+", this machine's architecture; most PCs need GOARCH=amd64"))
 	}
 	return report(o.Output, "windows/"+b.arch)
+}
+
+// linuxApp is what the Linux files say about the app.
+func (b *builder) linuxApp() linux.App {
+	cfg := b.proj.Config
+	return linux.App{
+		Name:    b.main.Name,
+		ID:      b.main.ID,
+		Package: linuxPackage(b.main),
+		Version: cfg.App.Version,
+		Arch:    b.arch,
+	}
+}
+
+// linuxPackage is the package name, and the program's name in /usr/bin:
+// made from the app's name, else the main package's, else the last part
+// of the ID.
+func linuxPackage(m *project.Main) string {
+	for _, s := range []string{m.Name, m.Executable, m.ID[strings.LastIndexByte(m.ID, '.')+1:]} {
+		if p := linux.PackageName(s); p != "" {
+			return p
+		}
+	}
+	return "app"
+}
+
+// linux builds the install tree Package-linux-Arch: the program for
+// linux/arch without cgo, as ggwd and ggfx load the system's libraries
+// at run time, with its desktop entry, icons and AppStream metadata; and
+// from the tree the archives asked for.
+func (b *builder) linux(ctx context.Context) error {
+	if err := b.proj.CheckIcon(); err != nil {
+		return err
+	}
+	cfg := b.proj.Config
+	dir, err := b.proj.OutDir(b.out)
+	if err != nil {
+		return err
+	}
+	log := ui.Stderr
+	app := b.linuxApp()
+
+	tmp, err := os.MkdirTemp("", "ggui-build-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmp)
+	icon, err := b.icon(ctx, tmp)
+	if err != nil {
+		return err
+	}
+	svg := ""
+	if p := b.proj.Path(cfg.App.Icon); p != "" && svgicon.Is(p) {
+		svg = p
+	}
+
+	bin := filepath.Join(tmp, app.Package)
+	o := b.release(bin)
+	o.GOOS, o.GOARCH = "linux", b.arch
+	o.Env = append(o.Env, "CGO_ENABLED=0")
+	if err := b.build(ctx, o, "linux/"+b.arch); err != nil {
+		return err
+	}
+
+	name := linux.TreeName(app)
+	var (
+		tree     string
+		warnings []string
+	)
+	err = step(ctx, "Assembling "+name, "Assembled "+name, func() error {
+		tree, warnings, err = linux.Assemble(linux.Tree{
+			App:      app,
+			Binary:   bin,
+			Icon:     icon,
+			IconName: b.proj.Path(cfg.App.Icon),
+			SVG:      svg,
+			OutDir:   dir,
+		})
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	for _, w := range warnings {
+		log.Warn("%s", w)
+	}
+	if icon == "" {
+		log.Warn("app.icon is not set, so the desktop entry has no icon and desktops show a generic one")
+	}
+	if b.main.ID != cfg.App.ID {
+		log.Warn("app.id is not set, so the desktop entry is %s.desktop; set it in ggui.toml before shipping, since desktops match windows to entries by it", b.main.ID)
+	}
+	artifacts := []string{tree}
+
+	tarball := filepath.Join(dir, linux.TarName(app))
+	err = step(ctx, "Making "+filepath.Base(tarball), "Made "+filepath.Base(tarball), func() error {
+		return linux.Tar(tree, tarball)
+	})
+	if err != nil {
+		return err
+	}
+	artifacts = append(artifacts, tarball)
+
+	if runtime.GOOS != "linux" && b.arch == runtime.GOARCH && b.arch != "amd64" && os.Getenv("GOARCH") == "" {
+		log.Note("%s", log.Dim("for "+b.arch+", this machine's architecture; most PCs need GOARCH=amd64"))
+	}
+	for _, a := range artifacts {
+		if err := report(a, "linux/"+b.arch); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (b *builder) web(ctx context.Context) error {
