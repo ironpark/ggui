@@ -95,23 +95,34 @@ type frameEncoder struct {
 	slots  int // the color table's size, 1<<bits
 	npal   int // the colors in the palette
 
-	idx, want, under, chosen []byte
-	lzw                      lzwEncoder
-	data                     bytes.Buffer
-	pending                  bool
-	rect                     image.Rectangle
-	clear                    int
-	centis                   int
-	written                  int
+	idx, want, under []byte
+	lzw              lzwEncoder
+	parts            [3]encoded // the frame whole, and in two
+	pending          *encoded   // the frame to write next
+	centis           int        // how long it shows
+	written          int
 }
+
+// encoded is a part of a frame, encoded.
+type encoded struct {
+	rect   image.Rectangle
+	clear  int
+	data   bytes.Buffer
+	chosen []byte
+}
+
+// splitLead is how long the first part of a frame split in two shows,
+// in hundredths of a second: browsers show a frame of less than 2 for
+// 10, which would hold the animation up.
+const splitLead = 2
 
 // frame encodes the frame whose indices for rect are e.idx, shown for
 // centis.
 func (e *frameEncoder) frame(rect image.Rectangle, centis int, first bool) error {
 	draw := rect
-	clear := -1
-	if !first && e.level > 0 {
-		draw = e.needed(rect)
+	opt := !first && e.level > 0
+	if opt {
+		draw = e.needed(rect, rect)
 		if draw.Empty() {
 			e.centis += centis
 			return nil
@@ -120,10 +131,51 @@ func (e *frameEncoder) frame(rect image.Rectangle, centis int, first bool) error
 	if err := e.flush(); err != nil {
 		return err
 	}
+	clear := -1
+	if opt {
+		clear = e.spareIndex(rect, draw)
+	}
+	whole := &e.parts[0]
+	if err := e.encode(whole, rect, draw, clear); err != nil {
+		return err
+	}
+	if opt && e.level >= 2 && centis >= 2*splitLead {
+		// Two rectangles far apart, as the cursor and a control it
+		// changed, can cost less than the one around both: the first
+		// shows for splitLead, the second for the rest.
+		if a, b, ok := e.split(rect, draw); ok {
+			pa, pb := &e.parts[1], &e.parts[2]
+			if err := e.encode(pa, rect, a, clear); err != nil {
+				return err
+			}
+			if err := e.encode(pb, rect, b, clear); err != nil {
+				return err
+			}
+			const overhead = 20 // a graphic control, an image descriptor and their ends
+			if pa.data.Len()+pb.data.Len()+overhead < whole.data.Len() {
+				e.show(pa)
+				e.pending, e.centis = pa, splitLead
+				if err := e.flush(); err != nil {
+					return err
+				}
+				e.show(pb)
+				e.pending, e.centis = pb, centis-splitLead
+				return nil
+			}
+		}
+	}
+	e.show(whole)
+	e.pending, e.centis = whole, centis
+	return nil
+}
+
+// encode encodes the part draw of the frame whose indices for rect are
+// e.idx into p.
+func (e *frameEncoder) encode(p *encoded, rect, draw image.Rectangle, clear int) error {
 	n := draw.Dx() * draw.Dy()
 	e.want = grow(e.want, n)
 	e.under = grow(e.under, n)
-	e.chosen = grow(e.chosen, n)
+	p.chosen = grow(p.chosen, n)
 	i := 0
 	for y := draw.Min.Y; y < draw.Max.Y; y++ {
 		src := (y-rect.Min.Y)*rect.Dx() + draw.Min.X - rect.Min.X
@@ -131,47 +183,47 @@ func (e *frameEncoder) frame(rect image.Rectangle, centis int, first bool) error
 		copy(e.under[i:i+draw.Dx()], e.screen[y*e.size.X+draw.Min.X:])
 		i += draw.Dx()
 	}
-	if !first && e.level > 0 {
-		clear = e.spareIndex()
-	}
-	fc := frameCodes{want: e.want, clear: clear, lossy: e.lossy, chosen: e.chosen}
+	fc := frameCodes{want: e.want, clear: clear, lossy: e.lossy, chosen: p.chosen}
 	if clear >= 0 {
 		fc.under = e.under
 	}
-	e.data.Reset()
-	if err := e.lzw.encode(&e.data, max(e.g.bits, 2), fc); err != nil {
-		return err
-	}
-	// What the frame shows now.
-	i = 0
-	for y := draw.Min.Y; y < draw.Max.Y; y++ {
+	p.rect, p.clear = draw, clear
+	p.data.Reset()
+	return e.lzw.encode(&p.data, max(e.g.bits, 2), fc)
+}
+
+// show puts what p shows on the screen.
+func (e *frameEncoder) show(p *encoded) {
+	i := 0
+	for y := p.rect.Min.Y; y < p.rect.Max.Y; y++ {
 		row := e.screen[y*e.size.X:]
-		for x := draw.Min.X; x < draw.Max.X; x++ {
-			if c := e.chosen[i]; int(c) != clear {
+		for x := p.rect.Min.X; x < p.rect.Max.X; x++ {
+			if c := p.chosen[i]; int(c) != p.clear {
 				row[x] = c
 			}
 			i++
 		}
 	}
-	e.pending, e.rect, e.clear, e.centis = true, draw, clear, centis
-	return nil
 }
 
-// needed returns the smallest rectangle within rect around the pixels
-// whose index is not shown already, or near enough to it when lossy.
-func (e *frameEncoder) needed(rect image.Rectangle) image.Rectangle {
-	x0, y0, x1, y1 := rect.Max.X, rect.Max.Y, rect.Min.X, rect.Min.Y
-	i := 0
-	for y := rect.Min.Y; y < rect.Max.Y; y++ {
-		row := e.screen[y*e.size.X:]
-		for x := rect.Min.X; x < rect.Max.X; x++ {
-			p, s := e.idx[i], row[x]
-			i++
-			if p == s || (e.lossy != nil && e.lossy.ok[s][p]) {
-				continue
+// needs reports whether the pixel at x, y, whose index for rect is in
+// e.idx, is not shown already, nor near enough to it when lossy.
+func (e *frameEncoder) needs(rect image.Rectangle, x, y int) bool {
+	p := e.idx[(y-rect.Min.Y)*rect.Dx()+x-rect.Min.X]
+	s := e.screen[y*e.size.X+x]
+	return p != s && (e.lossy == nil || !e.lossy.ok[s][p])
+}
+
+// needed returns the smallest rectangle within in around the pixels
+// that need drawing of the frame whose indices for rect are e.idx.
+func (e *frameEncoder) needed(rect, in image.Rectangle) image.Rectangle {
+	x0, y0, x1, y1 := in.Max.X, in.Max.Y, in.Min.X, in.Min.Y
+	for y := in.Min.Y; y < in.Max.Y; y++ {
+		for x := in.Min.X; x < in.Max.X; x++ {
+			if e.needs(rect, x, y) {
+				x0, x1 = min(x0, x), max(x1, x+1)
+				y0, y1 = min(y0, y), max(y1, y+1)
 			}
-			x0, x1 = min(x0, x), max(x1, x+1)
-			y0, y1 = min(y0, y), max(y1, y+1)
 		}
 	}
 	if x0 >= x1 {
@@ -180,16 +232,74 @@ func (e *frameEncoder) needed(rect image.Rectangle) image.Rectangle {
 	return image.Rect(x0, y0, x1, y1)
 }
 
+// split cuts draw in two across the widest band of rows, or of columns,
+// with nothing to draw, each part cut to what it needs, when the two are
+// smaller than draw by a quarter.
+func (e *frameEncoder) split(rect, draw image.Rectangle) (a, b image.Rectangle, ok bool) {
+	band := func(lo, hi int, empty func(int) bool) (int, int) {
+		start, n, run := -1, 0, -1
+		for v := lo; v < hi; v++ {
+			if !empty(v) {
+				run = -1
+				continue
+			}
+			if run < 0 {
+				run = v
+			}
+			if v-run+1 > n {
+				start, n = run, v-run+1
+			}
+		}
+		return start, n
+	}
+	rows := func(y int) bool {
+		for x := draw.Min.X; x < draw.Max.X; x++ {
+			if e.needs(rect, x, y) {
+				return false
+			}
+		}
+		return true
+	}
+	cols := func(x int) bool {
+		for y := draw.Min.Y; y < draw.Max.Y; y++ {
+			if e.needs(rect, x, y) {
+				return false
+			}
+		}
+		return true
+	}
+	area := func(r image.Rectangle) int { return r.Dx() * r.Dy() }
+	best := area(draw) * 3 / 4
+	if y, n := band(draw.Min.Y, draw.Max.Y, rows); n > 0 {
+		ta := e.needed(rect, image.Rect(draw.Min.X, draw.Min.Y, draw.Max.X, y))
+		tb := e.needed(rect, image.Rect(draw.Min.X, y+n, draw.Max.X, draw.Max.Y))
+		if s := area(ta) + area(tb); s < best {
+			a, b, ok, best = ta, tb, true, s
+		}
+	}
+	if x, n := band(draw.Min.X, draw.Max.X, cols); n > 0 {
+		ta := e.needed(rect, image.Rect(draw.Min.X, draw.Min.Y, x, draw.Max.Y))
+		tb := e.needed(rect, image.Rect(x+n, draw.Min.Y, draw.Max.X, draw.Max.Y))
+		if s := area(ta) + area(tb); s < best {
+			a, b, ok = ta, tb, true
+		}
+	}
+	return a, b, ok
+}
+
 // spareIndex returns an index of the color table no pixel of the frame
 // may be written with, to be its transparent one, or -1 when it has none
 // to spare.
-func (e *frameEncoder) spareIndex() int {
+func (e *frameEncoder) spareIndex(rect, draw image.Rectangle) int {
 	if e.npal < e.slots {
 		return e.npal // past the palette: never a pixel's
 	}
 	var used [256]bool
-	for _, p := range e.want {
-		used[p] = true
+	for y := draw.Min.Y; y < draw.Max.Y; y++ {
+		row := e.idx[(y-rect.Min.Y)*rect.Dx():]
+		for x := draw.Min.X; x < draw.Max.X; x++ {
+			used[row[x-rect.Min.X]] = true
+		}
 	}
 	if e.lossy != nil {
 		for p := range 256 {
@@ -210,12 +320,13 @@ func (e *frameEncoder) spareIndex() int {
 
 // flush writes the frame encoded last.
 func (e *frameEncoder) flush() error {
-	if !e.pending {
+	p := e.pending
+	if p == nil {
 		return nil
 	}
-	e.pending = false
+	e.pending = nil
 	e.written++
-	return e.g.frame(e.rect, max(e.g.bits, 2), e.data.Bytes(), e.centis, e.clear)
+	return e.g.frame(p.rect, max(e.g.bits, 2), p.data.Bytes(), e.centis, p.clear)
 }
 
 func grow(b []byte, n int) []byte {
