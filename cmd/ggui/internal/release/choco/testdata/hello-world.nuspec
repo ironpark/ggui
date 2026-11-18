@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Written by ggui release. -->
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>hello-world</id>
+    <version>1.2.0</version>
+    <packageSourceUrl>https://github.com/alice/hello</packageSourceUrl>
+    <title>Hello World</title>
+    <authors>Alice</authors>
+    <projectUrl>https://hello.example.com</projectUrl>
+    <iconUrl>https://hello.example.com/icon.png</iconUrl>
+    <licenseUrl>https://github.com/alice/hello/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <tags>hello gui</tags>
+    <summary>Says hello</summary>
+    <description>Hello World says hello &amp; means it.</description>
+  </metadata>
+</package>
