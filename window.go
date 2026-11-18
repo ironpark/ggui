@@ -38,6 +38,17 @@ type Config struct {
 	// nil centers it.
 	Position *Point
 
+	// Remember names the window's placement, such as "main", so that it
+	// reopens where it was last closed: its position, size and whether it
+	// was maximized, kept for the user under os.UserConfigDir. A saved
+	// placement overrides Position, Width, Height and Maximized, within the
+	// size limits; one that would leave the window out of reach, as on a
+	// display since unplugged, keeps the size and leaves the position to
+	// Position. Each window of an app needs a name of its own. Empty, the
+	// default, keeps nothing. A browser, and the viewer of ggui dev, keep
+	// nothing either.
+	Remember string
+
 	Resizable bool
 	// Frameless opens the window without its title bar and border.
 	Frameless bool
@@ -198,6 +209,12 @@ type Window struct {
 	// whose regions are among those asked for.
 	pointerAsked bool
 
+	// remember is where the window keeps its placement when it closes, for
+	// Config.Remember; nil when it keeps none. remembered is the placement
+	// its events have left (see placement.go).
+	remember   *placementStore
+	remembered placement
+
 	focused  *StateValue[bool]
 	viewport *StateValue[Size]
 	state    *StateValue[WindowState]
@@ -239,12 +256,15 @@ func newWindow(app *App, rt *reactive.Runtime, cfg Config, build Builder) *Windo
 func (w *Window) open() error {
 	w.start()
 	w.ax.Start(w.Perform, w.cfg.Accessibility)
+	placements := w.restorePlacement(Screens())
 	nw, err := ggwd.NewWindow(w.cfg.options())
 	if err != nil {
 		w.release()
 		return err
 	}
 	w.window.Store(nw)
+	// Kept from here, so a window that never opened leaves what was saved.
+	w.trackPlacement(placements)
 	nw.SetTextInputEnabled(false)
 	if len(w.cfg.Icon) > 0 {
 		nw.SetIcon(w.cfg.Icon)
@@ -289,8 +309,11 @@ func (w *Window) Close() {
 	}
 }
 
-// release frees what the window holds without closing the native one.
+// release frees what the window holds without closing the native one. It
+// is where every way a window closes passes while the native window is
+// still there to ask where it stands, so the placement is kept here.
 func (w *Window) release() {
+	w.savePlacement()
 	if w.panel != nil {
 		w.panel.Release()
 	}
@@ -440,7 +463,13 @@ func (w *Window) handle(ev ggwd.Event) error {
 		}
 		w.post(func() { w.focused.Set(ev.Focused) })
 	case ggwd.WindowStateEvent:
+		w.notePlacement()
 		w.post(func() { w.state.Set(windowState(ev.State)) })
+	case ggwd.MoveEvent, ggwd.ResizeEvent:
+		// Taken as the window stands when the event is handled, not as the
+		// event says: a frame is kept only while the window is normal, which
+		// only the window can say for the same moment.
+		w.notePlacement()
 	}
 	return nil
 }
