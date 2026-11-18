@@ -18,7 +18,12 @@ type settings struct {
 	radius   float64     // the window's corner radius, logical; negative is DefaultCornerRadius
 	margin   float64     // around the window, logical; negative is DefaultMargin
 	backdrop color.Color // nil is DefaultBackdrop
-	noCursor bool
+	// separator is the Separator option's, or nil for the style's.
+	separator *bool
+	// buttonInset is the ButtonInset option's, logical; negative is the
+	// Tour's.
+	buttonInset float64
+	noCursor    bool
 	// flatten draws a transparent backdrop over white, for a GIF, which
 	// has no partial transparency.
 	flatten bool
@@ -28,7 +33,7 @@ type settings struct {
 }
 
 func resolve(opts []Option) *settings {
-	s := &settings{colors: 256, margin: -1, radius: -1}
+	s := &settings{colors: 256, margin: -1, radius: -1, buttonInset: -1}
 	for _, o := range opts {
 		o(s)
 	}
@@ -91,9 +96,22 @@ func Background(c color.Color) Option { return func(s *settings) { s.background 
 
 // Frame draws f around every frame in place of the Tour's Frame: FrameMac
 // draws the content as a macOS window, with a title bar, its buttons, a
-// border and a shadow, on a backdrop. The output grows by the frame;
+// border and a shadow, on a backdrop, and the other FrameMac styles the
+// same window with another title bar. The output grows by the frame;
 // Width scales the framed image.
 func Frame(f FrameStyle) Option { return func(s *settings) { s.frame = &f } }
+
+// Separator draws a hairline between a framed window's title bar and the
+// content, or leaves it out, in place of what macOS shows for the style:
+// a line under FrameMac's, FrameMacTitleless's and FrameMacExpanded's
+// bar, none under a unified toolbar's, which shows one only once content
+// scrolls under it. FrameMacHidden has no bar to draw one under.
+func Separator(on bool) Option { return func(s *settings) { s.separator = &on } }
+
+// ButtonInset moves FrameMacHidden's window buttons pt logical pixels
+// right and down, in place of the Tour's ButtonInset: into a sidebar the
+// app draws inset from the window's edges by pt.
+func ButtonInset(pt float64) Option { return func(s *settings) { s.buttonInset = max(pt, 0) } }
 
 // CornerRadius rounds a framed window's corners by pt logical pixels in
 // place of DefaultCornerRadius, the radius macOS 26 gives a window with a

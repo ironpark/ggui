@@ -10,7 +10,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
@@ -52,8 +54,12 @@ docs/recording.md has the details.
 --frame mac draws each frame as a macOS window, with a title bar,
 rounded corners and a shadow, on a backdrop that --backdrop sets, in
 place of the frame the tour asks for; --frame none draws the content
-alone. --cursor=false leaves out the cursor the tour's pointer steps
-draw.`,
+alone. The other mac frames are the same window with another title bar:
+mac-titleless (no title), mac-unified (a 52pt unified toolbar, the
+title after the buttons), mac-compact (a 38pt compact toolbar),
+mac-expanded (the title row over a 38pt toolbar row) and mac-hidden (no
+bar, the buttons over the content). --cursor=false leaves out the
+cursor the tour's pointer steps draw.`,
 	flags: func(fs *flag.FlagSet) func(context.Context, []string, []string) error {
 		cfgPath := fs.String("config", "", "read `file` instead of the ggui.toml found from the current directory")
 		pkg := fs.String("package", "", "the main `package` to build, replacing app.package")
@@ -67,7 +73,7 @@ draw.`,
 		dither := fs.Float64("dither", 0, "ordered dithering's `strength`, 0 (none) to 1; 0.3 smooths gradients that band")
 		loop := fs.Int("loop", 0, "play the GIF `n` times; 0 loops for ever")
 		lossy := fs.Int("lossy", 0, "let the GIF's compression write colors up to `n`/1000 off in Oklab, 0 (exact) to 200; 20 to 40 is hard to see")
-		frame := fs.String("frame", "", "draw the frames in a `style` of window frame, mac or none, in place of the tour's")
+		frame := fs.String("frame", "", "draw the frames in a `style` of window frame, in place of the tour's: "+strings.Join(recordFrames, ", "))
 		backdrop := fs.String("backdrop", "", "the `color` a framed window is drawn on, #RRGGBB or transparent")
 		cursor := fs.Bool("cursor", true, "draw the cursor the tour's pointer steps move")
 		return func(ctx context.Context, pos, rest []string) error {
@@ -90,8 +96,8 @@ draw.`,
 				return errors.New("--fps, --width and --loop are not negative")
 			case *lossy < 0 || *lossy > 200:
 				return fmt.Errorf("--lossy %d: it is 0 to 200", *lossy)
-			case *frame != "" && *frame != "mac" && *frame != "none":
-				return fmt.Errorf("--frame %s: the frames are mac and none", *frame)
+			case *frame != "" && !slices.Contains(recordFrames, *frame):
+				return fmt.Errorf("--frame %s: the frames are %s", *frame, strings.Join(recordFrames, ", "))
 			case *backdrop != "" && !validBackdrop(*backdrop):
 				return fmt.Errorf("--backdrop %s: give #RRGGBB or transparent", *backdrop)
 			}
@@ -213,13 +219,17 @@ type recordRequest struct {
 	Dither float64 `json:"dither,omitempty"`
 	Loop   int     `json:"loop,omitempty"`
 	Lossy  int     `json:"lossy,omitempty"`
-	// Frame is "mac" or "none", or "" for the tour's; Backdrop is
+	// Frame is one of recordFrames, or "" for the tour's; Backdrop is
 	// "#RRGGBB" or "transparent".
 	Frame    string `json:"frame,omitempty"`
 	Backdrop string `json:"backdrop,omitempty"`
 	NoCursor bool   `json:"no_cursor,omitempty"`
 	Report   string `json:"report,omitempty"`
 }
+
+// recordFrames are the frames package record draws, as its FrameStyle
+// writes them.
+var recordFrames = []string{"none", "mac", "mac-titleless", "mac-unified", "mac-compact", "mac-expanded", "mac-hidden"}
 
 // validBackdrop reports whether s is a backdrop the app reads: #RRGGBB or
 // transparent.

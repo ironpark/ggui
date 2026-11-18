@@ -35,8 +35,9 @@ type request struct {
 	Dither float64 `json:"dither,omitempty"`
 	Loop   int     `json:"loop,omitempty"`
 	Lossy  int     `json:"lossy,omitempty"`
-	// Frame is "mac" or "none", in place of the tour's Frame; "" keeps
-	// it. Backdrop is "#RRGGBB" or "transparent". NoCursor leaves the
+	// Frame is a FrameStyle as its String writes it ("mac",
+	// "mac-unified", "none" and the rest), in place of the tour's Frame;
+	// "" keeps it. Backdrop is "#RRGGBB" or "transparent". NoCursor leaves the
 	// cursor out.
 	Frame    string `json:"frame,omitempty"`
 	Backdrop string `json:"backdrop,omitempty"`

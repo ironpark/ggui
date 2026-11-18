@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -18,12 +19,12 @@ import (
 // The request and the report are what package record reads and writes;
 // its test checks the same strings (record/record_test.go).
 const (
-	goldenRecordRequest = `{"v":1,"tour":"intro","format":"gif","out":"/tmp/tour.gif","fps":10,"width":640,"colors":128,"dither":0.25,"loop":2,"lossy":30,"frame":"mac","backdrop":"#20242a","no_cursor":true,"report":"/tmp/report.json"}`
+	goldenRecordRequest = `{"v":1,"tour":"intro","format":"gif","out":"/tmp/tour.gif","fps":10,"width":640,"colors":128,"dither":0.25,"loop":2,"lossy":30,"frame":"mac-unified","backdrop":"#20242a","no_cursor":true,"report":"/tmp/report.json"}`
 	goldenRecordReport  = `{"v":1,"tours":["","intro"],"frames":42,"duration_ms":4200,"width":640,"height":400}`
 )
 
 func TestRecordProtocolGolden(t *testing.T) {
-	req := recordRequest{V: 1, Tour: "intro", Format: "gif", Out: "/tmp/tour.gif", FPS: 10, Width: 640, Colors: 128, Dither: 0.25, Loop: 2, Lossy: 30, Frame: "mac", Backdrop: "#20242a", NoCursor: true, Report: "/tmp/report.json"}
+	req := recordRequest{V: 1, Tour: "intro", Format: "gif", Out: "/tmp/tour.gif", FPS: 10, Width: 640, Colors: 128, Dither: 0.25, Loop: 2, Lossy: 30, Frame: "mac-unified", Backdrop: "#20242a", NoCursor: true, Report: "/tmp/report.json"}
 	if got, _ := json.Marshal(req); string(got) != goldenRecordRequest {
 		t.Errorf("request\n%s\nwant\n%s", got, goldenRecordRequest)
 	}
@@ -45,11 +46,21 @@ func TestRecordFlags(t *testing.T) {
 		{"record", "-o", "x.gif", "--frames", "dir"},
 		{"record", "--colors", "300"},
 		{"record", "--dither", "2"},
+		{"record", "--frame", "round"},
 	} {
 		var stdout, stderr bytes.Buffer
 		if code := run(args, &stdout, &stderr); code == 0 {
 			t.Errorf("%v exited 0", args)
 		}
+	}
+}
+
+// The frames --frame takes are those package record reads
+// (frameNames in record/frame.go).
+func TestRecordFrames(t *testing.T) {
+	want := []string{"none", "mac", "mac-titleless", "mac-unified", "mac-compact", "mac-expanded", "mac-hidden"}
+	if !slices.Equal(recordFrames, want) {
+		t.Errorf("the frames are %v, want %v", recordFrames, want)
 	}
 }
 

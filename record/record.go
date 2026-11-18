@@ -69,16 +69,26 @@ type Tour struct {
 	// Build returns the root of the tree drawn. It is required.
 	Build ggui.Builder
 	// Frame is what is drawn around the app: FrameNone, the default,
-	// draws the content alone; FrameMac a macOS window around it. The
-	// Frame option overrides it.
+	// draws the content alone; FrameMac a macOS window around it, and the
+	// other FrameMac styles one with another title bar. The Frame option
+	// overrides it.
 	Frame FrameStyle
-	// Title is the window's title, which FrameMac sets in its title bar,
-	// as the app's Config.Title would be.
+	// Title is the window's title, which a FrameMac style sets in its
+	// title bar, as the app's Config.Title would be.
 	Title string
-	// TitlebarHidden draws FrameMac as for a window whose Config sets
-	// TitlebarHidden: no title bar, the content up to the window's top
-	// edge and the window buttons over it.
+	// Subtitle is the line FrameMacUnified sets under the Title, as
+	// NSWindow.subtitle is; the other styles have none.
+	Subtitle string
+	// TitlebarHidden draws any FrameMac style as FrameMacHidden, as for a
+	// window whose Config sets TitlebarHidden: no title bar, the content up
+	// to the window's top edge and the window buttons over it.
 	TitlebarHidden bool
+	// ButtonInset moves FrameMacHidden's window buttons this many logical
+	// pixels right and down, for an app that draws its own sidebar inset
+	// from the window's edges, as macOS 26 floats one: the buttons sit in
+	// the sidebar's top-left corner as they would in the window's. The
+	// ButtonInset option overrides it.
+	ButtonInset float64
 	// Script walks through the app, a step at a time, with Hold, Then
 	// and the pointer and keyboard steps (MoveTo, Click, Type and the
 	// rest). It is required. A panic in it, as Probe.Tap's when nothing
@@ -306,8 +316,8 @@ func (t Tour) play(o *settings, sink func(*image.RGBA) error) (err error) {
 		cursors: cursors{scale: t.scale()},
 		mouse:   mouse{draw: !o.noCursor, shown: true, size: t.Size},
 	}
-	if r.lay.style == FrameMac {
-		r.frame = newFramer(r.lay, t.Title, o)
+	if r.lay.style.mac() {
+		r.frame = newFramer(r.lay, t.Title, t.Subtitle, o)
 	}
 	r.img = ggfx.NewImage(w, h)
 	defer r.img.Deallocate()
