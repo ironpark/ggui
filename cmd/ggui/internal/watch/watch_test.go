@@ -311,3 +311,28 @@ func TestChangeMerge(t *testing.T) {
 		t.Errorf("merged = %+v", c)
 	}
 }
+
+// A scan that catches a save between its truncating the file and writing
+// it sees an empty file. The edit is judged by what the save writes: one
+// to a comment is not a real change because the file was empty in passing.
+func TestClassifyWaitsOutATruncatedSave(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "main.go")
+	const src = "package main\n\nfunc main() {}\n"
+	touch(t, path, src)
+	w := New([]string{path}, Options{})
+	w.fingerprint([]string{path})
+
+	touch(t, path, "")
+	ds := w.scan()
+	if len(ds) != 1 {
+		t.Fatalf("the scan found %d changes, want the truncated file", len(ds))
+	}
+	go os.WriteFile(path, []byte(src+"// A comment.\n"), 0o644)
+	real, cosmetic, _ := w.classify(ds)
+	if len(real) > 0 || !slices.Equal(cosmetic, []string{path}) {
+		t.Errorf("real %v, cosmetic %v: want the comment's edit cosmetic", real, cosmetic)
+	}
+	if ds := w.scan(); len(ds) > 0 {
+		t.Errorf("the next scan judges the file again: %v", ds)
+	}
+}
