@@ -405,10 +405,10 @@ func wrapperOf(fi *fileInfo, funcs []Func, fun ast.Expr) (Func, bool) {
 // of one of funcs: the innermost function around it that declares a
 // parameter so called is one of them.
 func paramOfWrapper(fi *fileInfo, funcs []Func, litNames map[*ast.FuncLit]string, stack []ast.Node, name string) bool {
-	for i := len(stack) - 1; i >= 0; i-- {
+	for _, s := range slices.Backward(stack) {
 		var typ *ast.FuncType
 		fn := ""
-		switch n := stack[i].(type) {
+		switch n := s.(type) {
 		case *ast.FuncDecl:
 			typ, fn = n.Type, n.Name.Name
 		case *ast.FuncLit:

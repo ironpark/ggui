@@ -78,15 +78,13 @@ func (p Package) info(scripts string) (*nfpm.Info, error) {
 		Homepage:        p.Homepage,
 		License:         p.License,
 		DisableGlobbing: true,
-		Overridables: nfpm.Overridables{
-			Depends:  p.Depends,
-			Contents: contents,
-			Scripts: nfpm.Scripts{
-				PostInstall: scripts,
-				PostRemove:  scripts,
-			},
-			RPM: nfpm.RPM{Summary: summary},
+		Depends:         p.Depends,
+		Contents:        contents,
+		Scripts: nfpm.Scripts{
+			PostInstall: scripts,
+			PostRemove:  scripts,
 		},
+		RPM: nfpm.RPM{Summary: summary},
 	}
 	return nfpm.WithDefaults(in), nil
 }
