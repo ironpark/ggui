@@ -174,7 +174,10 @@ func sealResources(contents, main string) ([]byte, error) {
 				if err != nil {
 					return err
 				}
-				files2[name] = withOptional(map[string]any{"symlink": target}, r2.optional)
+				// The seal holds the target as macOS reads it, with
+				// slashes: Windows keeps a link's target with
+				// backslashes, and Readlink gives it back that way.
+				files2[name] = withOptional(map[string]any{"symlink": filepath.ToSlash(target)}, r2.optional)
 			}
 			return nil
 		}
