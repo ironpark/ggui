@@ -2,6 +2,7 @@ package dev
 
 import (
 	"encoding/json"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -29,6 +30,7 @@ func keepModule(t *testing.T, msg string) string {
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
@@ -48,7 +50,14 @@ func main() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGTERM, os.Interrupt)
 	id, addr, _ := strings.Cut(os.Getenv("GGUI_DEV_STATE"), ":")
-	conn, err := net.Dial("unix", addr)
+	// On Windows the channel is a named pipe, which a plain open reaches.
+	var conn io.ReadWriter
+	var err error
+	if strings.HasPrefix(addr, `+"`\\\\.\\pipe\\`"+`) {
+		conn, err = os.OpenFile(addr, os.O_RDWR, 0)
+	} else {
+		conn, err = net.Dial("unix", addr)
+	}
 	if err != nil {
 		fmt.Println(msg.Text, "no channel:", err)
 		<-c
@@ -174,12 +183,36 @@ func TestKeepTypeChange(t *testing.T) {
 	waitFor(t, out, "v3 handed n=1\n")
 }
 
+// dialKeep connects to a keeper as an app does: to a named pipe on
+// Windows, which a plain open reaches, and to a unix socket elsewhere. A
+// connection is closed after ten seconds, so that a test waiting on an
+// answer that never comes fails rather than hangs.
+func dialKeep(t *testing.T, addr string) io.ReadWriteCloser {
+	t.Helper()
+	var c io.ReadWriteCloser
+	var err error
+	if strings.HasPrefix(addr, `\\.\pipe\`) {
+		c, err = os.OpenFile(addr, os.O_RDWR, 0)
+	} else {
+		c, err = net.Dial("unix", addr)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	timer := time.AfterFunc(10*time.Second, func() { c.Close() })
+	t.Cleanup(func() {
+		timer.Stop()
+		c.Close()
+	})
+	return c
+}
+
 // A hello from another instance than the one started last, as from a
 // process the app started with its environment, is answered with nothing.
 func TestKeepAnswersOnlyTheInstance(t *testing.T) {
 	k, err := newKeeper()
 	if err != nil {
-		t.Skipf("no unix socket here: %v", err)
+		t.Fatalf("no channel: %v", err)
 	}
 	defer k.close()
 	k.last = map[string]json.RawMessage{"n": json.RawMessage("7")}
@@ -188,14 +221,9 @@ func TestKeepAnswersOnlyTheInstance(t *testing.T) {
 	id, addr, _ := strings.Cut(rest, ":")
 
 	hello := func(id string) keepMsg {
-		c, err := net.Dial("unix", addr)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { c.Close() })
+		c := dialKeep(t, addr)
 		json.NewEncoder(c).Encode(keepMsg{Type: "hello", Instance: id})
 		var m keepMsg
-		c.SetReadDeadline(time.Now().Add(5 * time.Second))
 		if err := json.NewDecoder(c).Decode(&m); err != nil {
 			t.Fatal(err)
 		}

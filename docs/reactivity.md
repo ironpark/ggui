@@ -383,6 +383,9 @@ replaces its history's first entry; the entries behind it are not kept.
   stderr, and the state keeps its initial value; one that does not encode,
   a func say, is not kept. What JSON leaves out, unexported fields, is not
   kept either, so keep plain data rather than a model with private parts.
+- **Everywhere `ggui dev` runs.** In the viewer or a window of the app's
+  own, on macOS, Linux and every Windows, where it travels over a named
+  pipe rather than a unix socket, and in a browser with `--web`.
 - **Free elsewhere.** Without `ggui dev`, as in a release build or a test,
   `Keep` does nothing: it returns the state after one check, and nothing
   runs, listens or is stored.

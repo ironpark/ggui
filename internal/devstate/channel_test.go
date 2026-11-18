@@ -3,30 +3,23 @@
 package devstate
 
 import (
+	"bytes"
 	"encoding/json"
-	"net"
-	"os"
-	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
+
+// The tests here stand in for ggui dev on the channel the system's ggui
+// dev listens on, which listenTest makes: a unix socket, or on Windows a
+// named pipe.
 
 // The app's end of the channel against a stand-in for ggui dev: the hello
 // names the instance, the answer is the state handed over, and a request
 // is answered with what is kept, read through Dispatch.
 func TestChannel(t *testing.T) {
-	dir, err := os.MkdirTemp("", "ggui-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
-	sock := filepath.Join(dir, "k.sock")
-	ln, err := net.Listen("unix", sock)
-	if err != nil {
-		t.Skipf("no unix socket here: %v", err)
-	}
-	defer ln.Close()
-	t.Setenv(Env, "4:"+sock)
+	addr, accept := listenTest(t)
+	t.Setenv(Env, "4:"+addr)
 
 	type answer struct {
 		hello message
@@ -38,12 +31,11 @@ func TestChannel(t *testing.T) {
 	go func() {
 		var a answer
 		defer func() { got <- a }()
-		c, err := ln.Accept()
+		c, err := accept()
 		if a.err = err; err != nil {
 			return
 		}
 		defer c.Close()
-		c.SetDeadline(time.Now().Add(10 * time.Second))
 		enc, dec := json.NewEncoder(c), json.NewDecoder(c)
 		if a.err = dec.Decode(&a.hello); a.err != nil {
 			return
@@ -76,7 +68,12 @@ func TestChannel(t *testing.T) {
 	s.mu.Unlock()
 	close(kept)
 
-	a := <-got
+	var a answer
+	select {
+	case a = <-got:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the stand-in for ggui dev got no answer")
+	}
 	if a.err != nil {
 		t.Fatal(a.err)
 	}
@@ -90,6 +87,40 @@ func TestChannel(t *testing.T) {
 	case <-dispatched:
 	default:
 		t.Error("the state was not read through Dispatch")
+	}
+}
+
+// A ggui dev that takes the connection and never answers holds the app's
+// start no longer than connectTimeout, and the app keeps nothing.
+func TestChannelNoAnswer(t *testing.T) {
+	addr, accept := listenTest(t)
+	t.Setenv(Env, "5:"+addr)
+	prev := connectTimeout
+	connectTimeout = 300 * time.Millisecond
+	defer func() { connectTimeout = prev }()
+	var errs bytes.Buffer
+	prevErr := Stderr
+	Stderr = &errs
+	defer func() { Stderr = prevErr }()
+	reported.Delete("channel")
+	held := make(chan struct{})
+	defer close(held)
+	go func() {
+		if c, err := accept(); err == nil {
+			<-held
+			c.Close()
+		}
+	}()
+
+	start := time.Now()
+	if s := connect(); s != nil {
+		t.Error("a session with a ggui dev that never answered")
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Errorf("connect waited %s for an answer, past connectTimeout", d)
+	}
+	if !strings.Contains(errs.String(), "did not hand state over") {
+		t.Errorf("stderr = %q, want word that no state is kept", errs.String())
 	}
 }
 

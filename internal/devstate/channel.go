@@ -4,22 +4,33 @@ package devstate
 
 import (
 	"encoding/json"
-	"net"
+	"io"
 	"os"
 	"strings"
 	"time"
 )
 
 // Env is the variable ggui dev starts the app with when it keeps state:
-// the instance ggui dev knows this run of the app by and the unix socket
-// it listens on, as "3:/tmp/ggui-123/k.sock". ggui dev's own code, which
-// imports nothing of ggui's, spells it out.
+// the instance ggui dev knows this run of the app by and the address of
+// the channel it listens on, after the first colon. The address is a unix
+// socket's path, as in "3:/tmp/ggui-123/k.sock", or on Windows a named
+// pipe's name, as in "3:\\.\pipe\ggui-dev-…", which is what makes the
+// app dial a pipe (see dial). ggui dev's own code, which imports nothing
+// of ggui's, spells it out.
 const Env = "GGUI_DEV_STATE"
 
 // connectTimeout bounds the hello and its answer. ggui dev answers at once
 // from a goroutine of its own; the bound is for a ggui dev that is gone
-// and a socket nobody serves, which must not hold the app's start.
-const connectTimeout = 2 * time.Second
+// and a channel nobody serves, which must not hold the app's start. A
+// variable, for tests.
+var connectTimeout = 2 * time.Second
+
+// stream is a connection to ggui dev: a unix socket's, or a named pipe's
+// file on Go's poller.
+type stream interface {
+	io.ReadWriteCloser
+	SetDeadline(time.Time) error
+}
 
 // Dispatch, when set, runs fn on the UI thread and reports whether it
 // will: the package ggui sets it to post to the running App. The kept
@@ -40,16 +51,22 @@ func connect() *session {
 		reportf("channel", "ggui: %s=%q is not ggui dev's; state is not kept across restarts", Env, v)
 		return nil
 	}
-	c, err := net.DialTimeout("unix", addr, connectTimeout)
+	c, err := dial(addr, connectTimeout)
 	if err != nil {
 		reportf("channel", "ggui: no channel to ggui dev (%v); state is not kept across restarts", err)
 		return nil
 	}
+	// The deadline bounds the hello; the timer is there should the channel
+	// take no deadline, and closing the channel ends the wait as surely.
 	c.SetDeadline(time.Now().Add(connectTimeout))
+	guard := time.AfterFunc(connectTimeout, func() { c.Close() })
 	enc, dec := json.NewEncoder(c), json.NewDecoder(c)
 	var m message
 	if err := enc.Encode(message{Type: "hello", Instance: id}); err == nil {
 		err = dec.Decode(&m)
+	}
+	if !guard.Stop() && err == nil {
+		err = os.ErrDeadlineExceeded
 	}
 	if err != nil || m.Type != "state" {
 		c.Close()
@@ -64,7 +81,7 @@ func connect() *session {
 
 // serve answers ggui dev's requests until it closes the channel, as it
 // does when it hands this app's state to another instance.
-func (s *session) serve(c net.Conn, enc *json.Encoder, dec *json.Decoder) {
+func (s *session) serve(c stream, enc *json.Encoder, dec *json.Decoder) {
 	defer c.Close()
 	for {
 		var m message
