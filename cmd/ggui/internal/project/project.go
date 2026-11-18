@@ -209,7 +209,7 @@ func (p *Project) CheckIcon() error {
 	}
 	path := p.Path(p.Config.App.Icon)
 	if _, err := os.Stat(path); err != nil {
-		return fmt.Errorf("app.icon: %w; add the PNG or remove the key from %s", err, p.fileName())
+		return fmt.Errorf("app.icon: %w; add the PNG or SVG, or remove the key from %s", err, p.fileName())
 	}
 	return nil
 }

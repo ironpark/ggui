@@ -83,6 +83,9 @@ type Bundle struct {
 	Info
 	Binary string // the built program, copied into the bundle
 	Icon   string // a PNG, or ""
+	// IconName is what messages call the icon, as for a PNG drawn from
+	// an SVG; Icon when "".
+	IconName string
 	// IconInset scales the icon into the body of Apple's icon grid, 824
 	// of 1024 pixels, for artwork drawn edge to edge.
 	IconInset bool
@@ -106,15 +109,19 @@ func Assemble(b Bundle) (app string, warnings []string, err error) {
 		return "", nil, err
 	}
 	if b.Icon != "" {
+		name := b.IconName
+		if name == "" {
+			name = b.Icon
+		}
 		skipped, fullBleed, err := writeIcon(filepath.Join(contents, "Resources", iconName+".icns"), b.Icon, b.IconInset)
 		if err != nil {
-			return "", nil, fmt.Errorf("icon %s: %w", b.Icon, err)
+			return "", nil, fmt.Errorf("icon %s: %w", name, err)
 		}
 		if len(skipped) > 0 {
-			warnings = append(warnings, fmt.Sprintf("icon %s is smaller than 1024×1024, so the icon has no %v pixel images; macOS scales the largest it has", b.Icon, skipped))
+			warnings = append(warnings, fmt.Sprintf("icon %s is smaller than 1024×1024, so the icon has no %v pixel images; macOS scales the largest it has", name, skipped))
 		}
 		if fullBleed && !b.IconInset {
-			warnings = append(warnings, fmt.Sprintf("icon %s is drawn to the edges of its canvas, so it looks larger than other apps' in the Dock, which sit in the middle 824×824 of 1024; set macos.icon_inset = true to scale it in, or leave the margin in the artwork", b.Icon))
+			warnings = append(warnings, fmt.Sprintf("icon %s is drawn to the edges of its canvas, so it looks larger than other apps' in the Dock, which sit in the middle 824×824 of 1024; set macos.icon_inset = true to scale it in, or leave the margin in the artwork", name))
 		}
 		b.HasIcon = true
 	}

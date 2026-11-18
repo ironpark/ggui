@@ -63,6 +63,13 @@ func TestCheckIcon(t *testing.T) {
 		{write("tiny.png", 128, 128), Warn},
 		{write("wide.png", 200, 100), Fail},
 		{filepath.Join(dir, "missing.png"), Fail},
+		{filepath.Join(dir, "missing.svg"), Fail},
+		// The build draws an SVG; the doctor does not compile anything.
+		{func() string {
+			p := filepath.Join(dir, "icon.svg")
+			os.WriteFile(p, []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"/>`), 0o644)
+			return p
+		}(), OK},
 	} {
 		r := &Report{}
 		checkIcon(r, tc.path)

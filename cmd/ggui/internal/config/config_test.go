@@ -99,20 +99,28 @@ func TestDefaultsKeptForUnsetKeys(t *testing.T) {
 	}
 }
 
-// errorsOf returns the problems Parse reported.
-// An SVG icon is refused with what to do instead, since ggui carries no
-// SVG renderer.
+// An SVG icon is taken, as the build draws it; a compressed one is
+// refused with what to do instead.
 func TestSVGIcon(t *testing.T) {
-	es := errorsOf(t, "[app]\nicon = \"art/icon.svg\"\n")
-	if len(es) != 1 || es[0].Line != 2 || !strings.Contains(es[0].Msg, "export it at 1024×1024") || !strings.Contains(es[0].Msg, "-o icon.png") {
+	cfg, err := Parse("ggui.toml", []byte("[app]\nicon = \"art/icon.SVG\"\n"))
+	if err != nil || cfg.App.Icon != "art/icon.SVG" {
+		t.Errorf("an SVG icon: %q, %v", cfg.App.Icon, err)
+	}
+	es := errorsOf(t, "[app]\nicon = \"art/icon.svgz\"\n")
+	if len(es) != 1 || es[0].Line != 2 || !strings.Contains(es[0].Msg, "gunzip -c icon.svgz > icon.svg") {
 		t.Errorf("errors = %v", es)
 	}
-	cfg, err := Parse("ggui.toml", []byte("[macos]\nicon_inset = true\n"))
+	es = errorsOf(t, "[app]\nicon = \"icon.jpg\"\n")
+	if len(es) != 1 || !strings.Contains(es[0].Msg, "or an SVG") {
+		t.Errorf("errors = %v", es)
+	}
+	cfg, err = Parse("ggui.toml", []byte("[macos]\nicon_inset = true\n"))
 	if err != nil || !cfg.MacOS.IconInset || Defaults().MacOS.IconInset {
 		t.Errorf("icon_inset: %v, %v", cfg.MacOS.IconInset, err)
 	}
 }
 
+// errorsOf returns the problems Parse reported.
 func errorsOf(t *testing.T, src string) Errors {
 	t.Helper()
 	_, err := Parse("ggui.toml", []byte(src))
