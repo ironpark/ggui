@@ -4,6 +4,7 @@
 //	ggui dev [package]     run it, rebuilding and restarting it on every change
 //	ggui build [package]   build a macOS .app, a Windows .exe, a web bundle or a program
 //	ggui doctor            check the machine and the project
+//	ggui i18n check|extract  check the translation catalogs, or fill them in
 //
 // It drives the go command on PATH rather than linking a toolchain in, so
 // a build is the one go build would make, with the developer's own
@@ -39,7 +40,7 @@ type command struct {
 	flags func(fs *flag.FlagSet) func(ctx context.Context, pos, rest []string) error
 }
 
-var commands = []*command{initCmd, devCmd, buildCmd, doctorCmd}
+var commands = []*command{initCmd, devCmd, buildCmd, doctorCmd, i18nCmd}
 
 // stopSignals are the signals that stop a command: Ctrl-C, a polite kill,
 // and the terminal closing.

@@ -32,6 +32,7 @@ applications it runs. `ggui version` prints the version installed.
 | [`ggui dev [package]`](#ggui-dev) | Run it, rebuilding and restarting it whenever its code changes; `--web` serves it to a browser instead. |
 | [`ggui build [package]`](#ggui-build) | Build a release: a macOS `.app`, a Windows `.exe`, a web bundle or a plain program. |
 | [`ggui doctor`](#ggui-doctor) | Check the machine and the project for what ggui needs. |
+| [`ggui i18n check\|extract [dir]`](#ggui-i18n) | Check the translation catalogs against the messages the app passes, or add what they lack. |
 
 `ggui help <command>` prints a command's flags. Settings come from
 [`ggui.toml`](#ggui-toml), and flags override them. Flags may come before
@@ -53,6 +54,7 @@ and spinners. `NO_COLOR` wins over the other two.
 - [ggui dev](#ggui-dev)
 - [ggui build](#ggui-build)
 - [ggui doctor](#ggui-doctor)
+- [ggui i18n](#ggui-i18n)
 - [ggui.toml](#ggui-toml)
 
 ## ggui init
@@ -584,6 +586,7 @@ It prints what to do under each line that is not ok, and exits with status
 | remote display | Whether `ggui dev` can show the app in its viewer, and why not. |
 | ggui.toml, icon | Whether the file is valid, and the icon a square PNG of at least 64 pixels, ideally 1024; under 256 it lacks Windows' largest size too. |
 | Windows build | What `--target windows` takes from the file and macOS does not check: each number of `app.version` at most 65535, `app.name` a name Windows allows for a file, and `windows.manifest`, when set, a well-formed `<assembly>`. |
+| translations | In a project with [translation catalogs](#ggui-i18n) only: the errors `ggui i18n check` finds in each, as a warning, since the app still runs. |
 | platform | What ggwd and ggfx load when an app starts. |
 | tools | `wasm-opt`; on macOS `codesign`, and `lipo` for `--universal`. |
 | signing | On macOS: the keychain's signing identities and whether `macos.signing_identity` is one; a certificate `ggui.toml` or `$GGUI_P12_BASE64` gives; `notarytool` and `stapler`, which come with the Xcode command line tools; and the notarization credentials. Elsewhere: whether this ggui can sign at all. |
@@ -598,6 +601,83 @@ runs on:
 | macOS | macOS 13 or later, which Go 1.27 programs need. The AppKit, Carbon, CoreFoundation, CoreGraphics, CoreVideo, Foundation, IOKit, Metal, OpenGL and QuartzCore frameworks: all load at start-up, OpenGL even when drawing with Metal. | |
 | Linux, FreeBSD, NetBSD | An X11 display: there is no Wayland backend, so a Wayland session needs XWayland and `DISPLAY`. `libX11`; `libGLESv2` or `libGL`; GLX or `libEGL` to make the context; a driver offering OpenGL 3.3 or OpenGL ES 3.0, checked with `glxinfo` when it is installed. | `libXi`, `libXrandr`, `libXcursor`, `libXinerama`, `libXrender`, `libXext`; `fc-match` for system fonts; `zenity` or `kdialog` for file and message dialogs; `xdg-open`. |
 | Windows | Direct3D 11 (`d3d11.dll`, `dxgi.dll` and a `d3dcompiler_4x.dll`), or OpenGL 3.3 through the GPU driver, which ggfx falls back to. | `uiautomationcore.dll`, for screen readers. |
+
+## ggui i18n
+
+```sh
+ggui i18n check
+ggui i18n check --allow-missing
+ggui i18n extract
+ggui i18n extract --lang ko --out locales/ko.json
+```
+
+`ggui i18n` compares the messages an app passes to the
+`github.com/ironpark/ggui/i18n` package with the catalogs that translate
+them. It reads the Go source, without building it: the project is the
+directory given, else that of the `ggui.toml` found from the working
+directory, else the working directory, and its Go files are read but for
+`_test.go` files, `vendor` and `testdata` directories, directories whose
+names begin with `.` or `_`, and other modules nested inside.
+
+A message is the string literal, or a sum of string literals, that a call
+passes:
+
+| Call | Key |
+| --- | --- |
+| `i18n.T("Open file", args…)` | `Open file` |
+| `i18n.N(n, "%d file", "%d files", args…)` | `%d file`, a plural message, keyed by its singular form |
+| `loc.S("Saved")`, `loc.N(n, "%d file", "%d files")` on a `*i18n.Localizer` | as for `T` and `N` |
+| any of them followed by `.Context("verb")` | `Open [verb]`: the text, a space and the context in brackets |
+
+The package is recognised by its import path, whatever name the file gives
+it, a dot import included. A Localizer is not: any method called `S` or
+`N`, in a file that imports the package, whose message argument is a
+string literal counts, so a method of another type with that name and
+those arguments would be read as one. A call to `i18n.T` or `i18n.N` whose
+message is not a literal, such as `i18n.T(key)`, cannot be checked or
+extracted, and is listed with its position.
+
+Catalogs are of two forms. In Go, any composite literal of `i18n.Catalog`
+in the project, with its fields named; a translation that is not a literal
+counts as present and is not checked, and a key that is not a literal
+turns off the report of unused keys for that catalog:
+
+```go
+var ko = &i18n.Catalog{
+	Lang:     "ko",
+	Messages: map[string]string{"Open [verb]": "열기"},
+	Plurals:  map[string]i18n.Forms{"%d sandbox running": {Other: "샌드박스 %d개 실행 중"}},
+}
+```
+
+In JSON, the files `--catalog glob` matches, relative to the project, `**`
+standing for any number of directories; the flag may be repeated, and by
+default it is `**/i18n/*.json` and `**/locales/*.json`. The plural forms
+are `zero`, `one`, `two`, `few`, `many` and `other`:
+
+```json
+{"lang": "ko", "messages": {"Open [verb]": "열기"}, "plurals": {"%d sandbox running": {"other": "샌드박스 %d개 실행 중"}}}
+```
+
+`check` prints a line for each catalog and each problem in it, in
+doctor's form, and exits with status 1 when there is an error:
+
+| Problem | |
+| --- | --- |
+| missing | The catalog has no translation of a message, or an empty one, as `extract` adds. An error; `--allow-missing` makes it a warning. |
+| verbs | The translation's format verbs differ from the source's: each argument must be formatted, with the same verb, as many times. `%[2]s` and `%[1]d` reorder the arguments, and text right after a verb, such as a Korean particle choice in `%s{을/를}`, is not part of it. A plural form other than `other` may leave verbs out, as "one file" leaves out the count, but not add any. An error. |
+| no other, form | A plural translation without the `other` form, which every language's plural rules fall back to, or with a form that is not one of the six. An error. |
+| whitespace | The translation begins or ends with other spaces than the source. A warning. |
+| unused | A key that no call passes. A warning. |
+
+`extract` adds each message a JSON catalog lacks with an empty
+translation, `{"other": ""}` for a plural one, and writes the file again
+with its keys sorted, keeping its entries and any other members. A Go
+catalog is not rewritten: the entries it lacks are printed on standard
+output, as lines to paste into its `Messages` and `Plurals`. With
+`--lang ko` it makes a new JSON catalog of every message instead, at
+`--out`, by default `locales/ko.json` in the project; a file already
+there is left alone.
 
 ## ggui.toml
 

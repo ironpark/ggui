@@ -26,7 +26,8 @@ It exits with status 1 when a check failed.
 It checks the Go toolchain against the version ggui requires, the
 target platform, the project in the current directory (the ggui, ggfx
 and ggwd versions it resolves, and whether ggfx and ggwd are the ones
-that ggui asks for), ggui.toml and its icon, the libraries and programs
+that ggui asks for), ggui.toml and its icon, the translation catalogs
+when the project has any (as ggui i18n check does), the libraries and programs
 ggwd and ggfx load on this operating system, and the tools ggui build
 uses.`,
 	flags: func(fs *flag.FlagSet) func(context.Context, []string, []string) error {
