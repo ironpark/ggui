@@ -143,6 +143,161 @@ func TestSwitcherCrossFadesAndDisposesTheOldSubtree(t *testing.T) {
 	}
 }
 
+// sequentialSwitcher is a Sequential Switcher whose subtree for k is 50
+// wide and 20 high, 40 for odd k, and records where it was painted, how
+// often it was built, whether it was disposed and its taps. The leaving
+// half takes 100ms and the entering one 200ms; both slide by 10.
+type sequentialSwitcher struct {
+	key      *ggui.StateValue[int]
+	sw       *widget.SwitcherWidget[int]
+	rects    [4]ggui.Rect
+	built    [4]int
+	disposed [4]bool
+	taps     [4]int
+	size     ggui.Size // of the switcher, as its last layout left it
+}
+
+func newSequentialSwitcher() (*sequentialSwitcher, *ggui.Probe) {
+	s := &sequentialSwitcher{key: ggui.State(0)}
+	s.sw = widget.Switcher(s.key, func(k int) ggui.Widget {
+		s.built[k]++
+		s.disposed[k] = false
+		ggui.OnCleanup(func() { s.disposed[k] = true })
+		return widget.Tap(probe(50, float64(20+20*(k%2)), &s.rects[k]), func() { s.taps[k]++ })
+	}).Sequential().Slide(0, 10).Easing(ggui.EaseLinear).Durations(100*time.Millisecond, 200*time.Millisecond)
+	sized := ggui.FromFuncs(func(c ggui.Constraints, env ggui.Env) ggui.Size {
+		s.size = s.sw.Layout(c, env)
+		return s.size
+	}, s.sw.Paint)
+	return s, ggui.NewProbe(widget.Column(sized), ggui.Sz(100, 100))
+}
+
+// paint runs a frame with the rects cleared, so only what painted in it
+// has one.
+func (s *sequentialSwitcher) paint(p *ggui.Probe) {
+	s.rects = [4]ggui.Rect{}
+	p.Frame()
+}
+
+// A Sequential switcher plays the old subtree out before the new one comes
+// in: the new one is built at once but neither painted nor hit while it
+// waits, and the switcher is the leaving subtree's size until it enters.
+func TestSequentialSwitcherLeavesThenEnters(t *testing.T) {
+	t.Parallel()
+	s, p := newSequentialSwitcher()
+	defer p.Close()
+	p.Frame()
+	s.key.Set(1)
+	p.Advance(0)
+	p.Advance(50 * time.Millisecond)
+	s.rects = [4]ggui.Rect{}
+	p.Click(ggui.Pt(10, 10))
+	if s.built[1] != 1 || s.rects[1] != (ggui.Rect{}) || s.taps != [4]int{} {
+		t.Fatalf("while the old subtree leaves the new one was built %d times, painted at %v, taps %v; want built, unpainted and inert", s.built[1], s.rects[1], s.taps)
+	}
+	if s.rects[0].Origin.Y != 5 || s.size.H != 20 {
+		t.Fatalf("half way out the old subtree is at y=%v in a switcher %v high; want 5 and its own 20", s.rects[0].Origin.Y, s.size.H)
+	}
+
+	p.Advance(50 * time.Millisecond)
+	s.paint(p)
+	if !s.disposed[0] || s.rects[0] != (ggui.Rect{}) || s.rects[1].Origin.Y != 10 || s.size.H != 40 {
+		t.Fatalf("as the old subtree is gone (disposed %v, at %v) the new one is at %v in a switcher %v high; want it starting in at y=10, 40 high", s.disposed[0], s.rects[0], s.rects[1], s.size.H)
+	}
+	p.Advance(100 * time.Millisecond)
+	s.paint(p)
+	if s.rects[1].Origin.Y != 5 {
+		t.Fatalf("half way through its 200ms the new subtree is at y=%v, want 5", s.rects[1].Origin.Y)
+	}
+	p.Advance(100 * time.Millisecond)
+	p.Click(ggui.Pt(10, 10))
+	if s.rects[1].Origin.Y != 0 || s.taps[1] != 1 {
+		t.Fatalf("the settled subtree is at %v with %d taps", s.rects[1], s.taps[1])
+	}
+}
+
+// A switch while the old subtree leaves replaces the subtree waiting to
+// enter, which goes without ever showing; one while the new subtree enters
+// sends it back out from as far as it came.
+func TestSequentialSwitcherUnderRapidChanges(t *testing.T) {
+	t.Parallel()
+	s, p := newSequentialSwitcher()
+	defer p.Close()
+	p.Frame()
+	s.key.Set(1)
+	p.Advance(0)
+	p.Advance(50 * time.Millisecond)
+	s.key.Set(2)
+	p.Advance(0)
+	if !s.disposed[1] || s.built[2] != 1 || s.disposed[0] {
+		t.Fatalf("a switch during the leave: waiting subtree disposed %v, next built %d times, leaving one disposed %v", s.disposed[1], s.built[2], s.disposed[0])
+	}
+	p.Advance(25 * time.Millisecond)
+	s.paint(p)
+	if s.rects[0].Origin.Y != 7.5 || s.rects[1] != (ggui.Rect{}) || s.rects[2] != (ggui.Rect{}) {
+		t.Fatalf("75ms into the leave: old at %v, replaced %v, waiting %v; want the old one going on at y=7.5 alone", s.rects[0], s.rects[1], s.rects[2])
+	}
+	p.Advance(25 * time.Millisecond)
+	p.Advance(100 * time.Millisecond)
+	s.paint(p)
+	if s.rects[2].Origin.Y != 5 {
+		t.Fatalf("half way in the next subtree is at y=%v, want 5", s.rects[2].Origin.Y)
+	}
+
+	s.key.Set(3)
+	p.Advance(0)
+	p.Advance(25 * time.Millisecond)
+	s.paint(p)
+	if s.rects[2].Origin.Y != 7.5 || s.rects[3] != (ggui.Rect{}) || s.size.H != 20 {
+		t.Fatalf("25ms out from half way in: at %v with the next %v in a switcher %v high; want y=7.5, the next waiting, 20 high", s.rects[2], s.rects[3], s.size.H)
+	}
+	p.Advance(25 * time.Millisecond)
+	s.paint(p)
+	if !s.disposed[2] || s.rects[3].Origin.Y != 10 {
+		t.Fatalf("out after 50ms: disposed %v, the next at %v", s.disposed[2], s.rects[3])
+	}
+}
+
+// Durations times a cross-fade's two halves apart.
+func TestSwitcherDurationsTimeTheHalvesApart(t *testing.T) {
+	t.Parallel()
+	key := ggui.State(0)
+	var rects [2]ggui.Rect
+	sw := widget.Switcher(key, func(k int) ggui.Widget { return probe(50, 20, &rects[k]) }).
+		Slide(0, 10).Easing(ggui.EaseLinear).Durations(100*time.Millisecond, 200*time.Millisecond)
+	p := ggui.NewProbe(widget.Column(sw), ggui.Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	key.Set(1)
+	p.Advance(0)
+	p.Advance(50 * time.Millisecond)
+	if rects[0].Origin.Y != 5 || rects[1].Origin.Y != 7.5 {
+		t.Fatalf("50ms in: leaving at y=%v, entering at y=%v; want 5 and 7.5", rects[0].Origin.Y, rects[1].Origin.Y)
+	}
+}
+
+// Reduced motion switches a Sequential switcher at once too.
+func TestSequentialSwitcherUnderReducedMotionSwitchesAtOnce(t *testing.T) {
+	t.Parallel()
+	key := ggui.State(0)
+	var rects [2]ggui.Rect
+	disposed := [2]bool{}
+	sw := widget.Switcher(key, func(k int) ggui.Widget {
+		ggui.OnCleanup(func() { disposed[k] = true })
+		return probe(50, 20, &rects[k])
+	}).Sequential()
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(sw)), ggui.Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	key.Set(1)
+	p.Frame()
+	rects = [2]ggui.Rect{}
+	p.Frame()
+	if !disposed[0] || rects[0] != (ggui.Rect{}) || rects[1] != ggui.Rct(ggui.Pt(0, 0), ggui.Sz(50, 20)) {
+		t.Fatalf("reduced motion: old disposed %v painted %v, new painted %v", disposed[0], rects[0], rects[1])
+	}
+}
+
 func TestSwitcherUnderReducedMotionSwitchesAtOnce(t *testing.T) {
 	t.Parallel()
 	key := ggui.State(0)
