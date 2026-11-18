@@ -30,8 +30,19 @@ A message is the string literal given to i18n.T, i18n.N (its singular
 form, which keys a plural message) or a Localizer's S and N, followed by
 " [context]" when the call is followed by .Context("context"). A method
 called S or N counts in a file that imports the i18n package when its
-message is a literal, whatever its type. A message that is not a literal
-cannot be extracted, and is listed.
+message is a literal, whatever its type. A constant of the package, as
+const msg = "Saved", counts as its literal. A message that is not a
+literal cannot be extracted, and is listed.
+
+The app's own functions that pass a message on, such as
+func tr(key string, args ...any) string, are named with --func, and
+those like i18n.N with --plural, or in ggui.toml's [i18n] funcs and
+plurals; the flags add to the file's. tr matches a call of tr and of any
+method called tr; ui.T, a call of T on an import of a package called ui,
+or on anything called ui. --func tr:1 takes the message from the second
+argument, --plural trn:0,1 the singular and plural forms from the first
+two. A message the wrapper's own body passes on from its parameters is
+not listed.
 
 Catalogs are the i18n.Catalog composite literals in the Go files, and the
 JSON files --catalog matches, by default any *.json in a directory called
@@ -51,6 +62,9 @@ i18n or locales: {"lang": "ko", "messages": {...}, "plurals": {...}}.
            catalog of every message instead, at --out.`,
 	flags: func(fs *flag.FlagSet) func(context.Context, []string, []string) error {
 		var globs globList
+		var funcs, plurals globList
+		fs.Var(&funcs, "func", "read the calls of the app's own `function`, which passes its message on as i18n.T does: NAME, a function or any method called so, or pkg.Name, then :POS, the message argument's index, when it is not 0; repeat it for more, added to ggui.toml's i18n.funcs")
+		fs.Var(&plurals, "plural", "read the calls of the app's own `function` as i18n.N's: NAME or pkg.Name, then :ONE,OTHER, the indexes of the singular and the plural form, when they are not 1,2; repeat it for more, added to ggui.toml's i18n.plurals")
 		fs.Var(&globs, "catalog", "read the JSON catalogs matching `glob`, relative to the project, ** standing for any directories; repeat it for more (default **/i18n/*.json and **/locales/*.json)")
 		allowMissing := fs.Bool("allow-missing", false, "with check, count missing translations as warnings")
 		lang := fs.String("lang", "", "with extract, make a new JSON catalog for the `language`, such as ko, holding every message")
@@ -82,18 +96,29 @@ i18n or locales: {"lang": "ko", "messages": {...}, "plurals": {...}}.
 			if len(globs) == 0 {
 				globs = i18n.DefaultGlobs
 			}
-			root := ""
-			if len(pos) == 2 {
-				root = pos[1]
-			} else {
-				proj, err := project.Open(".", "", "")
-				if err != nil {
-					return err
-				}
-				root = proj.Root
+			flagFuncs, err := i18n.ParseFuncs(funcs, plurals)
+			if err != nil {
+				return fmt.Errorf("--func and --plural take NAME, pkg.Name, NAME:POS or for --plural NAME:ONE,OTHER:\n%w", err)
 			}
+			dir := "."
+			if len(pos) == 2 {
+				dir = pos[1]
+			}
+			proj, err := project.Open(dir, "", "")
+			if err != nil {
+				return err
+			}
+			// A directory given is the project, though its ggui.toml may
+			// be above it.
+			root := proj.Root
+			if len(pos) == 2 {
+				root = dir
+			}
+			// ggui.toml was checked as it was read.
+			wrappers, _ := i18n.ParseFuncs(proj.Config.I18n.Funcs, proj.Config.I18n.Plurals)
+			wrappers = append(wrappers, flagFuncs...)
 			s := ui.Stderr.Step("Reading the sources", ui.QuietStart())
-			src, err := i18n.Find(root, globs)
+			src, err := i18n.Find(root, globs, wrappers...)
 			s.Stop()
 			if src == nil {
 				return err

@@ -1,6 +1,7 @@
 package i18n
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -310,5 +311,170 @@ func TestAddAndWriteJSON(t *testing.T) {
 	entries, _ := os.ReadDir(filepath.Dir(c.Path))
 	if len(entries) != 1 {
 		t.Errorf("left behind: %v", entries)
+	}
+}
+
+// wrapped is a project that wraps the i18n package in functions of its
+// own, of every form a Func names.
+var wrapped = map[string]string{
+	"go.mod": "module example.com/app\n",
+	"main.go": `package main
+
+import (
+	"fmt"
+
+	u "example.com/app/ui"
+	"example.com/app/msgs"
+)
+
+const greeting = "Hello, %s"
+
+const (
+	saveLabel = "Save" + " all"
+	alsoSave
+)
+
+type model struct{}
+
+func (m *model) tr(key string, args ...any) string { return key }
+
+func main() {
+	var m model
+	name := "x"
+	fmt.Println(
+		tr("Delete %s?", name),
+		tr(greeting, name),
+		tr(fromAnotherFile),
+		tr(alsoSave),
+		m.tr("Method"),
+		tr("Open").Context("verb"),
+		trn(2, "%d file", "%d files", 2),
+		u.T("Aliased"),
+		say(1, "Positioned"),
+		count("%d item", "%d items", 3),
+		tr(name),
+		tr(msgs.Hello),
+		untr("Not a wrapper"),
+	)
+}
+
+func shadowed() {
+	greeting := "local"
+	_ = tr(greeting)
+}
+
+func localConst() {
+	const k = "Local constant"
+	_ = tr(k)
+}
+`,
+	"consts.go": "package main\n\nconst fromAnotherFile = \"From another file\"\n",
+	"wrap.go": `package main
+
+import "github.com/ironpark/ggui/i18n"
+
+var loc *i18n.Localizer
+
+func tr(key string, args ...any) string { return i18n.T(key, args...).String() }
+
+func trn(n int, one, other string, args ...any) string { return loc.N(n, one, other, args...) }
+
+var say = func(n int, key string) string { return i18n.T(key).String() }
+
+func count(one, other string, n int) string { return i18n.N(n, one, other).String() }
+
+func untr(key string) string { return i18n.T(key).String() }
+`,
+	"ui/ui.go":       "package ui\n\nfunc T(key string) string { return key }\n\nvar _ = T(\"Same package\")\n",
+	"other/o.go":     "package other\n\nimport \"example.com/app/ui\"\n\nvar x struct{ T func(string) string }\n\nvar _, _ = ui.T(\"Qualified\"), x.T(\"Not ui's\")\n",
+	"dotted/d.go":    "package dotted\n\nimport . \"example.com/app/ui\"\n\nvar _ = T(\"Dot-imported\")\n",
+	"msgs/m.go":      "package msgs\n\nconst Hello = \"Hello\"\n",
+	"twice/a.go":     "package twice\n\nconst k = \"A\"\n\nfunc tr(string) {}\n\nfunc init() { tr(k) }\n",
+	"twice/b_x.go":   "package twice\n\nconst k = \"B\"\n",
+	"twice/same.go":  "package twice\n\nconst s = \"Same\"\n\nfunc init() { tr(s) }\n",
+	"twice/same2.go": "package twice\n\nconst s = \"Same\"\n",
+}
+
+func TestScanFuncs(t *testing.T) {
+	funcs, err := ParseFuncs([]string{"tr", "ui.T", "say:1"}, []string{"trn", "count:0,1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := Scan(write(t, wrapped), funcs...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys, pkeys := s.Keys()
+	want := []string{
+		"Aliased", "Delete %s?", "Dot-imported", "From another file", "Hello, %s",
+		"Local constant", "Method", "Open [verb]", "Positioned", "Qualified",
+		"Same", "Same package", "Save all",
+	}
+	if !slices.Equal(keys, want) {
+		t.Errorf("messages:\n got %q\nwant %q", keys, want)
+	}
+	if want := []string{"%d file", "%d item"}; !slices.Equal(pkeys, want) {
+		t.Errorf("plurals = %q, want %q", pkeys, want)
+	}
+	if m := s.Plurals["%d item"]; m == nil || m.Other != "%d items" {
+		t.Errorf("count's plural = %+v", m)
+	}
+	// The wrappers' own bodies pass their parameters on, and are not
+	// listed; untr is not a wrapper, and a name that is not a constant of
+	// the package, or is declared twice with two values, is no message.
+	var skipped []string
+	for _, sk := range s.Skipped {
+		skipped = append(skipped, fmt.Sprintf("%s %s:%d", sk.Call, sk.Pos.Filename, sk.Pos.Line))
+	}
+	wantSkipped := []string{"tr main.go:35", "tr main.go:36", "tr main.go:43", "tr twice/a.go:7", "i18n.T wrap.go:15"}
+	if !slices.Equal(skipped, wantSkipped) {
+		t.Errorf("skipped:\n got %q\nwant %q", skipped, wantSkipped)
+	}
+
+	// Without the funcs, only the i18n package's calls count, and the
+	// wrappers' bodies are listed.
+	s, err = Scan(write(t, wrapped))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if keys, _ := s.Keys(); len(keys) != 0 || len(s.Skipped) != 4 {
+		t.Errorf("without funcs: %q, skipped %+v", keys, s.Skipped)
+	}
+}
+
+func TestParseFunc(t *testing.T) {
+	for _, tc := range []struct {
+		spec   string
+		plural bool
+		want   string // pkg name key other, or error
+	}{
+		{"tr", false, " tr 0 -1"},
+		{"ui.T", false, "ui T 0 -1"},
+		{"tr:2", false, " tr 2 -1"},
+		{"trn", true, " trn 1 2"},
+		{"ui.N:0,1", true, "ui N 0 1"},
+		{"(*M).tr", false, "error"},
+		{"M.tr.x", false, "error"},
+		{"", false, "error"},
+		{"tr:", false, "error"},
+		{"tr:-1", false, "error"},
+		{"trn:1", true, "error"},
+		{"trn:1,1", true, "error"},
+		{"trn:a,b", true, "error"},
+	} {
+		f, err := ParseFunc(tc.spec, tc.plural)
+		got := fmt.Sprintf("%s %s %d %d", f.Pkg, f.Name, f.Key, f.Other)
+		if err != nil {
+			got = "error"
+		}
+		if got != tc.want {
+			t.Errorf("ParseFunc(%q, %v) = %q, %v; want %q", tc.spec, tc.plural, got, err, tc.want)
+		}
+	}
+	if _, err := ParseFuncs([]string{"a:x", "ok"}, []string{"b:1"}); err == nil || !strings.Contains(err.Error(), `"a:x"`) || !strings.Contains(err.Error(), `"b:1"`) {
+		t.Errorf("ParseFuncs did not report each: %v", err)
+	}
+	if got := pathName("gopkg.in/yaml.v3") + " " + pathName("example.com/go-ui/v2") + " " + pathName("ui"); got != "yaml ui ui" {
+		t.Errorf("pathName = %q", got)
 	}
 }

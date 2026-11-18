@@ -288,8 +288,9 @@ func checkLinuxBuild(r *Report, proj *project.Project) {
 // checkTranslations sums up ggui i18n check, for a project with catalogs:
 // a translation missing or wrong is a warning here, since the app still
 // builds and runs, showing the source text or a garbled one.
-func checkTranslations(r *Report, root string) {
-	src, err := i18n.Find(root, i18n.DefaultGlobs)
+func checkTranslations(r *Report, root string, conf config.I18n) {
+	funcs, _ := i18n.ParseFuncs(conf.Funcs, conf.Plurals) // checked as ggui.toml was read
+	src, err := i18n.Find(root, i18n.DefaultGlobs, funcs...)
 	if err != nil || len(src.Catalogs) == 0 {
 		return // a Go file that does not parse is the build's to say
 	}

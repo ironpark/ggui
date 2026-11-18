@@ -62,15 +62,16 @@ func (c *Catalog) String() string {
 // project: any directory called i18n or locales.
 var DefaultGlobs = []string{"**/i18n/*.json", "**/locales/*.json"}
 
-// Find scans root's Go sources, as Scan does, and reads the JSON catalogs
-// below root that match one of globs, slash-separated patterns relative
-// to root in which ** stands for any number of directories. The catalogs
+// Find scans root's Go sources, as Scan does with funcs, and reads the
+// JSON catalogs below root that match one of globs, slash-separated
+// patterns relative to root in which ** stands for any number of
+// directories. The catalogs
 // are the Go ones first, then the JSON ones, each in the order of their
 // files. A Go file that does not parse makes the error, after the rest
 // are read; a JSON file that cannot be read as a catalog is among the
 // catalogs, with its Err set.
-func Find(root string, globs []string) (*Sources, error) {
-	s, err := Scan(root)
+func Find(root string, globs []string, funcs ...Func) (*Sources, error) {
+	s, err := Scan(root, funcs...)
 	if s == nil {
 		return nil, err
 	}

@@ -165,7 +165,7 @@ func TestReportOutput(t *testing.T) {
 func TestCheckTranslations(t *testing.T) {
 	dir := t.TempDir()
 	r := &Report{}
-	checkTranslations(r, dir)
+	checkTranslations(r, dir, config.I18n{})
 	if len(r.Checks) != 0 {
 		t.Errorf("a project without catalogs: %+v", r.Checks)
 	}
@@ -173,9 +173,9 @@ func TestCheckTranslations(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "main.go"), []byte(src), 0o644)
 	os.MkdirAll(filepath.Join(dir, "locales"), 0o755)
 	os.WriteFile(filepath.Join(dir, "locales", "ko.json"), []byte(`{"lang": "ko", "messages": {"Hello": "안녕"}}`), 0o644)
-	checkTranslations(r, dir)
+	checkTranslations(r, dir, config.I18n{})
 	os.WriteFile(filepath.Join(dir, "locales", "ja.json"), []byte(`{"lang": "ja"}`), 0o644)
-	checkTranslations(r, dir)
+	checkTranslations(r, dir, config.I18n{})
 	if len(r.Checks) != 2 || r.Checks[0].Status != OK || r.Checks[1].Status != Warn || r.Checks[1].Detail != "ja: 1 error" {
 		t.Errorf("checks = %+v", r.Checks)
 	}
