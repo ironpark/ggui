@@ -3,6 +3,8 @@ package ggui
 import (
 	"context"
 	"reflect"
+	"slices"
+	"time"
 
 	"github.com/ironpark/ggui/internal/reactive"
 )
@@ -640,4 +642,102 @@ func Async[T any](work func() (T, error), done func(T, error)) {
 		v, err := work()
 		post(func() { done(v, err) })
 	}()
+}
+
+// Debounced follows r, but late: it takes r's value at once the first time,
+// and afterwards each new value only once r has held it unchanged for d. A
+// search field typed into runs one search when the typing pauses rather
+// than one per keystroke. Together with Resource, which cancels the request
+// for a query that changed, it is search-as-you-type:
+//
+//	q := ggui.Debounced(query, 250*time.Millisecond)
+//	res := ggui.Resource(q.Get, search)
+//
+// d is measured by the clock ClockTime reads, so a test steps it with
+// Probe.Advance or SetClock; a value comes through in the frame that
+// reaches it, or, when no frame does, in work posted for it at that time.
+// Nothing is written but on the UI thread. Like Resource it needs an owner
+// with a frame loop: create it in App.Setup or a component's setup, and it
+// stops with that owner, keeping the last value it took.
+func Debounced[T any](r Readable[T], d time.Duration) Readable[T] {
+	reactive.CheckUIThread("Debounced")
+	l := loopOf(reactive.CurrentOwner())
+	if l == nil {
+		panic("ggui: Debounced requires an app or mounted component owner")
+	}
+	w := l.world()
+	out := State(Untrack(r.Get))
+	var (
+		pending T
+		real    *time.Timer
+	)
+	t := &clockTimer{fire: func() { out.Set(pending) }}
+	first := true
+	Observe(func() {
+		v := r.Get()
+		if first {
+			first = false
+			return
+		}
+		if d <= 0 {
+			out.Set(v)
+			return
+		}
+		pending = v
+		w.schedule(t, w.frame.raw().Add(d))
+		// The frame clock moves only while frames run, and a window that
+		// shows nothing new runs none: a timer of the process's own posts
+		// the check for the time d is up. It writes nothing itself.
+		if real != nil {
+			real.Stop()
+		}
+		real = time.AfterFunc(d, func() {
+			l.post(func() { w.fireTimers(w.frame.raw()) })
+		})
+	})
+	OnCleanup(func() {
+		if real != nil {
+			real.Stop()
+		}
+		w.unschedule(t)
+	})
+	return out
+}
+
+// clockTimer is something to do once the frame clock's raw time reaches
+// due. It belongs to one world and runs on its UI thread.
+type clockTimer struct {
+	due  time.Time
+	fire func()
+}
+
+// schedule has t fire once the raw time reaches due, replacing the time it
+// was scheduled for before.
+func (w *world) schedule(t *clockTimer, due time.Time) {
+	t.due = due
+	if !slices.Contains(w.timers, t) {
+		w.timers = append(w.timers, t)
+	}
+}
+
+// unschedule drops t if it has not fired.
+func (w *world) unschedule(t *clockTimer) {
+	w.timers = slices.DeleteFunc(w.timers, func(o *clockTimer) bool { return o == t })
+}
+
+// fireTimers fires, in the order they were scheduled, the timers whose time
+// now has reached, and forgets them. Each frame's tick calls it, as does
+// the work a timer of the process's posts when its time is up.
+func (w *world) fireTimers(now time.Time) {
+	var due []*clockTimer
+	w.timers = slices.DeleteFunc(w.timers, func(t *clockTimer) bool {
+		if now.Before(t.due) {
+			return false
+		}
+		due = append(due, t)
+		return true
+	})
+	for _, t := range due {
+		t.fire()
+	}
 }

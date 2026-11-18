@@ -43,6 +43,7 @@ Choose the smallest reactive boundary that expresses the change:
 | Follow a list whose rows have no identity | `Each` (rows reused by position) |
 | Preserve rows through collection edits | `EachKeyed` |
 | Load asynchronously and render its status | `Resource` and `Await` |
+| Wait for typing to pause before acting on it | `Debounced` |
 | Synchronize with an external system | An owned `Effect` or `Watch` with cleanup |
 
 ## Signals
@@ -503,6 +504,28 @@ cancellation. `Reload()` retries with the current input. `ResourceEqual(fn)`
 customizes input equality; `nil` restarts on every input notification.
 Resources execute independently of consumers; multiple `Await` blocks share
 one task. Unmounting a consumer does not cancel a resource owned elsewhere.
+
+A search that runs as the user types should wait for the typing to pause.
+`Debounced(r, d)` follows `r` late: it takes the first value at once, and
+afterwards a value only once `r` has held it unchanged for `d`. Feed it to
+the resource, and the search runs once per pause and is cancelled when the
+query changes again:
+
+```go
+q := ggui.Debounced(query, 250*time.Millisecond)
+res := ggui.Resource(q.Get, search)
+```
+
+Like `Resource`, `Debounced` needs an owner with a frame loop (app setup or
+a mounted component) and stops with it. It writes only on the UI goroutine,
+and measures `d` by the clock `ClockTime` reads, so a test steps it with
+`Probe.Advance`:
+
+```go
+query.Set("abc")
+p.Frame()
+p.Advance(250 * time.Millisecond) // q is now "abc"
+```
 
 `Await` accepts any `Readable[AsyncState[T]]`. A snapshot has `RequestID`,
 `Status` (`Pending`, `Ready`, `Failed`), `Value`, and `Err`. Zero values are
