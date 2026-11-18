@@ -137,9 +137,11 @@ which the app encodes as JSON, and holds them for the new build, which is
 handed them as it starts. A state is restored when `Keep` is called, so one
 kept in the app's setup shows its value in the first frame, and one kept in
 a page the router mounts takes its value when that page mounts. The app
-finds dev's channel, a unix socket in the temporary directory, in
-`GGUI_DEV_STATE`; started any other way, or built for release, it keeps
-nothing, and `Keep` costs a check. See
+finds dev's channel in `GGUI_DEV_STATE`: a unix socket in a directory of
+the temporary directory that only the user may enter, or on Windows, every
+version of it, a named pipe with a random name that only the user may
+open and no other machine may reach. Started any other way, or built for
+release, the app keeps nothing, and `Keep` costs a check. See
 [State and components](reactivity.md#keeping-state-while-developing) for
 what is kept and when.
 
@@ -155,8 +157,8 @@ what is kept and when.
   kept: a state that may have hung one build is not handed to the next.
 - **Both displays.** It works the same in the viewer and in a window of
   the app's own. With `--no-watch` there is no restart and nothing is
-  kept. On Windows the socket needs Windows 10 1803 or later, as the
-  viewer does; without one dev says so once and keeps nothing.
+  kept. Unlike the viewer, it needs no unix sockets, so it works on a
+  Windows older than 10 1803 too, where the app opens its own window.
 - **In a browser**, with `--web`, the page carries the state across its
   reload onto the new build in its `sessionStorage`. A reload by hand
   starts afresh.

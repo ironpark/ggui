@@ -140,13 +140,14 @@ func Start(ctx context.Context, exe string, o Options) (*Process, error) {
 }
 
 // SocketPath returns a new directory, which only its user may enter, and
-// the path of a unix socket called name in it: the viewer's, and ggui
-// dev's channel for the state an app keeps. A unix socket's path is
-// limited to 104 bytes on macOS and 108 on Linux and Windows, so the
+// the path of a unix socket called name in it: the viewer's, and off
+// Windows, which has a named pipe for it, ggui dev's channel for the state
+// an app keeps. A unix socket's path is limited to 104 bytes on macOS and
+// 108 on Linux and Windows, so the
 // directory is short: the temporary directory when it leaves room, /tmp
 // otherwise. Windows has no /tmp, and its temporary directory, under the
 // user's profile, leaves room but for the longest user names; then there
-// is no socket, and the app opens its own window, or keeps no state.
+// is no socket, and the app opens its own window.
 func SocketPath(name string) (dir, socket string, err error) {
 	const maxPath = 103 // with the 0 that ends it, in macOS's 104 bytes
 	base := ""

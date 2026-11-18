@@ -3,19 +3,19 @@ package dev
 import (
 	"encoding/json"
 	"errors"
-	"net"
-	"os"
+	"io"
 	"strconv"
 	"sync"
 	"time"
-
-	"github.com/ironpark/ggui/cmd/ggui/internal/viewer"
 )
 
 // The state an app keeps across a restart, what it marks with
-// StateValue.Keep, goes through ggui dev: the keeper listens on a unix
-// socket whose address, and the instance it is handed to, each run of the
-// app finds in keepEnv. An app that keeps state says hello on its first
+// StateValue.Keep, goes through ggui dev: the keeper listens on a channel
+// whose address, and the instance it is handed to, each run of the app
+// finds in keepEnv. The channel is a unix socket in a directory only the
+// user may enter, or on Windows a named pipe only the user may open (see
+// listenKeep): a Windows older than 10 1803 has no unix sockets, and a
+// pipe is what every Windows has, so Windows takes the one path. An app that keeps state says hello on its first
 // Keep and is answered with what the instance before it kept, at once, so
 // that the app has it before its first frame. Before the app is stopped to
 // be replaced, the keeper asks it for what it keeps now and holds that for
@@ -31,7 +31,10 @@ import (
 // known.
 
 // keepEnv is ggui's devstate.Env, which this command, importing nothing of
-// ggui's, spells out.
+// ggui's, spells out. Its value is the instance and the channel's address,
+// "3:/tmp/ggui-123/k.sock", or on Windows "3:\\.\pipe\ggui-dev-…": the
+// app dials a pipe when the address is a pipe's name and a unix socket
+// otherwise.
 const keepEnv = "GGUI_DEV_STATE"
 
 // handTimeout is how long the app has to hand over what it keeps before it
@@ -52,11 +55,26 @@ type keepMsg struct {
 	State    map[string]json.RawMessage `json:"state,omitempty"`
 }
 
+// keepStream is one connection: a unix socket's, or a named pipe's file,
+// which Go's poller gives deadlines and a Close that ends a pending read.
+type keepStream interface {
+	io.ReadWriteCloser
+	SetReadDeadline(time.Time) error
+	SetWriteDeadline(time.Time) error
+}
+
+// keepListener takes the apps' connections. Accept returns an error only
+// once it is closed or broken for good.
+type keepListener interface {
+	Accept() (keepStream, error)
+	Close() error
+}
+
 // keeper holds the state between instances and speaks to the running one.
 type keeper struct {
-	ln     net.Listener
-	dir    string // the socket's, removed by close
-	socket string
+	ln      keepListener
+	addr    string
+	cleanup func() // removes what listenKeep made, after ln is closed
 
 	mu   sync.Mutex
 	last map[string]json.RawMessage // what the next instance is handed
@@ -67,7 +85,7 @@ type keeper struct {
 
 // keepConn is the running instance's channel.
 type keepConn struct {
-	conn  net.Conn
+	conn  keepStream
 	enc   *json.Encoder
 	sent  chan struct{} // closed once the state was handed over
 	saved chan map[string]json.RawMessage
@@ -76,16 +94,11 @@ type keepConn struct {
 
 // newKeeper listens for apps.
 func newKeeper() (*keeper, error) {
-	dir, socket, err := viewer.SocketPath("k.sock")
+	ln, addr, cleanup, err := listenKeep()
 	if err != nil {
 		return nil, err
 	}
-	ln, err := net.Listen("unix", socket)
-	if err != nil {
-		os.RemoveAll(dir)
-		return nil, err
-	}
-	k := &keeper{ln: ln, dir: dir, socket: socket}
+	k := &keeper{ln: ln, addr: addr, cleanup: cleanup}
 	go k.accept()
 	return k, nil
 }
@@ -105,7 +118,7 @@ func (k *keeper) accept() {
 // started, which has its environment, or an instance being replaced that
 // kept its first value late. The instance's channel then carries its
 // answers until it ends.
-func (k *keeper) serve(c net.Conn) {
+func (k *keeper) serve(c keepStream) {
 	defer c.Close()
 	c.SetReadDeadline(time.Now().Add(helloTimeout))
 	enc, dec := json.NewEncoder(c), json.NewDecoder(c)
@@ -155,7 +168,7 @@ func (k *keeper) handTo() string {
 	defer k.mu.Unlock()
 	k.next++
 	k.want, k.cur = strconv.Itoa(k.next), nil
-	return keepEnv + "=" + k.want + ":" + k.socket
+	return keepEnv + "=" + k.want + ":" + k.addr
 }
 
 // take asks the running instance for what it keeps, before it is stopped,
@@ -216,5 +229,5 @@ func (k *keeper) close() {
 		k.cur = nil
 	}
 	k.mu.Unlock()
-	os.RemoveAll(k.dir)
+	k.cleanup()
 }
