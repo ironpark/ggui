@@ -62,7 +62,7 @@ func connect() *session {
 	guard := time.AfterFunc(connectTimeout, func() { c.Close() })
 	enc, dec := json.NewEncoder(c), json.NewDecoder(c)
 	var m message
-	if err := enc.Encode(message{Type: "hello", Instance: id}); err == nil {
+	if err = enc.Encode(message{Type: "hello", Instance: id}); err == nil {
 		err = dec.Decode(&m)
 	}
 	if !guard.Stop() && err == nil {
