@@ -73,6 +73,14 @@ func (c Column[T]) Center() Column[T] { c.Align = 0.5; return c }
 
 // TableWidget is a keyed list of rows under a heading row, with a line
 // between rows, hover and selection. Build one with Table.
+//
+// Rows are at least a line of text inside the cell padding tall, 37 under
+// the stock themes. A table whose body does not scroll (no Height,
+// MaxHeight or MaxRows) and has no RowHeight lets a row grow to its
+// tallest cell, so a Button or a field in a cell keeps its own height.
+// Under a scrolling body every row has one height, which the body needs to
+// lay out only the rows in view: the text row's unless RowHeight sets
+// another, so give such a table a RowHeight to make room for controls.
 type TableWidget[T any, K comparable] struct {
 	props          property.Owner
 	cols           []Column[T]
@@ -282,9 +290,15 @@ func (t *TableWidget[T, K]) Selected(v K) *TableWidget[T, K] {
 // OnSelect fires with the item whose row was clicked or activated.
 func (t *TableWidget[T, K]) OnSelect(fn func(T)) *TableWidget[T, K] { t.onSelect = fn; return t }
 
-// RowHeight fixes every row's height. The default follows the theme: a
-// line of text inside the cell padding, 37 under the stock themes. With
-// Height, MaxHeight or MaxRows the body then lays out only the rows in view.
+// RowHeight fixes every row's height, cells holding controls included,
+// and the body then lays out only the rows in view where it scrolls, or
+// inside a Scroll around the table. Without it a row is a line of text
+// inside the cell padding, 37 under the stock themes: at least that and as
+// tall as its tallest cell while the body does not scroll, and exactly
+// that under Height, MaxHeight or MaxRows, where a cell's control is
+// squeezed into it: there a default-size Button, 32 tall under the default
+// theme, needs RowHeight(49) to keep its height in the 8 of cell padding
+// and over the line.
 func (t *TableWidget[T, K]) RowHeight(h float64) *TableWidget[T, K] {
 	defer property.Watch(&t.props, &t.rowH)()
 	h = max(1, h)
@@ -334,6 +348,10 @@ func (t *TableWidget[T, K]) bound(set func()) *TableWidget[T, K] {
 
 // scrolls reports whether the body scrolls: under a Height or a maximum.
 func (t *TableWidget[T, K]) scrolls() bool { return t.height > 0 || t.maxH > 0 || t.maxRows > 0 }
+
+// fixedRows reports whether every row is rowH tall: under RowHeight or a
+// scrolling body. Otherwise rows grow to their cells.
+func (t *TableWidget[T, K]) fixedRows() bool { return t.rowSet || t.scrolls() }
 
 // RowName names each row for Probe.Find and the inspector; the default is
 // the key.
@@ -452,11 +470,10 @@ func (t *TableWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t.theme = th
 	t.head.Gap(0)
 	if !t.rowSet {
-		if h := tableRowHeight(th); h != t.rowH {
-			t.rowH = h
-			t.body.ItemExtent(h)
-		}
+		t.rowH = tableRowHeight(th)
 	}
+	// Rows of one height where it is fixed; otherwise each takes its own.
+	t.body.ItemExtent(pick(t.fixedRows(), t.rowH, 0))
 	// shadcn's h-10 heading row, and a footer row as tall as the others.
 	t.headH, t.footH, t.capH = 5*th.Space, 0, 0
 	t.headBox.Height(t.headH)
@@ -538,7 +555,14 @@ func (r *tableRow[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if r.box == nil {
 		r.box = widget.Box(r.cells)
 	}
-	r.box.Height(r.table.rowH)
+	if r.table.fixedRows() {
+		r.box.Height(r.table.rowH)
+	} else {
+		// At least a row of text, and as tall as the tallest cell: the
+		// cells' Align would take all the height it is offered.
+		r.box.Height(0)
+		c.MinH, c.MaxH = r.table.rowH, ggui.Unbounded
+	}
 	return r.box.Layout(c, env)
 }
 
@@ -743,7 +767,7 @@ type tableCell struct {
 }
 
 func (c *tableCell) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
-	// shadcn's p-2; the row's fixed height decides the vertical room.
+	// shadcn's p-2; the row's height decides the vertical room.
 	return c.box.Pad(uitheme.Of(env).Space).Layout(cs, env)
 }
 func (c *tableCell) Paint(dst *ggui.Canvas, r ggui.Rect) {
