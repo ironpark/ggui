@@ -79,8 +79,9 @@ type Tour struct {
 	// TitlebarHidden: no title bar, the content up to the window's top
 	// edge and the window buttons over it.
 	TitlebarHidden bool
-	// Script walks through the app, a step at a time, with Hold and
-	// Then. It is required. A panic in it, as Probe.Tap's when nothing
+	// Script walks through the app, a step at a time, with Hold, Then
+	// and the pointer and keyboard steps (MoveTo, Click, Type and the
+	// rest). It is required. A panic in it, as Probe.Tap's when nothing
 	// has the label, ends the recording with an error.
 	Script func(r *Recorder)
 }
@@ -177,7 +178,9 @@ func (t Tour) pixels() (w, h int) {
 }
 
 // A Recorder runs a tour's Script: Hold and Then draw its frames, and
-// Probe drives the app between them.
+// Probe drives the app between them. The pointer steps, MoveTo, Click,
+// Drag, Scroll and the rest, move a cursor drawn over the frames as they
+// drive the app, and Type types a character at a time.
 type Recorder struct {
 	p    *ggui.Probe
 	dev  device
@@ -188,8 +191,10 @@ type Recorder struct {
 	pix  *image.RGBA
 	sink func(*image.RGBA) error
 
-	lay   layout
-	frame *framer // nil for FrameNone
+	lay     layout
+	frame   *framer // nil for FrameNone
+	cursors cursors
+	mouse   mouse
 
 	frames int
 	err    error
@@ -255,6 +260,7 @@ func (r *Recorder) shoot() {
 		if r.frame != nil {
 			out = r.frame.draw(r.pix, bg, env.Text())
 		}
+		r.drawPointer(out, chromeFor(bg).dark)
 		err = r.sink(out)
 	}
 	if err != nil {
@@ -290,13 +296,15 @@ func (t Tour) play(o *settings, sink func(*image.RGBA) error) (err error) {
 		start = DefaultStart
 	}
 	r := &Recorder{
-		dev:  dev,
-		step: time.Second / time.Duration(t.fps()),
-		fps:  t.fps(),
-		bg:   o.background,
-		pix:  image.NewRGBA(image.Rect(0, 0, w, h)),
-		sink: sink,
-		lay:  t.layout(o),
+		dev:     dev,
+		step:    time.Second / time.Duration(t.fps()),
+		fps:     t.fps(),
+		bg:      o.background,
+		pix:     image.NewRGBA(image.Rect(0, 0, w, h)),
+		sink:    sink,
+		lay:     t.layout(o),
+		cursors: cursors{scale: t.scale()},
+		mouse:   mouse{draw: !o.noCursor, shown: true, size: t.Size},
 	}
 	if r.lay.style == FrameMac {
 		r.frame = newFramer(r.lay, t.Title, o)
