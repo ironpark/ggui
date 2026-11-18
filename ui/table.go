@@ -114,6 +114,8 @@ type TableWidget[T any, K comparable] struct {
 	footBox *widget.BoxWidget  // foot at the height of a row
 	caption *widget.TextWidget // nil without Caption
 	capSize ggui.Size
+	toolBox *widget.BoxWidget // Toolbar's widget in the cell padding, nil without one
+	toolSz  ggui.Size
 	scroll  *widget.ScrollWidget
 	column  *widget.ColumnWidget
 	theme   *uitheme.Theme
@@ -121,6 +123,7 @@ type TableWidget[T any, K comparable] struct {
 	footH   float64
 	footBg  color.Color // the footer surface, resolved each layout
 	capH    float64
+	toolH   float64
 }
 
 // tableLabelText gives a table's headings and footer the theme's medium
@@ -168,8 +171,8 @@ func Table[T any, K comparable](rows ggui.Readable[[]T], key func(T) K, cols ...
 }
 
 // compose stacks the table's parts: the headings, the rows (scrolling under
-// a Height or a maximum), then the footer where there is one. The caption
-// is laid out apart, under the column.
+// a Height or a maximum), then the footer where there is one. The toolbar
+// and the caption are laid out apart, above and under the column.
 func (t *TableWidget[T, K]) compose() {
 	parts := []ggui.Widget{t.headBox, t.body}
 	if t.scrolls() {
@@ -307,7 +310,7 @@ func (t *TableWidget[T, K]) RowHeight(h float64) *TableWidget[T, K] {
 	return t
 }
 
-// Height fixes the table's height, footer and caption included,
+// Height fixes the table's height, toolbar, footer and caption included,
 // and scrolls the body under the fixed heading. Without it, or a
 // MaxHeight or MaxRows, the table is as tall as its rows. It wins over
 // MaxHeight and MaxRows; zero removes it.
@@ -315,15 +318,15 @@ func (t *TableWidget[T, K]) Height(h float64) *TableWidget[T, K] {
 	return t.bound(func() { t.height = max(0, h) })
 }
 
-// MaxHeight lets the table be as tall as its rows up to h, footer and
-// caption included, and past that scrolls the body under the fixed
+// MaxHeight lets the table be as tall as its rows up to h, toolbar, footer
+// and caption included, and past that scrolls the body under the fixed
 // heading. Height wins over it; zero removes it.
 func (t *TableWidget[T, K]) MaxHeight(h float64) *TableWidget[T, K] {
 	return t.bound(func() { t.maxH = max(0, h) })
 }
 
 // MaxRows is MaxHeight in rows: the table is as tall as its rows up to n of
-// them under the heading, with the footer and caption, and past
+// them under the heading, with the toolbar, footer and caption, and past
 // that the body scrolls. The limit follows the row height at layout. With
 // MaxHeight too the lower limit applies; Height wins over both. Zero
 // removes it.
@@ -352,6 +355,25 @@ func (t *TableWidget[T, K]) scrolls() bool { return t.height > 0 || t.maxH > 0 |
 // fixedRows reports whether every row is rowH tall: under RowHeight or a
 // scrolling body. Otherwise rows grow to their cells.
 func (t *TableWidget[T, K]) fixedRows() bool { return t.rowSet || t.scrolls() }
+
+// Toolbar puts w above the heading row, as wide as the table, in the
+// cells' padding and over the line that parts the rows: a place for a
+// filter field or actions. It stays in place while the body scrolls, and
+// counts toward Height and MaxHeight. Nil removes it.
+//
+//	ui.Table(...).Toolbar(widget.Row(widget.Expanded(search), add).Gap(8))
+func (t *TableWidget[T, K]) Toolbar(w ggui.Widget) *TableWidget[T, K] {
+	switch {
+	case w == nil && t.toolBox == nil:
+		return t
+	case w == nil:
+		t.toolBox = nil
+	default:
+		t.toolBox = widget.Box(w)
+	}
+	t.props.Changed()
+	return t
+}
 
 // RowName names each row for Probe.Find and the inspector; the default is
 // the key.
@@ -488,7 +510,19 @@ func (t *TableWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		t.capSize = t.caption.Color(th.MutedFg).Layout(ggui.Loose(ggui.Sz(c.MaxW, c.MaxH)), env)
 		t.capH = t.capSize.H + 2*th.Space
 	}
-	around := t.headH + t.footH + t.capH // what is not the body
+	t.toolH = 0
+	if t.toolBox != nil {
+		// The cells' p-2 around it, over the line under it.
+		t.toolBox.Padding(ggui.Insets(th.Space, th.Space, th.Space+th.BorderWidth, th.Space))
+		tc := ggui.Constraints{MaxW: c.MaxW, MaxH: ggui.Unbounded}
+		if c.MaxW != ggui.Unbounded {
+			tc.MinW = c.MaxW // a table with flexible columns is as wide as it may be
+		}
+		t.toolSz = t.toolBox.Layout(tc, env)
+		t.toolH = t.toolSz.H
+		c.MinW = max(c.MinW, min(t.toolSz.W, c.MaxW))
+	}
+	around := t.toolH + t.headH + t.footH + t.capH // what is not the body
 	switch {
 	case t.height > 0:
 		h := min(t.height, c.MaxH)
@@ -505,10 +539,14 @@ func (t *TableWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		h = min(h, c.MaxH)
 		c.MinH, c.MaxH = h, h
 	}
-	c.MinH, c.MaxH = max(0, c.MinH-t.capH), max(0, c.MaxH-t.capH)
+	apart := t.toolH + t.capH
+	c.MinH, c.MaxH = max(0, c.MinH-apart), max(0, c.MaxH-apart)
 	sz := t.column.Layout(c, env)
 	t.bodyH = sz.H - t.headH - t.footH
-	return ggui.Sz(sz.W, sz.H+t.capH)
+	if t.toolBox != nil && t.toolSz.W != sz.W {
+		t.toolSz = t.toolBox.Layout(ggui.Tight(ggui.Sz(sz.W, t.toolH)), env)
+	}
+	return ggui.Sz(sz.W, sz.H+apart)
 }
 
 // Paint implements Widget.
@@ -518,15 +556,22 @@ func (t *TableWidget[T, K]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if t.footH > 0 {
 		dst.FillRect(footer, t.footBg)
 	}
+	top := r.Origin.Y + t.toolH // where the column starts
 	dst.Node(r, ggui.Node{Role: ggui.RoleTable}, func(dst *ggui.Canvas) {
-		dst.Paint(t.column, ggui.Rct(r.Origin, ggui.Sz(r.Size.W, r.Size.H-t.capH)))
+		if t.toolBox != nil {
+			dst.Paint(t.toolBox, ggui.Rct(r.Origin, ggui.Sz(r.Size.W, t.toolH)))
+		}
+		dst.Paint(t.column, ggui.Rct(ggui.Pt(r.Origin.X, top), ggui.Sz(r.Size.W, r.Size.H-t.toolH-t.capH)))
 		if t.caption != nil {
 			at := ggui.Pt(r.Origin.X+(r.Size.W-t.capSize.W)/2, r.Origin.Y+r.Size.H-t.capSize.H)
 			dst.Paint(t.caption, ggui.Rct(at, t.capSize))
 		}
 	})
 	line := ggui.Sz(r.Size.W, th.BorderWidth)
-	dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+t.headH-th.BorderWidth), line), th.Border)
+	if t.toolBox != nil {
+		dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, top-th.BorderWidth), line), th.Border)
+	}
+	dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, top+t.headH-th.BorderWidth), line), th.Border)
 	if t.footH > 0 {
 		dst.FillRect(ggui.Rct(footer.Origin, line), th.Border)
 	}
