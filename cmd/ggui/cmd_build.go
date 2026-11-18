@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
+	"github.com/ironpark/ggui/cmd/ggui/internal/i18n"
 	"github.com/ironpark/ggui/cmd/ggui/internal/macos"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
@@ -413,13 +415,17 @@ func (b *builder) macos(ctx context.Context) error {
 	}
 
 	appName := b.main.Name + ".app"
+	extra, langs := plistExtra(b.proj.Root, cfg.MacOS.Plist)
+	if langs != nil {
+		logf("Info.plist names the localizations %s, from the translation catalogs", strings.Join(langs, ", "))
+	}
 	assemble := ui.Stderr.Step("Assembling " + appName)
 	app, warnings, err := macos.Assemble(macos.Bundle{
 		Name: b.main.Name, Executable: b.main.Executable, ID: b.main.ID,
 		Version:              cfg.App.Version,
 		MinimumSystemVersion: cfg.MacOS.MinimumSystemVersion,
 		Category:             cfg.MacOS.Category,
-		Extra:                cfg.MacOS.Plist,
+		Extra:                extra,
 		Binary:               bin,
 		Icon:                 b.proj.Path(cfg.App.Icon),
 		IconInset:            cfg.MacOS.IconInset,
@@ -532,6 +538,42 @@ func (b *builder) macos(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// plistExtra returns the Info.plist keys [macos.plist] sets, with
+// CFBundleLocalizations, when it does not set that, made from the
+// languages of the translation catalogs below root, found as ggui i18n
+// check finds them: the development language, en, first, then the rest
+// sorted. macOS shows the app's menus and dialogs, the ones it draws, in
+// a language only when the bundle names it. It also returns the languages
+// it named, or nil when it named none.
+func plistExtra(root string, plist map[string]any) (map[string]any, []string) {
+	if _, set := plist["CFBundleLocalizations"]; set {
+		return plist, nil
+	}
+	// A Go file that does not parse fails the build; the catalogs found
+	// before it are as good as any.
+	src, _ := i18n.Find(root, i18n.DefaultGlobs)
+	if src == nil {
+		return plist, nil
+	}
+	found := i18n.Langs(src.Catalogs)
+	if len(found) == 0 {
+		return plist, nil
+	}
+	found = slices.DeleteFunc(found, func(l string) bool { return l == "en" })
+	slices.Sort(found)
+	langs := append([]string{"en"}, found...)
+	extra := maps.Clone(plist)
+	if extra == nil {
+		extra = map[string]any{}
+	}
+	list := make([]any, len(langs))
+	for i, l := range langs {
+		list[i] = l
+	}
+	extra["CFBundleLocalizations"] = list
+	return extra, langs
 }
 
 // sign signs path as a step, reporting whether it was signed: a step that

@@ -451,6 +451,14 @@ The icon must be a PNG. ggui carries no SVG renderer, so an `.svg`
 the drawing program, or with `rsvg-convert -w 1024 -h 1024 icon.svg -o
 icon.png`, and name that.
 
+macOS draws the app's standard menu items and dialogs in a language only
+when `Info.plist` lists it in `CFBundleLocalizations`. When
+`[macos.plist]` does not set that key, a project with translation
+catalogs, found as [`ggui i18n check`](#ggui-i18n) finds them, gets it:
+`en`, the development language, then the catalogs' languages, sorted,
+said as the build starts. Set `CFBundleLocalizations` under
+`[macos.plist]` to name them yourself.
+
 The default signing identity, `-`, signs ad hoc with `codesign`, which
 runs on the Mac that built it. Away from a Mac an ad hoc build is left
 unsigned, with a notice.
@@ -783,7 +791,7 @@ base = "/hello/"
 | `p12_password_env` | `"GGUI_P12_PASSWORD"` | The environment variable holding the password, read when `p12_password_file` is not set. |
 | `notarize` | `false` | Notarize and staple; see `--notarize`. |
 | `universal` | `false` | Build for Apple silicon and Intel; see `--universal`. |
-| `[macos.plist]` | none | Extra `Info.plist` keys of any TOML type but dates, written over the generated ones. |
+| `[macos.plist]` | none | Extra `Info.plist` keys of any TOML type but dates, written over the generated ones. Without `CFBundleLocalizations` here, a project with [translation catalogs](#ggui-i18n) gets one naming their languages; see [The macOS bundle](#the-macos-bundle). |
 
 ### [macos.notary]
 
