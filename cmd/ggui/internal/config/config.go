@@ -288,8 +288,7 @@ func Parse(name string, data []byte) (Config, error) {
 	cfg := Defaults()
 	md, err := toml.NewDecoder(bytes.NewReader(data)).Decode(&cfg)
 	if err != nil {
-		var pe toml.ParseError
-		if errors.As(err, &pe) {
+		if pe, ok := errors.AsType[toml.ParseError](err); ok {
 			return Config{}, &Error{File: name, Line: pe.Position.Line, Msg: pe.Message}
 		}
 		// A value of the wrong type comes as text, naming the key.
@@ -355,7 +354,7 @@ func undecoded(md toml.MetaData) []toml.Key {
 // table inside an array inside one as undecoded, though the map holds
 // them.
 func inMap(k toml.Key) bool {
-	t := reflect.TypeOf(Config{})
+	t := reflect.TypeFor[Config]()
 	for _, name := range k {
 		if t.Kind() == reflect.Map {
 			return true
@@ -392,7 +391,7 @@ func unknownKey(k toml.Key) string {
 // knownKeys lists the keys the schema has below table, from the struct
 // tags, so the suggestion can never fall out of step with the schema.
 func knownKeys(table []string) []string {
-	t := reflect.TypeOf(Config{})
+	t := reflect.TypeFor[Config]()
 	for _, name := range table {
 		f, ok := fieldByTag(t, name)
 		if !ok || f.Type.Kind() != reflect.Struct {
@@ -401,8 +400,8 @@ func knownKeys(table []string) []string {
 		t = f.Type
 	}
 	var keys []string
-	for i := range t.NumField() {
-		if tag := t.Field(i).Tag.Get("toml"); tag != "-" {
+	for field := range t.Fields() {
+		if tag := field.Tag.Get("toml"); tag != "-" {
 			keys = append(keys, tag)
 		}
 	}
@@ -410,9 +409,9 @@ func knownKeys(table []string) []string {
 }
 
 func fieldByTag(t reflect.Type, tag string) (reflect.StructField, bool) {
-	for i := range t.NumField() {
-		if t.Field(i).Tag.Get("toml") == tag {
-			return t.Field(i), true
+	for field := range t.Fields() {
+		if field.Tag.Get("toml") == tag {
+			return field, true
 		}
 	}
 	return reflect.StructField{}, false
@@ -521,7 +520,7 @@ func (c *Config) validate() []problem {
 	if !strings.HasPrefix(c.Web.Base, "/") {
 		add(fmt.Sprintf("web.base %q must be an absolute path such as / or /app/", c.Web.Base), "web", "base")
 	}
-	for _, f := range strings.Fields(c.Web.WasmOpt) {
+	for f := range strings.FieldsSeq(c.Web.WasmOpt) {
 		if !strings.HasPrefix(f, "-") {
 			add(fmt.Sprintf("web.wasm_opt %q must be wasm-opt flags such as -O2 or -Oz, or empty to skip it", c.Web.WasmOpt), "web", "wasm_opt")
 			break

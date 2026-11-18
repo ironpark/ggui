@@ -54,7 +54,7 @@ func (s *sim) change(paths []string) {
 
 // run plays the saves and returns once all is quiet.
 func (s *sim) run() {
-	for step := 0; step < 10000; step++ {
+	for range 10000 {
 		// The next thing to happen: a save found, a build due, a build
 		// done.
 		next := time.Duration(-1)

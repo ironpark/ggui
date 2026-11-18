@@ -74,7 +74,7 @@ func running(t *testing.T, work string) bool {
 	if err != nil {
 		t.Skipf("ps: %v", err)
 	}
-	for _, l := range strings.Split(string(out), "\n") {
+	for l := range strings.SplitSeq(string(out), "\n") {
 		if strings.Contains(l, work) && !strings.HasPrefix(l, "ps ") {
 			return true
 		}

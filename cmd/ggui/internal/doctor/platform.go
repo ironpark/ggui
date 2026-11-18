@@ -160,7 +160,7 @@ func checkUnix(ctx context.Context, r *Report) {
 	}
 	for _, t := range tools {
 		found := ""
-		for _, n := range strings.Fields(t.names) {
+		for n := range strings.FieldsSeq(t.names) {
 			if p, err := exec.LookPath(n); err == nil {
 				found = p
 				break
@@ -281,7 +281,7 @@ func ldConfDirs(path string, depth int) []string {
 		return nil
 	}
 	var dirs []string
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if i := strings.IndexByte(line, '#'); i >= 0 {
 			line = strings.TrimSpace(line[:i])

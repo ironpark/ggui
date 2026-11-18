@@ -40,8 +40,8 @@ func Resize(src image.Image, size int) *image.NRGBA {
 	xw := weights(w, size)
 	yw := weights(h, size)
 	tmp := make([]float64, size*h*4)
-	for y := 0; y < h; y++ {
-		for x := 0; x < size; x++ {
+	for y := range h {
+		for x := range size {
 			var acc [4]float64
 			for _, c := range xw[x] {
 				s := (y*w + c.i) * 4
@@ -53,8 +53,8 @@ func Resize(src image.Image, size int) *image.NRGBA {
 		}
 	}
 	dst := image.NewNRGBA(image.Rect(0, 0, size, size))
-	for y := 0; y < size; y++ {
-		for x := 0; x < size; x++ {
+	for y := range size {
+		for x := range size {
 			var acc [4]float64
 			for _, c := range yw[y] {
 				s := (c.i*size + x) * 4
@@ -89,7 +89,7 @@ type contrib struct {
 func weights(m, n int) [][]contrib {
 	out := make([][]contrib, n)
 	scale := float64(m) / float64(n)
-	for d := 0; d < n; d++ {
+	for d := range n {
 		lo, hi := float64(d)*scale, float64(d+1)*scale
 		var cs []contrib
 		for s := int(math.Floor(lo)); s < int(math.Ceil(hi)) && s < m; s++ {

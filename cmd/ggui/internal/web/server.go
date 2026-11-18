@@ -350,7 +350,7 @@ func (s *Server) serveWasm(w http.ResponseWriter, r *http.Request) {
 // acceptsGzip reports whether the client asked for gzip and did not then
 // refuse it with q=0.
 func acceptsGzip(r *http.Request) bool {
-	for _, enc := range strings.Split(r.Header.Get("Accept-Encoding"), ",") {
+	for enc := range strings.SplitSeq(r.Header.Get("Accept-Encoding"), ",") {
 		name, params, _ := strings.Cut(strings.TrimSpace(enc), ";")
 		if name != "gzip" {
 			continue
