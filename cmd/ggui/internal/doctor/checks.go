@@ -15,6 +15,7 @@ import (
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/config"
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
+	"github.com/ironpark/ggui/cmd/ggui/internal/i18n"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 	"github.com/ironpark/ggui/cmd/ggui/internal/windows"
 )
@@ -241,6 +242,48 @@ func checkConfig(r *Report, o Options) *project.Project {
 	}
 	checkWindowsBuild(r, proj)
 	return proj
+}
+
+// checkTranslations sums up ggui i18n check, for a project with catalogs:
+// a translation missing or wrong is a warning here, since the app still
+// builds and runs, showing the source text or a garbled one.
+func checkTranslations(r *Report, root string) {
+	src, err := i18n.Find(root, i18n.DefaultGlobs)
+	if err != nil || len(src.Catalogs) == 0 {
+		return // a Go file that does not parse is the build's to say
+	}
+	var bad []string
+	warns := 0
+	for _, c := range src.Catalogs {
+		errs := 0
+		for _, p := range i18n.Check(c, src, i18n.Options{}) {
+			if p.Error {
+				errs++
+			} else {
+				warns++
+			}
+		}
+		if errs > 0 {
+			name := c.Lang
+			if name == "" {
+				name = c.Name
+			}
+			what := "errors"
+			if errs == 1 {
+				what = "error"
+			}
+			bad = append(bad, fmt.Sprintf("%s: %d %s", name, errs, what))
+		}
+	}
+	langs := strings.Join(i18n.Langs(src.Catalogs), ", ")
+	switch {
+	case len(bad) > 0:
+		r.warn("translations", strings.Join(bad, "; "), "ggui i18n check lists them; ggui i18n extract adds what is missing")
+	case warns > 0:
+		r.ok("translations", fmt.Sprintf("%s: every message translated; ggui i18n check has %d warnings", langs, warns))
+	default:
+		r.ok("translations", langs+": every message translated")
+	}
 }
 
 // checkWindowsBuild checks what ggui build --target windows takes from
