@@ -45,71 +45,6 @@ func remove(t *testing.T, path string) {
 	}
 }
 
-func TestScan(t *testing.T) {
-	dir := t.TempDir()
-	a, b, c := filepath.Join(dir, "a.go"), filepath.Join(dir, "b.go"), filepath.Join(dir, "c.go")
-	touch(t, a, "a")
-	touch(t, b, "b")
-	w := New([]string{dir, a, b, c}, Options{})
-	if got := w.Scan(); len(got) != 0 {
-		t.Fatalf("first scan reported %v", got)
-	}
-
-	touch(t, a, "a2")
-	if got := w.Scan(); !slices.Equal(got, []string{a}) {
-		t.Errorf("after modifying a: %v", got)
-	}
-	if got := w.Scan(); len(got) != 0 {
-		t.Errorf("a change was reported twice: %v", got)
-	}
-
-	// Removing a file is a change to it and to its directory.
-	remove(t, b)
-	dirTime := time.Now().Add(time.Hour)
-	if err := os.Chtimes(dir, dirTime, dirTime); err != nil {
-		t.Fatal(err)
-	}
-	if got := w.Scan(); !slices.Equal(got, []string{dir, b}) {
-		t.Errorf("after removing b: %v", got)
-	}
-
-	// A watched path that did not exist and now does.
-	touch(t, c, "c")
-	if got := w.Scan(); !slices.Contains(got, c) {
-		t.Errorf("after creating c: %v", got)
-	}
-
-	// An editor's save by rename: same name, new file.
-	tmp := filepath.Join(t.TempDir(), "a.tmp")
-	touch(t, tmp, "a3-renamed")
-	rename(t, tmp, a)
-	if got := w.Scan(); !slices.Contains(got, a) {
-		t.Errorf("after replacing a by rename: %v", got)
-	}
-}
-
-func TestSetKeepsStamps(t *testing.T) {
-	dir := t.TempDir()
-	a, b := filepath.Join(dir, "a"), filepath.Join(dir, "b")
-	touch(t, a, "a")
-	touch(t, b, "b")
-	w := New([]string{a}, Options{})
-	touch(t, a, "a2")
-	// A change made before the set is replaced is still reported; a path
-	// new to the set is not reported for existing.
-	if added := w.Set([]string{a, b}); !slices.Equal(added, []string{b}) {
-		t.Errorf("Set added %v, want [b]", added)
-	}
-	if got := w.Scan(); !slices.Equal(got, []string{a}) {
-		t.Errorf("after Set: %v, want [a]", got)
-	}
-	w.Set([]string{b})
-	touch(t, a, "a3")
-	if got := w.Scan(); len(got) != 0 {
-		t.Errorf("a path dropped from the set was reported: %v", got)
-	}
-}
-
 // pkg is a package directory under test: its Go files, an embedded file
 // in a directory git would ignore, and what the go command would list.
 type pkg struct {
@@ -336,27 +271,78 @@ func TestChangeMerge(t *testing.T) {
 	}
 }
 
+func mkfiles(t *testing.T, root string, files map[string]string) {
+	t.Helper()
+	for name, data := range files {
+		p := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func write(t *testing.T, path, data string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // A scan that catches a save between its truncating the file and writing
 // it sees an empty file. The edit is judged by what the save writes: one
 // to a comment is not a real change because the file was empty in passing.
 func TestClassifyWaitsOutATruncatedSave(t *testing.T) {
+	t.Setenv(PollEnv, "poll")
 	path := filepath.Join(t.TempDir(), "main.go")
 	const src = "package main\n\nfunc main() {}\n"
 	touch(t, path, src)
 	w := New([]string{path}, Options{})
-	w.fingerprint([]string{path})
+	time.Sleep(100 * time.Millisecond) // the fingerprint is taken
 
 	touch(t, path, "")
-	ds := w.scan()
-	if len(ds) != 1 {
-		t.Fatalf("the scan found %d changes, want the truncated file", len(ds))
-	}
-	go os.WriteFile(path, []byte(src+"// A comment.\n"), 0o644)
-	real, cosmetic, _ := w.classify(ds)
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		os.WriteFile(path, []byte(src+"// A comment.\n"), 0o644)
+	}()
+	real, cosmetic, _, _ := w.classify(w.fs.Sync(context.Background()))
 	if len(real) > 0 || !slices.Equal(cosmetic, []string{path}) {
 		t.Errorf("real %v, cosmetic %v: want the comment's edit cosmetic", real, cosmetic)
 	}
-	if ds := w.scan(); len(ds) > 0 {
-		t.Errorf("the next scan judges the file again: %v", ds)
+	if b := w.fs.Sync(context.Background()); len(b.Changes) > 0 {
+		t.Errorf("the next scan judges the file again: %v", b.Changes)
 	}
+}
+
+// The rules a listing is judged by are git's; the entries of a package
+// directory leave out only what is never worth a look.
+func TestIgnore(t *testing.T) {
+	root := t.TempDir()
+	ig := NewIgnore(filepath.Join(root, "build"))
+	for _, c := range []struct {
+		path       string
+		git, entry bool
+	}{
+		{"main.go", false, false},
+		{"build/app", true, true},
+		{".git/HEAD", true, true},
+		{"main.go~", false, true},
+		{"4913", false, true},
+		{"node_modules/x.js", true, true}, // outside a work tree, the fallback
+	} {
+		p := filepath.Join(root, filepath.FromSlash(c.path))
+		if got := ig.Ignored(p); got != c.git {
+			t.Errorf("%s: ignored = %v, want %v", c.path, got, c.git)
+		}
+		if got := ig.entry(p, false); got != c.entry {
+			t.Errorf("%s: entry ignored = %v, want %v", c.path, got, c.entry)
+		}
+	}
+	var none *Ignore
+	if none.Ignored("/x/.git/HEAD") || none.entry("/x/.git", true) {
+		t.Error("nil Ignore ignored a path")
+	}
+	none.Reset()
 }
