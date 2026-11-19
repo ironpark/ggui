@@ -363,9 +363,7 @@ func (w *Watcher) fingerprint(paths []string) {
 	if len(files) == 0 {
 		return
 	}
-	w.bg.Add(1)
-	go func() {
-		defer w.bg.Done()
+	w.bg.Go(func() {
 		for _, p := range files {
 			before := stat(p)
 			if !before.exist || before.dir {
@@ -383,5 +381,5 @@ func (w *Watcher) fingerprint(paths []string) {
 			}
 			w.mu.Unlock()
 		}
-	}()
+	})
 }

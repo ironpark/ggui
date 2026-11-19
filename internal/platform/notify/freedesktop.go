@@ -77,12 +77,12 @@ func fdAction(key string) (string, bool) {
 // the "@" Go dials one by. It is "" where there is no bus to be found.
 func sessionBusPath(getenv func(string) string, exists func(string) bool) string {
 	if addr := getenv("DBUS_SESSION_BUS_ADDRESS"); addr != "" {
-		for _, a := range strings.Split(addr, ";") {
+		for a := range strings.SplitSeq(addr, ";") {
 			rest, ok := strings.CutPrefix(a, "unix:")
 			if !ok {
 				continue
 			}
-			for _, kv := range strings.Split(rest, ",") {
+			for kv := range strings.SplitSeq(rest, ",") {
 				k, v, _ := strings.Cut(kv, "=")
 				v = unescapeAddress(v)
 				switch k {
