@@ -3,6 +3,7 @@ package fswatch
 import (
 	"bytes"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"time"
@@ -115,7 +116,41 @@ func (w *Watcher) reconcile() (added []string, dropped map[string]stamp) {
 		delete(w.files, p)
 		delete(w.sums, p)
 	}
+	w.compact()
 	return added, dropped
+}
+
+// seenStamp is a path and its stamp, as a scan saw it.
+type seenStamp struct {
+	path string
+	st   stamp
+}
+
+// compactBelow is the fewest paths a watcher must once have held before
+// its maps are made again for having shrunk.
+const compactBelow = 4096
+
+// compact makes the maps again, at the size of what they hold, once the
+// set has shrunk to a quarter of the most it held: a map never gives
+// back the room it grew to, and a large tree watched once and then
+// dropped kept hundreds of megabytes of it. w.mu is held.
+func (w *Watcher) compact() {
+	n := len(w.files)
+	w.peak = max(w.peak, n)
+	if w.peak < compactBelow || n > w.peak/4 {
+		return
+	}
+	w.files = remake(w.files)
+	w.entries = remake(w.entries)
+	w.sums = remake(w.sums)
+	w.peak = n
+}
+
+// remake returns a copy of m, sized to what it holds.
+func remake[K comparable, V any](m map[K]V) map[K]V {
+	out := make(map[K]V, len(m))
+	maps.Copy(out, m)
+	return out
 }
 
 // check scans and returns what changed. full lists every directory
@@ -124,9 +159,16 @@ func (w *Watcher) reconcile() (added []string, dropped map[string]stamp) {
 func (w *Watcher) check(full bool, relist map[string]bool) Batch {
 	at := time.Now()
 	w.mu.Lock()
-	paths := make([]string, 0, len(w.files))
-	for p := range w.files {
-		paths = append(paths, p)
+	// The paths and their stamps go in a slice kept from scan to scan: a
+	// watch of a large tree stats every path each scan, and a map or a
+	// slice made afresh for each was garbage of hundreds of megabytes
+	// every few seconds.
+	seen := w.scanned[:0]
+	if cap(seen) > 2*len(w.files)+64 {
+		seen = nil // the set shrank: let the larger go
+	}
+	for p, st := range w.files {
+		seen = append(seen, seenStamp{p, st})
 	}
 	onFull := w.onFull
 	w.mu.Unlock()
@@ -135,11 +177,17 @@ func (w *Watcher) check(full bool, relist map[string]bool) Batch {
 	}
 
 	// Stat outside the lock, so Add and Set are never held up by a slow
-	// disk.
-	now := make(map[string]stamp, len(paths))
-	for _, p := range paths {
-		now[p] = stat(p)
+	// disk, keeping only the paths that changed.
+	changed := seen[:0]
+	for _, e := range seen {
+		if s := stat(e.path); s != e.st {
+			changed = append(changed, seenStamp{e.path, s})
+		}
 	}
+	defer func() {
+		clear(seen) // hold no paths the set may drop
+		w.scanned = seen[:0]
+	}()
 
 	w.mu.Lock()
 	if relist == nil {
@@ -147,7 +195,8 @@ func (w *Watcher) check(full bool, relist map[string]bool) Batch {
 	}
 	reshape := full
 	var ds []delta
-	for p, s := range now {
+	for _, e := range changed {
+		p, s := e.path, e.st
 		old, ok := w.files[p]
 		if !ok || old == s {
 			continue // unchanged, or dropped while this scan ran

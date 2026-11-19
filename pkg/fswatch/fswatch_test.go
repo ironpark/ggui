@@ -541,3 +541,53 @@ func TestNoLeaks(t *testing.T) {
 		}
 	})
 }
+
+// A large tree dropped from the set leaves maps made again at the size of
+// what is left, which still reports its changes.
+func TestDroppedTreeCompacts(t *testing.T) {
+	big, small := t.TempDir(), t.TempDir()
+	files := map[string]string{}
+	for i := range compactBelow + 100 {
+		files[fmt.Sprintf("d%d/f%d", i%50, i)] = "x"
+	}
+	mkfiles(t, big, files)
+	a := filepath.Join(small, "a")
+	touch(t, a, "a")
+	w := New(Options{NoNotify: true, Recursive: true})
+	w.Set([]string{big, small})
+	if w.peak < compactBelow {
+		t.Fatalf("peak %d after watching %d files", w.peak, len(files))
+	}
+	w.Sync(context.Background())
+	w.Set([]string{small})
+	if w.Len() != 2 || w.peak != 2 {
+		t.Errorf("after the tree was dropped: %d paths, peak %d; want 2, 2", w.Len(), w.peak)
+	}
+	touch(t, a, "a2")
+	if got := w.Sync(context.Background()).Changes; !slices.Equal(got, []Event{ev(Write, a)}) {
+		t.Errorf("after compacting: %v, want a written", got)
+	}
+}
+
+// A scan with nothing changed allocates nothing per path watched.
+func TestQuietScanAllocatesLittle(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{}
+	for i := range 2000 {
+		files[fmt.Sprintf("d%d/f%d", i%20, i)] = "x"
+	}
+	mkfiles(t, dir, files)
+	w := New(Options{NoNotify: true, Recursive: true})
+	w.Set([]string{dir})
+	w.check(false, nil)
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	before := ms.TotalAlloc
+	w.check(false, nil)
+	runtime.ReadMemStats(&ms)
+	// os.Stat's own garbage, some 200 bytes a path, is not the scan's;
+	// a map of the stamps alone was more than that again.
+	if per := (ms.TotalAlloc - before) / uint64(w.Len()); per > 400 {
+		t.Errorf("a quiet scan allocated %d bytes a path", per)
+	}
+}
