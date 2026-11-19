@@ -45,16 +45,22 @@ jobs:
             icons/lucide/go.sum
             icons/tabler/go.sum
             cmd/ggui/go.sum
+            pkg/fswatch/go.sum
       # examples/sqlite, fonts/notoemoji and the icon libraries under icons
       # are modules of their own that
       # require a published ggui; the workspace makes them build against
       # this checkout instead. cmd/ggui, the ggui command, is a module of
       # its own so its dependencies stay out of ggui's; it imports no ggui,
-      # but its tests build an app against this checkout.
+      # but its tests build an app against this checkout. pkg/fswatch, the
+      # file watcher, is a module of its own the command requires; the
+      # replace stands in for a version of it not yet tagged, which the go
+      # command would otherwise look for although the workspace has it.
       # The developer's own go.work, which also points at ../ggfx, is not
       # committed.
       - name: Workspace
-        run: go work init . ./examples/sqlite ./fonts/notoemoji ./icons/heroicons ./icons/lucide ./icons/tabler ./cmd/ggui
+        run: |
+          go work init . ./examples/sqlite ./fonts/notoemoji ./icons/heroicons ./icons/lucide ./icons/tabler ./cmd/ggui ./pkg/fswatch
+          go work edit -replace github.com/ironpark/ggui/pkg/fswatch=./pkg/fswatch
       # The Ubuntu image has DejaVu Sans but no font for Korean, which the
       # system font fallback is tested with. Mesa supplies a surfaceless EGL
       # context for the offscreen text rendering tests.
@@ -62,16 +68,17 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y fonts-nanum libegl1 libegl-mesa0 libgl1 libgl1-mesa-dri
       - name: Test
-        run: go test ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/... ./cmd/ggui/...
+        run: go test ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/... ./cmd/ggui/... ./pkg/fswatch/...
       # The ggui command's watcher once more, scanning without the
-      # system's notifications, and, where cgo is the default, without cgo:
-      # on macOS FSEvents calls back into Go on a thread of its own, which
-      # purego's fakecgo then makes possible.
-      - name: Test the ggui command's watcher by polling and without cgo
+      # system's notifications, and fswatch, where cgo is the default,
+      # without cgo: on macOS FSEvents calls back into Go on a thread of its
+      # own, which purego's fakecgo then makes possible. fswatch's own tests
+      # run each case both notified and polling.
+      - name: Test the watcher by polling and without cgo
         shell: bash
         run: |
           GGUI_WATCH=poll go test ./cmd/ggui/internal/watch/... ./cmd/ggui/internal/dev/...
-          CGO_ENABLED=0 go test ./cmd/ggui/internal/watch/...
+          CGO_ENABLED=0 go test ./pkg/fswatch/... ./cmd/ggui/internal/watch/...
       - name: Test with the inspector
         run: go test -tags ggui_inspector . ./widget
       - name: Test the debug build
@@ -149,6 +156,13 @@ jobs:
           cache-dependency-path: |
             go.sum
             cmd/ggui/go.sum
+            pkg/fswatch/go.sum
+      # The command requires a pkg/fswatch tagged only once it is
+      # published; until then it is built with this checkout's.
+      - name: Workspace
+        run: |
+          go work init ./cmd/ggui ./pkg/fswatch
+          go work edit -replace github.com/ironpark/ggui/pkg/fswatch=./pkg/fswatch
       - name: Build an app's packages
         run: |
           go -C cmd/ggui build -o "$RUNNER_TEMP/ggui" .
@@ -211,6 +225,12 @@ jobs:
           cache-dependency-path: |
             go.sum
             cmd/ggui/go.sum
+            pkg/fswatch/go.sum
+      # As in the linux package job, until pkg/fswatch is tagged.
+      - name: Workspace
+        run: |
+          go work init ./cmd/ggui ./pkg/fswatch
+          go work edit -replace github.com/ironpark/ggui/pkg/fswatch=./pkg/fswatch
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.17.1
@@ -369,7 +389,9 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Workspace
-        run: go work init . ./examples/sqlite ./fonts/notoemoji ./icons/heroicons ./icons/lucide ./icons/tabler ./cmd/ggui
+        run: |
+          go work init . ./examples/sqlite ./fonts/notoemoji ./icons/heroicons ./icons/lucide ./icons/tabler ./cmd/ggui ./pkg/fswatch
+          go work edit -replace github.com/ironpark/ggui/pkg/fswatch=./pkg/fswatch
       - name: gofmt
         run: |
           unformatted=$(gofmt -l .)
@@ -378,7 +400,7 @@ jobs:
           fi
       - name: vet
         run: |
-          go vet ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/... ./cmd/ggui/...
+          go vet ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/... ./cmd/ggui/... ./pkg/fswatch/...
           go vet -tags ggui_inspector .
       # The Windows accessibility bridge is compiled by no other platform;
       # see vet:windows in Taskfile.yml for why unsafeptr is off.
@@ -388,7 +410,7 @@ jobs:
             GOOS=windows GOARCH=$arch go vet -unsafeptr=false ./...
             GOOS=windows GOARCH=$arch go vet -unsafeptr=false -tags ggui_inspector .
             # The ggui command's job object code, with unsafeptr on.
-            GOOS=windows GOARCH=$arch go vet ./cmd/ggui/...
+            GOOS=windows GOARCH=$arch go vet ./cmd/ggui/... ./pkg/fswatch/...
           done
       # Each platform compiles code the others do not, so code unused on
       # one platform alone is not dead: staticcheck runs once per platform.
@@ -397,7 +419,7 @@ jobs:
           go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
           for p in linux/amd64 darwin/arm64 windows/amd64 windows/arm64; do
             echo "::group::$p"
-            GOOS=${p%/*} GOARCH=${p#*/} staticcheck ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/... ./cmd/ggui/...
+            GOOS=${p%/*} GOARCH=${p#*/} staticcheck ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/... ./cmd/ggui/... ./pkg/fswatch/...
             echo "::endgroup::"
           done
       - name: Build for other architectures
