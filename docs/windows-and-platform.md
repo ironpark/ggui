@@ -4,8 +4,8 @@
 
 An `App` is the process's GUI: one event loop, one UI thread, one reactive
 graph, and any number of windows. This page covers the windows and what an
-app asks of the desktop around them: menus, a tray icon, message boxes, the
-system appearance and a single running instance.
+app asks of the desktop around them: menus, a tray icon, message boxes,
+notifications, the system appearance and a single running instance.
 
 ## On this page
 
@@ -23,6 +23,7 @@ system appearance and a single running instance.
 - [The app's id](#the-apps-id)
 - [System languages](#system-languages)
 - [Open at login](#open-at-login)
+- [Notifications](#notifications)
 - [Platform support](#platform-support)
 
 ## Several windows
@@ -491,6 +492,121 @@ releases, so a new version finds what an old one registered.
 
 The files are written whole through a temporary file renamed over the old one.
 
+## Notifications
+
+`app.Notify` shows a desktop notification, and `app.OnNotification` hears the
+clicks on it:
+
+```go
+app.OnNotification(func(r ggui.NotificationResponse) {
+    switch r.Action {
+    case "": // the notification itself
+        m.openChat(r.Data)
+    case "read":
+        m.markRead(r.Data)
+    }
+})
+...
+err := app.Notify(ggui.Notification{
+    ID:    "chat-42", // a later one with this ID replaces it
+    Title: "Ada Lovelace",
+    Body:  "Are the engines ready?",
+    Sound: true,
+    Actions: []ggui.NotificationAction{
+        {ID: "reply", Title: "Reply", Foreground: true},
+        {ID: "read", Title: "Mark as read"},
+    },
+    Data: "chat/42", // handed back with the click
+})
+```
+
+`Notify` may be called from any goroutine, the UI thread included, and returns
+at once: the platform's work runs on a goroutine of its own. It returns an
+error only for what is known at once: `ErrNotificationsUnavailable` where the
+platform has no notifications for the app, `ErrNotificationsDenied` once the
+platform has said the user turned them off, and a notification with no text or
+an action with no ID. What the platform says later is written once on stderr.
+`app.RemoveNotification(id)` withdraws one; widgets reach all three through
+`ggui.UseHost()`.
+
+The handlers run on the UI thread. A click on the notification itself, or on a
+button marked `Foreground`, also brings the app forward as `ShowFromTray`
+does, before the handlers run: a tray app's hidden windows come back. A
+button without `Foreground`, such as Mark as read, leaves the app where it is.
+A click that arrives before the windows are open, as when a click launched
+the app on macOS, waits for them and for a handler; register the handler
+before `Run` to hear it.
+
+On macOS the first notification asks the user to allow them.
+`app.RequestNotificationPermission(fn)` asks at a moment of the app's
+choosing instead, as when the user turns on a setting that sends them, and
+reports the answer, now or later, on the UI thread:
+
+```go
+app.RequestNotificationPermission(func(granted bool) { notifyOn.Set(granted) })
+```
+
+| Platform | How | What it needs | Shows |
+| --- | --- | --- | --- |
+| macOS | UserNotifications | An app bundle, as `ggui build --target macos` makes; the user's leave, asked at the first notification | Title, subtitle, body, sound, buttons in the notification's Options menu, threads by `Group`; shown while the app is in front too |
+| macOS outside a bundle | `osascript` | Nothing | Title, subtitle, body, sound; no buttons, no replacing or removing, no clicks |
+| Windows 10 and 11 | WinRT toasts | The app's id registered as an AppUserModelID, which `Notify` does | Title, subtitle as the second line, body, sound, up to five buttons |
+| Linux and BSD | The freedesktop notification service over D-Bus | A session bus and a notification service, which desktops run | Title, body with the subtitle above it, buttons where the service shows them (GNOME and KDE do), the icon of the app's desktop file |
+| Browser | The Notification API | The page's permission, asked at the first notification | Title, body with the subtitle above it; no buttons |
+| Elsewhere | None | | `ErrNotificationsUnavailable` |
+
+On macOS, UserNotifications posts only for an app with a bundle identifier.
+An executable run on its own, by `go run`, `go build` or `ggui dev`, has none:
+its notifications are shown by `osascript` instead, with no buttons and no
+response to a click, which the app says once on stderr. `ggui dev` runs the
+executable it builds, not a bundle, in either display mode, so under
+`ggui dev` notifications appear without buttons and a click does nothing;
+macOS may show them under Script Editor's name and icon, and the first one
+may ask to allow Script Editor's notifications. Build the bundle to see them
+as users will: `ggui build --target macos`, then open the app. macOS also
+refuses a bundle it will not vouch for, such as one opened from a temporary
+directory, with "Notifications are not allowed for this application", which
+the app writes on stderr: open it from a folder such as `/Applications` or the
+project's. A
+notification shown by an earlier run carries its `Data` and the buttons that
+bring the app forward, so a click that launches the app is answered in full.
+
+On Windows a toast is shown under an AppUserModelID, the
+[app's id](#the-apps-id) with spaces made dots, registered for the user under
+`HKCU\Software\Classes\AppUserModelId\<id>` with the main window's title as
+`DisplayName`. That is what lets Windows show the toasts of an app that has
+no Start menu shortcut, as a `ggui build` executable has none; the process's
+own AppUserModelID is left alone, so the taskbar button stays with a pinned
+shortcut. The toast shows Windows' generic icon, not the app's. Clicks are
+heard while the app runs; a click on a toast after the app has exited does
+nothing, since that needs a COM activator registered for the id, which ggui
+does not register. A toast is known by its tag, the `ID`, so `Group` is not
+used on Windows.
+
+On Linux and the BSDs the notification goes to `org.freedesktop.Notifications`
+on the session bus, through a D-Bus client of ggui's own: the title as the
+summary, the main window's title as the app name, and the
+[app's id](#the-apps-id) as the `desktop-entry` hint, the name of the desktop
+file the Linux package installs, from which the desktop shows the app's icon.
+A later notification with the same ID replaces the one shown by this run, and
+a body is escaped for a service that reads markup in it. Without a session
+bus, `Notify` returns `ErrNotificationsUnavailable`.
+
+Under `ggui dev`'s viewer the app posts its notifications itself, as the
+process on the same desktop that it is; nothing goes through the viewer.
+
+In a test, a `Probe` records what `Notify` shows instead of showing it, and
+`ClickNotification` clicks one:
+
+```go
+p := ggui.ProbeBuilder(chat, ggui.Sz(400, 300))
+p.Tap("Send")
+if n := p.Notifications(); len(n) != 1 || n[0].ID != "chat-42" {
+    t.Fatalf("notifications %+v", n)
+}
+p.ClickNotification("chat-42", "read") // the handlers run in a frame
+```
+
 ## Platform support
 
 | Feature | macOS | Windows | Linux | Browser |
@@ -506,5 +622,6 @@ The files are written whole through a temporary file renamed over the old one.
 | `SingleInstance` | Yes | Yes | Yes | Every tab is one |
 | `SystemLanguages` | Yes | Yes | Environment | `navigator.languages` |
 | `SetOpenAtLogin` | LaunchAgent | `Run` key | XDG autostart | No |
+| `Notify` | UserNotifications in a bundle, else `osascript` | Toasts | freedesktop service over D-Bus | Notification API |
 | `runtime.OpenURL` | `open` | Default handler | `xdg-open` | New tab |
 | `runtime.Reveal` | Selected in Finder | Selected in Explorer | FileManager1 over D-Bus, else the folder | No |
