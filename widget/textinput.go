@@ -86,6 +86,7 @@ type TextInputWidget struct {
 	ed textedit.Editor
 
 	ime         ggui.IME
+	imeFor      *imeOwner // the editor ime serves, which Adopt hands on
 	composition string
 	compCaret   int // caret inside composition, in bytes
 	imeStart    int // the byte range of ed.Text the IME was told about
@@ -141,12 +142,16 @@ func TextInput(value ggui.Binding[string]) *TextInputWidget {
 	t := &TextInputWidget{value: value, minWidth: 120}
 	t.Role = ggui.RoleTextField
 	t.AutoKey()
+	// The IME edits whichever editor owns it now: one rebuilt over this
+	// one takes it over, with what it composes (Adopt).
+	o := &imeOwner{t: t}
+	t.imeFor = o
 	t.ime = ggui.NewIME(ggui.IMEHandler{
-		Session:     t.imeSession,
-		Composition: t.imeComposition,
-		Commit:      t.imeCommit,
-		Replace:     t.imeReplace,
-		End:         func() { t.Interactive.Focused = false },
+		Session:     func() (image.Rectangle, string, string) { return o.t.imeSession() },
+		Composition: func(text string, caret int) { o.t.imeComposition(text, caret) },
+		Commit:      func(text string) { o.t.imeCommit(text) },
+		Replace:     func(before, text, after string) { o.t.imeReplace(before, text, after) },
+		End:         func() { o.t.Interactive.Focused = false },
 	})
 	t.layout.Face = func() text.Face { return t.face(1) }
 	t.layout.Style = func() paragraph.Style { return t.textStyle() }
@@ -1123,6 +1128,21 @@ func (t *TextInputWidget) commit() {
 // tests substitute a fake through ggui.SetIME that feeds compositions and
 // commits by hand.
 
+// noIME is the IME of an editor another rebuilt over it took its own
+// from: it composes nothing.
+type noIME struct{}
+
+func (noIME) Update(image.Rectangle) (bool, error) { return false, nil }
+func (noIME) Confirm()                             {}
+func (noIME) Cancel()                              {}
+func (noIME) Rebase(string, string)                {}
+func (noIME) Typed(string)                         {}
+
+// imeOwner is the editor an IME serves. It is the IME's handler's one way
+// to the editor, so that an editor rebuilt over another takes the IME over
+// by pointing it at itself.
+type imeOwner struct{ t *TextInputWidget }
+
 // imeSession tells a new session where the caret is and the text around
 // it, which is the range a replacing commit replaces.
 func (t *TextInputWidget) imeSession() (caret image.Rectangle, before, after string) {
@@ -1384,18 +1404,38 @@ func (t *TextInputWidget) HandlePointer(ev ggui.PointerEvent) bool {
 }
 
 // Adopt implements Adopter: a rebuilt editor at the same Rect carries on
-// with the previous one's focus, caret and selection.
+// with the previous one's focus, caret and selection, and its IME, with
+// what the IME is composing. A form rebuilt by its own field's write, as
+// each syllable a Korean IME commits writes it, so goes on composing the
+// next one: confirming it there would commit its first letter alone.
 func (t *TextInputWidget) Adopt(prev any) {
 	p, ok := prev.(*TextInputWidget)
 	if !ok {
 		return
 	}
-	p.ime.Confirm()
+	// The IME moves over, once however often the regions ask: the editor
+	// left behind keeps one that does nothing, so nothing it still runs,
+	// as its binding's effect, reaches the IME in use.
+	if p.imeFor != nil {
+		t.ime.Cancel() // its own, which never started a session
+		t.ime, t.imeFor = p.ime, p.imeFor
+		t.imeFor.t = t
+		t.composition, t.compCaret, t.imeStart, t.imeEnd = p.composition, p.compCaret, p.imeStart, p.imeEnd
+		p.ime, p.imeFor, p.composition = noIME{}, nil, ""
+	}
 	t.Interactive.Adopt(prev)
 	t.ed, t.scroll, t.width = p.ed, p.scroll, p.width
 	t.clicks = p.clicks
-	if p.ed.Text != ggui.Untrack(t.value.Get) {
-		t.ed.SetText(ggui.Untrack(t.value.Get))
+	if v := ggui.Untrack(t.value.Get); p.ed.Text != v {
+		// Written from outside meanwhile: what was composed was for text
+		// that is gone, as the binding's own effect drops it.
+		if t.composition != "" {
+			t.ime.Cancel()
+		}
+		t.ed.SetText(v)
+		lo, hi := t.ed.Selection()
+		t.imeStart, t.imeEnd = 0, len(t.ed.Text)
+		t.ime.Rebase(t.ed.Text[:lo], t.ed.Text[hi:])
 	}
 	t.blink = ggui.Now()
 }

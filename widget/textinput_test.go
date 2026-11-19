@@ -286,6 +286,56 @@ func TestTextInputSurvivesRebuildWithCaret(t *testing.T) {
 	}
 }
 
+// An editor rebuilt while the IME composes, as one whose own binding's
+// write rebuilds the form around it, carries the composition on rather
+// than confirming it: a Korean IME commits each syllable as the next one
+// starts, and a rebuild that confirmed the next would split it into its
+// letters.
+func TestTextInputRebuiltWhileComposingKeepsComposing(t *testing.T) {
+	t.Parallel()
+	useFakeIME(t)
+	value := ggui.State("")
+	build := func() ggui.Widget { return TextInput(value) }
+	first := build().(*TextInputWidget)
+	var current ggui.Widget = first
+	p := ggui.NewProbe(ggui.FromFuncs(
+		func(c ggui.Constraints, env ggui.Env) ggui.Size { return current.Layout(c, env) },
+		func(dst *ggui.Canvas, r ggui.Rect) { current.Paint(dst, r) },
+	), ggui.Sz(200, 20))
+	defer p.Close()
+	p.Click(ggui.Pt(100, 10))
+	f := first.ime.(*fakeIME)
+	tick := func() { p.Move(ggui.Pt(100, 10)); p.Frame() } // the IME runs on the input, the paint after it
+	// 한 committed as ㄱ starts the next syllable.
+	f.commit = "한"
+	tick()
+	f.compose = "ㄱ"
+	tick()
+	if ggui.Untrack(value.Get) != "한" || first.composition != "ㄱ" {
+		t.Fatalf("value = %q composition = %q before the rebuild", ggui.Untrack(value.Get), first.composition)
+	}
+	confirmed := f.confirmed
+	second := build().(*TextInputWidget)
+	current = second
+	tick()
+	if f.confirmed != confirmed || ggui.Untrack(value.Get) != "한" || second.composition != "ㄱ" {
+		t.Fatalf("after the rebuild: confirmed %d times, value = %q, composition = %q; want ㄱ still composing",
+			f.confirmed-confirmed, ggui.Untrack(value.Get), second.composition)
+	}
+	// The IME composes on in the rebuilt editor, and commits there.
+	f.compose = "글"
+	tick()
+	f.compose, f.commit = "", "글"
+	tick()
+	if got := ggui.Untrack(value.Get); got != "한글" || second.composition != "" || second.ed.Caret != len("한글") {
+		t.Fatalf("value = %q composition = %q caret %d, want 한글 with the caret after it", got, second.composition, second.ed.Caret)
+	}
+	// The editor left behind keeps nothing of the IME's.
+	if first.composition != "" {
+		t.Fatalf("the replaced editor still shows %q", first.composition)
+	}
+}
+
 func TestTextInputPasswordHidesText(t *testing.T) {
 	t.Parallel()
 	useFakeIME(t)

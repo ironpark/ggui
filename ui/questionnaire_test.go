@@ -1,6 +1,7 @@
 package ui_test
 
 import (
+	"image"
 	"slices"
 	"testing"
 
@@ -162,5 +163,79 @@ func TestQuestionnaireButtonArrowsGoBackAndForth(t *testing.T) {
 	p.Type(ggui.Mods{}, ggui.KeyArrowRight)
 	if got := ggui.Untrack(active.Get); got != "three" {
 		t.Fatalf("ArrowRight on Next went to %q, want three", got)
+	}
+}
+
+// koreanIME composes as a Korean input method does: each syllable is
+// committed as the next one starts, which the test sets up by hand.
+type koreanIME struct {
+	h               ggui.IMEHandler
+	compose, commit string
+	shown           string
+	confirmedEarly  *int
+}
+
+func (k *koreanIME) Update(image.Rectangle) (bool, error) {
+	if k.commit != "" {
+		k.h.Session()
+		k.h.Commit(k.commit)
+		k.commit = ""
+	}
+	if k.compose != k.shown {
+		k.shown = k.compose
+		k.h.Composition(k.compose, len(k.compose))
+	}
+	return k.shown != "", nil
+}
+
+func (k *koreanIME) Confirm() {
+	if k.shown != "" {
+		*k.confirmedEarly++
+		k.h.Session()
+		k.h.Commit(k.shown)
+	}
+	k.compose, k.shown = "", ""
+	k.h.Composition("", 0)
+}
+
+func (k *koreanIME) Cancel()               { k.compose, k.shown = "", "" }
+func (k *koreanIME) Rebase(string, string) {}
+func (k *koreanIME) Typed(string)          {}
+
+// The freeform answer's own write rebuilds the questionnaire around it: a
+// Korean word typed there keeps each syllable whole, rather than having
+// the rebuild commit the letter the next syllable began with.
+func TestQuestionnaireFreeformTakesKorean(t *testing.T) {
+	var early int
+	var imes []*koreanIME
+	t.Cleanup(ggui.SetIME(func(h ggui.IMEHandler) ggui.IME {
+		k := &koreanIME{h: h, confirmedEarly: &early}
+		imes = append(imes, k)
+		return k
+	}))
+	answers := ggui.State(ui.QuestionAnswers{})
+	q := ui.Questionnaire(answers, surveyQuestions()...)
+	p := ggui.NewProbe(q, ggui.Sz(450, 500))
+	defer p.Close()
+	field, ok := p.Find("Other")
+	if !ok {
+		t.Fatalf("no freeform field:\n%s", p.Semantics())
+	}
+	p.Click(field.Center())
+	ime := imes[len(imes)-1]
+	step := func(commit, compose string) {
+		ime.commit, ime.compose = commit, compose
+		p.Move(field.Center()) // the IME runs on the input
+		p.Frame()              // and the form is built again on the paint
+	}
+	step("", "ㅎ")
+	step("", "하")
+	step("", "한")
+	step("한", "ㄱ")
+	step("", "그")
+	step("", "글")
+	step("글", "")
+	if got := ggui.Untrack(answers.Get)["one"].Text; got != "한글" || early != 0 {
+		t.Fatalf("typed %q, with %d compositions committed early; want 한글 and none", got, early)
 	}
 }
