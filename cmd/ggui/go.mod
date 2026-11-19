@@ -4,8 +4,8 @@ go 1.27.0
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/ebitengine/purego v0.11.1
 	github.com/goreleaser/nfpm/v2 v2.48.0
+	github.com/ironpark/ggui/pkg/fswatch v0.1.0
 	github.com/ironpark/zapp v1.7.1
 	golang.org/x/sys v0.49.0
 )
@@ -21,6 +21,7 @@ require (
 	github.com/blakesmith/ar v0.0.0-20190502131153-809d4375e1fb // indirect
 	github.com/cloudflare/circl v1.6.4 // indirect
 	github.com/cyphar/filepath-securejoin v0.7.0 // indirect
+	github.com/ebitengine/purego v0.11.1 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.9.0 // indirect
