@@ -256,6 +256,10 @@ type Watcher struct {
 	entries map[string]map[string]bool
 	sums    map[string]fileSum
 	shape   int // counts changes to roots and entries' keys
+	peak    int // the most paths files held since its maps were made
+	// scanned is check's slice of the paths and stamps it stats, kept
+	// for the next check; only the one goroutine checking uses it.
+	scanned []seenStamp
 	// onFull, when set, is called as a full rescan starts; for tests.
 	onFull func()
 }
