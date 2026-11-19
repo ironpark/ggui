@@ -1,4 +1,4 @@
-//go:build !(darwin && !ios) && !js && !((linux && !android) || freebsd || netbsd || openbsd || dragonfly)
+//go:build !(darwin && !ios) && !windows && !js && !((linux && !android) || freebsd || netbsd || openbsd || dragonfly)
 
 package notify
 
