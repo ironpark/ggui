@@ -1,7 +1,7 @@
 package notify
 
 import (
-	"path/filepath"
+	"path"
 	"strings"
 )
 
@@ -96,7 +96,7 @@ func sessionBusPath(getenv func(string) string, exists func(string) bool) string
 		return ""
 	}
 	if dir := getenv("XDG_RUNTIME_DIR"); dir != "" {
-		if p := filepath.Join(dir, "bus"); exists(p) {
+		if p := path.Join(dir, "bus"); exists(p) {
 			return p
 		}
 	}
