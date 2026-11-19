@@ -40,11 +40,22 @@ type LayerPool[T Texture] struct {
 type pooled[T Texture] struct {
 	img  T
 	used bool
+	// idle counts the frames since an area needed an image this large: one
+	// taken only for areas of a quarter of it or less.
+	idle int
 }
 
 // LayerGrid is the grid in pixels a layer image's bounds are rounded out
 // to.
 const LayerGrid = 64
+
+// LayerShrink is how many frames an image is kept for areas of a quarter
+// of it or less before a layer takes one of their size instead, which lets
+// the large one go. An image holding an area serves it, however much
+// larger: a fade over a list repainted whole took a layer of the whole
+// window, 78 MB on a 6K display, and each frame after, which repainted only
+// a spinner in the list, took it again, so that it was never let go.
+const LayerShrink = 120
 
 // Borrow returns an image for the next depth that covers area of whole,
 // all of whole when area is empty, making one with alloc when the depth
@@ -61,22 +72,32 @@ func (p *LayerPool[T]) Borrow(whole, area image.Rectangle, alloc func(image.Rect
 		p.depths = append(p.depths, nil)
 	}
 	pool := p.depths[i]
-	// The smallest that holds the area.
+	// What an image of the area's own would be.
+	b := image.Rect(area.Min.X&^(LayerGrid-1), area.Min.Y&^(LayerGrid-1),
+		(area.Max.X+LayerGrid-1)&^(LayerGrid-1), (area.Max.Y+LayerGrid-1)&^(LayerGrid-1)).Intersect(whole)
+	if b.Empty() {
+		b = area
+	}
+	need := b.Dx() * b.Dy()
+	// The smallest that holds the area, but not one long taken only for
+	// areas far smaller.
 	best, bestPx := -1, 0
 	for j, l := range pool {
-		b := l.img.Bounds()
-		if px := b.Dx() * b.Dy(); area.In(b) && (best < 0 || px < bestPx) {
+		ib := l.img.Bounds()
+		px := ib.Dx() * ib.Dy()
+		if !area.In(ib) || l.idle >= LayerShrink && 4*need <= px {
+			continue
+		}
+		if best < 0 || px < bestPx {
 			best, bestPx = j, px
 		}
 	}
 	if best >= 0 {
 		pool[best].used = true
+		if 4*need > bestPx {
+			pool[best].idle = 0
+		}
 		return pool[best].img
-	}
-	b := image.Rect(area.Min.X&^(LayerGrid-1), area.Min.Y&^(LayerGrid-1),
-		(area.Max.X+LayerGrid-1)&^(LayerGrid-1), (area.Max.Y+LayerGrid-1)&^(LayerGrid-1)).Intersect(whole)
-	if b.Empty() {
-		b = area
 	}
 	// What the new image holds, it replaces.
 	pool = slices.DeleteFunc(pool, func(l pooled[T]) bool {
@@ -122,6 +143,7 @@ func (p *LayerPool[T]) EndFrame() {
 		})
 		for j := range p.depths[i] {
 			p.depths[i][j].used = false
+			p.depths[i][j].idle++
 		}
 	}
 	for len(p.depths) > 0 && len(p.depths[len(p.depths)-1]) == 0 {

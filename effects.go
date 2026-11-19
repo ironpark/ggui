@@ -186,13 +186,22 @@ func (c *Canvas) Shadow(r Rect, radius float64, s ShadowStyle) {
 // along an axis faded out: the first lead logical pixels from clear to
 // opaque, and the last trail from opaque to clear, across x when
 // horizontal and across y otherwise. What is under r shows through the
-// faded ends, as it would through the content's own transparency.
+// faded ends, as it would through the content's own transparency. What
+// paint draws outside r is not shown.
 func (c *Canvas) FadeEdges(r Rect, horizontal bool, lead, trail float64, paint func(dst *Canvas)) {
 	if lead <= 0 && trail <= 0 || c == nil || c.Image == nil || c.Image.Bounds().Empty() {
 		paint(c)
 		return
 	}
-	c.layer(c.Image.Bounds(), paint, func(img *ggfx.Image) {
+	// The layer is r's, as a Blur's is: what paint draws past r would show
+	// unfaded beyond the faded ends. One of all c holds was the whole window
+	// for a list that fades out at its foot, 78 MB on a 6K display.
+	area := c.physical(r).Intersect(c.Image.Bounds())
+	if area.Empty() {
+		paint(c)
+		return
+	}
+	c.layer(area, paint, func(img *ggfx.Image) {
 		ramp := fadeRamp()
 		// A ramp of fadeRampLength pixels, clear to opaque, stretched over
 		// an end and turned to face into r.

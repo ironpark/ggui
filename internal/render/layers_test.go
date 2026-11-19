@@ -156,3 +156,46 @@ func TestLayerPoolGaugeBalances(t *testing.T) {
 		t.Fatalf("after FreeAll the gauge holds %d", gauge)
 	}
 }
+
+// An image taken only for areas far smaller than it, frame after frame, is
+// let go for one of their size; one taken again for an area as large stays.
+func TestLayerPoolShrinksWhatOnlySmallAreasTake(t *testing.T) {
+	var p LayerPool[*fakeTex]
+	whole := p.Borrow(window, image.Rectangle{}, allocFake)
+	p.Return()
+	p.EndFrame()
+	spinner := image.Rect(100, 100, 120, 120)
+	for range LayerShrink - 1 {
+		if got := p.Borrow(window, spinner, allocFake); got != whole {
+			t.Fatal("the whole window's image was let go too soon")
+		}
+		p.Return()
+		p.EndFrame()
+	}
+	small := p.Borrow(window, spinner, allocFake)
+	p.Return()
+	p.EndFrame()
+	if small == whole || small.b != image.Rect(64, 64, 128, 128) {
+		t.Fatalf("after %d frames: bounds %v; want an image of the spinner's own", LayerShrink, small.b)
+	}
+	if !whole.freed || p.Len() != 1 {
+		t.Fatalf("the whole window's image: freed %v, %d kept; want freed, 1", whole.freed, p.Len())
+	}
+
+	// Needed now and then, it stays.
+	p.FreeAll()
+	whole = p.Borrow(window, image.Rectangle{}, allocFake)
+	p.Return()
+	p.EndFrame()
+	for f := range 3 * LayerShrink {
+		area := spinner
+		if f%(LayerShrink/2) == 0 {
+			area = image.Rectangle{}
+		}
+		if got := p.Borrow(window, area, allocFake); got != whole {
+			t.Fatalf("frame %d: the whole window's image was let go though needed every %d frames", f, LayerShrink/2)
+		}
+		p.Return()
+		p.EndFrame()
+	}
+}

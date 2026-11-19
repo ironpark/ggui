@@ -374,3 +374,26 @@ func TestClipOvalReturnsItsLayer(t *testing.T) {
 	}
 	c.freeLayers()
 }
+
+// FadeEdges paints through a layer of r, not of all its canvas holds: a list
+// fading out at its foot, painted on the window's canvas, took a layer of
+// the whole window.
+func TestFadeEdgesLayerCoversR(t *testing.T) {
+	t.Parallel()
+	img := ggfx.NewImage(1000, 800)
+	defer img.Deallocate()
+	c := &Canvas{Image: img}
+	r := Rct(Pt(10, 700), Sz(200, 60))
+	var in image.Rectangle
+	c.FadeEdges(r, false, 0, 20, func(dst *Canvas) { in = dst.Image.Bounds() })
+	if in != c.physical(r) {
+		t.Fatalf("painted into %v; want r, %v", in, c.physical(r))
+	}
+	c.freeLayers()
+	// Outside what c holds, it paints straight onto c, through no layer.
+	var onto *ggfx.Image
+	c.FadeEdges(Rct(Pt(2000, 0), Sz(10, 10)), false, 0, 20, func(dst *Canvas) { onto = dst.Image })
+	if onto != img || layerCount(c) != 0 {
+		t.Fatalf("outside the canvas: painted into its image %v, %d layers", onto == img, layerCount(c))
+	}
+}
