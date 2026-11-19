@@ -31,6 +31,8 @@ type Probe struct {
 	hasPointer bool
 
 	sinks []func(*inspect.Frame)
+
+	notes probeNotifications // what Notify recorded
 }
 
 // SetOverlay installs o over the probe's window, as App.SetOverlay does:
