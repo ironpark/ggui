@@ -60,7 +60,7 @@ jobs:
       - name: Workspace
         run: |
           go work init . ./examples/sqlite ./fonts/notoemoji ./icons/heroicons ./icons/lucide ./icons/tabler ./cmd/ggui ./pkg/fswatch
-          go work edit -replace github.com/ironpark/ggui/pkg/fswatch=./pkg/fswatch
+          go work edit -replace github.com/ironpark/ggui/pkg/fswatch@v0.1.0=./pkg/fswatch
       # The Ubuntu image has DejaVu Sans but no font for Korean, which the
       # system font fallback is tested with. Mesa supplies a surfaceless EGL
       # context for the offscreen text rendering tests.
@@ -162,7 +162,7 @@ jobs:
       - name: Workspace
         run: |
           go work init ./cmd/ggui ./pkg/fswatch
-          go work edit -replace github.com/ironpark/ggui/pkg/fswatch=./pkg/fswatch
+          go work edit -replace github.com/ironpark/ggui/pkg/fswatch@v0.1.0=./pkg/fswatch
       - name: Build an app's packages
         run: |
           go -C cmd/ggui build -o "$RUNNER_TEMP/ggui" .
@@ -230,7 +230,7 @@ jobs:
       - name: Workspace
         run: |
           go work init ./cmd/ggui ./pkg/fswatch
-          go work edit -replace github.com/ironpark/ggui/pkg/fswatch=./pkg/fswatch
+          go work edit -replace github.com/ironpark/ggui/pkg/fswatch@v0.1.0=./pkg/fswatch
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.17.1
@@ -391,7 +391,7 @@ jobs:
       - name: Workspace
         run: |
           go work init . ./examples/sqlite ./fonts/notoemoji ./icons/heroicons ./icons/lucide ./icons/tabler ./cmd/ggui ./pkg/fswatch
-          go work edit -replace github.com/ironpark/ggui/pkg/fswatch=./pkg/fswatch
+          go work edit -replace github.com/ironpark/ggui/pkg/fswatch@v0.1.0=./pkg/fswatch
       - name: gofmt
         run: |
           unformatted=$(gofmt -l .)
