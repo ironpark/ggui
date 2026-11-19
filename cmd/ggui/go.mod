@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/goreleaser/nfpm/v2 v2.48.0
-	github.com/ironpark/ggui/pkg/fswatch v0.1.0
+	github.com/ironpark/ggui/pkg/fswatch v0.2.0
 	github.com/ironpark/zapp v1.7.1
 	golang.org/x/sys v0.49.0
 )
