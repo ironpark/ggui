@@ -33,7 +33,7 @@ and controls that bind directly to your data.
 | Ready-made controls | Buttons, text fields, tables, tabs, dialogs, command search, charts, chat components with Markdown, and more. |
 | Text and input | IME composition, grapheme-aware editing, clipboard support, and font fallbacks. |
 | Motion and themes | Tweens, springs, transitions, light/dark themes, and inherited style tokens. |
-| The desktop | Several windows that reopen where they were closed, app menus, a tray icon, native file and message dialogs, and one running instance. |
+| The desktop | Several windows that reopen where they were closed, app menus, a tray icon, native file and message dialogs, desktop notifications with buttons, and one running instance. |
 | Your language | Every word the controls say by themselves replaced in one place, right-to-left layout, and Korean, Japanese and Chinese input. |
 | Developer tools | The `ggui` command for live rebuilds and release bundles, headless interaction tests with `Probe`, and an in-app widget inspector. |
 | Shipping | Bundles for macOS, Windows and Linux (`.app`, `.exe`, `.deb`, `.rpm`) built from any system, macOS signing and notarizing from a Mac, Linux or Windows, and one command that publishes a GitHub release, a Homebrew cask and a Chocolatey package. |
