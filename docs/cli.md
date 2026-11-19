@@ -283,12 +283,16 @@ file, compared with the last, which costs well under a millisecond for a
 few thousand files and sees every way an editor saves, a write in place,
 a new file renamed over the old one, or a delete and a create. The
 operating system's notifications only wake the scan up: FSEvents on
-macOS, on the roots of the modules being edited; inotify on Linux, on
-each watched directory and those made in them; `ReadDirectoryChangesW`
-on Windows, on the module roots. A save is seen some 20 ms after it is
-written, and the build starts 50 ms later if nothing else changes. A scan
-also runs every 2 seconds whatever is said, for a notification that never
-came, as on some network file systems. Where there are no notifications,
+macOS, on the roots of the modules being edited; inotify on Linux, once
+on each watched directory; `ReadDirectoryChangesW` on Windows, on the
+module roots. A save is seen some 20 ms after it is written, and the
+build starts 50 ms later if nothing else changes. A scan also runs every
+2 seconds whatever is said, for a notification that never came, as on
+some network file systems; when the system says it lost notifications,
+every watched directory is listed again as well. Editors' temporary
+files, such as Vim's `4913` and swap files and Emacs's backups, are not
+looked at. The watcher is
+[`pkg/fswatch`](../pkg/fswatch/), which any Go program can use. Where there are no notifications,
 or when inotify runs out of watches (`fs.inotify.max_user_watches`), dev
 says so in one line and scans four times a second instead;
 `GGUI_WATCH=poll` in the environment asks for that, for a file system
