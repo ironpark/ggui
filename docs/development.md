@@ -278,7 +278,7 @@ workspace that has the module; a replace in the workspace, not in
 `go.mod`, stands in for it, as CI's does:
 
 ```sh
-go work edit -replace github.com/ironpark/ggui/pkg/fswatch=./pkg/fswatch
+go work edit -replace github.com/ironpark/ggui/pkg/fswatch@v0.1.0=./pkg/fswatch
 ```
 
 The tag runs `.github/workflows/release-cli.yml`: GoReleaser builds the
