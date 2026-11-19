@@ -2,8 +2,10 @@ name: CI
 
 # A change to the documentation alone runs nothing: no test reads a
 # Markdown file, the guide under docs or the recordings under assets/demos.
-# A push or a pull request that touches anything else beside them runs
-# everything, as before.
+# Otherwise the changes job says what changed, and each job runs only for
+# what it tests: the library, the ggui command with its watcher, or
+# both. A change to CI itself, the nightly run and a run by hand run
+# everything.
 on:
   push:
     branches: [main]
@@ -16,6 +18,10 @@ on:
       - '**.md'
       - 'docs/**'
       - 'assets/demos/**'
+  # Every job, fuzzing included, nightly and by hand.
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -25,8 +31,50 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # lib is the library and everything built on it in this repository but
+  # the command: the root module, the examples, fonts and icon modules,
+  # and cmd/ggviewer. cmd is the ggui command and pkg/fswatch, whose
+  # tests build an app against this checkout, so a change to the library
+  # runs them too.
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      lib: ${{ steps.filter.outputs.lib == 'true' || steps.all.outputs.all == 'true' }}
+      cmd: ${{ steps.filter.outputs.lib == 'true' || steps.filter.outputs.cmd == 'true' || steps.all.outputs.all == 'true' }}
+      package: ${{ steps.filter.outputs.cmd == 'true' || steps.all.outputs.all == 'true' }}
+      all: ${{ steps.all.outputs.all == 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+      # A nightly run or one by hand has nothing to compare with, and
+      # runs everything.
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        with:
+          predicate-quantifier: every
+          filters: |
+            lib:
+              - '**'
+              - '!cmd/ggui/**'
+              - '!pkg/fswatch/**'
+              - '!.github/**'
+              - '!**.md'
+              - '!docs/**'
+              - '!assets/demos/**'
+            cmd:
+              - '{cmd/ggui,pkg/fswatch}/**'
+              - '!**.md'
+            ci:
+              - '{.github/**,internal/tools/**,Taskfile.yml}'
+      - id: all
+        run: echo "all=${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.filter.outputs.ci == 'true' }}" >> "$GITHUB_OUTPUT"
+
   test:
     name: test (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.lib == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -51,11 +99,9 @@ jobs:
       # require a published ggui; the workspace makes them build against
       # this checkout instead. cmd/ggui, the ggui command, is a module of
       # its own so its dependencies stay out of ggui's; it imports no ggui,
-      # but its tests build an app against this checkout. pkg/fswatch, the
-      # file watcher, is a module of its own the command requires; the
-      # replace stands in for a version of it not yet tagged, which the go
-      # command would otherwise look for although the workspace has it.
-      # The developer's own go.work, which also points at ../ggfx, is not
+      # but its tests build an app against this checkout, and are run by
+      # the command job. pkg/fswatch, the file watcher, is a module of its
+      # own the command requires. The developer's own go.work, which also points at ../ggfx, is not
       # committed.
       - name: Workspace
         run: |
@@ -67,17 +113,7 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y fonts-nanum libegl1 libegl-mesa0 libgl1 libgl1-mesa-dri
       - name: Test
-        run: go test ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/... ./cmd/ggui/... ./pkg/fswatch/...
-      # The ggui command's watcher once more, scanning without the
-      # system's notifications, and fswatch, where cgo is the default,
-      # without cgo: on macOS FSEvents calls back into Go on a thread of its
-      # own, which purego's fakecgo then makes possible. fswatch's own tests
-      # run each case both notified and polling.
-      - name: Test the watcher by polling and without cgo
-        shell: bash
-        run: |
-          GGUI_WATCH=poll go test ./cmd/ggui/internal/watch/... ./cmd/ggui/internal/dev/...
-          CGO_ENABLED=0 go test ./pkg/fswatch/... ./cmd/ggui/internal/watch/...
+        run: go test ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/...
       - name: Test with the inspector
         run: go test -tags ggui_inspector . ./widget
       - name: Test the debug build
@@ -90,11 +126,58 @@ jobs:
         run: |
           go test -tags ggwd_remote . ./internal/platform/... ./runtime
           go build -tags ggwd_remote,ggui_inspector,ggui_debug -o "$RUNNER_TEMP/counter-remote" ./examples/counter
-      # The race detector needs cgo, which the Windows runner has no C
-      # toolchain configured for. Probe tests run under t.Parallel, and
-      # -race is what shows that no probe reaches another's state.
+
+  # The ggui command and its watcher, beside the library's tests rather than
+  # after them: they build apps against this checkout and take as long.
+  command:
+    name: command (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.cmd == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-26, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            cmd/ggui/go.sum
+            pkg/fswatch/go.sum
+      - name: Workspace
+        run: go work init . ./cmd/ggui ./pkg/fswatch
+      - name: Test
+        run: go test ./cmd/ggui/... ./pkg/fswatch/...
+      # The ggui command's watcher once more, scanning without the
+      # system's notifications, and fswatch, where cgo is the default,
+      # without cgo: on macOS FSEvents calls back into Go on a thread of its
+      # own, which purego's fakecgo then makes possible. fswatch's own tests
+      # run each case both notified and polling.
+      - name: Test the watcher by polling and without cgo
+        shell: bash
+        run: |
+          GGUI_WATCH=poll go test ./cmd/ggui/internal/watch/... ./cmd/ggui/internal/dev/...
+          CGO_ENABLED=0 go test ./pkg/fswatch/... ./cmd/ggui/internal/watch/...
+
+  # Probe tests run under t.Parallel, and -race is what shows that no
+  # probe reaches another's state. It needs cgo, which the Windows runner
+  # has no C toolchain configured for, and finds the same races on one
+  # system as on another: it runs on Linux, beside the other tests.
+  race:
+    needs: changes
+    if: needs.changes.outputs.lib == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Install test fonts and Mesa
+        run: sudo apt-get update && sudo apt-get install -y fonts-nanum libegl1 libegl-mesa0 libgl1 libgl1-mesa-dri
       - name: Test with the race detector
-        if: runner.os != 'Windows'
         run: go test -race ./...
 
   # The viewer and examples/counter with the remote backend, end to end, on
@@ -103,6 +186,8 @@ jobs:
   # the window; Windows' runner has no GPU, and DirectX draws with WARP.
   remote:
     name: remote (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.lib == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -146,6 +231,8 @@ jobs:
   # app opens.
   linux-package:
     name: linux package
+    needs: changes
+    if: needs.changes.outputs.package == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -206,6 +293,8 @@ jobs:
   # Apple's credentials, which CI has none of: it is not tested.
   sign-linux:
     name: sign a macOS app on Linux
+    needs: changes
+    if: needs.changes.outputs.package == 'true'
     runs-on: ubuntu-latest
     env:
       CERT_CN: 'Developer ID Application: ggui CI (GGUITEST01)'
@@ -335,6 +424,8 @@ jobs:
           done
 
   wasm:
+    needs: changes
+    if: needs.changes.outputs.lib == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -358,8 +449,10 @@ jobs:
           ./a11y ./inspect ./runtime
 
   # Each fuzz target's seeds already run in test; this explores a little
-  # beyond them on every push.
+  # beyond them, nightly and by hand, as it takes five minutes and finds
+  # nothing a push needs to wait on.
   fuzz:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -369,48 +462,67 @@ jobs:
       - name: Fuzz
         run: FUZZTIME=5s internal/tools/fuzz.sh
 
+  # gofmt once; vet and staticcheck once per platform, side by side, since
+  # each platform compiles code the others do not, so code unused on one
+  # platform alone is not dead. staticcheck keeps what it learned of
+  # packages that did not change in its cache.
   lint:
+    name: lint (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linux/amd64, darwin/arm64, windows/amd64, windows/arm64]
     runs-on: ubuntu-latest
+    env:
+      PKGS: ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/... ./cmd/ggui/... ./pkg/fswatch/...
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            cmd/ggui/go.sum
+            pkg/fswatch/go.sum
       - name: Workspace
         run: |
           go work init . ./examples/sqlite ./fonts/notoemoji ./icons/heroicons ./icons/lucide ./icons/tabler ./cmd/ggui ./pkg/fswatch
+          echo "GOOS=${PLATFORM%/*}" >> "$GITHUB_ENV"
+          echo "GOARCH=${PLATFORM#*/}" >> "$GITHUB_ENV"
+        env:
+          PLATFORM: ${{ matrix.platform }}
       - name: gofmt
+        if: matrix.platform == 'linux/amd64'
         run: |
           unformatted=$(gofmt -l .)
           if [ -n "$unformatted" ]; then
             echo "gofmt would change:"; echo "$unformatted"; exit 1
           fi
+      # The Windows accessibility bridge needs unsafeptr off; see
+      # vet:windows in Taskfile.yml. The ggui command's job object code and
+      # the watcher are vetted with it on.
       - name: vet
         run: |
-          go vet ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/... ./cmd/ggui/... ./pkg/fswatch/...
-          go vet -tags ggui_inspector .
-      # The Windows accessibility bridge is compiled by no other platform;
-      # see vet:windows in Taskfile.yml for why unsafeptr is off.
-      - name: vet (windows)
-        run: |
-          for arch in amd64 arm64; do
-            GOOS=windows GOARCH=$arch go vet -unsafeptr=false ./...
-            GOOS=windows GOARCH=$arch go vet -unsafeptr=false -tags ggui_inspector .
-            # The ggui command's job object code, with unsafeptr on.
-            GOOS=windows GOARCH=$arch go vet ./cmd/ggui/... ./pkg/fswatch/...
-          done
-      # Each platform compiles code the others do not, so code unused on
-      # one platform alone is not dead: staticcheck runs once per platform.
+          if [ "$GOOS" = windows ]; then
+            go vet -unsafeptr=false ./...
+            go vet -unsafeptr=false -tags ggui_inspector .
+            go vet ./cmd/ggui/... ./pkg/fswatch/...
+          else
+            go vet $PKGS
+            go vet -tags ggui_inspector .
+          fi
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/staticcheck
+          key: staticcheck-${{ matrix.platform }}-${{ hashFiles('go.sum', 'cmd/ggui/go.sum', 'pkg/fswatch/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            staticcheck-${{ matrix.platform }}-${{ hashFiles('go.sum', 'cmd/ggui/go.sum', 'pkg/fswatch/go.sum') }}-
+            staticcheck-${{ matrix.platform }}-
       - name: staticcheck
         run: |
-          go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
-          for p in linux/amd64 darwin/arm64 windows/amd64 windows/arm64; do
-            echo "::group::$p"
-            GOOS=${p%/*} GOARCH=${p#*/} staticcheck ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/... ./cmd/ggui/... ./pkg/fswatch/...
-            echo "::endgroup::"
-          done
+          GOOS= GOARCH= go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
+          staticcheck $PKGS
       - name: Build for other architectures
+        if: matrix.platform == 'linux/amd64'
         run: |
-          GOOS=linux GOARCH=amd64 go build ./...
           GOOS=linux GOARCH=riscv64 go build ./...
-          GOOS=windows GOARCH=arm64 go build ./...
