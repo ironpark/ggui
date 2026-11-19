@@ -60,8 +60,8 @@ func paintedBaseline(top, ascent, scale float64) float64 {
 
 // fieldBoxShape gives a field's box what its size depends on, the padding
 // and the radius, and leaves its colors to fieldChrome.
-func fieldBoxShape(b *widget.BoxWidget, t *uitheme.Theme, pad ggui.EdgeInsets) *widget.BoxWidget {
-	return b.Padding(pad).Radius(t.Radius)
+func fieldBoxShape(b *widget.BoxWidget, t *uitheme.Theme, pad ggui.EdgeInsets) {
+	b.Padding(pad).Radius(t.Radius)
 }
 
 // fieldFill is the surface of a field: the theme's Input, which may be

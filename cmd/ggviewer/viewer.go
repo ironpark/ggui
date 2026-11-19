@@ -846,11 +846,13 @@ func (v *session) remember(f func(*geometry)) {
 	v.mu.Unlock()
 	if first {
 		go func() {
+			tick := time.NewTicker(time.Second)
+			defer tick.Stop()
 			for {
 				select {
 				case <-v.quitting:
 					return
-				case <-time.After(time.Second):
+				case <-tick.C:
 					v.saveState()
 				}
 			}

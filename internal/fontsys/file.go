@@ -45,7 +45,7 @@ func openFontFile(path string) (io.ReaderAt, int64, error) {
 	if o, ok := openFontFiles.files[path]; ok {
 		return o.r, o.size, nil
 	}
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // path is a font file the system font search found
 	if err != nil {
 		return nil, 0, err
 	}

@@ -78,9 +78,9 @@ func TestDiamondRunsTheReaderOnceWithConsistentInputs(t *testing.T) {
 	chain := sum.Map(strings.ToUpper)
 	var seen []string
 	dispose := Observe(func() { seen = append(seen, chain.Get()+"|"+fmt.Sprint(double.Get(), next.Get())) })
-	defer dispose()
+	t.Cleanup(dispose)
 	for _, d := range []interface{ Dispose() }{double, next, sum, chain} {
-		defer d.Dispose()
+		t.Cleanup(d.Dispose)
 	}
 	a.Set(5)
 	Flush()

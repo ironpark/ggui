@@ -489,29 +489,27 @@ func (p *Probe) Perform(id NodeID, act Action) {
 
 // perform routes act to the widget that described the node. It runs on the
 // UI goroutine, against the regions and the tree the last frame left.
-func perform(c *Canvas, in *inputState, id NodeID, act Action) bool {
+func perform(c *Canvas, in *inputState, id NodeID, act Action) {
 	e := findSemNode(c, id)
 	if e == nil {
-		return false
+		return
 	}
 	// A disabled control is in the tree so that it can be read out, not so
 	// that it can be worked; only being looked at is allowed.
 	if e.node.Disabled && act.Kind != ActionFocus && act.Kind != ActionScrollIntoView {
-		return false
+		return
 	}
 	if a, ok := e.handler.(Actor); ok && a.Act(act) {
-		return true
+		return
 	}
 	switch act.Kind {
 	case ActionPress:
-		return press(e)
+		press(e)
 	case ActionFocus:
-		return focusNode(in, e)
+		focusNode(in, e)
 	case ActionScrollIntoView:
 		in.reveal(e.full)
-		return true
 	}
-	return false
 }
 
 // findSemNode returns the node id names in the frame's tree, matched the way

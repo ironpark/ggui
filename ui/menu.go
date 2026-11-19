@@ -216,7 +216,7 @@ func (m *MenuWidget) Act(a ggui.Action) bool {
 		m.current, m.hover = -1, -1
 		m.search.clear()
 		m.popup.Show()
-		m.jump(1)
+		m.jumpFirst()
 	case ggui.ActionCollapse:
 		m.popup.Hide()
 	default:
@@ -286,7 +286,7 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 		m.button.HandleKey(ev)
 		if m.popup.IsOpen() {
 			// Opened from the keyboard, the menu starts on its first row.
-			m.jump(1)
+			m.jumpFirst()
 		}
 	default:
 		m.button.HandleKey(ev)
@@ -324,10 +324,9 @@ func (m *MenuWidget) navigate(ev ggui.KeyEvent) bool {
 	return ok
 }
 
-// jump puts the highlight on the first enabled item from the near end:
-// the top for dir 1, the bottom for -1.
-func (m *MenuWidget) jump(dir int) {
-	m.current, m.pointed = stepIndex(-1, dir, len(m.items), m.enabled), false
+// jumpFirst puts the highlight on the first enabled item from the top.
+func (m *MenuWidget) jumpFirst() {
+	m.current, m.pointed = stepIndex(-1, 1, len(m.items), m.enabled), false
 }
 
 // reopen refreshes the items and, when first is set, highlights the first
@@ -343,7 +342,7 @@ func (m *MenuWidget) reopen(first bool) {
 		it.Sync()
 	}
 	if first {
-		m.jump(1)
+		m.jumpFirst()
 	}
 }
 
@@ -427,16 +426,15 @@ func (m *MenuWidget) typing() bool {
 // moves its highlight to the next enabled row whose label starts with what
 // has been typed since the last pause, searching on from the row the
 // highlight was on when the typing began. The same letter again moves on
-// to the next row that starts with it. It reports whether a row was found.
-func (m *MenuWidget) typeahead(text string) bool {
+// to the next row that starts with it.
+func (m *MenuWidget) typeahead(text string) {
 	leaf := m.leaf()
 	i := leaf.search.search(text, ggui.FrameTime(), menuTypeaheadReset, len(leaf.items), max(leaf.current, -1),
 		func(i int) string { return leaf.items[i].label }, leaf.enabled)
 	if i < 0 {
-		return false
+		return
 	}
 	leaf.current, leaf.hover, leaf.pointed = i, -1, false
-	return true
 }
 
 // key gives a key press to the innermost open menu under m and reports
@@ -964,7 +962,7 @@ func (it *MenuItemWidget) openSub(first bool) {
 		row.Sync()
 	}
 	if first {
-		it.sub.jump(1)
+		it.sub.jumpFirst()
 	}
 	it.subPopup.Show()
 }

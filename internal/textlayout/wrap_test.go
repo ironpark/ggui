@@ -139,13 +139,15 @@ func TestWrapKeepsNoTextItWasGiven(t *testing.T) {
 	// Stepping by grapheme remembers the line it last stepped in, and the
 	// text it is in: step in another.
 	textedit.NextGrapheme("elsewhere", 0)
-	buf, doc = nil, ""
+	buf, doc = nil, "" //nolint:ineffassign // drop the text, so that only a cache could keep it
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
 	for range 20 {
 		runtime.GC()
 		select {
 		case <-freed:
 			return
-		case <-time.After(10 * time.Millisecond):
+		case <-tick.C:
 		}
 	}
 	t.Fatal("the text wrapped is still reachable after it was dropped")

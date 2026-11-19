@@ -110,7 +110,7 @@ func BenchmarkTypingHeld(b *testing.B) {
 	e.SetText(strings.Clone(doc))
 	e.MoveTo(e.Snap(len(doc)/2), false)
 	e.Replace("x")
-	doc = ""
+	doc = "" //nolint:ineffassign // drop the document, so that only the editor can hold a copy
 	b.ReportAllocs()
 	for b.Loop() {
 		e.Replace("x") // within undoCoalesce of the last: one undo step

@@ -21,12 +21,16 @@ import (
 var fixtureJSON []byte
 
 type chartExample struct {
-	Stacked                                   bool
-	Opacities                                 map[string]float64
-	Name, Title, Description, Curve, Subtitle string
-	Data                                      []map[string]any
-	Keys                                      []string
-	Colors                                    map[string]int
+	Stacked     bool               `json:"stacked"`
+	Opacities   map[string]float64 `json:"opacities"`
+	Name        string             `json:"name"`
+	Title       string             `json:"title"`
+	Description string             `json:"description"`
+	Curve       string             `json:"curve"`
+	Subtitle    string             `json:"subtitle"`
+	Data        []map[string]any   `json:"data"`
+	Keys        []string           `json:"keys"`
+	Colors      map[string]int     `json:"colors"`
 }
 
 var chartExamples = load()

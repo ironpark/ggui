@@ -89,7 +89,9 @@ var colorOffsets = func() []uintptr {
 	var t Theme
 	offsets := make([]uintptr, len(colorFields))
 	for i, f := range colorFields {
-		offsets[i] = uintptr(unsafe.Pointer(f(&t))) - uintptr(unsafe.Pointer(&t))
+		// Both addresses are taken after the call, with none between them, so
+		// the stack cannot move under the difference.
+		offsets[i] = uintptr(unsafe.Pointer(f(&t))) - uintptr(unsafe.Pointer(&t)) //nolint:stackaddr // see above
 	}
 	return offsets
 }()

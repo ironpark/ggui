@@ -9,5 +9,5 @@ import (
 
 // dial connects to ggui dev's unix socket.
 func dial(addr string, timeout time.Duration) (stream, error) {
-	return net.DialTimeout("unix", addr, timeout)
+	return net.DialTimeout("unix", addr, timeout) //nolint:gosec // addr is the dev socket ggui dev itself made
 }

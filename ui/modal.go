@@ -143,7 +143,7 @@ func (m *modal) Semantics() (ggui.Role, string) {
 // build makes the panel out of the title, the description, the content and
 // the footer, on the surface every floating thing uses and in the shape its
 // owner asks for. The caller lays it out when it knows the room.
-func (m *modal) build(env ggui.Env, shape modalShape) *widget.BoxWidget {
+func (m *modal) build(env ggui.Env, shape modalShape) {
 	t := uitheme.Of(env)
 	m.theme, m.env, m.shape = t, env, shape
 	if m.closeButton == nil {
@@ -175,7 +175,6 @@ func (m *modal) build(env ggui.Env, shape modalShape) *widget.BoxWidget {
 	pad.Top += shape.topInset
 	m.inner.Padding(pad)
 	m.panel.Fill(shape.fillColor).Shadow(shape.shadow[:]...).Border(shape.borderWidth, shape.border).Radius(shape.radius)
-	return m.panel
 }
 
 // assemble puts the parts together: the header and the content in a padded

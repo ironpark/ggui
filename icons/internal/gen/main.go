@@ -71,7 +71,7 @@ func main() {
 // read fetches the release and returns its icons in name order.
 func read(lib library) ([]glyph, error) {
 	url := "https://codeload.github.com/" + lib.repo + "/tar.gz/refs/tags/" + lib.version
-	resp, err := http.Get(url)
+	resp, err := http.Get(url) //nolint:gosec // url is codeload.github.com and a library from the table above
 	if err != nil {
 		return nil, err
 	}
@@ -116,14 +116,14 @@ func read(lib library) ([]glyph, error) {
 			// and read without parsing.
 			parsed, err := icons.Parse(data)
 			if err != nil {
-				return nil, fmt.Errorf("%s: %v", file, err)
+				return nil, fmt.Errorf("%s: %w", file, err)
 			}
 			bin, err := parsed.MarshalBinary()
 			if err != nil {
-				return nil, fmt.Errorf("%s: %v", file, err)
+				return nil, fmt.Errorf("%s: %w", file, err)
 			}
 			if _, err := icons.ParseBinary(bin); err != nil {
-				return nil, fmt.Errorf("%s: %v", file, err)
+				return nil, fmt.Errorf("%s: %w", file, err)
 			}
 			g.data = string(bin)
 			glyphs = append(glyphs, g)
@@ -218,7 +218,7 @@ func write(name string, lib library, glyphs []glyph, dir string) error {
 func source(file string, src []byte) error {
 	out, err := format.Source(src)
 	if err != nil {
-		return fmt.Errorf("%s: %v", file, err)
+		return fmt.Errorf("%s: %w", file, err)
 	}
 	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
 		return err

@@ -298,7 +298,7 @@ func (p *previewModel) transactionsCard() ggui.Widget {
 // navCards is the two menu cards side by side, a selection each.
 func (p *previewModel) navCards() ggui.Widget {
 	type entry struct{ icon, label string }
-	menu := func(name, selected string, sections ...[]entry) ggui.Widget {
+	menu := func(selected string, sections ...[]entry) ggui.Widget {
 		current := ggui.State(selected)
 		var rows []ggui.Widget
 		for i, section := range sections {
@@ -313,10 +313,10 @@ func (p *previewModel) navCards() ggui.Widget {
 		return ui.Card(widget.Column(rows...).Gap(2).Stretch()).Pad(8)
 	}
 	return widget.Row(
-		widget.Expanded(menu("Overview", "Dashboard",
+		widget.Expanded(menu("Dashboard",
 			[]entry{{"", "Overview"}, {"dashboard", "Dashboard"}, {"transfer", "Transactions"}, {"trending", "Investments"}, {"bank", "Accounts"}, {"pie", "Spending"}},
 			[]entry{{"", "Planning"}, {"target", "Goals"}, {"wallet", "Budget"}, {"report", "Reports"}, {"document", "Documents"}})),
-		widget.Expanded(menu("Account", "Billing",
+		widget.Expanded(menu("Billing",
 			[]entry{{"", "Account"}, {"user", "Profile"}, {"card", "Billing"}, {"bell", "Notifications"}, {"shield", "Security"}, {"brush", "Appearance"}},
 			[]entry{{"", "Support"}, {"help", "Help Center"}, {"message", "Contact Us"}, {"book", "Documentation"}, {"activity", "Status"}})),
 	).Gap(24).Align(widget.AlignStart)

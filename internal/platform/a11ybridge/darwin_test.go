@@ -26,7 +26,7 @@ func TestAXElementsResolveTheirOwningBridge(t *testing.T) {
 		tree := axRoots(a11y.SemNode{Role: a11y.RoleTextField, Value: value})
 		b.cur.Store(newAXFrame(tree))
 		elements[i] = objc.ID(b.element(axKeyOf(tree.At(0).ID)))
-		defer b.clear()
+		t.Cleanup(b.clear)
 	}
 	for i, want := range []string{"first window", "second window"} {
 		got := cstrings.NSStringToString(elements[i].Send(objc.RegisterName("accessibilityValue")))

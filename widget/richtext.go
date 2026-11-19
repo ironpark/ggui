@@ -644,7 +644,7 @@ func (a *SelectionAreaWidget) extend(u *RichTextWidget, at int) {
 	ggui.RepaintAll()
 	for k, t := range a.texts {
 		switch {
-		case k == i && k == j:
+		case k == i && i == j:
 			t.ed.MoveTo(a.anchorAt, false)
 			t.ed.MoveTo(at, true)
 		case k == i:

@@ -1,0 +1,42 @@
+mode = "standard"
+
+# The tree is formatted with go fmt (task fmt), not gofumpt; subtests run
+# serially on purpose where they share a window or a font cache.
+disable = ["gofumpt", "tparallel"]
+
+# Vendored code is kept as upstream wrote it, so that it can be updated.
+[[exclude]]
+paths = ["^internal/third_party/"]
+
+# Examples and tests read top to bottom, as a catalog or a script: their
+# length and branching is not what the complexity limits guard against.
+[[exclude]]
+paths = ["^examples/"]
+rules = ["complexity"]
+
+[[exclude]]
+tests = true
+rules = ["complexity", "unparam"]
+
+# append(buf[:0], ...) into a buffer kept across calls is how the tree reuses
+# its scratch slices.
+[[exclude]]
+rules = ["gocritic"]
+text = "^appendAssign: "
+
+# Insets indexes sides only after switching on len(sides).
+[[exclude]]
+paths = ["^widget\\.go$"]
+rules = ["gosec"]
+text = "^G602: "
+
+# The cancel func is kept in the Entry and called when the entry goes.
+[[exclude]]
+paths = ["^internal/imgcache/imgcache\\.go$"]
+rules = ["gosec"]
+text = "^G118: "
+
+# n is a Duration quotient, a count, so n * period is a Duration.
+[[exclude]]
+paths = ["^widget/textinput\\.go$"]
+rules = ["durationcheck"]

@@ -112,7 +112,7 @@ func windowsFonts(names ...string) []fontFile {
 }
 
 func fileExists(path string) bool {
-	_, err := os.Stat(path)
+	_, err := os.Stat(path) //nolint:gosec // path is a font file the system font search found
 	return err == nil
 }
 
