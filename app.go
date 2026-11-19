@@ -52,6 +52,8 @@ type App struct {
 
 	wakeQueued atomic.Bool // a WakeEvent is on its way
 	draining   atomic.Bool // posted work is running outside a frame
+
+	notes appNotifications // Notify's and OnNotification's
 }
 
 // New creates an App whose main window renders the tree returned by build.
@@ -230,6 +232,9 @@ func (a *App) handleEvent(ev ggwd.Event) error {
 		for _, t := range a.trays {
 			t.install()
 		}
+		// A click on a notification that came before the windows, such
+		// as the one that launched the app, has somewhere to go now.
+		a.notificationsReady()
 		return nil
 	}
 	switch ev.(type) {
@@ -702,6 +707,14 @@ type Host interface {
 	Announce(text string, politeness Politeness)
 	// Semantics returns the accessibility tree the last frame published.
 	Semantics() *SemTree
+	// Notify shows a desktop notification: the platform's under an App,
+	// recorded for Probe.Notifications under a Probe.
+	Notify(n Notification) error
+	// RemoveNotification withdraws the notification with id.
+	RemoveNotification(id string)
+	// OnNotification registers fn for clicks on the app's notifications;
+	// see App.OnNotification.
+	OnNotification(fn func(NotificationResponse))
 	// Close disposes everything the host built.
 	Close()
 }
