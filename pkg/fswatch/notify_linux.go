@@ -97,6 +97,33 @@ func (s *inotify) watch(dirs []string) error {
 	return nil
 }
 
+// watchTrees watches every directory below roots, but those skip leaves
+// out with all below them, as a Tree asks: inotify follows a directory,
+// not a tree. It fails past maxDirs directories, before watching any.
+func (s *inotify) watchTrees(roots []string, maxDirs int) error {
+	var dirs []string
+	for _, r := range roots {
+		err := filepath.WalkDir(r, func(p string, d fs.DirEntry, err error) error {
+			switch {
+			case err != nil:
+				return nil // gone, or not to be read: not watched
+			case !d.IsDir():
+				return nil
+			case p != r && s.skip != nil && s.skip(p):
+				return filepath.SkipDir
+			}
+			if dirs = append(dirs, p); len(dirs) > maxDirs {
+				return errTooManyDirs
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("%s: %w (%d)", r, err, maxDirs)
+		}
+	}
+	return s.watch(dirs)
+}
+
 // below reports whether dir is below one of dirs.
 func (s *inotify) below(dirs map[string]bool, dir string) bool {
 	for d := filepath.Dir(dir); ; d = filepath.Dir(d) {

@@ -53,4 +53,18 @@
 // [Ignore] is a ready-made [Options.Ignore]: editor temporary files,
 // version control directories and node_modules by default, chosen
 // directories, and, optionally, what git ignores.
+//
+// # Being woken only
+//
+// A [Watcher] keeps a stamp of every path it watches, so a recursive one
+// costs memory and a scan's time by the files below: a few hundred bytes
+// and a stat each, which a home folder of millions makes a gigabyte and a
+// core. A caller that only needs to be told that something below a
+// directory changed, and reads what itself, as a source control panel
+// runs git status, uses a [Tree] instead: it trusts the system's
+// notifications alone and keeps no path. macOS and Windows follow a whole
+// tree from its top; on Linux a Tree watches each directory but those
+// ignored, up to [TreeOptions.MaxDirs], and past it, or wherever the
+// system cannot follow, [Tree.Run] returns [ErrUnwatched] for the caller
+// to poll.
 package fswatch
