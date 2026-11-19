@@ -75,7 +75,7 @@ type joinedPart struct {
 func joinedParts(r ggui.Rect, radius float64, j JoinedSides, scale float64) (parts [4]joinedPart, n int) {
 	tl, tr := joinedCorner(radius, j.Left, j.Top), joinedCorner(radius, j.Right, j.Top)
 	bl, br := joinedCorner(radius, j.Left, j.Bottom), joinedCorner(radius, j.Right, j.Bottom)
-	if tl == tr && tl == bl && tl == br {
+	if tl == tr && tr == br && br == bl {
 		parts[0] = joinedPart{r, tl}
 		return parts, 1
 	}

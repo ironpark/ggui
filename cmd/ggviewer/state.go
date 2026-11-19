@@ -17,8 +17,10 @@ import (
 // geometry is where the window is, in device-independent pixels: its
 // position on its monitor and the size of its client area.
 type geometry struct {
-	X, Y          float64
-	Width, Height float64
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
 }
 
 func (g geometry) valid() bool {

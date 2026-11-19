@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"image"
 	"image/png"
 	"io"
@@ -172,6 +173,9 @@ func startViewer(t *testing.T, exe, socket string) *e2eViewer {
 			if err := json.Unmarshal(sc.Bytes(), &ev); err == nil {
 				v.events <- ev
 			}
+		}
+		if err := sc.Err(); err != nil {
+			fmt.Fprintf(cmd.Stderr, "e2e: reading the viewer's stdout: %v\n", err)
 		}
 		_ = cmd.Wait()
 		close(v.exited)

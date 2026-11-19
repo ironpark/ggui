@@ -2,6 +2,7 @@ package router
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -146,7 +147,7 @@ func (c *compiler) walk(nodes []Route, section []seg, layouts []*route) {
 			}
 			p := c.join(section, n.path, false)
 			l := c.add(&route{kind: kindLayout, pattern: p, layouts: layouts, layout: n.build})
-			c.walk(n.children, p, append(layouts[:len(layouts):len(layouts)], l))
+			c.walk(n.children, p, append(slices.Clip(layouts), l))
 		case *groupNode:
 			c.walk(n.children, c.join(section, n.path, false), layouts)
 		case *Target:

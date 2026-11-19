@@ -265,7 +265,8 @@ func (m *model) copyCode() {
 	m.status.Set("Go code copied.")
 }
 func (m *model) copyPreset() {
-	data, _ := json.MarshalIndent(ggui.Peek(m.settings), "", "  ")
+	// A preset is theme.Config as its Go fields name it.
+	data, _ := json.MarshalIndent(ggui.Peek(m.settings), "", "  ") //nolint:musttag // see above
 	ggui.CurrentClipboard().Write(string(data))
 	m.status.Set("Preset copied.")
 }
@@ -275,7 +276,7 @@ func (m *model) importPreset() {
 	var s customization
 	decoder := json.NewDecoder(strings.NewReader(ggui.Peek(m.presetText)))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&s); err != nil {
+	if err := decoder.Decode(&s); err != nil { //nolint:musttag // a preset is theme.Config as its Go fields name it
 		m.presetError.Set("Invalid preset: " + err.Error())
 		return
 	}

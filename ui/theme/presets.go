@@ -322,8 +322,11 @@ var shadcnJSON []byte
 
 var themePalettes = sync.OnceValue(func() map[string][2]map[string]color.Color {
 	var data []struct {
-		Name    string                                  `json:"name"`
-		CSSVars struct{ Light, Dark map[string]string } `json:"cssVars"`
+		Name    string `json:"name"`
+		CSSVars struct {
+			Light map[string]string `json:"light"`
+			Dark  map[string]string `json:"dark"`
+		} `json:"cssVars"`
 	}
 	if err := json.Unmarshal(shadcnJSON, &data); err != nil {
 		panic(err)

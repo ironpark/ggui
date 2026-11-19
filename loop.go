@@ -635,7 +635,7 @@ func (l *frameLoop) settle(size Size) (err error) {
 			// About to give up: the last pass notes what writes state, for
 			// the error to say.
 			stop := reactive.TraceWrites()
-			defer func() {
+			defer func() { //nolint:gocritic // the last pass only: one defer per settle
 				if writes := stop(); err != nil {
 					err = cycle(rt, writes...)
 				}

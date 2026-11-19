@@ -95,7 +95,7 @@ func serve(req string) int {
 func serveTo(raw string, stdout io.Writer) (int, error) {
 	var req request
 	if err := json.Unmarshal([]byte(raw), &req); err != nil {
-		return 2, fmt.Errorf("record: %s is not a request: %v", Env, err)
+		return 2, fmt.Errorf("record: %s is not a request: %w", Env, err)
 	}
 	if req.V != protocol {
 		return 2, fmt.Errorf("record: %s is a request of version %d, but this program's ggui reads version %d: "+

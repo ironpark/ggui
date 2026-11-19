@@ -197,7 +197,7 @@ func wrapParagraph(p string, width func(a, b int) float64, maxW float64) []Span 
 		if lineEnd > lineStart && w > maxW {
 			// Does not fit after what is on the line: break before it.
 			lines = append(lines, Span{lineStart, lineEnd})
-			lineStart, lineEnd = start, start
+			lineStart = start
 			w = width(lineStart, wend)
 		}
 		if w <= maxW {

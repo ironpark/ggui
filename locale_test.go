@@ -19,7 +19,7 @@ func TestNormalizeLanguage(t *testing.T) {
 		"C.UTF-8":         "",
 		"POSIX":           "",
 		"":                "",
-		" fr_CA ":         "fr-CA",
+		" fr_CA ":         "fr-CA", //nolint:gocritic // the spaces are what is tested
 	} {
 		if got := normalizeLanguage(in); got != want {
 			t.Errorf("normalizeLanguage(%q) = %q, want %q", in, got, want)

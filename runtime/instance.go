@@ -20,8 +20,8 @@ import (
 // directory it was started in, against which relative paths among the
 // arguments resolve.
 type Launch struct {
-	Args []string
-	Dir  string
+	Args []string `json:"args"`
+	Dir  string   `json:"dir"`
 }
 
 // ErrRunning is returned by ClaimInstance when another process already

@@ -65,6 +65,8 @@ func ready(t testing.TB, c *Cache[*tex], h *Handle[*tex], k Key, load Loader, u 
 	notified := make(chan struct{}, 1)
 	h.Acquire(c, k, load, Waiter{Post: u.post, Notify: func() { notified <- struct{}{} }})
 	deadline := time.After(time.Second)
+	tick := time.NewTicker(time.Millisecond)
+	defer tick.Stop()
 	for {
 		if st, tx, _, _ := h.Get(c, k); st != Pending {
 			return tx
@@ -74,7 +76,7 @@ func ready(t testing.TB, c *Cache[*tex], h *Handle[*tex], k Key, load Loader, u 
 		case <-notified:
 		case <-deadline:
 			t.Fatalf("%v never loaded", k)
-		case <-time.After(time.Millisecond):
+		case <-tick.C:
 		}
 	}
 }

@@ -83,7 +83,8 @@ func (r *RevealWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if !r.shown && r.progress <= 0 {
 		return c.Constrain(ggui.Size{})
 	}
-	inner, size := c, ggui.Size{}
+	inner := c
+	var size ggui.Size
 	if r.horizontal {
 		inner.MinW = 0
 		r.size = r.child.Layout(inner, env)

@@ -580,7 +580,7 @@ func Add[N layout.Number](s Writable[N], d N) { s.Update(func(n N) N { return n 
 // Append adds items to a writable slice, in a new slice so the
 // change is noticed.
 func Append[T any](s Writable[[]T], items ...T) {
-	s.Update(func(ts []T) []T { return append(ts[:len(ts):len(ts)], items...) })
+	s.Update(func(ts []T) []T { return append(slices.Clip(ts), items...) })
 }
 
 // Remove drops every item of a writable slice that drop accepts, into a new
