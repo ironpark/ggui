@@ -376,3 +376,74 @@ func TestTextOutOfViewKeepsItsSemantics(t *testing.T) {
 		t.Fatalf("found %v, offscreen %v; want the text, flagged", ok, n.Offscreen)
 	}
 }
+
+func TestTextFractionalScaleMatchesPaintFace(t *testing.T) {
+	t.Parallel()
+	const sample = "The quick brown fox jumps over the lazy dog 0123456789 repeatedly"
+	font := ggui.MustFont(goregular.TTF).NoFallback()
+
+	for _, scale := range []float64{1, 1.25, 1.5, 1.75, 2} {
+		for _, size := range []float64{13, 14, 15} {
+			// Single-line natural width must match the painted face at scale.
+			single := Text(sample).Font(font).Size(size).NoWrap()
+			p := ggui.NewProbe(single, ggui.Sz(1200, 100))
+			p.SetScale(scale)
+			p.Frame()
+			face := single.faceAt(scale)
+			wantW := textlayout.Width(sample, face) / scale
+			if math.Abs(single.widths[0]-wantW) > 1e-9 || math.Abs(single.natural.W-wantW) > 1e-9 {
+				t.Fatalf("scale %g size %g: measured width=%v natural=%v, want painted width %v",
+					scale, size, single.widths[0], single.natural.W, wantW)
+			}
+			m := face.Metrics()
+			if base, ok := single.Baseline(); !ok || math.Abs(base-m.HAscent/scale) > 1e-9 {
+				t.Fatalf("scale %g size %g: baseline=%v ok=%v, want %v", scale, size, base, ok, m.HAscent/scale)
+			}
+			p.Close()
+
+			// Wrapped + ellipsized lines must never exceed maxW when painted at scale.
+			const maxW = 180.0
+			wrapped := Text(sample).Font(font).Size(size).MaxLines(2).Ellipsis()
+			pw := ggui.NewProbe(wrapped, ggui.Sz(maxW, 100))
+			pw.SetScale(scale)
+			img := ggfx.NewImage(int(math.Ceil(maxW*scale)), int(math.Ceil(100*scale)))
+			pw.RenderTo(img)
+			pw.Frame()
+			wface := wrapped.faceAt(scale)
+			for i, line := range wrapped.lines {
+				paintedW := textlayout.Width(line, wface) / scale
+				if paintedW > maxW+1e-9 {
+					t.Fatalf("scale %g size %g line %d %q: painted width %v exceeds maxW %v",
+						scale, size, i, line, paintedW, maxW)
+				}
+				if math.Abs(wrapped.widths[i]-paintedW) > 1e-9 {
+					t.Fatalf("scale %g size %g line %d: cached width %v != painted width %v",
+						scale, size, i, wrapped.widths[i], paintedW)
+				}
+			}
+			img.Deallocate()
+			pw.Close()
+		}
+	}
+}
+
+func TestTextBidiFractionalScaleConsistency(t *testing.T) {
+	t.Parallel()
+	const sample = "שלום world 12345"
+	for _, scale := range []float64{1, 1.25, 1.5, 1.75, 2} {
+		w := Text(sample).Size(13)
+		p := ggui.NewProbe(ggui.Directionality(ggui.DirRTL, w), ggui.Sz(300, 60))
+		p.SetScale(scale)
+		img := ggfx.NewImage(int(math.Ceil(300*scale)), int(math.Ceil(60*scale)))
+		p.RenderTo(img)
+		p.Frame()
+		if w.bidi == nil || len(w.bidi.lines) != 1 || w.bidi.lines[0] == nil {
+			t.Fatalf("scale %g: RTL line was not reordered", scale)
+		}
+		if w.bidi.key.scale != scale {
+			t.Fatalf("scale %g: bidi key scale=%v", scale, w.bidi.key.scale)
+		}
+		img.Deallocate()
+		p.Close()
+	}
+}

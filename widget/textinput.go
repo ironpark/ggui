@@ -153,8 +153,8 @@ func TextInput(value ggui.Binding[string]) *TextInputWidget {
 		Replace:     func(before, text, after string) { o.t.imeReplace(before, text, after) },
 		End:         func() { o.t.Interactive.Focused = false },
 	})
-	t.layout.Face = func() text.Face { return t.face(1) }
-	t.layout.Style = func() paragraph.Style { return t.textStyle() }
+	t.layout.Face = func() text.Face { return t.face(t.measureScale()) }
+	t.layout.Style = func() paragraph.Style { return t.bidiStyle() }
 	t.ed.Now = ggui.ClockTime // Probe.Advance reaches typing coalesced into one undo
 	t.ed.SetText(ggui.Untrack(value.Get))
 	t.ed.MoveTo(len(t.ed.Text), false)
@@ -293,7 +293,7 @@ func (t *TextInputWidget) Describe() ggui.Node {
 // positions one frame behind, which is a frame that has not been shown yet.
 func (t *TextInputWidget) runs() []ggui.TextRun {
 	d := &t.described
-	key := runsKey{t.ed.Text, t.wrapStyle(), t.textStyle().LineHeight}
+	key := runsKey{t.ed.Text, t.wrapStyle(), t.textStyle().LineHeight, t.measureScale()}
 	if d.measured == nil || d.key != key {
 		d.key, d.measured = key, t.measureRuns()
 	}
@@ -314,11 +314,12 @@ func (t *TextInputWidget) runs() []ggui.TextRun {
 }
 
 // runsKey is what the runs' measures depend on: the text, how it is
-// wrapped and in what, and how far apart its lines are.
+// wrapped and in what, how far apart its lines are, and the display scale.
 type runsKey struct {
 	text       string
 	style      editlayout.Style
 	lineHeight float64
+	scale      float64
 }
 
 // measureRuns is runs, measured from the editor's top left, unscrolled.
@@ -326,6 +327,7 @@ func (t *TextInputWidget) measureRuns() []ggui.TextRun {
 	r := t.wrap(t.ed.Text)
 	out := make([]ggui.TextRun, 0, len(r.Spans))
 	h := t.height()
+	scale := t.measureScale()
 	for i, sp := range r.Spans {
 		y := 0.0
 		if t.multiline {
@@ -334,7 +336,7 @@ func (t *TextInputWidget) measureRuns() []ggui.TextRun {
 		var width func(b int) float64
 		var w float64
 		if bl := t.bidiAt(r, i); bl != nil {
-			width, w = func(b int) float64 { return bl.X(b - sp.Start) }, bl.Width()
+			width, w = func(b int) float64 { return bl.X(b-sp.Start) / scale }, bl.Width()/scale
 		} else {
 			width = t.prefixWidths(sp)
 			w = width(sp.End)
@@ -604,6 +606,23 @@ func (t *TextInputWidget) textStyle() paragraph.Style {
 	return st
 }
 
+// measureScale is the display scale used for measuring, wrapping, caret
+// positioning and hit-testing so they match the face Paint draws in.
+func (t *TextInputWidget) measureScale() float64 {
+	if t.scale > 0 && !math.IsNaN(t.scale) && !math.IsInf(t.scale, 0) {
+		return t.scale
+	}
+	return sanitizeScale(ggui.UseScale())
+}
+
+// bidiStyle is textStyle with Size scaled to physical pixels so paragraph
+// lays out and measures bidi lines in the same face Paint draws them in.
+func (t *TextInputWidget) bidiStyle() paragraph.Style {
+	st := t.textStyle()
+	st.Size *= t.measureScale()
+	return st
+}
+
 // face is the face the text is drawn in at scale times its size, its
 // tracking with it.
 func (t *TextInputWidget) face(scale float64) text.Face {
@@ -613,15 +632,19 @@ func (t *TextInputWidget) face(scale float64) text.Face {
 }
 
 // advance is the logical width of s as drawn.
-func (t *TextInputWidget) advance(s string) float64 { return textlayout.Width(t.display(s), t.face(1)) }
+func (t *TextInputWidget) advance(s string) float64 {
+	scale := t.measureScale()
+	return textlayout.Width(t.display(s), t.face(scale)) / scale
+}
 
 // prefixWidths measures the line sp once and returns the width of its text
 // up to a byte offset b of the text within it, where advance would
 // measure each prefix.
 func (t *TextInputWidget) prefixWidths(sp textlayout.Span) func(b int) float64 {
-	width := textlayout.PrefixWidths(t.display(t.ed.Text[sp.Start:sp.End]), t.face(1))
+	scale := t.measureScale()
+	width := textlayout.PrefixWidths(t.display(t.ed.Text[sp.Start:sp.End]), t.face(scale))
 	from := t.toDisplay(sp.Start)
-	return func(b int) float64 { return width(t.toDisplay(b) - from) }
+	return func(b int) float64 { return width(t.toDisplay(b)-from) / scale }
 }
 
 // rendered is the text with the composition inserted where the caret is,
@@ -640,8 +663,9 @@ func (t *TextInputWidget) rendered() (s string, caret int) {
 }
 
 func (t *TextInputWidget) height() float64 {
-	m := t.face(1).Metrics()
-	return m.HAscent + m.HDescent
+	scale := t.measureScale()
+	m := t.face(scale).Metrics()
+	return (m.HAscent + m.HDescent) / scale
 }
 
 // Baseline implements Baseliner: the first line's, an ascent below the top.
@@ -649,7 +673,8 @@ func (t *TextInputWidget) Baseline() (float64, bool) {
 	if t.resolved.Font == nil {
 		return 0, false
 	}
-	return t.face(1).Metrics().HAscent, true
+	scale := t.measureScale()
+	return t.face(scale).Metrics().HAscent / scale, true
 }
 
 // spacing is the distance between baselines when multiline.
@@ -666,7 +691,7 @@ func (t *TextInputWidget) measureKey() editlayout.Key {
 		Generation: gen,
 		Font:       st.Font,
 		Weight:     st.Weight,
-		Size:       st.Size,
+		Size:       st.Size * t.measureScale(),
 		Tracking:   st.Tracking,
 		Lang:       t.lang,
 	}
@@ -681,7 +706,7 @@ func (t *TextInputWidget) wrapStyle() editlayout.Style {
 	case t.noWrap:
 		ws.Mode = editlayout.BreakOnly
 	default:
-		ws.Mode, ws.Width = editlayout.WrapWidth, t.width
+		ws.Mode, ws.Width = editlayout.WrapWidth, t.width*t.measureScale()
 	}
 	return ws
 }
@@ -709,6 +734,7 @@ func (t *TextInputWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t.resolved = env.ResolveText(t.style)
 	t.lang = env.Language()
 	t.env = env
+	t.scale = sanitizeScale(ggui.UseScale())
 	style := env.EditorStyle()
 	if t.IsDisabled() {
 		t.resolved.Color = style.Muted
@@ -736,7 +762,10 @@ func (t *TextInputWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t.Sync()
 	// Where it is being painted is recorded first: describing it reports
 	// where its characters are, which is measured from here.
-	t.rect, t.scale = r, dst.Scale()
+	t.rect = r
+	if dst != nil {
+		t.scale = dst.Scale()
+	}
 	// A disabled editor takes no input but is still read out.
 	dst.Describe(r, t)
 	if !t.IsDisabled() {
@@ -754,7 +783,8 @@ func (t *TextInputWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	bl := t.bidiAt(t.wrap(shown), 0)
 	var caretX, total float64
 	if bl != nil {
-		caretX, total = bl.X(caret), bl.Width()
+		scale := t.measureScale()
+		caretX, total = bl.X(caret)/scale, bl.Width()/scale
 	} else {
 		caretX, total = t.advance(shown[:caret]), t.advance(shown)
 	}
@@ -927,7 +957,7 @@ func (t *TextInputWidget) bidiAt(r *editlayout.Wrap, i int) *editlayout.Line {
 func (t *TextInputWidget) xAt(r *editlayout.Wrap, i, b int) float64 {
 	sp := r.Spans[i]
 	if bl := t.bidiAt(r, i); bl != nil {
-		return bl.X(b - sp.Start)
+		return bl.X(b-sp.Start) / t.measureScale()
 	}
 	return t.advance(r.Text()[sp.Start:b])
 }
@@ -942,9 +972,10 @@ func (t *TextInputWidget) spanX(s string, sp textlayout.Span, bl *editlayout.Lin
 		fn(t.advance(s[sp.Start:a]), t.advance(s[sp.Start:b])+runOn)
 		return
 	}
-	bl.SpanX(a-sp.Start, b-sp.Start, fn)
+	scale := t.measureScale()
+	bl.SpanX(a-sp.Start, b-sp.Start, func(x0, x1 float64) { fn(x0/scale, x1/scale) })
 	if runOn > 0 {
-		end := bl.Width()
+		end := bl.Width() / scale
 		fn(end, end+runOn)
 	}
 }
@@ -984,7 +1015,7 @@ func (t *TextInputWidget) drawText(dst *ggui.Canvas, s string, sp textlayout.Spa
 // when bl is nil.
 func (t *TextInputWidget) lineWidth(s string, sp textlayout.Span, bl *editlayout.Line) float64 {
 	if bl != nil {
-		return bl.Width()
+		return bl.Width() / t.measureScale()
 	}
 	return t.advance(s[sp.Start:sp.End])
 }
@@ -1000,8 +1031,9 @@ func (t *TextInputWidget) drawLine(dst *ggui.Canvas, line string, bl *editlayout
 		fontsys.DrawText(dst.Image, t.display(line), t.face(dst.Scale()), op)
 		return
 	}
-	baseline := t.face(dst.Scale()).Metrics().HAscent
-	bl.Draw(dst.Image, &t.pieceOp, dst.Scale(), baseline,
+	scale := sanitizeScale(dst.Scale())
+	baseline := t.face(scale).Metrics().HAscent
+	bl.Draw(dst.Image, &t.pieceOp, scale/t.measureScale(), baseline,
 		func(int) color.Color { return col },
 		func(op *text.DrawOptions) { op.GeoM.Translate(px(dst, x), px(dst, y)) })
 }
@@ -1060,7 +1092,7 @@ func (t *TextInputWidget) indexAt(p ggui.Point) int {
 func (t *TextInputWidget) indexOnLine(r *editlayout.Wrap, i int, x float64) int {
 	sp := r.Spans[i]
 	if bl := t.bidiAt(r, i); bl != nil {
-		return sp.Start + bl.At(x)
+		return sp.Start + bl.At(x*t.measureScale())
 	}
 	width := t.prefixWidths(sp)
 	best, bestDist := sp.Start, math.Inf(1)
@@ -1491,7 +1523,10 @@ func (t *TextInputWidget) Select(anchor, caret int) {
 // IME. The caller owns hit regions and semantics and forwards keyboard events
 // and HandleTick to this editor. Layout must have run first.
 func (t *TextInputWidget) PaintCustom(dst *ggui.Canvas, r ggui.Rect, paint func(*ggui.Canvas, ggui.Rect, TextInputState) ggui.Rect) {
-	t.rect, t.scale = r, dst.Scale()
+	t.rect = r
+	if dst != nil {
+		t.scale = dst.Scale()
+	}
 	caret := paint(dst, r, t.EditingState())
 	t.caretBounds = image.Rect(int(caret.Origin.X), int(caret.Origin.Y), int(caret.Origin.X+caret.Size.W), int(caret.Origin.Y+caret.Size.H))
 }

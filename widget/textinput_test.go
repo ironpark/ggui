@@ -13,11 +13,14 @@ import (
 	"unicode"
 	"unsafe"
 
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/textlayout"
+	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/runtime"
+	"golang.org/x/image/font/gofont/goregular"
 )
 
 // fakeIME stands in for the platform IME: a test sets its composition or
@@ -702,6 +705,115 @@ func TestTextInputIMECaretUsesLogicalCoordinates(t *testing.T) {
 			}
 			p.Close()
 		}
+	}
+}
+
+func TestTextInputFractionalScaleCaretAndHitTestConsistency(t *testing.T) {
+	t.Parallel()
+	const sample = "The quick brown fox jumps over the lazy dog 0123456789"
+	font := ggui.MustFont(goregular.TTF).NoFallback()
+
+	for _, scale := range []float64{1, 1.25, 1.5, 1.75, 2} {
+		for _, size := range []float64{13, 14} {
+			// Single-line: advance, prefixWidths, hit-testing and painted glyphs agree.
+			val := ggui.State(sample)
+			e := TextInput(val).Style(ggui.TextStyle{Font: font, Size: size})
+			p := ggui.NewProbe(e, ggui.Sz(800, 40))
+			p.SetScale(scale)
+			img := ggfx.NewImage(int(math.Ceil(800*scale)), int(math.Ceil(40*scale)))
+			p.RenderTo(img)
+			p.Frame()
+
+			face := e.face(scale)
+			wantTotal := textlayout.Width(sample, face) / scale
+			if got := e.advance(sample); math.Abs(got-wantTotal) > 1e-9 {
+				t.Fatalf("scale %g size %g: advance=%v, want painted width %v", scale, size, got, wantTotal)
+			}
+
+			// Every glyph's painted logical OriginX matches prefixWidths and hit-tests back to its offset.
+			sp := textlayout.Span{Start: 0, End: len(sample)}
+			pw := e.prefixWidths(sp)
+			glyphs := text.AppendLazyGlyphs(nil, sample, face, nil)
+			for _, g := range glyphs {
+				paintedX := g.OriginX / scale
+				if got := pw(g.StartIndexInBytes); math.Abs(got-paintedX) > 1e-9 {
+					t.Fatalf("scale %g size %g byte %d: prefixWidth=%v, painted OriginX/scale=%v",
+						scale, size, g.StartIndexInBytes, got, paintedX)
+				}
+				if hit := e.indexAt(ggui.Pt(e.rect.Origin.X+paintedX, e.rect.Origin.Y+5)); hit != g.StartIndexInBytes {
+					t.Fatalf("scale %g size %g byte %d: indexAt(%v)=%d, want %d",
+						scale, size, g.StartIndexInBytes, paintedX, hit, g.StartIndexInBytes)
+				}
+			}
+
+			// End-of-line caret sits at the painted total width.
+			if wantEnd := int(e.rect.Origin.X + wantTotal); e.caretBounds.Min.X != wantEnd {
+				t.Fatalf("scale %g size %g: caretBounds.Min.X=%d, want %d", scale, size, e.caretBounds.Min.X, wantEnd)
+			}
+
+			// Accessibility runs match painted stops.
+			runs := e.runs()
+			if len(runs) != 1 || math.Abs(runs[0].Rect.Size.W-wantTotal) > 1e-9 {
+				t.Fatalf("scale %g size %g: runs=%+v, want width %v", scale, size, runs, wantTotal)
+			}
+
+			img.Deallocate()
+			p.Close()
+
+			// Multiline wrapping: every wrapped line fits within e.width at scale.
+			const wrapW = 160.0
+			mval := ggui.State(sample + " " + sample)
+			me := TextInput(mval).Multiline().Style(ggui.TextStyle{Font: font, Size: size})
+			mp := ggui.NewProbe(me, ggui.Sz(wrapW, 200))
+			mp.SetScale(scale)
+			mimg := ggfx.NewImage(int(math.Ceil(wrapW*scale)), int(math.Ceil(200*scale)))
+			mp.RenderTo(mimg)
+			mp.Frame()
+
+			mface := me.face(scale)
+			w := me.wrap(me.ed.Text)
+			if len(w.Spans) < 2 {
+				t.Fatalf("scale %g size %g: expected multiline wrap, got %d spans", scale, size, len(w.Spans))
+			}
+			for i, lineSpan := range w.Spans {
+				line := me.ed.Text[lineSpan.Start:lineSpan.End]
+				paintedW := textlayout.Width(line, mface) / scale
+				if paintedW > wrapW+1e-9 {
+					t.Fatalf("scale %g size %g span %d %q: painted width %v exceeds wrapW %v",
+						scale, size, i, line, paintedW, wrapW)
+				}
+				if got := me.xAt(w, i, lineSpan.End); math.Abs(got-paintedW) > 1e-9 {
+					t.Fatalf("scale %g size %g span %d: xAt(end)=%v, want %v", scale, size, i, got, paintedW)
+				}
+			}
+
+			mimg.Deallocate()
+			mp.Close()
+		}
+
+		// Bidi text in TextInput measures, hit-tests, and paints cleanly at fractional scales.
+		bval := ggui.State("hello שלום world")
+		be := TextInput(bval).Style(ggui.TextStyle{Size: 13})
+		bp := ggui.NewProbe(be, ggui.Sz(400, 40))
+		bp.SetScale(scale)
+		bimg := ggfx.NewImage(int(math.Ceil(400*scale)), int(math.Ceil(40*scale)))
+		bp.RenderTo(bimg)
+		bp.Frame()
+		bw := be.wrap(be.ed.Text)
+		bl := be.bidiAt(bw, 0)
+		if bl == nil {
+			t.Fatalf("scale %g: expected bidi layout", scale)
+		}
+		if got, want := be.lineWidth(be.ed.Text, bw.Spans[0], bl), bl.Width()/scale; math.Abs(got-want) > 1e-9 {
+			t.Fatalf("scale %g: bidi lineWidth=%v, want %v", scale, got, want)
+		}
+		// Clicking past the right edge reaches the visual end without out-of-range offsets.
+		at := be.indexAt(ggui.Pt(be.rect.Origin.X+bl.Width()/scale+10, be.rect.Origin.Y+5))
+		if at < 0 || at > len(be.ed.Text) {
+			t.Fatalf("scale %g: bidi indexAt returned out-of-range offset %d", scale, at)
+		}
+		bimg.Deallocate()
+		bp.Close()
 	}
 }
 

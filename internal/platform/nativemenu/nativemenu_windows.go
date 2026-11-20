@@ -43,6 +43,8 @@ var (
 	procSetForegroundWindow    = dllUser32.NewProc("SetForegroundWindow")
 	procPostMessageW           = dllUser32.NewProc("PostMessageW")
 	procGetSystemMetrics       = dllUser32.NewProc("GetSystemMetrics")
+	procGetSystemMetricsForDpi = dllUser32.NewProc("GetSystemMetricsForDpi")
+	procGetDpiForWindow        = dllUser32.NewProc("GetDpiForWindow")
 	procCreateIconIndirect     = dllUser32.NewProc("CreateIconIndirect")
 	procDestroyIcon            = dllUser32.NewProc("DestroyIcon")
 	procLoadIconW              = dllUser32.NewProc("LoadIconW")
@@ -76,6 +78,7 @@ const (
 	wmNull          = 0x0000
 	wmSettingChange = 0x001A
 	wmContextMenu   = 0x007B
+	wmDpiChanged    = 0x02E0
 	wmApp           = 0x8000
 
 	// wmTray is the message the shell sends the window about its icons.
@@ -320,8 +323,14 @@ func ensureWindow() bool {
 // install hands the shell s's icon and tooltip, adding the icon when the
 // shell does not have it. It runs on the main thread.
 func install(key int, s *trayIcon) {
+	installAtDPI(key, s, 0)
+}
+
+// installAtDPI rebuilds s's icon for dpi (or the tray window's current DPI
+// when dpi is zero) and updates the shell notification icon.
+func installAtDPI(key int, s *trayIcon, dpi uint32) {
 	old := s.icon
-	s.icon = makeIcon(s.cfg.Icon, s.cfg.Template)
+	s.icon = makeIcon(s.cfg.Icon, s.cfg.Template, trayIconSize(dpi))
 	icon := s.icon
 	if icon == 0 {
 		icon = appIcon()
@@ -381,6 +390,15 @@ func wndProc(wnd windows.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 				install(key, s)
 			}
 		}
+	case msg == wmDpiChanged:
+		// Rebuild tray icons at the new DPI so the notification area stays sharp.
+		dpi := dpiFromWParam(wparam)
+		for key, s := range trays {
+			if len(s.cfg.Icon) > 0 {
+				installAtDPI(key, s, dpi)
+			}
+		}
+		return 0
 	}
 	r, _, _ := procDefWindowProcW.Call(uintptr(wnd), uintptr(msg), wparam, lparam)
 	return r
@@ -511,11 +529,67 @@ func appIcon() windows.Handle {
 	return fallbackIcon
 }
 
-// makeIcon makes an icon of the notification area's size from a PNG,
-// fitted within the square and centred. A template is drawn from its alpha
-// alone, in white on a dark taskbar and black on a light one. It returns
-// zero for no PNG, or one that does not decode.
-func makeIcon(data []byte, template bool) windows.Handle {
+// dpiFromWParam extracts the new DPI from a WM_DPICHANGED wParam.
+func dpiFromWParam(wparam uintptr) uint32 {
+	return uint32(wparam & 0xFFFF)
+}
+
+// windowDPI returns the DPI of w via GetDpiForWindow, or 0 if unavailable.
+func windowDPI(w windows.HWND) uint32 {
+	if w != 0 && procGetDpiForWindow.Find() == nil {
+		if dpi, _, _ := procGetDpiForWindow.Call(uintptr(w)); dpi > 0 {
+			return uint32(dpi)
+		}
+	}
+	return 0
+}
+
+// trayIconSize returns the notification area's small icon size in pixels for
+// dpi (or hwnd's current DPI when dpi is 0), using GetSystemMetricsForDpi when
+// available and falling back to GetSystemMetrics and finally 16.
+func trayIconSize(dpi uint32) int {
+	var metricsForDpi func(int, uint32) int
+	if procGetSystemMetricsForDpi.Find() == nil {
+		metricsForDpi = func(index int, d uint32) int {
+			n, _, _ := procGetSystemMetricsForDpi.Call(uintptr(index), uintptr(d))
+			return int(n)
+		}
+	}
+	return resolveTrayIconSize(
+		dpi,
+		func() uint32 { return windowDPI(hwnd) },
+		metricsForDpi,
+		func(index int) int {
+			n, _, _ := procGetSystemMetrics.Call(uintptr(index))
+			return int(n)
+		},
+	)
+}
+
+// resolveTrayIconSize picks the small icon size in pixels for dpi using the
+// supplied Win32 queries, falling back to GetSystemMetrics and finally 16.
+func resolveTrayIconSize(dpi uint32, getWindowDPI func() uint32, metricsForDpi func(int, uint32) int, metrics func(int) int) int {
+	if dpi == 0 && getWindowDPI != nil {
+		dpi = getWindowDPI()
+	}
+	if dpi > 0 && metricsForDpi != nil {
+		if n := metricsForDpi(smCxSmIcon, dpi); n > 0 {
+			return n
+		}
+	}
+	if metrics != nil {
+		if n := metrics(smCxSmIcon); n > 0 {
+			return n
+		}
+	}
+	return 16
+}
+
+// makeIcon makes an icon of size×size pixels from a PNG, fitted within the
+// square and centred. A template is drawn from its alpha alone, in white on a
+// dark taskbar and black on a light one. It returns zero for no PNG, or one
+// that does not decode.
+func makeIcon(data []byte, template bool, size int) windows.Handle {
 	if len(data) == 0 {
 		return 0
 	}
@@ -523,9 +597,8 @@ func makeIcon(data []byte, template bool) windows.Handle {
 	if err != nil {
 		return 0
 	}
-	size := 16
-	if n, _, _ := procGetSystemMetrics.Call(smCxSmIcon); n > 0 {
-		size = int(n)
+	if size <= 0 {
+		size = 16
 	}
 	sb := src.Bounds()
 	if sb.Dx() <= 0 || sb.Dy() <= 0 {

@@ -400,6 +400,9 @@ func (v *session) HandleEvent(ev ggwd.Event) error {
 		v.pump()
 		v.service(false)
 	case ggwd.FrameEvent:
+		if ev.Scale > 0 {
+			v.scale = ev.Scale
+		}
 		v.pump()
 		v.service(true)
 		v.compose(ev.Screen)
@@ -610,7 +613,14 @@ func (v *session) reconfigure() {
 	if w == nil || !have {
 		return
 	}
-	v.configure(viewer.Config(w, cfg.Width, cfg.Height, cfg.Scale, v.focused))
+	scale := cfg.Scale
+	if s := w.DeviceScaleFactor(); s > 0 {
+		scale = s
+		v.scale = s
+	}
+	next := viewer.Config(w, cfg.Width, cfg.Height, scale, v.focused)
+	v.pixels = image.Pt(next.PixelWidth, next.PixelHeight)
+	v.configure(next)
 }
 
 // service frees the apps that went away and replays the shown app's

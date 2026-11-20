@@ -460,3 +460,137 @@ func TestImagePlacement(t *testing.T) {
 		}
 	}
 }
+
+func TestFillRectPixelGridSnapping(t *testing.T) {
+	t.Parallel()
+	img := ggfx.NewImage(400, 400)
+	defer img.Deallocate()
+
+	for _, scale := range []float64{1, 1.25, 1.5, 1.75, 2} {
+		c := &Canvas{Image: img, scale: scale}
+
+		// Adjacent blocks and 1px dividers tiled along X and Y share exact
+		// snapped pixel boundaries with no seams and no overlaps.
+		edges := []float64{-10, -1, 0, 1, 11, 12, 25.5, 39, 40, 100}
+		var prevXEnd, prevYEnd float32
+		for i := 0; i+1 < len(edges); i++ {
+			r := Rct(Pt(edges[i], edges[i]), Sz(edges[i+1]-edges[i], edges[i+1]-edges[i]))
+			x, y, w, h, ok := c.snapFillRect(r)
+			if !ok {
+				t.Fatalf("scale %g rect %v: snapFillRect failed", scale, r)
+			}
+			for _, v := range []float32{x, y, w, h} {
+				if float64(v) != math.Trunc(float64(v)) {
+					t.Fatalf("scale %g rect %v: non-integer snapped value %v", scale, r, v)
+				}
+			}
+			if w < 1 || h < 1 {
+				t.Fatalf("scale %g rect %v: snapped size (%v,%v) < 1", scale, r, w, h)
+			}
+			if i > 0 {
+				if x != prevXEnd || y != prevYEnd {
+					t.Fatalf("scale %g seam between segments %d and %d: prev end (%v,%v), next origin (%v,%v)",
+						scale, i-1, i, prevXEnd, prevYEnd, x, y)
+				}
+			}
+			prevXEnd, prevYEnd = x+w, y+h
+			c.FillRect(r, color.White)
+		}
+
+		// Sub-pixel positive sizes remain at least 1 physical pixel thick.
+		_, _, hw, hh, ok := c.snapFillRect(Rct(Pt(10.3, 20.7), Sz(0.2, 0.1)))
+		if !ok || hw != 1 || hh != 1 {
+			t.Fatalf("scale %g hairline: ok=%v size=(%v,%v), want (1,1)", scale, ok, hw, hh)
+		}
+	}
+
+	// A 1px rect centered on 0 stays 1px wide rather than expanding to 2px.
+	c1 := &Canvas{Image: img, scale: 1}
+	if x, _, w, _, ok := c1.snapFillRect(Rct(Pt(-0.5, 0), Sz(1, 10))); !ok || x != 0 || w != 1 {
+		t.Fatalf("rect centered on 0: ok=%v x=%v w=%v, want x=0 w=1", ok, x, w)
+	}
+
+	// Zero, negative, NaN and Inf dimensions are rejected cleanly.
+	for _, bad := range []Rect{
+		Rct(Pt(0, 0), Sz(0, 10)),
+		Rct(Pt(0, 0), Sz(10, 0)),
+		Rct(Pt(0, 0), Sz(-5, 10)),
+		Rct(Pt(0, 0), Sz(10, -5)),
+		Rct(Pt(math.NaN(), 0), Sz(10, 10)),
+		Rct(Pt(0, 0), Sz(math.NaN(), 10)),
+		Rct(Pt(0, 0), Sz(math.Inf(1), 10)),
+	} {
+		if _, _, _, _, ok := c1.snapFillRect(bad); ok {
+			t.Fatalf("expected snapFillRect(%v) to fail", bad)
+		}
+		c1.FillRect(bad, color.White)
+	}
+}
+
+func TestStrokeLineAxisAlignedUniformThickness(t *testing.T) {
+	t.Parallel()
+	img := ggfx.NewImage(400, 400)
+	defer img.Deallocate()
+
+	for _, scale := range []float64{1, 1.25, 1.5, 1.75, 2} {
+		c := &Canvas{Image: img, scale: scale}
+		for _, logicalW := range []float64{0.5, 1, 1.5, 2} {
+			wantThick := float32(max(snapPx(logicalW*scale), 1))
+			for step := -4; step <= 40; step++ {
+				pos := float64(step) * 0.25
+
+				// Horizontal line at pos.
+				hx, hy, hw, hh, ok := c.snapAxisLine(2, 50, pos, logicalW, true)
+				if !ok || hh != wantThick {
+					t.Fatalf("scale %g w=%g y=%g: ok=%v thick=%v, want %v", scale, logicalW, pos, ok, hh, wantThick)
+				}
+				// Reversed endpoints match exactly.
+				rx, ry, rw, rh, rok := c.snapAxisLine(50, 2, pos, logicalW, true)
+				if !rok || rx != hx || ry != hy || rw != hw || rh != hh {
+					t.Fatalf("scale %g reversed horizontal mismatch: (%v,%v,%v,%v) vs (%v,%v,%v,%v)",
+						scale, rx, ry, rw, rh, hx, hy, hw, hh)
+				}
+				// Center stays within 0.5 physical pixels of cross*scale.
+				centerErr := math.Abs((float64(hy) + float64(hh)/2) - pos*scale)
+				if centerErr > 0.5+1e-9 {
+					t.Fatalf("scale %g w=%g y=%g: center drift %v > 0.5px", scale, logicalW, pos, centerErr)
+				}
+
+				// Vertical line at pos.
+				vx, vy, vw, vh, vok := c.snapAxisLine(2, 50, pos, logicalW, false)
+				if !vok || vw != wantThick {
+					t.Fatalf("scale %g w=%g x=%g: ok=%v thick=%v, want %v", scale, logicalW, pos, vok, vw, wantThick)
+				}
+				vCenterErr := math.Abs((float64(vx) + float64(vw)/2) - pos*scale)
+				if vCenterErr > 0.5+1e-9 {
+					t.Fatalf("scale %g w=%g x=%g: vertical center drift %v > 0.5px", scale, logicalW, pos, vCenterErr)
+				}
+				if float64(vy) != math.Trunc(float64(vy)) || float64(vh) != math.Trunc(float64(vh)) {
+					t.Fatalf("scale %g vertical endpoints not integer: y=%v h=%v", scale, vy, vh)
+				}
+			}
+
+			// Collinear segments sharing a midpoint join without seam or overlap.
+			ax, ay, aw, ah, ok1 := c.snapAxisLine(0, 13, 10, logicalW, true)
+			bx, by, _, bh, ok2 := c.snapAxisLine(13, 26, 10, logicalW, true)
+			if !ok1 || !ok2 || ay != by || ah != bh || ax+aw != bx {
+				t.Fatalf("scale %g w=%g collinear join failed: a=(%v,%v,%v,%v) b=(%v,%v,_,%v)",
+					scale, logicalW, ax, ay, aw, ah, bx, by, bh)
+			}
+
+			c.StrokeLine(Pt(0, 10), Pt(50, 10), logicalW, color.White)
+			c.StrokeLine(Pt(10, 0), Pt(10, 50), logicalW, color.White)
+		}
+	}
+
+	// Degenerate or non-finite lines are ignored cleanly.
+	c := &Canvas{Image: img, scale: 1.5}
+	if _, _, _, _, ok := c.snapAxisLine(5, 5, 10, 1, true); ok {
+		t.Fatal("zero-length line should not draw")
+	}
+	if _, _, _, _, ok := c.snapAxisLine(0, 10, math.NaN(), 1, true); ok {
+		t.Fatal("NaN cross coordinate should not draw")
+	}
+	c.StrokeLine(Pt(5, 5), Pt(5, 5), 1, color.White)
+	c.StrokeLine(Pt(0, 5), Pt(10, 5), math.NaN(), color.White)
+}

@@ -3,6 +3,7 @@ package ggui
 import (
 	"image"
 	"image/color"
+	"math"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -954,9 +955,23 @@ func (w *Window) Size() Size {
 	return Sz(float64(w.cfg.Width), float64(w.cfg.Height))
 }
 
+// roundWindowSize converts a logical window dimension to an integer DIP value,
+// rounding positive fractional sizes instead of truncating them (so round-tripping
+// fractional Viewport sizes at 125%/150% scale does not shrink by 1px) while
+// keeping zero and negative sentinel values intact.
+func roundWindowSize(v float64) int {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return 0
+	}
+	if v <= 0 {
+		return int(v)
+	}
+	return int(math.Round(v))
+}
+
 // SetSize resizes the window's content to size, in logical pixels.
 func (w *Window) SetSize(size Size) {
-	w.cfg.Width, w.cfg.Height = int(size.W), int(size.H)
+	w.cfg.Width, w.cfg.Height = roundWindowSize(size.W), roundWindowSize(size.H)
 	w.native(func(nw *ggwd.Window) { nw.SetSize(float64(w.cfg.Width), float64(w.cfg.Height)) })
 }
 
@@ -982,8 +997,8 @@ func (w *Window) SetPosition(p Point) {
 // SetSizeLimits bounds the size the user can resize the window's content
 // to, in logical pixels. A zero width or height means no limit.
 func (w *Window) SetSizeLimits(minSize, maxSize Size) {
-	w.cfg.MinWidth, w.cfg.MinHeight = int(minSize.W), int(minSize.H)
-	w.cfg.MaxWidth, w.cfg.MaxHeight = int(maxSize.W), int(maxSize.H)
+	w.cfg.MinWidth, w.cfg.MinHeight = roundWindowSize(minSize.W), roundWindowSize(minSize.H)
+	w.cfg.MaxWidth, w.cfg.MaxHeight = roundWindowSize(maxSize.W), roundWindowSize(maxSize.H)
 	w.native(func(nw *ggwd.Window) {
 		nw.SetSizeLimits(float64(w.cfg.MinWidth), float64(w.cfg.MinHeight), float64(w.cfg.MaxWidth), float64(w.cfg.MaxHeight))
 	})
