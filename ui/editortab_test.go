@@ -1,8 +1,10 @@
 package ui_test
 
 import (
+	"runtime"
 	"testing"
 	"time"
+	"weak"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
@@ -113,5 +115,88 @@ func TestTabGroupLabelSticks(t *testing.T) {
 	p.Tap("Group")
 	if labels != 1 || picked != "" {
 		t.Fatalf("a tap on the stuck label: %d label taps, picked %q", labels, picked)
+	}
+}
+
+// A tab is built at its first layout, but what it builds belongs to the
+// builder that made it, and goes when that builds again: a bar built anew
+// at each change, as one whose tabs' titles change is, lets its old tabs
+// go. Under the layout's owner, which lasts as long as the window, every
+// build kept the one before it alive.
+func TestEditorTabsABuilderMadeGoWhenItBuildsAgain(t *testing.T) {
+	builds := ggui.State(0)
+	var first weak.Pointer[ui.EditorTabWidget]
+	p := ggui.NewProbe(ggui.Reactive(func() ggui.Widget {
+		tab := ui.EditorTab("a.go", func() {}).Dirty(true).Selected(true).Status(widget.Box().Size(7, 7))
+		if builds.Get() == 0 {
+			first = weak.Make(tab)
+		}
+		return tab
+	}), ggui.Sz(300, 40))
+	defer p.Close()
+	p.Frame()
+	for n := 1; n <= 3; n++ {
+		builds.Set(n)
+		p.Frame()
+	}
+	runtime.GC()
+	runtime.GC()
+	if first.Value() != nil {
+		t.Fatal("the tab of the first build is still alive three builds later")
+	}
+}
+
+// A tab with a close button goes too, once the Envs its build derived age
+// out of the memo that keeps them, values and all, for a few hundred
+// builds: a bar rebuilt for hours keeps that many at most.
+func TestEditorTabsWithACloseButtonGoInTime(t *testing.T) {
+	builds := ggui.State(0)
+	var first weak.Pointer[ui.EditorTabWidget]
+	p := ggui.NewProbe(ggui.Reactive(func() ggui.Widget {
+		tab := ui.EditorTab("a.go", func() {}).OnClose(func() {})
+		if builds.Get() == 0 {
+			first = weak.Make(tab)
+		}
+		return tab
+	}), ggui.Sz(300, 40))
+	defer p.Close()
+	p.Frame()
+	for n := 1; n <= 1500; n++ {
+		builds.Set(n)
+		p.Frame()
+	}
+	runtime.GC()
+	runtime.GC()
+	if first.Value() != nil {
+		t.Fatal("the tab of the first build is still alive 1500 builds later")
+	}
+}
+
+// A tab kept from an earlier build, as a bar paints a closed tab while it
+// shrinks away, still lays out and paints after its builder built again:
+// what it built was let go, not taken from it.
+func TestEditorTabKeptFromAnEarlierBuildStillPaints(t *testing.T) {
+	builds := ggui.State(0)
+	var kept ggui.Widget
+	p := ggui.NewProbe(ggui.Reactive(func() ggui.Widget {
+		if builds.Get() == 0 {
+			kept = ui.EditorTab("leaving.go", func() {}).OnClose(func() {})
+		}
+		return widget.Row(kept, ui.EditorTab("staying.go", func() {}))
+	}), ggui.Sz(400, 40))
+	defer p.Close()
+	p.Frame()
+	before, ok := p.Find("leaving.go")
+	if !ok {
+		t.Fatal("no leaving.go")
+	}
+	builds.Set(1)
+	p.Frame()
+	after, ok := p.Find("leaving.go")
+	if !ok {
+		t.Fatal("the tab kept from the first build is gone after the second")
+	}
+	if after.Rect != before.Rect {
+		t.Fatalf("the kept tab moved from %v to %v", before.Rect, after.Rect)
 	}
 }

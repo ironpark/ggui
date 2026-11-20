@@ -58,6 +58,8 @@ type EditorTabWidget struct {
 	selected, current      bool
 	dirty, preview         bool
 	tree                   ggui.Widget // built at the first layout, from the above
+	scope                  ggui.Scope  // where the tab was made, which owns what it builds
+	id                     any         // the identity it was made with, for what it builds
 }
 
 // EditorTab is a tab named label, which shows what it stands for with
@@ -70,7 +72,11 @@ type EditorTabWidget struct {
 // room of its own. A label longer than MaxLabelWidth fades out at its end,
 // and shows whole in a tooltip.
 func EditorTab(label string, onSelect func()) *EditorTabWidget {
-	return &EditorTabWidget{label: label, onSelect: onSelect, maxLabel: 170, minWidth: EditorTabMinWidth}
+	// The identity a control made here would take, for those it builds.
+	var made ggui.Interactive
+	made.AutoKey()
+	return &EditorTabWidget{label: label, onSelect: onSelect, maxLabel: 170, minWidth: EditorTabMinWidth,
+		scope: ggui.UseScope(), id: made.HitID()}
 }
 
 // Icon puts w before the label, as a file's type or a session's program.
@@ -241,13 +247,28 @@ func (s *editorTabStatus) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // Layout implements Widget.
 func (t *EditorTabWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if t.tree == nil {
-		t.tree = t.build()
+		t.tree = t.mount()
 	}
 	return t.tree.Layout(c, env)
 }
 
 // Paint implements Widget.
 func (t *EditorTabWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(t.tree, r) }
+
+// mount builds the tab, as late as its first layout so that all its
+// setters are in it, but under the builder that made it: what it builds
+// goes when that builder builds again, as the tab does. Layout runs under
+// the window's own owner, which lasts as long as the window; built there,
+// every tab a bar rebuilt was kept alive, its old bar with it. Its
+// controls take their identities from the tab's, as they would had the
+// builder built them. A tab made outside every builder builds in place.
+func (t *EditorTabWidget) mount() ggui.Widget {
+	if t.scope == (ggui.Scope{}) {
+		return t.build()
+	}
+	tree, _ := t.scope.MountAs(t.id, "editor tab", t.build)
+	return tree
+}
 
 // editorTabButton is the look of a tab's button, and of a group's label:
 // its content alone, the tab or the group drawing the rest.
