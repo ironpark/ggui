@@ -505,16 +505,14 @@ func (p *PopupWidget) paintContent(dst *ggui.Canvas, anchor ggui.Rect) {
 // entrance grows from, and the side it ended on.
 func (p *PopupWidget) placeBelow(screen ggui.Size, anchor ggui.Rect, side PopupSide, rtl bool) (ggui.Size, ggui.Point, float64, PopupSide) {
 	// The content stays edge inside the window: its room on each side of
-	// the anchor, and across, ends there.
+	// the anchor, and across, ends there. Across the anchor the popup shifts
+	// along the window's width to fit, so it gets the full width inside edge.
 	edge := p.edge
 	minW := anchor.Size.W
 	if p.ownWidth {
 		minW = 0
 	}
-	maxW := max(screen.W-edge-max(anchor.Origin.X, edge), minW)
-	if p.align != PopupStart || rtl || p.point != nil {
-		maxW = max(screen.W-2*edge, minW)
-	}
+	maxW := max(screen.W-2*edge, minW)
 	natural := p.effect.Layout(ggui.Constraints{MinW: minW, MaxW: maxW, MaxH: ggui.Unbounded}, p.env)
 	below := screen.H - edge - (anchor.Origin.Y + anchor.Size.H + p.gap)
 	above := anchor.Origin.Y - p.gap - edge
