@@ -800,6 +800,7 @@ type CachedWidget struct {
 	valid   bool
 	cons    Constraints
 	fontGen uint64
+	scale   float64
 	rev     uint64 // the Env revision the size was measured under
 	size    Size
 	gen     uint64 // counts the measurements
@@ -861,8 +862,8 @@ func (c *CachedWidget) stale() {
 // Layout implements Widget.
 func (c *CachedWidget) Layout(cs Constraints, env Env) Size {
 	c.outer, _ = env.Get(cacheOwner)
-	gen := fontGen()
-	if c.valid && !c.dirty && cs == c.cons && env.rev == c.rev && c.fontGen == gen && c.inputsEqual() {
+	gen, scale := fontGen(), UseScale()
+	if c.valid && !c.dirty && cs == c.cons && env.rev == c.rev && c.fontGen == gen && c.scale == scale && c.inputsEqual() {
 		c.tellOuter()
 		return c.size
 	}
@@ -874,7 +875,7 @@ func (c *CachedWidget) Layout(cs Constraints, env Env) Size {
 	c.sources = dedupeReads(c.sources)
 	c.kids = slices.Clip(c.kids)
 	c.gen++
-	c.fontGen = gen
+	c.fontGen, c.scale = gen, scale
 	c.cons, c.rev, c.valid, c.dirty, c.again = cs, env.rev, true, c.again, false
 	c.tellOuter()
 	return c.size

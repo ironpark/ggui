@@ -3,6 +3,7 @@
 package textinput
 
 import (
+	"image"
 	"testing"
 
 	"github.com/ironpark/ggwd"
@@ -98,5 +99,65 @@ func TestNativeTargetWithoutEditorDoesNotConsumeText(t *testing.T) {
 	restore()
 	if len(input.events.queuedStates) != 0 {
 		t.Fatal("unfocused target retained text after its frame")
+	}
+}
+
+type fakeTextInputWindow struct {
+	scale   float64
+	rects   [][4]float64
+	enabled bool
+}
+
+func (f *fakeTextInputWindow) DeviceScaleFactor() float64         { return f.scale }
+func (f *fakeTextInputWindow) SetTextInputContext(string, string) {}
+func (f *fakeTextInputWindow) SetTextInputEnabled(on bool)        { f.enabled = on }
+func (f *fakeTextInputWindow) SetTextInputRect(x, y, w, h float64) {
+	f.rects = append(f.rects, [4]float64{x, y, w, h})
+}
+
+func TestSetRectResendsWhenWindowScaleChanges(t *testing.T) {
+	win := &fakeTextInputWindow{scale: 1}
+	input := &textInput{}
+	input.impl.events = &input.events
+	input.impl.window = win
+	useTextInput(t, input)
+
+	bounds := image.Rect(10, 20, 12, 36)
+	input.impl.Start(bounds, "", "")
+	if len(win.rects) != 1 || win.rects[0] != [4]float64{10, 20, 2, 16} {
+		t.Fatalf("initial Start rects = %v, want [[10 20 2 16]]", win.rects)
+	}
+
+	// Same logical bounds and same scale: must skip the main-thread hop.
+	UpdateCaret(bounds)
+	if len(win.rects) != 1 {
+		t.Fatalf("unchanged caret+scale sent %d rects, want 1", len(win.rects))
+	}
+
+	// Scale changes while logical bounds stay identical: must re-send.
+	win.scale = 1.5
+	UpdateCaret(bounds)
+	if len(win.rects) != 2 || win.rects[1] != [4]float64{10, 20, 2, 16} {
+		t.Fatalf("after scale change 1->1.5 rects = %v, want 2 calls", win.rects)
+	}
+
+	// Repeated tick at the new scale with same bounds: must skip again.
+	UpdateCaret(bounds)
+	if len(win.rects) != 2 {
+		t.Fatalf("steady 1.5x scale sent %d rects, want 2", len(win.rects))
+	}
+
+	// Start after another scale change also re-sends.
+	win.scale = 2
+	input.impl.Start(bounds, "", "")
+	if len(win.rects) != 3 {
+		t.Fatalf("Start after scale change 1.5->2 sent %d rects, want 3", len(win.rects))
+	}
+
+	// Moving the caret at the same scale still sends.
+	moved := image.Rect(30, 40, 32, 56)
+	UpdateCaret(moved)
+	if len(win.rects) != 4 || win.rects[3] != [4]float64{30, 40, 2, 16} {
+		t.Fatalf("moved caret rects = %v, want 4 calls ending in [30 40 2 16]", win.rects)
 	}
 }

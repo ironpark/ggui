@@ -102,6 +102,51 @@ func (c *Canvas) overlaps(r Rect, extra float64) bool {
 		float64(x)-pad < float64(bounds.Max.X) && float64(y)-pad < float64(bounds.Max.Y)
 }
 
+// snapPx rounds a physical pixel coordinate to the nearest pixel boundary.
+// Using Floor(v+0.5) instead of math.Round keeps rounding translation-invariant
+// across zero so a 1px band centered on 0 stays 1px wide rather than 2px.
+func snapPx(v float64) float64 { return math.Floor(v + 0.5) }
+
+func isFinite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
+
+// snapFillRect converts logical r to integer physical pixel coordinates so
+// axis-aligned fills land on the pixel grid without anti-aliasing: adjacent
+// rects share snapped boundaries with no seams or overlaps, and any positive
+// logical width or height remains at least one physical pixel wide.
+func (c *Canvas) snapFillRect(r Rect) (x, y, w, h float32, ok bool) {
+	if !(r.Size.W > 0) || !(r.Size.H > 0) {
+		return 0, 0, 0, 0, false
+	}
+	x0, x1 := snapPx(c.px(r.Origin.X)), snapPx(c.px(r.Origin.X+r.Size.W))
+	y0, y1 := snapPx(c.px(r.Origin.Y)), snapPx(c.px(r.Origin.Y+r.Size.H))
+	pw, ph := max(x1-x0, 1), max(y1-y0, 1)
+	if !isFinite(x0) || !isFinite(y0) || !isFinite(pw) || !isFinite(ph) {
+		return 0, 0, 0, 0, false
+	}
+	return float32(x0), float32(y0), float32(pw), float32(ph), true
+}
+
+// snapAxisLine converts a horizontal or vertical stroke of logical width w to
+// integer physical pixel coordinates. Endpoints snap so collinear segments join
+// cleanly, while thickness snaps from w alone so parallel lines of the same
+// logical width keep a uniform physical pixel width at fractional scales.
+func (c *Canvas) snapAxisLine(start, end, cross, w float64, horizontal bool) (x, y, pw, ph float32, ok bool) {
+	if !(w > 0) || start == end {
+		return 0, 0, 0, 0, false
+	}
+	p0, p1 := snapPx(c.px(min(start, end))), snapPx(c.px(max(start, end)))
+	length := max(p1-p0, 1)
+	thick := max(snapPx(c.px(w)), 1)
+	c0 := snapPx(c.px(cross) - thick/2)
+	if !isFinite(p0) || !isFinite(length) || !isFinite(c0) || !isFinite(thick) {
+		return 0, 0, 0, 0, false
+	}
+	if horizontal {
+		return float32(p0), float32(c0), float32(length), float32(thick), true
+	}
+	return float32(c0), float32(p0), float32(thick), float32(length), true
+}
+
 // FillRect fills the logical Rect r with col.
 //
 // A rectangle is drawn without anti-aliasing, which its axis-aligned edges
@@ -112,22 +157,15 @@ func (c *Canvas) overlaps(r Rect, extra float64) bool {
 // of the large fills in a frame are rectangles: table rows, sidebars, text
 // selection, a modal's scrim.
 func (c *Canvas) FillRect(r Rect, col color.Color) {
-	if c == nil || c.Image == nil || col == nil {
+	if c == nil || c.Image == nil || col == nil || !(r.Size.W > 0) || !(r.Size.H > 0) {
 		return
 	}
 	if !c.visiblePaintBounds(r, 0) {
 		return
 	}
-	w, h := c.Px(r.Size.W), c.Px(r.Size.H)
-	// Without anti-aliasing a shape thinner than a pixel covers no pixel
-	// centre and disappears. A hairline divider asked for is drawn.
-	if r.Size.W > 0 {
-		w = max(w, 1)
+	if x, y, w, h, ok := c.snapFillRect(r); ok {
+		vector.FillRect(c.Image, x, y, w, h, col, false)
 	}
-	if r.Size.H > 0 {
-		h = max(h, 1)
-	}
-	vector.FillRect(c.Image, c.Px(r.Origin.X), c.Px(r.Origin.Y), w, h, col, false)
 }
 
 // FillCircle fills a circle of logical radius around center with col.
@@ -146,7 +184,7 @@ func (c *Canvas) FillCircle(center Point, radius float64, col color.Color) {
 // StrokeLine draws a line of logical width w from a to b in col. The ends
 // are cut square, so a line drawn in pieces joins up.
 func (c *Canvas) StrokeLine(a, b Point, w float64, col color.Color) {
-	if c == nil || c.Image == nil || col == nil || w <= 0 || c.Image.Bounds().Empty() {
+	if c == nil || c.Image == nil || col == nil || !(w > 0) || c.Image.Bounds().Empty() || a == b {
 		return
 	}
 	if !c.visiblePaintBounds(Rct(Pt(min(a.X, b.X), min(a.Y, b.Y)), Sz(math.Abs(b.X-a.X), math.Abs(b.Y-a.Y))), w/2) {
@@ -157,9 +195,13 @@ func (c *Canvas) StrokeLine(a, b Point, w float64, col color.Color) {
 	// borders and the straight runs of a dashed outline are all this.
 	switch {
 	case a.Y == b.Y:
-		c.FillRect(Rct(Pt(min(a.X, b.X), a.Y-w/2), Sz(math.Abs(b.X-a.X), w)), col)
+		if x, y, pw, ph, ok := c.snapAxisLine(a.X, b.X, a.Y, w, true); ok {
+			vector.FillRect(c.Image, x, y, pw, ph, col, false)
+		}
 	case a.X == b.X:
-		c.FillRect(Rct(Pt(a.X-w/2, min(a.Y, b.Y)), Sz(w, math.Abs(b.Y-a.Y))), col)
+		if x, y, pw, ph, ok := c.snapAxisLine(a.Y, b.Y, a.X, w, false); ok {
+			vector.FillRect(c.Image, x, y, pw, ph, col, false)
+		}
 	default:
 		c.shadeSegment(a, b, w, col)
 	}

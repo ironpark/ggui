@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/pkg/gem"
 )
@@ -809,6 +810,97 @@ func TestAppLaysOutOnlyWhenSomethingChanged(t *testing.T) {
 	State(0).Set(1)
 	if !a.needsLayout(Sz(200, 100)) {
 		t.Fatal("a signal write must lay out")
+	}
+	if a.needsLayout(Sz(200, 100)) {
+		t.Fatal("a still frame after layout must not lay out")
+	}
+	a.canvas.scale = 2
+	if !a.needsLayout(Sz(200, 100)) || a.needsLayout(Sz(200, 100)) {
+		t.Fatal("a scale change at the same logical size must lay out once")
+	}
+}
+
+func TestLayoutRerunsWhenScaleChangesAtSameLogicalSize(t *testing.T) {
+	var scales []float64
+	widget := FromFuncs(func(c Constraints, _ Env) Size {
+		scales = append(scales, UseScale())
+		return c.Constrain(Sz(50, 50))
+	}, func(*Canvas, Rect) {})
+
+	w := newWindow(nil, nil, Config{Width: 100, Height: 100}, func() Widget { return widget })
+	w.headless()
+	defer w.close()
+	w.start()
+
+	s1 := ggfx.NewImage(100, 100)
+	defer s1.Deallocate()
+	s2 := ggfx.NewImage(200, 200)
+	defer s2.Deallocate()
+	s15 := ggfx.NewImage(150, 150)
+	defer s15.Deallocate()
+
+	w.draw(s1, 1, false, nil)
+	w.draw(s1, 1, false, nil) // same logical size and scale: must not re-layout
+	w.draw(s2, 2, true, nil)  // 100x100 logical at 2x scale: must re-layout
+	w.draw(s2, 2, false, nil) // same logical size and scale: must not re-layout
+	w.draw(s15, 1.5, true, nil)
+	if want := []float64{1, 2, 1.5}; !slices.Equal(scales, want) {
+		t.Fatalf("Window.draw layout scales = %v, want %v", scales, want)
+	}
+
+	// Probe.SetScale changes scale at the same logical size too.
+	scales = nil
+	p := NewProbe(widget, Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	p.Frame()
+	p.SetScale(2)
+	p.Frame()
+	p.Frame()
+	if want := []float64{1, 2}; !slices.Equal(scales, want) {
+		t.Fatalf("Probe layout scales = %v, want %v", scales, want)
+	}
+}
+
+func TestCachedAndComponentRelayoutWhenScaleChangesAtSameLogicalSize(t *testing.T) {
+	var scales []float64
+	leaf := FromFuncs(func(c Constraints, _ Env) Size {
+		scales = append(scales, UseScale())
+		return c.Constrain(Sz(50, 50))
+	}, func(*Canvas, Rect) {})
+
+	build := func() Widget {
+		return Cached(Component(func() Widget { return Cached(leaf) }))
+	}
+
+	w := newWindow(nil, nil, Config{Width: 100, Height: 100}, build)
+	w.headless()
+	defer w.close()
+	w.start()
+
+	s1 := ggfx.NewImage(100, 100)
+	defer s1.Deallocate()
+	s2 := ggfx.NewImage(200, 200)
+	defer s2.Deallocate()
+
+	w.draw(s1, 1, false, nil)
+	w.draw(s1, 1, false, nil) // unchanged scale & logical size: cached
+	w.draw(s2, 2, true, nil)  // 100x100 logical at 2x: Cached/Component must re-layout
+	w.draw(s2, 2, false, nil) // unchanged scale & logical size: cached
+	if want := []float64{1, 2}; !slices.Equal(scales, want) {
+		t.Fatalf("Window.draw Cached+Component layout scales = %v, want %v", scales, want)
+	}
+
+	scales = nil
+	p := ProbeBuilder(build, Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	p.Frame()
+	p.SetScale(1.5)
+	p.Frame()
+	p.Frame()
+	if want := []float64{1, 1.5}; !slices.Equal(scales, want) {
+		t.Fatalf("Probe Cached+Component layout scales = %v, want %v", scales, want)
 	}
 }
 

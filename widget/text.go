@@ -66,9 +66,19 @@ func (t *TextWidget) layoutBidi(env ggui.Env, rewrapped bool) {
 	}
 }
 
-// lineStyles is a line of a Text in its one style.
+// sanitizeScale returns s when it is a finite positive display scale, else 1.
+func sanitizeScale(s float64) float64 {
+	if s > 0 && !math.IsNaN(s) && !math.IsInf(s, 0) {
+		return s
+	}
+	return 1
+}
+
+// lineStyles is a line of a Text in its one style, scaled to the physical
+// display scale the lines were wrapped at so bidi measurement matches paint.
 func (t *TextWidget) lineStyles(line string) []paragraph.LineStyle {
 	st, _ := t.engine()
+	st.Size *= sanitizeScale(t.wrapped.scale)
 	return []paragraph.LineStyle{{Start: 0, End: len(line), Style: st}}
 }
 
@@ -80,9 +90,11 @@ func (t *TextWidget) paintBidi(dst *ggui.Canvas, i int, r ggui.Rect, align, y fl
 		return false
 	}
 	ps, line := t.bidi.lines[i], t.lines[i]
-	x := r.Origin.X + (r.Size.W-paragraph.Width(ps))*align
-	baseline := t.faceAt(dst.Scale()).Metrics().HAscent
-	paragraph.Draw(dst.Image, &t.bidi.pieceOp, line, ps, t.bidi.styles[i], dst.Scale(), baseline,
+	bidiScale := sanitizeScale(t.bidi.key.scale)
+	scale := sanitizeScale(dst.Scale())
+	x := r.Origin.X + (r.Size.W-paragraph.Width(ps)/bidiScale)*align
+	baseline := t.faceAt(scale).Metrics().HAscent
+	paragraph.Draw(dst.Image, &t.bidi.pieceOp, line, ps, t.bidi.styles[i], scale/bidiScale, baseline,
 		func(int) color.Color { return col },
 		func(op *text.DrawOptions) { place(op, x, y) })
 	return true
@@ -182,7 +194,8 @@ type wrapKey struct {
 	lineHeight float64
 	tracking   float64
 	maxW       float64
-	maxLines   int
+	scale      float64
+	maxLines   int32
 	ellipsis   bool
 	lineBox    bool
 }
@@ -448,7 +461,7 @@ func (t *TextWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		t.rich.maxW, t.rich.env = c.MaxW, env
 		return t.layoutRich(c, env, own)
 	}
-	t.layoutLines(c.MaxW, env)
+	t.layoutLines(c.MaxW, env, sanitizeScale(ggui.UseScale()))
 	return c.Constrain(t.natural)
 }
 
@@ -459,44 +472,47 @@ func lineHeightSet(env ggui.Env, s ggui.TextStyle) bool {
 	return s.LineHeight != 0 || env.Text().LineHeight != 0
 }
 
-// layoutLines wraps, cuts and orders the lines for a width of maxW, when
-// any of what they depend on changed since the last time.
-func (t *TextWidget) layoutLines(maxW float64, env ggui.Env) {
+// layoutLines wraps, cuts and orders the lines for a width of maxW at scale,
+// when any of what they depend on changed since the last time. Measuring at
+// the display scale avoids advance drift between layout and paint caused by
+// integer/fixed-point shaping rounding at fractional scales (125%/150%/175%).
+func (t *TextWidget) layoutLines(maxW float64, env ggui.Env, scale float64) {
 	st, gen := t.engine()
-	face := faceOf(st, 1)
+	face := faceOf(st, scale)
 	fits := t.wrap || t.ellipsis || t.maxLines > 0
 	key := wrapKey{generation: gen, value: t.value, font: t.resolved.Font, weight: t.resolved.Weight, size: t.resolved.Size, lineHeight: t.resolved.LineHeight, tracking: t.resolved.Tracking,
-		maxW: gem.Pick(fits, maxW, 0), maxLines: t.maxLines, ellipsis: t.ellipsis, lineBox: t.lineBox}
+		maxW: gem.Pick(fits, maxW, 0), scale: scale, maxLines: int32(min(t.maxLines, math.MaxInt32)), ellipsis: t.ellipsis, lineBox: t.lineBox}
 	rewrapped := key != t.wrapped
 	if rewrapped {
 		t.wrapped = key
 		t.glyphFace = nil // the lines' glyphs are of the lines before
-		t.lines = textlayout.Wrap(key.value, face, gem.Pick(t.wrap, key.maxW, 0))
-		if n := key.maxLines; n > 0 && len(t.lines) > n {
+		t.lines = textlayout.Wrap(key.value, face, gem.Pick(t.wrap, key.maxW, 0)*scale)
+		if n := int(key.maxLines); n > 0 && len(t.lines) > n {
 			t.lines = t.lines[:n]
-			t.lines[n-1] = textlayout.Ellipsize(t.lines[n-1], face, key.maxW, true)
+			t.lines[n-1] = textlayout.Ellipsize(t.lines[n-1], face, key.maxW*scale, true)
 		}
 		if key.ellipsis {
 			for i, line := range t.lines {
-				t.lines[i] = textlayout.Ellipsize(line, face, key.maxW, false)
+				t.lines[i] = textlayout.Ellipsize(line, face, key.maxW*scale, false)
 			}
 		}
 		t.widths = t.widths[:0]
 		var w float64
 		for _, line := range t.lines {
-			lw := textlayout.Width(line, face)
+			lw := textlayout.Width(line, face) / scale
 			t.widths = append(t.widths, lw)
 			w = max(w, lw)
 		}
 		m := face.Metrics()
+		ascent, descent := m.HAscent/scale, m.HDescent/scale
 		t.lead = 0
 		if t.lineBox {
 			// Half of what the line height leaves beside the glyphs goes
 			// above them and half below, as CSS's half-leading does.
-			t.lead = (t.spacing() - m.HAscent - m.HDescent) / 2
+			t.lead = (t.spacing() - ascent - descent) / 2
 		}
-		t.natural = ggui.Sz(w, float64(len(t.lines)-1)*t.spacing()+m.HAscent+m.HDescent+2*t.lead)
-		t.ascent = t.lead + m.HAscent
+		t.natural = ggui.Sz(w, float64(len(t.lines)-1)*t.spacing()+ascent+descent+2*t.lead)
+		t.ascent = t.lead + ascent
 	}
 	t.layoutBidi(env, rewrapped)
 }
@@ -549,17 +565,22 @@ func (t *TextWidget) paintLines(dst *ggui.Canvas, r ggui.Rect, upright bool, pla
 	if dst == nil || dst.Image == nil || dst.Image.Bounds().Empty() {
 		return
 	}
+	scale := sanitizeScale(dst.Scale())
 	if t.rich != nil {
-		t.layoutLines(t.rich.maxW, t.rich.env)
+		t.layoutLines(t.rich.maxW, t.rich.env, scale)
 	}
-	face := t.faceAt(dst.Scale())
+	face := t.faceAt(scale)
 	op := &t.drawOp
 	*op = text.DrawOptions{}
 	col := gem.Pick(t.style.Color != nil && !ggui.IsEnvColor(t.style.Color), t.style.Color, t.current().Color)
 	op.ColorScale.ScaleWithColor(col)
 	align := gem.Pick(t.alignSet, t.align, startAlign(t.dir()))
 	for i, line := range t.lines {
-		x := r.Origin.X + (r.Size.W-t.widths[i])*align
+		lw := t.widths[i]
+		if align != 0 && scale != t.wrapped.scale {
+			lw = textlayout.Width(line, face) / scale
+		}
+		x := r.Origin.X + (r.Size.W-lw)*align
 		y := r.Origin.Y + t.lead + float64(i)*t.spacing()
 		// A line's glyphs can reach past its box, by an accent, a tall
 		// emoji or a long tail, by up to a line more.

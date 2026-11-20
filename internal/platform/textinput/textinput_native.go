@@ -16,9 +16,21 @@ import (
 // frame. Sessions retain their owner even when another window handles events.
 var windowInputs = map[*ggwd.Window]*textInput{}
 
+// textInputWindow is the subset of *ggwd.Window called by textInputImpl,
+// allowing unit tests to substitute a fake without a native window.
+type textInputWindow interface {
+	DeviceScaleFactor() float64
+	SetTextInputContext(before, after string)
+	SetTextInputEnabled(enabled bool)
+	SetTextInputRect(x, y, width, height float64)
+}
+
 func newTextInput(w *ggwd.Window) *textInput {
 	t := &textInput{}
-	t.impl.events, t.impl.window = &t.events, w
+	t.impl.events = &t.events
+	if w != nil {
+		t.impl.window = w
+	}
 	return t
 }
 
@@ -88,10 +100,12 @@ func HandleEvent(event ggwd.Event) bool {
 
 type textInputImpl struct {
 	events  *textInputEvents
-	window  *ggwd.Window
+	window  textInputWindow
 	enabled bool
 	rect    image.Rectangle // the caret last handed to the window
-	before  string          // the context last handed to the window
+	scale   float64         // the window's scale when rect was last handed to it
+	rectSet bool
+	before  string // the context last handed to the window
 	after   string
 }
 
@@ -105,14 +119,16 @@ func (t *textInputImpl) setContext(before, after string) {
 	t.window.SetTextInputContext(before, after)
 }
 
-// setRect passes the caret rectangle on only when it moved: the window
-// method is a synchronous main-thread hop, and the editor reports the
-// caret on every tick it is focused.
+// setRect passes the caret rectangle on when it moved or the window's scale
+// changed: the window method is a synchronous main-thread hop, and the editor
+// reports the caret on every tick it is focused, while a DPI change alters the
+// physical pixel coordinates even when the logical caret rectangle is unchanged.
 func (t *textInputImpl) setRect(bounds image.Rectangle) {
-	if bounds == t.rect {
+	scale := t.window.DeviceScaleFactor()
+	if t.rectSet && bounds == t.rect && scale == t.scale {
 		return
 	}
-	t.rect = bounds
+	t.rect, t.scale, t.rectSet = bounds, scale, true
 	t.window.SetTextInputRect(float64(bounds.Min.X), float64(bounds.Min.Y), float64(bounds.Dx()), float64(bounds.Dy()))
 }
 

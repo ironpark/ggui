@@ -114,11 +114,12 @@ type frameLoop struct {
 
 	closeRequests []func() bool // OnCloseRequest handlers, in order
 
-	laidSize Size
-	laidGen  uint64
-	laidFree uint64 // freeGen at that layout
-	rootSize Size
-	settles  uint64 // counts the settles, for a layout boundary's checks
+	laidSize  Size
+	laidScale float64
+	laidGen   uint64
+	laidFree  uint64 // freeGen at that layout
+	rootSize  Size
+	settles   uint64 // counts the settles, for a layout boundary's checks
 	// unheld is that a layout boundary found, as it was laid out, that a
 	// layout it held moved what lies around it: the frame is painted whole.
 	unheld bool
@@ -491,17 +492,19 @@ func layoutGen() uint64 { return reactive.LayoutGen() + fontGen() }
 func freeGen() uint64 { return reactive.FreeGen() + fontGen() }
 
 // needsLayout reports whether the tree must be laid out again for a
-// viewport of the given logical size, and records that it will be: when
-// the viewport changed size, or a StateValue was written or Invalidate called
-// since the last layout. A rebuilt root is covered, since only a StateValue
-// write rebuilds it. Hover and press live outside signals and only change
-// how a widget paints, so a still frame costs no layout.
+// viewport of the given logical size and the canvas's current scale, and
+// records that it will be: when the viewport changed size or scale, or a
+// StateValue was written or Invalidate called since the last layout. A
+// rebuilt root is covered, since only a StateValue write rebuilds it. Hover
+// and press live outside signals and only change how a widget paints, so a
+// still frame costs no layout.
 func (l *frameLoop) needsLayout(logical Size) bool {
 	gen := layoutGen()
-	if logical == l.laidSize && gen == l.laidGen {
+	scale := l.canvas.Scale()
+	if logical == l.laidSize && scale == l.laidScale && gen == l.laidGen {
 		return false
 	}
-	l.laidSize, l.laidGen, l.laidFree = logical, gen, freeGen()
+	l.laidSize, l.laidScale, l.laidGen, l.laidFree = logical, scale, gen, freeGen()
 	return true
 }
 

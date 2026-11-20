@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"image"
+	"math"
 	"testing"
 	"time"
 
@@ -419,5 +420,36 @@ func TestAPreciseScrollIsTakenInPixels(t *testing.T) {
 	f := a.takeInput()
 	if f.wheelPx != Pt(0, -1.5*ggwd.PreciseLine) || f.wheel != Pt(0, -1) {
 		t.Fatalf("took %v pixels and %v notches", f.wheelPx, f.wheel)
+	}
+}
+
+func TestSetSizeAndSetSizeLimitsRoundFractionalSizes(t *testing.T) {
+	t.Parallel()
+	a := New(Config{}, func() Widget { return sized(0, 0) })
+	defer a.Close()
+
+	// Fractional logical sizes produced by 150% and 125% displays round to the
+	// nearest integer DIP instead of truncating down by 1px.
+	a.SetSize(Sz(1000.0/1.5, 1001.0/1.25)) // 666.666..., 800.8
+	if got := a.Size(); got != Sz(667, 801) {
+		t.Fatalf("SetSize fractional = %v, want 667×801", got)
+	}
+	a.SetSize(Sz(1199.0/1.5, 599.5)) // 799.333..., 599.5
+	if got := a.Size(); got != Sz(799, 600) {
+		t.Fatalf("SetSize fractional = %v, want 799×600", got)
+	}
+
+	a.SetSizeLimits(Sz(300.6, 200.4), Sz(1000.0/1.5, 0))
+	o := a.cfg.options()
+	if o.MinWidth != 301 || o.MinHeight != 200 || o.MaxWidth != 667 || o.MaxHeight != 0 {
+		t.Fatalf("SetSizeLimits fractional = min(%v,%v) max(%v,%v), want min(301,200) max(667,0)",
+			o.MinWidth, o.MinHeight, o.MaxWidth, o.MaxHeight)
+	}
+
+	// Zero and negative sentinels stay intact; NaN/Inf safely map to 0.
+	a.SetSizeLimits(Sz(-1, 0), Sz(math.NaN(), math.Inf(1)))
+	if a.cfg.MinWidth != -1 || a.cfg.MinHeight != 0 || a.cfg.MaxWidth != 0 || a.cfg.MaxHeight != 0 {
+		t.Fatalf("SetSizeLimits sentinels = min(%d,%d) max(%d,%d), want min(-1,0) max(0,0)",
+			a.cfg.MinWidth, a.cfg.MinHeight, a.cfg.MaxWidth, a.cfg.MaxHeight)
 	}
 }
