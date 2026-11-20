@@ -86,10 +86,10 @@ func (m MenuItem) BindEnabled(r Readable[bool]) MenuItem { m.Enabled = r; return
 func (m MenuItem) BindChecked(r Readable[bool]) MenuItem { m.Checked = r; return m }
 
 // NativeMenu reports whether App.SetMenu's menus appear in the platform's
-// menu bar, which is so on macOS. Elsewhere an app draws them itself, with
-// ui.AppMenubar, and their chords work either way. An app ggui dev shows
-// in its viewer draws them itself on macOS too: the menu bar is the
-// viewer's.
+// menu bar, which is so on macOS (including when ggui dev shows the app in
+// its viewer, which installs them in the viewer's menu bar). Elsewhere an
+// app draws them itself, with ui.AppMenubar, and their chords work either
+// way.
 func NativeMenu() bool { return nativemenu.Supported() }
 
 // menuSet is one group of menus the app installed: the menu bar's, or a

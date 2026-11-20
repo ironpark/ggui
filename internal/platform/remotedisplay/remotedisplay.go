@@ -1,8 +1,8 @@
 // Package remotedisplay says whether the app's window is shown by another
 // process: ggui dev's viewer (see cmd/ggviewer and ggwd.Remote). Such an
-// app opens no window of its own, so what belongs to the window on the
-// desktop is the viewer's there: the menu bar, the tray, native popup
-// menus and the accessibility tree. The packages that use those ask On
+// app opens no window of its own: its window and native menu bar (on macOS)
+// are forwarded to the viewer, while the tray, native popup menus and the
+// accessibility tree remain local-only. The packages that use those ask On
 // and take their in-window or empty path instead.
 //
 // It is known before Run, from the build and the environment, by the rule

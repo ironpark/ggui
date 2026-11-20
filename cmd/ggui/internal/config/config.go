@@ -147,6 +147,14 @@ type Dev struct {
 	// that stays while the app restarts, or "window", the app's own.
 	// Empty is remote where it is available, macOS for now.
 	Display string `toml:"display"`
+	// BundleDir is the directory where ggui dev creates Name.dev.app on
+	// macOS. Empty is build.output.
+	BundleDir string `toml:"bundle_dir"`
+	// Identity names the macOS signing identity for Name.dev.app, or "-"
+	// to sign ad hoc. Empty uses macos.signing_identity (when set and
+	// not "-"), then the keychain's first Apple Development identity,
+	// then ad hoc.
+	Identity string `toml:"identity"`
 }
 
 // MacOS holds what only the .app bundle, and the disk image and installer

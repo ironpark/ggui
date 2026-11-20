@@ -8,13 +8,16 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"time"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/dev"
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
+	"github.com/ironpark/ggui/cmd/ggui/internal/macos"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
+	"github.com/ironpark/ggui/cmd/ggui/internal/svgicon"
 	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
 	"github.com/ironpark/ggui/cmd/ggui/internal/viewer"
 )
@@ -39,19 +42,30 @@ Router.Keep, is asked of the app before it is stopped and handed to the
 new build as it starts, so that a save does not lose the screen being
 worked on; with --web the page carries it across its reload.
 
-On macOS the app's window is shown by a viewer, a process of its own
-that keeps the window open, where it was and as large as it was, while
-the app is rebuilt and restarts: the window shows the build's progress
-and a failed build's errors, and says when the app exits. The app is
-built with the ggwd_remote tag for it and draws through the viewer. With
---display=window, or dev.display = "window", each run of the app opens
-a window of its own, as a release build does. When there is no viewer
-to be had, because the project's ggui is too old for one or it does not
-build or start, the app opens its own window and ggui says why; if the
-viewer goes away, the app is started again in its own window. Closing
-the viewer's window ends ggui dev. The viewer shows one window and no
-tray icon or menu bar of the app's own; when the app adds what does not
-show, ggui says so, once, with --display=window to see it.
+On macOS, Linux and Windows the app's window is shown by a viewer, a
+process of its own that keeps the window open, where it was and as large
+as it was, while the app is rebuilt and restarts: the window shows the
+build's progress and a failed build's errors, and says when the app
+exits. The app is built with the ggwd_remote tag for it and draws
+through the viewer. With --display=window, or dev.display = "window",
+each run of the app opens a window of its own, as a release build does.
+When there is no viewer to be had, because the project's ggui is too old
+for one or it does not build or start, the app opens its own window and
+ggui says why; if the viewer goes away, the app is started again in its
+own window. Closing the viewer's window ends ggui dev. The viewer shows
+one window and the app's native menu bar, with no tray icon of the app's
+own; when the app adds what does not show, ggui says so, once, with
+--display=window to see it.
+
+On macOS ggui dev creates a Name.dev.app bundle in build.output (or
+--bundle-dir / dev.bundle_dir) with CFBundleIdentifier <app.id>.dev,
+Info.plist and AppIcon.icns, in both --display=remote (where the viewer
+runs inside the bundle for the Dock icon, menu bar name and Info.plist)
+and --display=window (where the app runs inside it). The bundle is
+signed with --sign or dev.identity, else macos.signing_identity, else an
+Apple Development identity from the keychain, else ad hoc ("-"). Signing
+with a keychain identity preserves macOS TCC permissions across
+rebuilds; Info.plist and AppIcon.icns are only rebuilt when they change.
 
 The package is a directory such as ./cmd/app, app.package in ggui.toml
 by default. Arguments after -- go to the app, after dev.args.
@@ -65,6 +79,8 @@ which keeps running the last build that succeeded.`,
 		noWatch := fs.Bool("no-watch", false, "build and run once; do not watch for changes")
 		stopTimeout := fs.Duration("stop-timeout", 3*time.Second, "how long the app has to exit when asked before it is killed")
 		display := fs.String("display", "", "where the app's window shows: `remote`, in a viewer that stays while the app restarts (the default on macOS, Linux and Windows), or window, its own; replaces dev.display")
+		bundleDir := fs.String("bundle-dir", "", "on macOS, the `directory` where Name.dev.app is created, replacing dev.bundle_dir (default: build.output)")
+		sign := fs.String("sign", "", "on macOS, sign Name.dev.app as `identity`, replacing dev.identity; - signs ad hoc")
 		webMode := fs.Bool("web", false, "build for the browser and serve the app instead of running it")
 		port := fs.Int("port", 8080, "with --web, the `port` to serve on")
 		host := fs.String("host", "localhost", "with --web, the `address` to listen on; 0.0.0.0 reaches the server from other devices, such as a phone")
@@ -103,6 +119,14 @@ which keeps running the last build that succeeded.`,
 				for _, w := range p.Config.Dev.Watch {
 					s.Extra = append(s.Extra, p.Path(w))
 				}
+				if runtime.GOOS == "darwin" && !*webMode {
+					if p.Config.App.Icon != "" {
+						s.Extra = append(s.Extra, p.Path(p.Config.App.Icon))
+					}
+					if p.Config.MacOS.Entitlements != "" {
+						s.Extra = append(s.Extra, p.Path(p.Config.MacOS.Entitlements))
+					}
+				}
 				return s
 			}
 			first := settings(proj)
@@ -128,6 +152,9 @@ which keeps running the last build that succeeded.`,
 				if len(rest) > 0 || len(cfg.Dev.Args) > 0 || len(cfg.Dev.Env) > 0 {
 					say.Warn("a page in a browser takes no arguments or environment; dev.args, dev.env and those after -- are not used with --web")
 				}
+				if isSet(fs, "bundle-dir") || isSet(fs, "sign") {
+					say.Warn("--bundle-dir and --sign only apply to native macOS dev runs, not --web")
+				}
 				b := cfg.Web.Base
 				if isSet(fs, "base") {
 					b = *base
@@ -147,6 +174,39 @@ which keeps running the last build that succeeded.`,
 					Tracef: tracef,
 				}
 				return w.Run(ctx)
+			}
+
+			var (
+				devBundler *macos.DevBundle
+				bDir       string
+			)
+			if runtime.GOOS == "darwin" {
+				bDir, err = resolveBundleDir(proj, outDir, *bundleDir, isSet(fs, "bundle-dir"))
+				if err != nil {
+					return err
+				}
+				devSign, err := macos.ResolveDevIdentity(ctx, macos.DevSigningRequest{
+					FlagIdentity:  *sign,
+					FlagSet:       isSet(fs, "sign"),
+					DevIdentity:   cfg.Dev.Identity,
+					MacOSIdentity: cfg.MacOS.SigningIdentity,
+					Entitlements:  proj.Path(cfg.MacOS.Entitlements),
+				})
+				if err != nil {
+					return err
+				}
+				for _, w := range devSign.Warnings {
+					say.Warn("%s", w)
+				}
+				devBundler = macos.NewDevBundle(devBundleSpec(proj, main, bDir, say), devSign)
+				if devSign.AdHoc() {
+					say.Info("bundle %s (signed ad hoc)", relPath(devBundler.AppPath()))
+					say.Note("%s", say.Dim("ad hoc signature: macOS permissions reset on rebuild; pass --sign, set dev.identity, or install an Apple Development certificate to keep them"))
+				} else {
+					say.Info("bundle %s (signed as %s)", relPath(devBundler.AppPath()), devSign.Display)
+				}
+			} else if isSet(fs, "bundle-dir") || isSet(fs, "sign") {
+				say.Warn("--bundle-dir and --sign only apply on macOS")
 			}
 
 			// A second signal skips the graceful stop.
@@ -183,6 +243,13 @@ which keeps running the last build that succeeded.`,
 					held(p.Config.Dev.Display != cfg.Dev.Display && !isSet(fs, "display"), "dev.display")
 					held(p.Path(p.Config.Build.Output) != outDir, "build.output")
 					held(p.Config.App.Package != cfg.App.Package && arg == "", "app.package")
+					if devBundler != nil {
+						held(p.Config.Dev.BundleDir != cfg.Dev.BundleDir && !isSet(fs, "bundle-dir"), "dev.bundle_dir")
+						held(p.Config.Dev.Identity != cfg.Dev.Identity && !isSet(fs, "sign"), "dev.identity")
+						held(p.Config.App.Name != cfg.App.Name, "app.name")
+						held(p.Config.App.ID != cfg.App.ID, "app.id")
+						devBundler.UpdateSpec(devBundleSpec(p, main, bDir, say), p.Path(p.Config.MacOS.Entitlements))
+					}
 					return settings(p), notes, nil
 				},
 				// The app's stdout is the terminal itself; its stderr
@@ -190,6 +257,9 @@ which keeps running the last build that succeeded.`,
 				// through ui, above any spinner of ggui's.
 				Log: os.Stderr, Stdout: os.Stdout, Stderr: ui.Stderr,
 				Tracef: tracef,
+			}
+			if devBundler != nil {
+				n.Bundle = devBundler
 			}
 			mode := cfg.Dev.Display
 			if isSet(fs, "display") {
@@ -200,6 +270,9 @@ which keeps running the last build that succeeded.`,
 				return err
 			}
 			if d != nil {
+				if devBundler != nil {
+					d.Bundle = devBundler
+				}
 				n.Display = d
 			}
 			return n.Run(ctx)
@@ -254,4 +327,82 @@ func target(m *project.Main) string {
 		}
 	}
 	return m.ImportPath
+}
+
+// resolveBundleDir returns the directory where macOS Name.dev.app is created:
+// --bundle-dir (relative to cwd) when set, else dev.bundle_dir (relative to
+// the project root), else outDir (build.output).
+func resolveBundleDir(proj *project.Project, outDir, flagVal string, flagSet bool) (string, error) {
+	if flagSet {
+		if flagVal == "" {
+			return outDir, nil
+		}
+		return filepath.Abs(flagVal)
+	}
+	if proj.Config.Dev.BundleDir != "" {
+		return proj.Path(proj.Config.Dev.BundleDir), nil
+	}
+	return outDir, nil
+}
+
+// devBundleSpec builds a macos.DevBundleSpec from the project configuration
+// and resolved main package.
+func devBundleSpec(proj *project.Project, main *project.Main, dir string, say *ui.Output) macos.DevBundleSpec {
+	cfg := proj.Config
+	extra, _ := plistExtra(proj.Root, cfg.MacOS.Plist)
+	iconPath := proj.Path(cfg.App.Icon)
+	var prepareIcon func(context.Context, string) error
+	if iconPath != "" && svgicon.Is(iconPath) {
+		root := proj.Root
+		name := cfg.App.Icon
+		prepareIcon = func(ctx context.Context, dst string) error {
+			s := say.Step("drawing " + filepath.Base(iconPath) + " for the dev bundle")
+			err := svgicon.Draw(ctx, svgicon.Options{
+				Dir:  root,
+				SVG:  iconPath,
+				Name: name,
+				Out:  dst,
+			})
+			if err != nil {
+				s.Fail("drawing " + filepath.Base(iconPath) + " failed")
+				return err
+			}
+			s.Done("drew " + filepath.Base(iconPath))
+			return nil
+		}
+	}
+	return macos.DevBundleSpec{
+		Name:                 main.Name,
+		Executable:           main.Executable,
+		ID:                   macos.DevBundleID(main.ID, main.Name),
+		Version:              cfg.App.Version,
+		MinimumSystemVersion: cfg.MacOS.MinimumSystemVersion,
+		Category:             cfg.MacOS.Category,
+		Extra:                extra,
+		Dir:                  dir,
+		Icon:                 iconPath,
+		IconName:             iconPath,
+		IconInset:            cfg.MacOS.IconInset,
+		PrepareIcon:          prepareIcon,
+		IconCacheDir:         devIconCacheDir(),
+	}
+}
+
+func devIconCacheDir() string {
+	if d := os.Getenv("GGUI_CACHE_DIR"); d != "" {
+		return filepath.Join(d, "dev-icons")
+	}
+	if d, err := os.UserCacheDir(); err == nil {
+		return filepath.Join(d, "ggui", "dev-icons")
+	}
+	return ""
+}
+
+func relPath(path string) string {
+	if wd, err := os.Getwd(); err == nil {
+		if rel, err := filepath.Rel(wd, path); err == nil && filepath.IsLocal(rel) {
+			return "." + string(filepath.Separator) + rel
+		}
+	}
+	return path
 }

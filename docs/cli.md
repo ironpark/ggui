@@ -226,13 +226,14 @@ is missing:
 - **One window.** `App.OpenWindow` returns an error while the app runs,
   and a window made before `Run` other than the first does not open, with
   a warning. `ggui dev --display=window` opens them all.
-- **Menus.** `NativeMenu`, `NativeContextMenu` and `TraySupported` report
-  false: the menu bar is the viewer's, so `App.SetMenu`'s menus are drawn
-  by `ui.AppMenubar`, as on Windows and Linux, and their chords work. A
-  tray icon does not show: when the app adds one, `ggui dev` warns once
-  a session that the tray is not shown and that `--display=window` shows
-  it; `Window.ShowContextMenu` returns false. On Windows, too, `TraySupported` is false while the
-  viewer shows the app.
+- **Menus.** On macOS, `App.SetMenu`'s native menu bar runs in the
+  viewer (`NativeMenu` is true): reactive enabled and checked states stay
+  in sync, clicks and shortcuts route back to the app, and the menu bar
+  clears when the app detaches. `NativeContextMenu` and `TraySupported`
+  report false: `Window.ShowContextMenu` returns false, and when the app
+  adds a tray icon `ggui dev` warns once a session that the tray is not
+  shown and that `--display=window` shows it. On Windows, too,
+  `TraySupported` is false while the viewer shows the app.
 - **Dialogs** open, from the app's process, standing alone in front of
   the viewer's window rather than as a sheet on it or owned by it. On
   macOS the viewer is active again once they close; on Windows the viewer
@@ -243,14 +244,14 @@ is missing:
   macOS and Windows the app reaches it itself, as in a release build; on
   Linux, where X11 has the clipboard belong to a window, the app reads and
   writes it through the viewer's.
-- **The window's placement and state** are the viewer's and its user's:
-  `SetSize`, `SetPosition`, maximize, minimize, fullscreen, show, hide,
-  focus and attention requests do nothing, and the window reports itself
-  at the screen's origin, visible and in none of those states. Its title,
-  size limits, resizability, frame and always-on-top follow the app's
-  `Config` and setters; a hidden title bar and transparency are the first
-  app's of the session. `Screens()` lists one screen, the viewer's.
-  Cursor shapes and text input, with input methods, work.
+- **Window settings and state** follow the app live and reset cleanly
+  when it detaches or restarts: title, icon, size and size limits,
+  position, resizability, frame, always-on-top, hidden title bar
+  (`Config.TitlebarHidden`), traffic light placement
+  (`Config.TrafficLights`), maximize, minimize, fullscreen, show, hide,
+  focus, attention, preferred color mode and Dock icon visibility all
+  apply to the viewer's window. `Screens()` lists one screen, the
+  viewer's. Cursor shapes and text input, with input methods, work.
 - **No accessibility tree**: there is no native window to hang it on,
   so screen readers see the viewer's window as empty.
 - The [inspector](inspector.md) and `ggui_debug` work as in a window of
@@ -264,6 +265,41 @@ over those sockets. On an older Windows the viewer does not start and the
 app opens its own window. The socket lives in the temporary directory;
 on Windows a temporary directory too long for a unix socket's path, as
 under a very long user name, leaves the app in its own window too.
+
+### The macOS development bundle
+
+On macOS, `ggui dev` wraps the running program in a `Name.dev.app` bundle
+under `build.output` (`build/` by default), or in the directory
+`--bundle-dir` or `dev.bundle_dir` names (which the watcher also
+ignores). Its `CFBundleIdentifier` is `<app.id>.dev`, so notifications,
+settings and permissions stay separate from a release build installed on
+the same Mac.
+
+- **Both displays.** With `--display=remote` (the default), the viewer
+  runs inside `Name.dev.app` so the Dock icon, menu bar app name and
+  `Info.plist` belong to the project, while the app binary runs outside
+  the bundle so rebuilding never invalidates the live viewer's code
+  signature. With `--display=window`, the app itself runs inside
+  `Name.dev.app`. In both modes ggui executes `Contents/MacOS/<exe>`
+  directly rather than through `open`, keeping stdout/stderr pipes,
+  `dev.env`, Ctrl-C and kept state intact.
+- **Incremental updates.** `Info.plist`, `PkgInfo` and
+  `Contents/Resources/AppIcon.icns` (including SVG icons) are written
+  only when missing or when `ggui.toml`, the icon or entitlements change.
+  Regular Go edits swap only the executable inside the bundle and re-sign
+  it. In remote mode, a change to the bundle's icon, plist or
+  entitlements restarts the viewer once so macOS picks it up.
+- **Signing and TCC permissions.** macOS tracks privacy permissions
+  (camera, microphone, screen recording, accessibility) by the bundle's
+  designated requirement. An ad hoc signature (`-`) keys on the binary's
+  hash, which changes on every rebuild and resets those permissions;
+  signing with a keychain certificate keys on `<app.id>.dev` and the
+  certificate, keeping permissions across rebuilds. `ggui dev` picks the
+  signing identity in order:
+  1. `--sign` or `dev.identity`
+  2. `macos.signing_identity` (when set and not `"-"`)
+  3. the first `Apple Development` identity found in the keychain
+  4. ad hoc (`"-"`) when none of the above is available.
 
 ### What is watched
 
@@ -310,12 +346,16 @@ this.
   build.
 - **A change to `ggui.toml`** is read again before that build:
   `dev.tags`, `dev.args`, `dev.env` and `dev.watch` take effect in it and
-  in the app it is run as, the flags still replacing what they replace.
+  in the app it is run as, the flags still replacing what they replace,
+  and on macOS changes to `app.icon`, `[macos.plist]` or
+  `macos.entitlements` update `Name.dev.app` (restarting the viewer once
+  in remote mode).
   A file that is not valid is said, with its line, and the settings in
   use stay until it is. `dev.display`, `build.output` and `app.package`
-  are held for the session; ggui says so when one of them changed, and
-  starting `ggui dev` again takes it up. With `--web` the server holds
-  every setting it started with, and says the same.
+  (and on macOS `dev.bundle_dir`, `dev.identity`, `app.name` and
+  `app.id`) are held for the session; ggui says so when one of them
+  changed, and starting `ggui dev` again takes it up. With `--web` the
+  server holds every setting it started with, and says the same.
 - **A change during a build** cancels it, the go command and its
   compilers with it, and builds again after the same wait; the build
   cache keeps what was compiled. Before the app is replaced, dev looks at
@@ -364,6 +404,8 @@ and why, and builds started, cancelled and thrown away.
 | `--stop-timeout 3s` | How long the app has to exit when asked before it is killed. |
 | `--verbose` | Print the watcher's and the rebuild loop's decisions, timed. `GGUI_VERBOSE=1` does the same. |
 | `--display remote` | Where the window shows: `remote`, in the viewer, the default on macOS, Linux and Windows, or `window`, the app's own. Replaces `dev.display`. |
+| `--bundle-dir dir` | On macOS, the directory where `Name.dev.app` is created, replacing `dev.bundle_dir` (default: `build.output`). |
+| `--sign identity` | On macOS, sign `Name.dev.app` as this keychain identity, replacing `dev.identity`; `-` signs ad hoc. |
 | `--config file` | Read this file instead of the `ggui.toml` found from the package or the working directory. |
 | `-- args` | Arguments for the app, after `dev.args`. |
 
@@ -1116,6 +1158,8 @@ base = "/hello/"
 | `env` | `{}` | Environment variables set for the app, such as `{ LOG_LEVEL = "debug" }`. |
 | `watch` | `[]` | More files or directories to watch, such as assets the app reads at run time. |
 | `display` | `"remote"` on macOS, Linux and Windows | Where the app's window shows: `"remote"`, in [the viewer](#the-window-remote-display) that stays while the app restarts, or `"window"`, the app's own. |
+| `bundle_dir` | `build.output` | On macOS, the directory where `Name.dev.app` is created; see [The macOS development bundle](#the-macos-development-bundle). Same as `--bundle-dir`. |
+| `identity` | auto (`macos.signing_identity`, else `Apple Development`, else `"-"`) | On macOS, the keychain identity used to sign `Name.dev.app` so TCC permissions persist across rebuilds; `"-"` signs ad hoc. Same as `--sign`. |
 
 ### [macos]
 
