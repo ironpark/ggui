@@ -45,6 +45,24 @@ type Viewer interface {
 	Stop(timeout time.Duration)
 }
 
+// Bundler packages an executable into a platform application bundle (such as
+// a macOS Name.dev.app) before it is started, and signs standalone binaries
+// when a running viewer holds the bundle itself.
+type Bundler interface {
+	// Dir is the directory holding the bundle, ignored by the file watcher.
+	Dir() string
+	// Stage updates the bundle with exe (refreshing Info.plist and icon only
+	// when missing or changed), re-signs it, and returns the executable path
+	// inside the bundle to run with proc.Start.
+	Stage(ctx context.Context, exe string) (staged string, warnings []string, err error)
+	// SignBinary signs an executable running outside the bundle (the app
+	// process in remote display mode, while the viewer runs inside the bundle).
+	SignBinary(ctx context.Context, exe string) error
+	// NeedsRefresh reports whether bundle metadata or icon changed since the
+	// last Stage, so a running viewer holding the bundle should restart.
+	NeedsRefresh(changedPaths []string) bool
+}
+
 // RemoteDisplay is the Display of ggviewer, built from the project's
 // module graph and kept in a cache.
 type RemoteDisplay struct {
@@ -55,6 +73,10 @@ type RemoteDisplay struct {
 	// Exe, when set, is the viewer to run instead of the project's: one
 	// being worked on, from GGUI_VIEWER.
 	Exe string
+	// Bundle, when set (on macOS), stages the viewer executable inside
+	// <bundle-dir>/<Name>.dev.app so the viewer carries the app's Dock icon,
+	// menu bar name and Info.plist.
+	Bundle Bundler
 
 	bin  *viewer.Binary
 	next *viewer.Binary // a binary Stale found, to start next
@@ -72,8 +94,26 @@ func (d *RemoteDisplay) Start(ctx context.Context) (Viewer, error) {
 			}
 		}
 	}
+	say := ui.For(d.Log).Prefixed("ggui")
+	stage := func(exe string) (string, error) {
+		if d.Bundle == nil {
+			return exe, nil
+		}
+		staged, warnings, err := d.Bundle.Stage(ctx, exe)
+		for _, w := range warnings {
+			say.Warn("%s", w)
+		}
+		if err != nil {
+			return "", fmt.Errorf("preparing the viewer bundle: %w", err)
+		}
+		return staged, nil
+	}
 	if d.Exe != "" {
-		p, err := viewer.Start(ctx, d.Exe, viewer.Options{Project: d.proj, Stderr: d.Stderr})
+		runExe, err := stage(d.Exe)
+		if err != nil {
+			return nil, err
+		}
+		p, err := viewer.Start(ctx, runExe, viewer.Options{Project: d.proj, Stderr: d.Stderr})
 		if err != nil {
 			return nil, fmt.Errorf("the viewer %s did not start: %w", d.Exe, err)
 		}
@@ -88,7 +128,6 @@ func (d *RemoteDisplay) Start(ctx context.Context) (Viewer, error) {
 		}
 	}
 	// No app runs while the viewer is built, so its step may animate.
-	say := ui.For(d.Log).Prefixed("ggui")
 	var s *ui.Step
 	if _, err := os.Stat(b.Path); err != nil {
 		s = say.Step("building the viewer, once for these versions of ggui, ggwd and ggfx", ui.NoElapsed())
@@ -108,7 +147,11 @@ func (d *RemoteDisplay) Start(ctx context.Context) (Viewer, error) {
 		}
 	}
 	s.Stop()
-	p, err := viewer.Start(ctx, b.Path, viewer.Options{Project: d.proj, Stderr: d.Stderr})
+	runExe, err := stage(b.Path)
+	if err != nil {
+		return nil, err
+	}
+	p, err := viewer.Start(ctx, runExe, viewer.Options{Project: d.proj, Stderr: d.Stderr})
 	if err != nil {
 		return nil, fmt.Errorf("the viewer did not start: %w", err)
 	}
@@ -117,16 +160,19 @@ func (d *RemoteDisplay) Start(ctx context.Context) (Viewer, error) {
 }
 
 // Stale resolves the viewer again when paths may change it, and reports
-// whether that makes another binary.
+// whether that makes another binary or requires refreshing the viewer bundle.
 func (d *RemoteDisplay) Stale(ctx context.Context, paths []string) bool {
-	if d.bin == nil || !d.bin.Affects(paths) {
-		return false
+	bundleStale := d.Bundle != nil && d.Bundle.NeedsRefresh(paths)
+	if d.bin != nil && d.bin.Affects(paths) {
+		b, err := viewer.Resolve(ctx, d.Dir, d.CacheDir)
+		if err == nil && b.Key != d.bin.Key {
+			d.next = b
+			return true
+		}
 	}
-	b, err := viewer.Resolve(ctx, d.Dir, d.CacheDir)
-	if err != nil || b.Key == d.bin.Key {
-		// A graph that lost its viewer keeps the one running.
-		return false
+	if bundleStale {
+		d.next = d.bin
+		return true
 	}
-	d.next = b
-	return true
+	return false
 }

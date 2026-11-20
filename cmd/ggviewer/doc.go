@@ -12,12 +12,13 @@
 // viewer's window (see github.com/ironpark/ggwd/remote). When the app ends,
 // the viewer keeps its last frame; the next app that connects takes the
 // window over, and its first frame replaces the last one. The window opens
-// with the first app's options and takes the title, size limits,
-// resizability, decoration and floating of every app after it; a new size
-// only when an app asks for another than the one before. The title bar's
-// hiding and transparency are the first app's. With -project, the window's
-// position and size are kept for the project under the user's cache
-// directory, and a later session opens the window there.
+// with the first app's options and applies the window and titlebar settings
+// (title, size limits, resizability, decoration, hidden titlebar and traffic
+// lights, floating, icon, appearance, dock icon, and native menu bar) of
+// every app that attaches; a new size or position only when an app asks for
+// another than the one before. With -project, the window's position and size
+// are kept for the project under the user's cache directory, and a later
+// session opens the window there.
 //
 // Usage:
 //

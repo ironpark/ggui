@@ -6,13 +6,17 @@ import (
 	"bytes"
 	"encoding/json"
 	"image"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/ironpark/ggui/internal/platform/nativemenu"
+	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggwd/remote"
 )
 
@@ -122,14 +126,26 @@ func TestState(t *testing.T) {
 
 type fakeWindow struct{ calls []string }
 
-func (w *fakeWindow) SetTitle(s string)    { w.calls = append(w.calls, "title "+s) }
-func (w *fakeWindow) SetSize(x, y float64) { w.calls = append(w.calls, sprint("size", x, y)) }
+func (w *fakeWindow) SetTitle(s string)        { w.calls = append(w.calls, "title "+s) }
+func (w *fakeWindow) SetSize(x, y float64)     { w.calls = append(w.calls, sprint("size", x, y)) }
+func (w *fakeWindow) SetPosition(x, y float64) { w.calls = append(w.calls, sprint("position", x, y)) }
 func (w *fakeWindow) SetSizeLimits(a, b, c, d float64) {
 	w.calls = append(w.calls, sprint("limits", a, b, c, d))
 }
 func (w *fakeWindow) SetResizable(v bool) { w.calls = append(w.calls, sprint("resizable", v)) }
 func (w *fakeWindow) SetDecorated(v bool) { w.calls = append(w.calls, sprint("decorated", v)) }
-func (w *fakeWindow) SetFloating(v bool)  { w.calls = append(w.calls, sprint("floating", v)) }
+func (w *fakeWindow) SetTitlebarHidden(v bool) {
+	w.calls = append(w.calls, sprint("titlebar-hidden", v))
+}
+func (w *fakeWindow) SetTrafficLights(p *ggwd.Point) {
+	w.calls = append(w.calls, sprint("traffic-lights", p))
+}
+func (w *fakeWindow) SetFloating(v bool)         { w.calls = append(w.calls, sprint("floating", v)) }
+func (w *fakeWindow) SetMousePassthrough(v bool) { w.calls = append(w.calls, sprint("passthrough", v)) }
+func (w *fakeWindow) Maximize()                  { w.calls = append(w.calls, "maximize") }
+func (w *fakeWindow) Restore()                   { w.calls = append(w.calls, "restore") }
+func (w *fakeWindow) Show()                      { w.calls = append(w.calls, "show") }
+func (w *fakeWindow) Hide()                      { w.calls = append(w.calls, "hide") }
 func sprint(name string, args ...any) string {
 	b, _ := json.Marshal(args)
 	return name + " " + string(b)
@@ -144,6 +160,16 @@ func appOptions(f func(*remote.OpenWindow)) remote.OpenWindow {
 
 func TestPlanOptions(t *testing.T) {
 	first := appOptions(func(o *remote.OpenWindow) { o.Width, o.Height = 400, 300 })
+	hiddenBar := appOptions(func(o *remote.OpenWindow) {
+		o.Width, o.Height = 400, 300
+		o.TitlebarHidden = true
+		o.TrafficLightsSet, o.TrafficLightsX, o.TrafficLightsY = true, 16, 14
+	})
+	undecoratedHidden := appOptions(func(o *remote.OpenWindow) {
+		o.Width, o.Height = 400, 300
+		o.Decorated = false
+		o.TitlebarHidden = true
+	})
 	for _, c := range []struct {
 		name     string
 		prev     *remote.OpenWindow
@@ -159,17 +185,361 @@ func TestPlanOptions(t *testing.T) {
 			[]string{`limits [200,0,0,900]`}},
 		{"flags", &first, appOptions(func(o *remote.OpenWindow) {
 			o.Width, o.Height, o.Resizable, o.Decorated, o.Floating, o.TitlebarHidden, o.Transparent = 400, 300, false, false, true, true, true
-		}), "app", false, []string{"resizable [false]", "decorated [false]", "floating [true]"}},
+		}), "app", false, []string{"resizable [false]", "decorated [false]", "titlebar-hidden [true]", "traffic-lights [null]", "floating [true]"}},
 		{"the first app in a window opened for a failure", nil, first, "ggviewer", false,
 			[]string{"title app", "limits [0,0,0,0]", "resizable [true]", "decorated [true]", "floating [false]", "size [400,300]"}},
 		{"the first app in a window of a remembered size", nil, first, "ggviewer", true,
 			[]string{"title app", "limits [0,0,0,0]", "resizable [true]", "decorated [true]", "floating [false]"}},
+		{"first app with hidden titlebar and traffic lights in failure window", nil, hiddenBar, "ggviewer", false,
+			[]string{"title app", "limits [0,0,0,0]", "resizable [true]", "decorated [true]", "titlebar-hidden [true]", `traffic-lights [{"X":16,"Y":14}]`, "floating [false]", "size [400,300]"}},
+		{"rebuilt app clears hidden titlebar and traffic lights", &hiddenBar, first, "app", false,
+			[]string{"titlebar-hidden [false]", "traffic-lights [null]"}},
+		{"rebuilt app moves traffic lights", &hiddenBar, appOptions(func(o *remote.OpenWindow) {
+			o.Width, o.Height = 400, 300
+			o.TitlebarHidden = true
+			o.TrafficLightsSet, o.TrafficLightsX, o.TrafficLightsY = true, 24, 18
+		}), "app", false, []string{"titlebar-hidden [true]", `traffic-lights [{"X":24,"Y":18}]`}},
+		{"re-enabling decoration re-applies hidden titlebar", &undecoratedHidden, appOptions(func(o *remote.OpenWindow) {
+			o.Width, o.Height = 400, 300
+			o.Decorated = true
+			o.TitlebarHidden = true
+		}), "app", false, []string{"decorated [true]", "titlebar-hidden [true]", "traffic-lights [null]"}},
+		{"position maximized hidden passthrough", &first, appOptions(func(o *remote.OpenWindow) {
+			o.Width, o.Height = 400, 300
+			o.PositionSet, o.X, o.Y = true, 120, 80
+			o.MousePassthrough = true
+			o.Maximized = true
+			o.Hidden = true
+		}), "app", false, []string{"passthrough [true]", "position [120,80]", "maximize", "hide"}},
+		{"restore and show when flags clear", &remote.OpenWindow{
+			Title: "app", Width: 400, Height: 300, Resizable: true, Decorated: true,
+			MinWidth: -1, MinHeight: -1, MaxWidth: -1, MaxHeight: -1,
+			Maximized: true, Hidden: true, MousePassthrough: true,
+		}, first, "app", false, []string{"passthrough [false]", "restore", "show"}},
 	} {
 		var w fakeWindow
 		planOptions(c.prev, &c.next, c.title, c.restored).apply(&w)
 		if got := w.reset(); !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s: %q, want %q", c.name, got, c.want)
 		}
+	}
+}
+
+type fakeMenuBar struct {
+	mu      sync.Mutex
+	sets    [][]nativemenu.Item
+	enabled map[int]bool
+	checked map[int]bool
+}
+
+func newFakeMenuBar() *fakeMenuBar {
+	return &fakeMenuBar{enabled: map[int]bool{}, checked: map[int]bool{}}
+}
+
+func (m *fakeMenuBar) Set(menus []nativemenu.Item) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sets = append(m.sets, menus)
+}
+
+func (m *fakeMenuBar) SetEnabled(id int, on bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.enabled[id] = on
+}
+
+func (m *fakeMenuBar) SetChecked(id int, on bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.checked[id] = on
+}
+
+func TestRemoteToNativeMenu(t *testing.T) {
+	if got := remoteToNativeMenu(nil); got != nil {
+		t.Fatalf("remoteToNativeMenu(nil) = %v, want nil", got)
+	}
+	in := []remote.MenuItem{
+		{
+			Title: "File",
+			Items: []remote.MenuItem{
+				{Title: "Save", ID: 1, Key: "s", Cmd: true, Enabled: true},
+				{Separator: true},
+				{
+					Title: "Recent",
+					Items: []remote.MenuItem{
+						{Title: "a.go", ID: 2, Enabled: false, Checked: true, Shift: true, Alt: true, Ctrl: true},
+					},
+				},
+			},
+		},
+	}
+	want := []nativemenu.Item{
+		{
+			Title: "File",
+			Items: []nativemenu.Item{
+				{Title: "Save", ID: 1, Key: "s", Cmd: true, Enabled: true},
+				{Separator: true},
+				{
+					Title: "Recent",
+					Items: []nativemenu.Item{
+						{Title: "a.go", ID: 2, Enabled: false, Checked: true, Shift: true, Alt: true, Ctrl: true},
+					},
+				},
+			},
+		},
+	}
+	if got := remoteToNativeMenu(in); !reflect.DeepEqual(got, want) {
+		t.Fatalf("remoteToNativeMenu =\n%+v\nwant\n%+v", got, want)
+	}
+}
+
+func unixPair(t *testing.T) (*net.UnixConn, *net.UnixConn) {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "ggvt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	addr := &net.UnixAddr{Name: filepath.Join(dir, "s"), Net: "unix"}
+	ln, err := net.ListenUnix("unix", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	accepted := make(chan *net.UnixConn, 1)
+	go func() {
+		c, err := ln.AcceptUnix()
+		if err == nil {
+			accepted <- c
+		}
+	}()
+	client, err := net.DialUnix("unix", nil, addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := <-accepted
+	t.Cleanup(func() {
+		_ = server.Close()
+		_ = client.Close()
+	})
+	return server, client
+}
+
+func TestSessionMenuAndRequestsRoundTrip(t *testing.T) {
+	var evBuf bytes.Buffer
+	v := newSession(options{}, &events{w: &evBuf})
+	fb := newFakeMenuBar()
+	v.menu = fb
+
+	c1Viewer, c1App := unixPair(t)
+
+	a1 := &app{
+		pid:  101,
+		conn: remote.NewConn(c1Viewer),
+		opts: appOptions(func(o *remote.OpenWindow) {
+			o.TitlebarHidden = true
+			o.TrafficLightsSet, o.TrafficLightsX, o.TrafficLightsY = true, 16, 14
+		}),
+	}
+	v.attach(a1, true)
+	app1Conn := remote.NewConn(c1App)
+
+	// Send menu + dynamic item state updates + window requests from app 1.
+	menuMsg := &remote.SetMenu{
+		Items: []remote.MenuItem{
+			{
+				Title: "File",
+				Items: []remote.MenuItem{
+					{Title: "Save", ID: 7, Key: "s", Cmd: true, Enabled: true},
+					{Title: "Dark", ID: 8, Checked: false, Enabled: true},
+				},
+			},
+		},
+	}
+	if err := app1Conn.Send(menuMsg); err != nil {
+		t.Fatal(err)
+	}
+	if err := app1Conn.Send(&remote.UpdateMenuItem{ID: 7, SetEnabled: true, Enabled: false}); err != nil {
+		t.Fatal(err)
+	}
+	if err := app1Conn.Send(&remote.UpdateMenuItem{ID: 8, SetChecked: true, Checked: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := app1Conn.Send(&remote.SetSize{Width: 640, Height: 480}); err != nil {
+		t.Fatal(err)
+	}
+	if err := app1Conn.Send(&remote.SetPosition{X: 10, Y: 20}); err != nil {
+		t.Fatal(err)
+	}
+	if err := app1Conn.Send(&remote.SetColorMode{Mode: uint8(ggwd.ColorModeDark)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := app1Conn.Send(&remote.SetDockIcon{Visible: false}); err != nil {
+		t.Fatal(err)
+	}
+	if err := app1Conn.Send(&remote.WindowRequest{Request: remote.RequestStartDrag}); err != nil {
+		t.Fatal(err)
+	}
+	if err := app1Conn.Send(&remote.WindowRequest{Request: remote.RequestTitlebarDoubleClick}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait until the reader goroutine has processed the last request.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		v.mu.Lock()
+		got := len(v.req.window)
+		v.mu.Unlock()
+		if got == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for requests; got %d window requests", got)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	v.mu.Lock()
+	r := v.req
+	v.req = requests{}
+	v.mu.Unlock()
+
+	if r.options == nil || !r.options.TitlebarHidden || !r.options.TrafficLightsSet || r.options.TrafficLightsX != 16 || r.options.TrafficLightsY != 14 {
+		t.Fatalf("options = %+v, want TitlebarHidden + TrafficLights(16,14)", r.options)
+	}
+	if r.size == nil || r.size.Width != 640 || r.size.Height != 480 {
+		t.Fatalf("size = %+v", r.size)
+	}
+	if r.position == nil || r.position.X != 10 || r.position.Y != 20 {
+		t.Fatalf("position = %+v", r.position)
+	}
+	if r.colorMode == nil || r.colorMode.Mode != uint8(ggwd.ColorModeDark) {
+		t.Fatalf("colorMode = %+v", r.colorMode)
+	}
+	if r.dockIcon == nil || r.dockIcon.Visible {
+		t.Fatalf("dockIcon = %+v", r.dockIcon)
+	}
+	if r.menu == nil || len(r.menuUpdates) != 2 {
+		t.Fatalf("menu = %+v, updates = %d", r.menu, len(r.menuUpdates))
+	}
+	if !reflect.DeepEqual(r.window, []uint8{remote.RequestStartDrag, remote.RequestTitlebarDoubleClick}) {
+		t.Fatalf("window requests = %v", r.window)
+	}
+
+	// Apply menu & updates against fakeMenuBar as pump does.
+	v.menu.Set(remoteToNativeMenu(r.menu.Items))
+	for _, u := range r.menuUpdates {
+		if u.SetEnabled {
+			v.menu.SetEnabled(u.ID, u.Enabled)
+		}
+		if u.SetChecked {
+			v.menu.SetChecked(u.ID, u.Checked)
+		}
+	}
+	if len(fb.sets) != 1 || len(fb.sets[0]) != 1 || fb.sets[0][0].Title != "File" {
+		t.Fatalf("menu sets = %+v", fb.sets)
+	}
+	if fb.enabled[7] != false || fb.checked[8] != true {
+		t.Fatalf("enabled=%v checked=%v", fb.enabled, fb.checked)
+	}
+
+	// Menu click and AppEvent travel back to the attached app.
+	received := make(chan remote.Message, 2)
+	go func() {
+		for range 2 {
+			m, err := app1Conn.Receive()
+			if err != nil {
+				return
+			}
+			received <- m
+		}
+	}()
+	v.menuSelected(7)
+	v.sendAppEvent(remote.AppEvent{Kind: remote.AppEventReopen})
+
+	m1 := <-received
+	sel, ok := m1.(*remote.MenuSelected)
+	if !ok || sel.ID != 7 {
+		t.Fatalf("got %T (%+v), want *remote.MenuSelected{ID:7}", m1, m1)
+	}
+	m2 := <-received
+	ae, ok := m2.(*remote.AppEvent)
+	if !ok || ae.Kind != remote.AppEventReopen {
+		t.Fatalf("got %T (%+v), want *remote.AppEvent{Kind:AppEventReopen}", m2, m2)
+	}
+
+	// Replacing app 1 with app 2 queues a reset and drops stale app 1 updates.
+	v.request(&remote.UpdateMenuItem{ID: 7, SetEnabled: true, Enabled: true})
+	c2Viewer, c2App := unixPair(t)
+	a2 := &app{pid: 202, conn: remote.NewConn(c2Viewer), opts: appOptions(func(o *remote.OpenWindow) {})}
+	v.attach(a2, true)
+
+	v.mu.Lock()
+	r2 := v.req
+	v.req = requests{}
+	v.mu.Unlock()
+	if !r2.reset {
+		t.Fatal("replacing app did not set reset")
+	}
+	if len(r2.menuUpdates) != 0 {
+		t.Fatalf("replacing app kept stale menuUpdates: %+v", r2.menuUpdates)
+	}
+
+	// Closing app 2 detaches it and queues a reset.
+	_ = c2App.Close()
+	deadline = time.Now().Add(2 * time.Second)
+	for {
+		v.mu.Lock()
+		detached := v.cur == nil && v.req.reset
+		v.mu.Unlock()
+		if detached {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for app 2 detach reset")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	// Clicking a menu item with no attached app is a safe no-op.
+	v.menuSelected(7)
+}
+
+func TestSetAppHiddenSyncsLastOpts(t *testing.T) {
+	hiddenOpts := appOptions(func(o *remote.OpenWindow) {
+		o.Width, o.Height = 400, 300
+		o.Hidden = true
+	})
+	last := hiddenOpts
+	v := newSession(options{}, &events{w: &bytes.Buffer{}})
+	v.lastOpts = &last
+	v.appHid = true
+
+	// Detach reset or error overlay shows the window and syncs lastOpts.Hidden.
+	v.setAppHidden(false)
+	if v.appHid || v.lastOpts.Hidden {
+		t.Fatalf("after setAppHidden(false): appHid=%v lastOpts.Hidden=%v, want both false", v.appHid, v.lastOpts.Hidden)
+	}
+	// A rebuilt app attaching with Hidden: true must hide the window again.
+	var w fakeWindow
+	planOptions(v.lastOpts, &hiddenOpts, "app", false).apply(&w)
+	if got := w.reset(); !reflect.DeepEqual(got, []string{"hide"}) {
+		t.Fatalf("rebuilt Hidden:true after reveal = %q, want [hide]", got)
+	}
+
+	// Runtime RequestHide syncs lastOpts.Hidden = true so a visible re-attach shows it.
+	visibleOpts := appOptions(func(o *remote.OpenWindow) {
+		o.Width, o.Height = 400, 300
+		o.Hidden = false
+	})
+	last2 := visibleOpts
+	v.lastOpts = &last2
+	v.setAppHidden(true)
+	if !v.appHid || !v.lastOpts.Hidden {
+		t.Fatalf("after setAppHidden(true): appHid=%v lastOpts.Hidden=%v, want both true", v.appHid, v.lastOpts.Hidden)
+	}
+	planOptions(v.lastOpts, &visibleOpts, "app", false).apply(&w)
+	if got := w.reset(); !reflect.DeepEqual(got, []string{"show"}) {
+		t.Fatalf("rebuilt Hidden:false after RequestHide = %q, want [show]", got)
 	}
 }
 

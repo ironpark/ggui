@@ -38,6 +38,8 @@ tags = []
 args = ["--verbose"]
 env = { LOG_LEVEL = "debug" }
 watch = ["assets"]
+bundle_dir = "tmp/bundles"
+identity = "Apple Development"
 
 [macos]
 minimum_system_version = "14.0"
@@ -74,7 +76,7 @@ wasm_opt = "-Oz"
 	if cfg.Dev.Tags == nil || len(cfg.Dev.Tags) != 0 {
 		t.Errorf("dev.tags = %#v, want empty", cfg.Dev.Tags)
 	}
-	if cfg.Dev.Env["LOG_LEVEL"] != "debug" || !cfg.MacOS.Universal || cfg.Web.Base != "/app/" {
+	if cfg.Dev.Env["LOG_LEVEL"] != "debug" || cfg.Dev.BundleDir != "tmp/bundles" || cfg.Dev.Identity != "Apple Development" || !cfg.MacOS.Universal || cfg.Web.Base != "/app/" {
 		t.Errorf("dev/macos/web = %+v %+v %+v", cfg.Dev, cfg.MacOS, cfg.Web)
 	}
 	if cfg.MacOS.Plist["LSUIElement"] != true {

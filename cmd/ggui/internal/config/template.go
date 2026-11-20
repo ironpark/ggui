@@ -63,6 +63,14 @@ version = {{.Version}}
 # window of its own, as a release build has. Remote is the default on
 # macOS, Linux and Windows; ggui dev --display overrides this.
 # display = "remote"
+# Directory where ggui dev creates Name.dev.app on macOS.
+# Default: build.output. Same as --bundle-dir.
+# bundle_dir = ""
+# macOS signing identity for Name.dev.app, so TCC permissions (camera,
+# screen recording, notifications) survive rebuilds. "-" signs ad hoc.
+# Default: macos.signing_identity when set, else an Apple Development
+# identity from the keychain, else ad hoc. Same as --sign.
+# identity = ""
 
 [macos]
 # The oldest macOS the app runs on: LSMinimumSystemVersion. Programs

@@ -128,29 +128,58 @@ var targetClass = sync.OnceValue(func() objc.Class {
 	return c
 })
 
-// Supported reports whether the platform shows Set's menus. An app shown by
-// ggui dev's viewer has none of its own: the menu bar is the viewer's,
-// and the app's process runs no AppKit event loop to answer a menu, a
-// tray icon or a popup, so all three are off there.
-func Supported() bool { return !remotedisplay.On() }
+// Supported reports whether the platform shows Set's menus. On macOS this is
+// true both locally and when ggui dev's viewer shows the app: in a remote app,
+// menus are forwarded to the viewer over ggwd's remote menu channel.
+func Supported() bool { return true }
 
 // TraySupported reports whether the platform shows SetTray's icons.
 func TraySupported() bool { return !remotedisplay.On() }
 
 // Handle sets the function called with an action's id when it is chosen,
-// in a menu or by a tray's click. It runs on the main thread and must hand
-// the work on.
+// in a menu or by a tray's click. It runs on the main thread locally, or on
+// the remote event reader in a remote app, and must hand the work on.
 func Handle(selected func(id int)) {
 	mu.Lock()
 	onSelect = selected
 	mu.Unlock()
+	if remotedisplay.On() {
+		ggwd.SetRemoteMenuHandler(selected)
+	}
 }
 
 // Set replaces the app's menus in the menu bar with menus, each a titled
 // item whose Items are its entries. It needs a running app: before the
 // engine has a window it does nothing.
 func Set(menus []Item) {
+	if remotedisplay.On() {
+		ggwd.SetRemoteMenu(toRemoteItems(menus))
+		return
+	}
 	ggwd.RunOnMainThread(func() { install(menus) })
+}
+
+func toRemoteItems(items []Item) []ggwd.RemoteMenuItem {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]ggwd.RemoteMenuItem, len(items))
+	for i, it := range items {
+		out[i] = ggwd.RemoteMenuItem{
+			Title:     it.Title,
+			Separator: it.Separator,
+			Items:     toRemoteItems(it.Items),
+			ID:        it.ID,
+			Key:       it.Key,
+			Cmd:       it.Cmd,
+			Shift:     it.Shift,
+			Alt:       it.Alt,
+			Ctrl:      it.Ctrl,
+			Enabled:   it.Enabled,
+			Checked:   it.Checked,
+		}
+	}
+	return out
 }
 
 // install swaps the menus in. It runs on the main thread.
@@ -158,6 +187,9 @@ func install(menus []Item) {
 	app := cocoa.App()
 	bar := app.Send(selMainMenu)
 	if bar == 0 {
+		if len(menus) == 0 {
+			return
+		}
 		bar = classNSMenu.Send(selAlloc).Send(selInit)
 		app.Send(selSetMainMenu, bar)
 		bar.Send(selRelease)
@@ -264,6 +296,10 @@ func state(checked bool) int {
 
 // SetEnabled enables or disables the action item with the id.
 func SetEnabled(id int, on bool) {
+	if remotedisplay.On() {
+		ggwd.SetRemoteMenuItemEnabled(id, on)
+		return
+	}
 	ggwd.RunOnMainThread(func() {
 		if it := item(id); it != 0 {
 			it.Send(selSetEnabled, on)
@@ -274,6 +310,10 @@ func SetEnabled(id int, on bool) {
 // SetChecked puts a check mark by the action item with the id, or takes it
 // away.
 func SetChecked(id int, on bool) {
+	if remotedisplay.On() {
+		ggwd.SetRemoteMenuItemChecked(id, on)
+		return
+	}
 	ggwd.RunOnMainThread(func() {
 		if it := item(id); it != 0 {
 			it.Send(selSetState, state(on))

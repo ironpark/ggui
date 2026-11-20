@@ -67,6 +67,11 @@ type Native struct {
 	// it goes away, the app opens its own window for the rest of the
 	// session, and ggui says why.
 	Display Display
+	// Bundle, when set (on macOS), packages the app into <Name>.dev.app
+	// when it runs in its own window, and signs the standalone app binary
+	// when a viewer holds <Name>.dev.app. Its directory is also ignored by
+	// the file watcher.
+	Bundle Bundler
 
 	Log    io.Writer // ggui's own messages
 	Stdout io.Writer // the app's
@@ -192,7 +197,13 @@ func (n *Native) Run(ctx context.Context) error {
 
 	var changes chan watch.Change
 	if n.Watch {
-		ig := watch.NewIgnore(n.OutDir)
+		ignoreDirs := []string{n.OutDir}
+		if n.Bundle != nil {
+			if d := n.Bundle.Dir(); d != "" && d != n.OutDir {
+				ignoreDirs = append(ignoreDirs, d)
+			}
+		}
+		ig := watch.NewIgnore(ignoreDirs...)
 		list := func(ctx context.Context) ([]string, error) {
 			n.set.Lock()
 			lo, extra := n.list, n.Extra
@@ -288,7 +299,7 @@ func (n *Native) Run(ctx context.Context) error {
 			n.send(viewer.Command{Type: viewer.AppExited, Status: msg, Output: n.tail.String()})
 		case ev, ok := <-events:
 			if !ok {
-				n.viewerLost()
+				n.viewerLost(ctx)
 				continue
 			}
 			switch ev.Type {
@@ -466,14 +477,14 @@ func (n *Native) finish(ctx context.Context, r buildResult) error {
 	n.built = r.took
 	n.step.Done(fmt.Sprintf("built in %s", n.built.Round(time.Millisecond)))
 	if len(r.batch) > 0 && n.viewer != nil && n.Display.Stale(ctx, r.batch) {
-		n.logf("the viewer's dependencies changed; restarting it, and its window with it")
+		n.logf("the viewer or its bundle changed; restarting it, and its window with it")
 		n.keepState()
 		n.stop()
 		n.dropViewer()
 		v, err := n.Display.Start(ctx)
 		n.useViewer(startResult{v, err})
 	}
-	n.restart(r.exe)
+	n.restart(ctx, r.exe)
 	return nil
 }
 
@@ -543,13 +554,13 @@ func (n *Native) useViewer(r startResult) {
 		return
 	}
 	n.viewer = r.v
-	n.logf("the viewer shows the app: one window, and no tray icon or menu bar of the app's own; --display=window shows them")
+	n.logf("the viewer shows the app: one window, and no tray icon of the app's own; --display=window shows them")
 }
 
 // viewerLost is the viewer's end when nobody closed its window: the app
 // opens its own window from then on, running the last build that
 // succeeded, as the one that showed in the viewer exits with it.
-func (n *Native) viewerLost() {
+func (n *Native) viewerLost(ctx context.Context) {
 	n.warnf("the viewer ended (%s); the app opens its own window for the rest of this session", n.viewer.Exited())
 	n.dropViewer()
 	if n.exe == "" {
@@ -557,7 +568,7 @@ func (n *Native) viewerLost() {
 	}
 	n.keepState()
 	n.stop()
-	n.start(n.exe)
+	n.startPrepared(ctx, n.exe)
 }
 
 // dropViewer stops the viewer, if there is one, and forgets it.
@@ -580,7 +591,7 @@ func (n *Native) send(c viewer.Command) {
 // restart replaces the running app, if any, with one running exe. The
 // running one is asked for the state it keeps before it is stopped, and
 // the new one is handed it as it starts: see keeper.
-func (n *Native) restart(exe string) {
+func (n *Native) restart(ctx context.Context, exe string) {
 	if n.app != nil {
 		n.keepState()
 		n.stop()
@@ -589,7 +600,34 @@ func (n *Native) restart(exe string) {
 		os.Remove(n.exe) // the previous build, no longer running
 	}
 	n.exe = exe
-	n.start(exe)
+	n.startPrepared(ctx, exe)
+}
+
+// startPrepared stages exe into the dev bundle (when the app owns its own
+// window) or signs the standalone binary (when a running viewer owns the
+// bundle), then starts it directly via proc.Start.
+func (n *Native) startPrepared(ctx context.Context, exe string) {
+	runExe := exe
+	if n.Bundle != nil {
+		if n.viewer == nil {
+			staged, warnings, err := n.Bundle.Stage(ctx, exe)
+			for _, w := range warnings {
+				n.warnf("%s", w)
+			}
+			if err != nil {
+				n.say().Error("preparing the app bundle: %v", err)
+				return
+			}
+			runExe = staged
+		} else {
+			if err := n.Bundle.SignBinary(ctx, exe); err != nil {
+				n.say().Error("signing the app binary: %v", err)
+				n.send(viewer.Command{Type: viewer.AppExited, Status: "signing failed", Output: err.Error()})
+				return
+			}
+		}
+	}
+	n.start(runExe)
 }
 
 // start starts the app on exe, in the viewer when there is one.

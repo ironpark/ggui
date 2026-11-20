@@ -17,6 +17,7 @@ import (
 
 	"github.com/ironpark/ggfx"
 	ggfxremote "github.com/ironpark/ggfx/remote"
+	"github.com/ironpark/ggui/internal/platform/nativemenu"
 	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggwd/remote"
 	"github.com/ironpark/ggwd/remote/viewer"
@@ -52,15 +53,23 @@ type app struct {
 // requests are what the other goroutines ask of the main thread, which
 // owns the window.
 type requests struct {
-	options   *remote.OpenWindow
-	title     *string
-	cursor    *remote.SetCursor
-	textInput *remote.TextInput
-	window    []uint8
-	actions   []command
-	inputs    []remote.Input
-	dumps     []string
-	close     bool
+	reset       bool
+	options     *remote.OpenWindow
+	title       *string
+	size        *remote.SetSize
+	position    *remote.SetPosition
+	icon        *remote.SetIcon
+	colorMode   *remote.SetColorMode
+	dockIcon    *remote.SetDockIcon
+	menu        *remote.SetMenu
+	menuUpdates []*remote.UpdateMenuItem
+	cursor      *remote.SetCursor
+	textInput   *remote.TextInput
+	window      []uint8
+	actions     []command
+	inputs      []remote.Input
+	dumps       []string
+	close       bool
 }
 
 // session is the viewer: its window, the app it shows, and what the
@@ -103,6 +112,8 @@ type session struct {
 	geomSet    bool
 
 	// The main thread's.
+	menu      menuBar
+	appHid    bool
 	lastOpts  *remote.OpenWindow
 	restored  bool
 	title     string
@@ -130,6 +141,7 @@ func newSession(o options, ev *events) *session {
 		events:     ev,
 		needWindow: make(chan struct{}),
 		quitting:   make(chan struct{}),
+		menu:       nativeMenuBar{},
 		replayers:  map[*app]*ggfxremote.Replayer{},
 		scale:      1,
 		ovKey:      [4]float64{-1},
@@ -226,8 +238,10 @@ func (v *session) handshake(c *net.UnixConn) (*app, error) {
 	return &app{pid: h.PID, conn: conn, opts: *o}, nil
 }
 
-// attach makes a the app shown, in place of the one before.
-func (v *session) attach(a *app) {
+// attach makes a the app shown, in place of the one before. When applyOpts
+// is true (every app after the one that opened the window), a's window
+// options are queued to be applied live on the main thread.
+func (v *session) attach(a *app, applyOpts bool) {
 	v.mu.Lock()
 	v.nextID++
 	a.id = v.nextID
@@ -235,7 +249,11 @@ func (v *session) attach(a *app) {
 	v.cur, v.closeAsked = a, false
 	v.apps = append(v.apps, a)
 	// What the app before asked of the window is not this one's.
-	v.resetRequests()
+	v.resetRequests(old != nil)
+	if applyOpts {
+		o := a.opts
+		v.req.options = &o
+	}
 	cfg, have := v.cfg, v.haveCfg
 	v.mu.Unlock()
 	if old != nil {
@@ -248,11 +266,18 @@ func (v *session) attach(a *app) {
 	go v.read(a)
 }
 
-// resetRequests puts the text input and the cursor back as they are with
-// no app. v.mu is held.
-func (v *session) resetRequests() {
-	v.req.textInput = &remote.TextInput{}
-	v.req.cursor = &remote.SetCursor{Shape: uint8(ggwd.CursorShapeDefault), Mode: uint8(ggwd.CursorModeVisible)}
+// resetRequests clears any pending app-originated requests and, when reset
+// is true, asks the main thread to reset per-app viewer state (cursor, text
+// input, icon, color mode, dock icon, menu bar). Launcher control-channel
+// requests are preserved. v.mu is held.
+func (v *session) resetRequests(reset bool) {
+	v.req = requests{
+		reset:   v.req.reset || reset,
+		actions: v.req.actions,
+		inputs:  v.req.inputs,
+		dumps:   v.req.dumps,
+		close:   v.req.close,
+	}
 }
 
 // accept attaches the apps that connect after the first, until the
@@ -265,11 +290,7 @@ func (v *session) accept() {
 			_ = c.Close()
 			continue
 		}
-		v.attach(a)
-		v.mu.Lock()
-		o := a.opts
-		v.req.options = &o
-		v.mu.Unlock()
+		v.attach(a, true)
 		v.wake()
 	}
 }
@@ -292,11 +313,12 @@ func (v *session) read(a *app) {
 			v.mu.Lock()
 			if v.cur == a {
 				v.cur = nil
-				v.resetRequests()
+				v.resetRequests(true)
 			}
 			v.gone = append(v.gone, a)
 			v.mu.Unlock()
 			v.events.send(event{Type: evAppDetached, PID: a.pid})
+			v.wake()
 			v.kick()
 			return
 		}
@@ -363,6 +385,21 @@ func (v *session) request(m remote.Message) {
 		v.req.options = m
 	case *remote.SetTitle:
 		v.req.title = &m.Title
+	case *remote.SetSize:
+		v.req.size = m
+	case *remote.SetPosition:
+		v.req.position = m
+	case *remote.SetIcon:
+		v.req.icon = m
+	case *remote.SetColorMode:
+		v.req.colorMode = m
+	case *remote.SetDockIcon:
+		v.req.dockIcon = m
+	case *remote.SetMenu:
+		v.req.menu = m
+		v.req.menuUpdates = nil
+	case *remote.UpdateMenuItem:
+		v.req.menuUpdates = append(v.req.menuUpdates, m)
 	case *remote.SetCursor:
 		v.req.cursor = m
 	case *remote.TextInput:
@@ -370,6 +407,29 @@ func (v *session) request(m remote.Message) {
 	case *remote.WindowRequest:
 		v.req.window = append(v.req.window, m.Request)
 	}
+}
+
+// menuSelected forwards a native menu bar selection to the attached app.
+func (v *session) menuSelected(id int) {
+	v.mu.Lock()
+	a := v.cur
+	v.mu.Unlock()
+	if a == nil {
+		return
+	}
+	_ = a.conn.Send(&remote.MenuSelected{ID: id})
+}
+
+// sendAppEvent forwards a process-level macOS event (quit / reopen) to the
+// attached app.
+func (v *session) sendAppEvent(ae remote.AppEvent) {
+	v.mu.Lock()
+	a := v.cur
+	v.mu.Unlock()
+	if a == nil {
+		return
+	}
+	_ = a.conn.Send(&ae)
 }
 
 // askClose hands the window's close to the app, and reports whether
@@ -418,8 +478,10 @@ func (v *session) HandleEvent(ev ggwd.Event) error {
 		if v.state == ggwd.WindowStateNormal {
 			v.remember(func(g *geometry) { g.X, g.Y = ev.X, ev.Y })
 		}
+		v.reconfigure()
 	case ggwd.WindowStateEvent:
 		v.state = ev.State
+		v.reconfigure()
 	case ggwd.FocusEvent:
 		v.focused = ev.Focused
 		if v.opts.debug {
@@ -428,6 +490,10 @@ func (v *session) HandleEvent(ev ggwd.Event) error {
 		v.reconfigure()
 	case ggwd.SystemColorModeEvent, ggwd.MonitorEvent:
 		v.reconfigure()
+	case ggwd.QuitEvent, ggwd.ReopenEvent:
+		if ae, ok := viewer.AppEvent(ev); ok {
+			v.sendAppEvent(ae)
+		}
 	case ggwd.CloseEvent:
 		// The app decides, and says Closed when it closes; with no app the
 		// window closes, and the viewer ends.
@@ -435,6 +501,7 @@ func (v *session) HandleEvent(ev ggwd.Event) error {
 			ev.KeepOpen()
 		}
 	case ggwd.ClosedEvent:
+		v.menu.Set(nil)
 		v.saveState()
 		v.events.send(event{Type: evWindowClosed})
 	case ggwd.MouseMoveEvent:
@@ -489,12 +556,28 @@ func (v *session) start() error {
 	}
 	v.win.Store(w)
 	v.title = o.Title
+	nativemenu.Handle(v.menuSelected)
 	if a != nil {
-		v.lastOpts = &a.opts
-		v.attach(a)
+		if a.opts.MousePassthrough {
+			w.SetMousePassthrough(true)
+		}
+		last := a.opts
+		v.lastOpts = &last
+		v.appHid = a.opts.Hidden
+		v.attach(a, false)
 	}
 	go v.accept()
 	return nil
+}
+
+// setAppHidden records whether the app currently hides the viewer window and
+// keeps v.lastOpts.Hidden in sync so subsequent planOptions calls see the
+// window's real visibility. Main thread only.
+func (v *session) setAppHidden(hidden bool) {
+	v.appHid = hidden
+	if v.lastOpts != nil {
+		v.lastOpts.Hidden = hidden
+	}
 }
 
 // pump does what the other goroutines asked of the window.
@@ -505,19 +588,66 @@ func (v *session) pump() {
 	}
 	v.mu.Lock()
 	r := v.req
+	ovKind := v.ov.kind
 	v.req = requests{}
 	v.mu.Unlock()
+	reconfig := false
+	if r.reset {
+		viewer.Reset(w)
+		if v.lastOpts != nil {
+			v.lastOpts.MousePassthrough = false
+		}
+		if r.menu == nil {
+			v.menu.Set(nil)
+		}
+		if v.appHid && (r.options == nil || !r.options.Hidden) {
+			w.Show()
+			v.setAppHidden(false)
+			reconfig = true
+		}
+	}
 	if r.options != nil {
 		c := planOptions(v.lastOpts, r.options, v.title, v.restored)
 		c.apply(w)
 		if c.title != nil {
 			v.title = *c.title
 		}
-		v.lastOpts = r.options
+		if c.hidden != nil {
+			v.appHid = *c.hidden
+			reconfig = true
+		}
+		last := *r.options
+		v.lastOpts = &last
 	}
 	if r.title != nil && *r.title != v.title {
 		w.SetTitle(*r.title)
 		v.title = *r.title
+	}
+	if r.size != nil {
+		viewer.SetSize(w, r.size)
+	}
+	if r.position != nil {
+		viewer.SetPosition(w, r.position)
+	}
+	if r.icon != nil {
+		viewer.SetIcon(w, r.icon)
+	}
+	if r.colorMode != nil {
+		viewer.SetColorMode(r.colorMode)
+	}
+	if r.dockIcon != nil {
+		viewer.SetDockIcon(r.dockIcon)
+	}
+	if r.menu != nil {
+		v.menu.Set(remoteToNativeMenu(r.menu.Items))
+	}
+	for _, u := range r.menuUpdates {
+		if u.SetEnabled {
+			v.menu.SetEnabled(u.ID, u.Enabled)
+		}
+		if u.SetChecked {
+			v.menu.SetChecked(u.ID, u.Checked)
+		}
 	}
 	if r.cursor != nil {
 		viewer.SetCursor(w, r.cursor)
@@ -530,6 +660,19 @@ func (v *session) pump() {
 	}
 	for _, q := range r.window {
 		viewer.Do(w, &remote.WindowRequest{Request: q})
+		switch q {
+		case remote.RequestHide:
+			v.setAppHidden(true)
+			reconfig = true
+		case remote.RequestShow:
+			v.setAppHidden(false)
+			reconfig = true
+		}
+	}
+	if v.appHid && (ovKind == overlayBuildFailed || ovKind == overlayAppExited) {
+		w.Show()
+		v.setAppHidden(false)
+		reconfig = true
 	}
 	for _, a := range r.actions {
 		switch a.Action {
@@ -537,8 +680,10 @@ func (v *session) pump() {
 			w.SetSize(a.Width, a.Height)
 		case "hide":
 			w.Hide()
+			reconfig = true
 		case "show":
 			w.Show()
+			reconfig = true
 		case "minimize":
 			w.Minimize()
 		case "restore":
@@ -551,6 +696,9 @@ func (v *session) pump() {
 				w.Close()
 			}
 		}
+	}
+	if reconfig {
+		v.reconfigure()
 	}
 	for _, in := range r.inputs {
 		v.scripted = true

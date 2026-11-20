@@ -9,11 +9,12 @@ import (
 )
 
 // An app that ggui dev shows in its viewer, the default of ggui dev on
-// macOS, has one window, the viewer's, and no menu bar, tray or native
-// popup of its own: see ggwd.Remote. NativeMenu, NativeContextMenu and
-// TraySupported report false there, so that the app takes the paths it
-// takes on a platform without them, and what still cannot be done is
-// said once on stderr, where ggui dev shows the app's output.
+// macOS, has one window (the viewer's) and forwards its native menu bar
+// to the viewer, but has no tray or native popup of its own: see
+// ggwd.Remote. NativeContextMenu and TraySupported report false there, so
+// that the app takes the paths it takes on a platform without them, and
+// what still cannot be done is said once on stderr, where ggui dev shows
+// the app's output.
 
 // remoteNotices holds the notices already given.
 var remoteNotices sync.Map
