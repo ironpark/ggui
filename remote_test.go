@@ -14,9 +14,9 @@ import (
 )
 
 // An app ggui dev shows in its viewer supports the native menu bar on macOS
-// (forwarded to the viewer), takes the paths of a platform without a tray or
-// native popups, keeps no accessibility bridge, and says why a second window
-// does not open.
+// and system tray icons on macOS and Windows (forwarded to the viewer), takes
+// the paths of a platform without native popups, keeps no accessibility
+// bridge, and says why a second window does not open.
 func TestRemoteDisplay(t *testing.T) {
 	// ggwd/remote.EnvSocket, which ggui does not import: see package
 	// remotedisplay.
@@ -25,9 +25,12 @@ func TestRemoteDisplay(t *testing.T) {
 	if NativeMenu() != wantNativeMenu {
 		t.Errorf("NativeMenu() = %v in a remote app on %s; want %v", NativeMenu(), runtime.GOOS, wantNativeMenu)
 	}
-	if NativeContextMenu() || TraySupported() {
-		t.Errorf("NativeContextMenu, TraySupported = %v, %v in a remote app; want both false",
-			NativeContextMenu(), TraySupported())
+	wantTray := runtime.GOOS == "darwin" || runtime.GOOS == "windows"
+	if TraySupported() != wantTray {
+		t.Errorf("TraySupported() = %v in a remote app on %s; want %v", TraySupported(), runtime.GOOS, wantTray)
+	}
+	if NativeContextMenu() {
+		t.Error("NativeContextMenu() = true in a remote app; want false")
 	}
 	var b a11ybridge.Bridge
 	b.Start(func(a11y.NodeID, a11y.Action) {}, a11y.Always)
@@ -106,4 +109,23 @@ func TestRemoteMenuAndWindowConfig(t *testing.T) {
 	if ran != 11 {
 		t.Fatalf("ran = %d, want 11", ran)
 	}
+
+	trayRan := 0
+	tr := a.AddTray(TrayConfig{
+		Title:   "Status",
+		Tooltip: "Tip",
+		Menu: []MenuItem{
+			MenuAction("Open", "", func() { trayRan++ }),
+		},
+	})
+	if len(tr.set.ids) != 1 {
+		t.Fatalf("tray menu ids = %v, want 1", tr.set.ids)
+	}
+	a.runAction(tr.set.ids[0])
+	if trayRan != 1 {
+		t.Fatalf("trayRan = %d, want 1", trayRan)
+	}
+	tr.SetTitle("Updated")
+	tr.SetTooltip("New Tip")
+	tr.Remove()
 }

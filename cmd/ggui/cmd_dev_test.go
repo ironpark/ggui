@@ -48,7 +48,7 @@ func TestDevHelpMentionsBundleAndMenuBar(t *testing.T) {
 			t.Errorf("ggui help dev lacks %q", want)
 		}
 	}
-	if strings.Contains(help, "no tray icon or menu bar") {
-		t.Error("ggui help dev still claims menu bar is unsupported in remote mode")
+	if strings.Contains(help, "no tray icon") {
+		t.Error("ggui help dev still claims tray icon is unsupported in remote mode")
 	}
 }

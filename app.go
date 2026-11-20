@@ -169,6 +169,7 @@ func (a *App) Quit() {
 	for _, w := range a.Windows() {
 		w.requestFrame()
 	}
+	a.wakeUp()
 }
 
 // Run opens the windows and blocks until the last one closes, disposing

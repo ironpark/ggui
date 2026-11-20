@@ -50,6 +50,11 @@ type app struct {
 	shown bool
 }
 
+type trayOp struct {
+	set    *remote.SetTray
+	remove int
+}
+
 // requests are what the other goroutines ask of the main thread, which
 // owns the window.
 type requests struct {
@@ -63,6 +68,7 @@ type requests struct {
 	dockIcon    *remote.SetDockIcon
 	menu        *remote.SetMenu
 	menuUpdates []*remote.UpdateMenuItem
+	trays       []trayOp
 	cursor      *remote.SetCursor
 	textInput   *remote.TextInput
 	window      []uint8
@@ -113,6 +119,7 @@ type session struct {
 
 	// The main thread's.
 	menu      menuBar
+	trayKeys  map[int]struct{}
 	appHid    bool
 	lastOpts  *remote.OpenWindow
 	restored  bool
@@ -142,6 +149,7 @@ func newSession(o options, ev *events) *session {
 		needWindow: make(chan struct{}),
 		quitting:   make(chan struct{}),
 		menu:       nativeMenuBar{},
+		trayKeys:   map[int]struct{}{},
 		replayers:  map[*app]*ggfxremote.Replayer{},
 		scale:      1,
 		ovKey:      [4]float64{-1},
@@ -400,6 +408,10 @@ func (v *session) request(m remote.Message) {
 		v.req.menuUpdates = nil
 	case *remote.UpdateMenuItem:
 		v.req.menuUpdates = append(v.req.menuUpdates, m)
+	case *remote.SetTray:
+		v.req.trays = append(v.req.trays, trayOp{set: m})
+	case *remote.RemoveTray:
+		v.req.trays = append(v.req.trays, trayOp{remove: m.Key})
 	case *remote.SetCursor:
 		v.req.cursor = m
 	case *remote.TextInput:
@@ -409,7 +421,7 @@ func (v *session) request(m remote.Message) {
 	}
 }
 
-// menuSelected forwards a native menu bar selection to the attached app.
+// menuSelected forwards a native menu bar or tray action to the attached app.
 func (v *session) menuSelected(id int) {
 	v.mu.Lock()
 	a := v.cur
@@ -417,7 +429,30 @@ func (v *session) menuSelected(id int) {
 	if a == nil {
 		return
 	}
+	allowForeground(a.pid)
 	_ = a.conn.Send(&remote.MenuSelected{ID: id})
+}
+
+// clearTrays removes all system tray icons installed for the previous app.
+// Main thread only.
+func (v *session) clearTrays() {
+	for k := range v.trayKeys {
+		v.menu.RemoveTray(k)
+	}
+	clear(v.trayKeys)
+}
+
+// applyTrays executes queued tray additions/updates/removals on the main thread.
+func (v *session) applyTrays(ops []trayOp) {
+	for _, op := range ops {
+		if op.set != nil {
+			v.menu.SetTray(op.set.Key, remoteToNativeTray(op.set))
+			v.trayKeys[op.set.Key] = struct{}{}
+		} else {
+			v.menu.RemoveTray(op.remove)
+			delete(v.trayKeys, op.remove)
+		}
+	}
 }
 
 // sendAppEvent forwards a process-level macOS event (quit / reopen) to the
@@ -502,6 +537,7 @@ func (v *session) HandleEvent(ev ggwd.Event) error {
 		}
 	case ggwd.ClosedEvent:
 		v.menu.Set(nil)
+		v.clearTrays()
 		v.saveState()
 		v.events.send(event{Type: evWindowClosed})
 	case ggwd.MouseMoveEvent:
@@ -600,6 +636,7 @@ func (v *session) pump() {
 		if r.menu == nil {
 			v.menu.Set(nil)
 		}
+		v.clearTrays()
 		if v.appHid && (r.options == nil || !r.options.Hidden) {
 			w.Show()
 			v.setAppHidden(false)
@@ -641,6 +678,7 @@ func (v *session) pump() {
 	if r.menu != nil {
 		v.menu.Set(remoteToNativeMenu(r.menu.Items))
 	}
+	v.applyTrays(r.trays)
 	for _, u := range r.menuUpdates {
 		if u.SetEnabled {
 			v.menu.SetEnabled(u.ID, u.Enabled)

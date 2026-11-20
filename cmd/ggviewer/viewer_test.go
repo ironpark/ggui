@@ -226,14 +226,20 @@ func TestPlanOptions(t *testing.T) {
 }
 
 type fakeMenuBar struct {
-	mu      sync.Mutex
-	sets    [][]nativemenu.Item
-	enabled map[int]bool
-	checked map[int]bool
+	mu           sync.Mutex
+	sets         [][]nativemenu.Item
+	enabled      map[int]bool
+	checked      map[int]bool
+	trays        map[int]nativemenu.Tray
+	removedTrays []int
 }
 
 func newFakeMenuBar() *fakeMenuBar {
-	return &fakeMenuBar{enabled: map[int]bool{}, checked: map[int]bool{}}
+	return &fakeMenuBar{
+		enabled: map[int]bool{},
+		checked: map[int]bool{},
+		trays:   map[int]nativemenu.Tray{},
+	}
 }
 
 func (m *fakeMenuBar) Set(menus []nativemenu.Item) {
@@ -252,6 +258,19 @@ func (m *fakeMenuBar) SetChecked(id int, on bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.checked[id] = on
+}
+
+func (m *fakeMenuBar) SetTray(key int, t nativemenu.Tray) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.trays[key] = t
+}
+
+func (m *fakeMenuBar) RemoveTray(key int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.trays, key)
+	m.removedTrays = append(m.removedTrays, key)
 }
 
 func TestRemoteToNativeMenu(t *testing.T) {
@@ -365,6 +384,22 @@ func TestSessionMenuAndRequestsRoundTrip(t *testing.T) {
 	if err := app1Conn.Send(&remote.UpdateMenuItem{ID: 8, SetChecked: true, Checked: true}); err != nil {
 		t.Fatal(err)
 	}
+	if err := app1Conn.Send(&remote.SetTray{
+		Key:      1,
+		Icon:     []byte{0x89, 'P', 'N', 'G'},
+		Template: true,
+		Title:    "Tray1",
+		Tooltip:  "Tip1",
+		Menu:     []remote.MenuItem{{Title: "Show", ID: 9, Enabled: true}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := app1Conn.Send(&remote.SetTray{Key: 2, Title: "Tray2", ClickID: 10}); err != nil {
+		t.Fatal(err)
+	}
+	if err := app1Conn.Send(&remote.RemoveTray{Key: 2}); err != nil {
+		t.Fatal(err)
+	}
 	if err := app1Conn.Send(&remote.SetSize{Width: 640, Height: 480}); err != nil {
 		t.Fatal(err)
 	}
@@ -426,8 +461,9 @@ func TestSessionMenuAndRequestsRoundTrip(t *testing.T) {
 		t.Fatalf("window requests = %v", r.window)
 	}
 
-	// Apply menu & updates against fakeMenuBar as pump does.
+	// Apply menu, trays & updates against fakeMenuBar as pump does.
 	v.menu.Set(remoteToNativeMenu(r.menu.Items))
+	v.applyTrays(r.trays)
 	for _, u := range r.menuUpdates {
 		if u.SetEnabled {
 			v.menu.SetEnabled(u.ID, u.Enabled)
@@ -441,6 +477,17 @@ func TestSessionMenuAndRequestsRoundTrip(t *testing.T) {
 	}
 	if fb.enabled[7] != false || fb.checked[8] != true {
 		t.Fatalf("enabled=%v checked=%v", fb.enabled, fb.checked)
+	}
+	if len(fb.trays) != 1 || fb.trays[1].Title != "Tray1" || !fb.trays[1].Template || len(fb.trays[1].Menu) != 1 || fb.trays[1].Menu[0].ID != 9 {
+		t.Fatalf("trays = %+v", fb.trays)
+	}
+	if !reflect.DeepEqual(fb.removedTrays, []int{2}) {
+		t.Fatalf("removedTrays = %v, want [2]", fb.removedTrays)
+	}
+	// Reset clears remaining installed trays cleanly.
+	v.clearTrays()
+	if len(fb.trays) != 0 || !reflect.DeepEqual(fb.removedTrays, []int{2, 1}) {
+		t.Fatalf("after clearTrays: trays=%+v removed=%v", fb.trays, fb.removedTrays)
 	}
 
 	// Menu click and AppEvent travel back to the attached app.
