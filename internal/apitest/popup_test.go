@@ -116,13 +116,14 @@ func TestPopupKeepsTheCollisionPaddingFromEveryEdge(t *testing.T) {
 		want  ggui.Point
 	}{
 		{"below, at the left edge", ggui.Pt(0, 100), widget.PopupBottom, widget.PopupStart, ggui.Pt(5, 124)},
+		{"below, start at the right edge", ggui.Pt(340, 100), widget.PopupBottom, widget.PopupStart, ggui.Pt(400-5-100, 124)},
 		{"below, its end at the right edge", ggui.Pt(340, 100), widget.PopupBottom, widget.PopupEnd, ggui.Pt(400-5-100, 124)},
 		{"beside, at the top edge", ggui.Pt(100, 0), widget.PopupRight, widget.PopupStart, ggui.Pt(164, 5)},
 		{"beside, at the bottom edge", ggui.Pt(100, 280), widget.PopupRight, widget.PopupStart, ggui.Pt(164, 300-5-50)},
 	} {
 		p := sidePopup(t, tt.at, func(p *widget.PopupWidget) { p.Side(tt.side).Align(tt.align) })
-		if got := p.Rect().Origin; got != tt.want {
-			t.Errorf("%s: content at %v, want %v", tt.name, got, tt.want)
+		if got := p.Rect(); got != ggui.Rct(tt.want, ggui.Sz(100, 50)) {
+			t.Errorf("%s: content at %v, want %v", tt.name, got, ggui.Rct(tt.want, ggui.Sz(100, 50)))
 		}
 	}
 	// CollisionPadding(0) lets it sit flush against the edge.
