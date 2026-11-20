@@ -4,6 +4,8 @@
 // the action chosen.
 package nativemenu
 
+import "github.com/ironpark/ggwd"
+
 // Item is one entry of a menu: an action, a separator, or a submenu when
 // Items is not empty.
 type Item struct {
@@ -36,4 +38,40 @@ type Tray struct {
 	// action ClickID.
 	Menu    []Item
 	ClickID int
+}
+
+//lint:ignore U1000 used by darwin and windows backends
+func toRemoteItems(items []Item) []ggwd.RemoteMenuItem {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]ggwd.RemoteMenuItem, len(items))
+	for i, it := range items {
+		out[i] = ggwd.RemoteMenuItem{
+			Title:     it.Title,
+			Separator: it.Separator,
+			Items:     toRemoteItems(it.Items),
+			ID:        it.ID,
+			Key:       it.Key,
+			Cmd:       it.Cmd,
+			Shift:     it.Shift,
+			Alt:       it.Alt,
+			Ctrl:      it.Ctrl,
+			Enabled:   it.Enabled,
+			Checked:   it.Checked,
+		}
+	}
+	return out
+}
+
+//lint:ignore U1000 used by darwin and windows backends
+func toRemoteTray(t Tray) ggwd.RemoteTray {
+	return ggwd.RemoteTray{
+		Icon:     t.Icon,
+		Template: t.Template,
+		Title:    t.Title,
+		Tooltip:  t.Tooltip,
+		Menu:     toRemoteItems(t.Menu),
+		ClickID:  t.ClickID,
+	}
 }

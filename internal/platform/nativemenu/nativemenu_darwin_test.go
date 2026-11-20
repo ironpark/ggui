@@ -47,3 +47,25 @@ func TestToRemoteItems(t *testing.T) {
 		t.Fatalf("toRemoteItems =\n%+v\nwant\n%+v", got, want)
 	}
 }
+
+func TestToRemoteTray(t *testing.T) {
+	in := Tray{
+		Icon:     []byte{0x89, 'P', 'N', 'G'},
+		Template: true,
+		Title:    "Status",
+		Tooltip:  "Running",
+		Menu:     []Item{{Title: "Show", ID: 10, Enabled: true}},
+		ClickID:  0,
+	}
+	want := ggwd.RemoteTray{
+		Icon:     []byte{0x89, 'P', 'N', 'G'},
+		Template: true,
+		Title:    "Status",
+		Tooltip:  "Running",
+		Menu:     []ggwd.RemoteMenuItem{{Title: "Show", ID: 10, Enabled: true}},
+		ClickID:  0,
+	}
+	if got := toRemoteTray(in); !reflect.DeepEqual(got, want) {
+		t.Fatalf("toRemoteTray =\n%+v\nwant\n%+v", got, want)
+	}
+}

@@ -189,18 +189,22 @@ type trayIcon struct {
 // app menu bar of its own.
 func Supported() bool { return false }
 
-// TraySupported reports whether the platform shows SetTray's icons: not in
-// an app ggui dev's viewer shows, whose main thread runs no message loop
-// for the tray's window.
-func TraySupported() bool { return !remotedisplay.On() }
+// TraySupported reports whether the platform shows SetTray's icons. On Windows
+// this is true both locally and when ggui dev's viewer shows the app: in a
+// remote app, tray icons are forwarded to the viewer over ggwd's remote tray
+// channel.
+func TraySupported() bool { return true }
 
 // Handle sets the function called with an action's id when it is chosen,
-// in a menu or by a tray's click. It runs on the main thread and must hand
-// the work on.
+// in a menu or by a tray's click. It runs on the main thread locally, or on
+// the remote event reader in a remote app, and must hand the work on.
 func Handle(selected func(id int)) {
 	mu.Lock()
 	onSelect = selected
 	mu.Unlock()
+	if remotedisplay.On() {
+		ggwd.SetRemoteMenuHandler(selected)
+	}
 }
 
 // Set does nothing: Windows has no app menu bar.
@@ -209,6 +213,10 @@ func Set([]Item) {}
 // SetEnabled enables or disables the action with the id in the tray menus
 // built from now on.
 func SetEnabled(id int, on bool) {
+	if remotedisplay.On() {
+		ggwd.SetRemoteMenuItemEnabled(id, on)
+		return
+	}
 	mu.Lock()
 	enabled[id] = on
 	mu.Unlock()
@@ -217,6 +225,10 @@ func SetEnabled(id int, on bool) {
 // SetChecked puts a check mark by the action with the id in the tray menus
 // built from now on, or takes it away.
 func SetChecked(id int, on bool) {
+	if remotedisplay.On() {
+		ggwd.SetRemoteMenuItemChecked(id, on)
+		return
+	}
 	mu.Lock()
 	checked[id] = on
 	mu.Unlock()
@@ -225,6 +237,10 @@ func SetChecked(id int, on bool) {
 // SetTray shows t in the notification area as the icon named key, making
 // it or replacing what it showed. It needs a running app.
 func SetTray(key int, t Tray) {
+	if remotedisplay.On() {
+		ggwd.SetRemoteTray(key, toRemoteTray(t))
+		return
+	}
 	ggwd.RunOnMainThread(func() {
 		if !ensureWindow() {
 			return
@@ -245,6 +261,10 @@ func SetTray(key int, t Tray) {
 // where it is called: the shell takes the call from any thread, and an
 // icon left behind would stay in the tray until the pointer passes over it.
 func RemoveTray(key int) {
+	if remotedisplay.On() {
+		ggwd.RemoveRemoteTray(key)
+		return
+	}
 	ran := false
 	ggwd.RunOnMainThread(func() { ran = true; removeTray(key) })
 	if !ran {

@@ -384,9 +384,9 @@ type Tray struct {
 }
 
 // TraySupported reports whether AddTray's icons show, which is so on
-// macOS and Windows, except in an app ggui dev shows in its viewer.
-// Elsewhere a Tray does nothing; in the viewer's app it says so once on
-// stderr.
+// macOS and Windows (including when ggui dev shows the app in its viewer,
+// which installs them in the viewer's status area). Elsewhere a Tray does
+// nothing.
 func TraySupported() bool { return nativemenu.TraySupported() }
 
 // AddTray puts an icon in the system tray. Call it from the UI thread or
@@ -420,7 +420,6 @@ func (a *App) AddTray(cfg TrayConfig) *Tray {
 	t.encodeIcon()
 	a.trays = append(a.trays, t)
 	t.install()
-	remoteNotice("the tray icon does not show")
 	return t
 }
 

@@ -554,7 +554,7 @@ func (n *Native) useViewer(r startResult) {
 		return
 	}
 	n.viewer = r.v
-	n.logf("the viewer shows the app: one window, and no tray icon of the app's own; --display=window shows them")
+	n.logf("the viewer shows the app: one window, with its native menu bar and tray icons; --display=window opens additional windows")
 }
 
 // viewerLost is the viewer's end when nobody closed its window: the app

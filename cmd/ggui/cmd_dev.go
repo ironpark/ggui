@@ -53,9 +53,9 @@ When there is no viewer to be had, because the project's ggui is too old
 for one or it does not build or start, the app opens its own window and
 ggui says why; if the viewer goes away, the app is started again in its
 own window. Closing the viewer's window ends ggui dev. The viewer shows
-one window and the app's native menu bar, with no tray icon of the app's
-own; when the app adds what does not show, ggui says so, once, with
---display=window to see it.
+one window along with the app's native menu bar and system tray icons;
+when the app adds what does not show (such as additional windows), ggui
+says so, once, with --display=window to see it.
 
 On macOS ggui dev creates a Name.dev.app bundle in build.output (or
 --bundle-dir / dev.bundle_dir) with CFBundleIdentifier <app.id>.dev,

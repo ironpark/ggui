@@ -14,8 +14,8 @@
 // window over, and its first frame replaces the last one. The window opens
 // with the first app's options and applies the window and titlebar settings
 // (title, size limits, resizability, decoration, hidden titlebar and traffic
-// lights, floating, icon, appearance, dock icon, and native menu bar) of
-// every app that attaches; a new size or position only when an app asks for
+// lights, floating, icon, appearance, dock icon, native menu bar and system
+// tray icons) of every app that attaches; a new size or position only when an app asks for
 // another than the one before. With -project, the window's position and size
 // are kept for the project under the user's cache directory, and a later
 // session opens the window there.

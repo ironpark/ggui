@@ -133,8 +133,11 @@ var targetClass = sync.OnceValue(func() objc.Class {
 // menus are forwarded to the viewer over ggwd's remote menu channel.
 func Supported() bool { return true }
 
-// TraySupported reports whether the platform shows SetTray's icons.
-func TraySupported() bool { return !remotedisplay.On() }
+// TraySupported reports whether the platform shows SetTray's icons. On macOS
+// this is true both locally and when ggui dev's viewer shows the app: in a
+// remote app, tray icons are forwarded to the viewer over ggwd's remote tray
+// channel.
+func TraySupported() bool { return true }
 
 // Handle sets the function called with an action's id when it is chosen,
 // in a menu or by a tray's click. It runs on the main thread locally, or on
@@ -157,29 +160,6 @@ func Set(menus []Item) {
 		return
 	}
 	ggwd.RunOnMainThread(func() { install(menus) })
-}
-
-func toRemoteItems(items []Item) []ggwd.RemoteMenuItem {
-	if len(items) == 0 {
-		return nil
-	}
-	out := make([]ggwd.RemoteMenuItem, len(items))
-	for i, it := range items {
-		out[i] = ggwd.RemoteMenuItem{
-			Title:     it.Title,
-			Separator: it.Separator,
-			Items:     toRemoteItems(it.Items),
-			ID:        it.ID,
-			Key:       it.Key,
-			Cmd:       it.Cmd,
-			Shift:     it.Shift,
-			Alt:       it.Alt,
-			Ctrl:      it.Ctrl,
-			Enabled:   it.Enabled,
-			Checked:   it.Checked,
-		}
-	}
-	return out
 }
 
 // install swaps the menus in. It runs on the main thread.
@@ -330,6 +310,10 @@ func item(id int) objc.ID {
 // SetTray shows t in the status area as the icon named key, making it or
 // replacing what it showed. It needs a running app, as Set does.
 func SetTray(key int, t Tray) {
+	if remotedisplay.On() {
+		ggwd.SetRemoteTray(key, toRemoteTray(t))
+		return
+	}
 	ggwd.RunOnMainThread(func() { installTray(key, t) })
 }
 
@@ -388,6 +372,10 @@ func trayImage(png []byte, template bool) objc.ID {
 
 // RemoveTray takes the icon named key out of the status area.
 func RemoveTray(key int) {
+	if remotedisplay.On() {
+		ggwd.RemoveRemoteTray(key)
+		return
+	}
 	ggwd.RunOnMainThread(func() {
 		s := trays[key]
 		if s == nil {

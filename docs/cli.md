@@ -226,14 +226,15 @@ is missing:
 - **One window.** `App.OpenWindow` returns an error while the app runs,
   and a window made before `Run` other than the first does not open, with
   a warning. `ggui dev --display=window` opens them all.
-- **Menus.** On macOS, `App.SetMenu`'s native menu bar runs in the
-  viewer (`NativeMenu` is true): reactive enabled and checked states stay
-  in sync, clicks and shortcuts route back to the app, and the menu bar
-  clears when the app detaches. `NativeContextMenu` and `TraySupported`
-  report false: `Window.ShowContextMenu` returns false, and when the app
-  adds a tray icon `ggui dev` warns once a session that the tray is not
-  shown and that `--display=window` shows it. On Windows, too,
-  `TraySupported` is false while the viewer shows the app.
+- **Menus and tray icons.** On macOS, `App.SetMenu`'s native menu bar
+  runs in the viewer (`NativeMenu` is true), and on macOS and Windows
+  `App.AddTray`'s system tray icons run in the viewer (`TraySupported`
+  is true): icons, titles, tooltips, menus, click handlers, and reactive
+  enabled/checked states stay in sync, and both the menu bar and tray
+  icons clear cleanly when the app detaches or restarts.
+  `NativeContextMenu` remains false while the viewer shows the app
+  (`Window.ShowContextMenu` returns false; `--display=window` shows
+  native popup menus).
 - **Dialogs** open, from the app's process, standing alone in front of
   the viewer's window rather than as a sheet on it or owned by it. On
   macOS the viewer is active again once they close; on Windows the viewer
