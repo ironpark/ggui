@@ -206,11 +206,8 @@ func (t *Tree) ignored(path string, isDir bool) bool {
 
 // A treeSource is a source that follows a directory's tree only by
 // watching each directory in it, as inotify does: watchTrees watches
-// those below roots, but the ones its skip leaves out, and fails with
-// errTooManyDirs past maxDirs.
+// those below roots, but the ones its skip leaves out, and fails past
+// maxDirs.
 type treeSource interface {
 	watchTrees(roots []string, maxDirs int) error
 }
-
-// errTooManyDirs is a tree with more directories than a Tree may watch.
-var errTooManyDirs = errors.New("more directories than are watched")
