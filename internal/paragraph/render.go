@@ -90,6 +90,7 @@ func track(out *shaping.Output, spacing fixed.Int26_6) {
 		}
 		if cluster != 0 {
 			g.Advance += spacing
+			//lint:ignore SA1019 the shaper keeps the old field level with Advance
 			g.XAdvance += spacing //nolint:staticcheck:SA1019 // the shaper keeps the old field level with Advance
 		}
 		cluster = 0

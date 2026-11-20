@@ -97,6 +97,9 @@ func (s *inotify) watch(dirs []string) error {
 	return nil
 }
 
+// errTooManyDirs is a tree with more directories than a Tree may watch.
+var errTooManyDirs = errors.New("more directories than are watched")
+
 // watchTrees watches every directory below roots, but those skip leaves
 // out with all below them, as a Tree asks: inotify follows a directory,
 // not a tree. It fails past maxDirs directories, before watching any.
