@@ -47,24 +47,3 @@ and formatters without sharing interactive or animation state:
 - `chart.Tooltip(c, index)` / `chart.TooltipContent(c, index)`
 
 See [docs/charts.md](../../docs/charts.md) and [docs/examples/charts](../../docs/examples/charts) for full usage and examples.
-
-## Migration
-
-Charts moved from `github.com/ironpark/ggui/ui` to `github.com/ironpark/ggui/ui/chart`
-with non-stuttering names; old symbols in `ui` are not aliases.
-
-| Before (`ui`) | Now (`ui/chart`) |
-| --- | --- |
-| `ui.ChartWidget` | `chart.Widget` |
-| `ui.ChartContainer` | `chart.Container` |
-| `ui.AreaChart`, `ui.BarChart`, `ui.LineChart` | `chart.Area`, `chart.Bar`, `chart.Line` |
-| `ui.PieChart`, `ui.RadarChart`, `ui.RadialChart` | `chart.Pie`, `chart.Radar`, `chart.Radial` |
-| `ui.ChartLegend`, `ui.ChartLegendContent` | `chart.Legend`, `chart.LegendContent` |
-| `ui.ChartTooltip`, `ui.ChartTooltipContent` | `chart.Tooltip`, `chart.TooltipContent` |
-| `ui.ChartKind` (`ui.ChartArea` ... `ui.ChartRadial`) | `chart.Kind` (`chart.KindArea` ... `chart.KindRadial`) |
-| `ui.ChartCurve` (`ui.ChartNatural` ... `ui.ChartMonotone`) | `chart.Curve` (`chart.CurveNatural` ... `chart.CurveMonotone`) |
-| `ui.ChartStack` (`ui.ChartUnstacked`, `ui.ChartStacked`, `ui.ChartExpanded`) | `chart.Stack` (`chart.StackUnstacked`, `chart.StackStacked`, `chart.StackExpanded`) |
-| `ui.ChartIndicator` (`ui.ChartIndicatorDot`, `ui.ChartIndicatorLine`, `ui.ChartIndicatorDashed`) | `chart.Indicator` (`chart.IndicatorDot`, `chart.IndicatorLine`, `chart.IndicatorDashed`) |
-| `ui.ChartSeries`, `ui.ChartConfig`, `ui.ChartDatum` | `chart.Series`, `chart.Config`, `chart.Datum` |
-| `ui.ChartTooltipOptions`, `ui.ChartTooltipPayload` | `chart.TooltipOptions`, `chart.TooltipPayload` |
-| `ui.ChartPolarGrid`, `ui.ChartPointContext` | `chart.PolarGrid`, `chart.PointContext` |
