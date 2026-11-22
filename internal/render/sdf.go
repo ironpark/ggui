@@ -108,26 +108,35 @@ func Shade(dst *ggfx.Image, f Field, col color.Color) {
 	}
 	// A corner never exceeds half the shape, which is a circle.
 	radius := min(max(f.Radius, 0), f.Half.W, f.Half.H)
-	vs := quad(bounds, f.Centre, f.Axis, f.Half, float32(radius), float32(max(f.Stroke, 0)), Premul(col))
+	vs := quad(bounds, quadShape{centre: f.Centre, axis: f.Axis, half: f.Half, s0: float32(radius), s1: float32(max(f.Stroke, 0)), tint: Premul(col)})
 	dst.DrawTrianglesShader(vs[:], quadIndices[:], sharedRoundRect(), nil)
 }
 
-// quad is the quad over bounds that draws a distance-field shape centred
-// at centre, turned to axis, with half size half, as roundRectSource and
+// quadShape is the distance-field shape a quad draws, as the shader
+// reads it: its centre, turn, half size, the two scalars and the tint.
+type quadShape struct {
+	centre layout.Point
+	axis   layout.Point
+	half   layout.Size
+	s0, s1 float32
+	tint   [4]float32
+}
+
+// quad is the quad over bounds that draws sh, as roundRectSource and
 // shadowSource read it: the fragment's place in the shape's own frame in
 // custom.xy, the half size in custom.zw, the two scalars in src_pos and
 // the tint as the colour.
-func quad(bounds image.Rectangle, centre, axis layout.Point, half layout.Size, s0, s1 float32, tint [4]float32) [4]ggfx.Vertex {
+func quad(bounds image.Rectangle, sh quadShape) [4]ggfx.Vertex {
 	x0, y0, x1, y1 := float64(bounds.Min.X), float64(bounds.Min.Y), float64(bounds.Max.X), float64(bounds.Max.Y)
 	var vs [4]ggfx.Vertex
 	for i, corner := range [4]layout.Point{layout.Pt(x0, y0), layout.Pt(x1, y0), layout.Pt(x0, y1), layout.Pt(x1, y1)} {
-		p := layout.Pt(corner.X-centre.X, corner.Y-centre.Y)
+		p := layout.Pt(corner.X-sh.centre.X, corner.Y-sh.centre.Y)
 		vs[i] = ggfx.Vertex{
 			DstX: float32(corner.X), DstY: float32(corner.Y),
-			SrcX: s0, SrcY: s1,
-			ColorR: tint[0], ColorG: tint[1], ColorB: tint[2], ColorA: tint[3],
-			Custom0: float32(p.X*axis.X + p.Y*axis.Y), Custom1: float32(p.Y*axis.X - p.X*axis.Y),
-			Custom2: float32(half.W), Custom3: float32(half.H),
+			SrcX: sh.s0, SrcY: sh.s1,
+			ColorR: sh.tint[0], ColorG: sh.tint[1], ColorB: sh.tint[2], ColorA: sh.tint[3],
+			Custom0: float32(p.X*sh.axis.X + p.Y*sh.axis.Y), Custom1: float32(p.Y*sh.axis.X - p.X*sh.axis.Y),
+			Custom2: float32(sh.half.W), Custom3: float32(sh.half.H),
 		}
 	}
 	return vs
