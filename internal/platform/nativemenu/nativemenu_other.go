@@ -8,8 +8,8 @@ func Supported() bool { return false }
 // TraySupported reports whether the platform shows SetTray's icons.
 func TraySupported() bool { return false }
 
-// Handle does nothing where there is nothing to choose from.
-func Handle(func(id int)) {}
+// OnSelect does nothing where there is nothing to choose from.
+func OnSelect(func(id int)) {}
 
 // Set does nothing where there is no menu bar to fill.
 func Set([]Item) {}

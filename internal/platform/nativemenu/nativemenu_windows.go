@@ -201,10 +201,10 @@ func Supported() bool { return false }
 // channel.
 func TraySupported() bool { return true }
 
-// Handle sets the function called with an action's id when it is chosen,
+// OnSelect sets the function called with an action's id when it is chosen,
 // in a menu or by a tray's click. It runs on the main thread locally, or on
 // the remote event reader in a remote app, and must hand the work on.
-func Handle(selected func(id int)) {
+func OnSelect(selected func(id int)) {
 	mu.Lock()
 	onSelect = selected
 	mu.Unlock()

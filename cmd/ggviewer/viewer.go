@@ -374,7 +374,7 @@ func (v *session) start() error {
 	}
 	v.win.Store(w)
 	v.title = o.Title
-	nativemenu.Handle(v.menuSelected)
+	nativemenu.OnSelect(v.menuSelected)
 	if a != nil {
 		if a.opts.MousePassthrough {
 			w.SetMousePassthrough(true)
