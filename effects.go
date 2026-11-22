@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"sync"
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/render"
@@ -29,7 +30,7 @@ func (c *Canvas) Blur(r Rect, sigma float64, paint func(dst *Canvas)) {
 	c.fs().drew(r, reach)
 	area := c.physical(r.Grow(reach)).Intersect(c.root().Image.Bounds())
 	if area.Empty() {
-		paint(c)
+		paint(c.into(nil))
 		return
 	}
 	c.layer(area, paint, func(img *ggfx.Image) {
@@ -89,6 +90,9 @@ func (c *Canvas) BackdropBlur(r Rect, radius, sigma float64) {
 // rather than reading transparency there.
 func (c *Canvas) blurImage(src *ggfx.Image, sigma float64, clampEdge bool) {
 	area := src.Bounds()
+	if area.Empty() {
+		return
+	}
 	k := render.BlurFactor(sigma)
 	if k == 1 {
 		c.scratch(area, func(across *ggfx.Image) {
@@ -98,17 +102,21 @@ func (c *Canvas) blurImage(src *ggfx.Image, sigma float64, clampEdge bool) {
 		return
 	}
 	// src is read once, to shrink it, so its corner holds the first pass.
+	// Use exact ratios between small and area so non-divisible dimensions do
+	// not leave unfilled fringe pixels in shrunk or shift on upscale.
 	small := render.Shrunk(area, k)
+	sx := float64(small.Dx()) / float64(area.Dx())
+	sy := float64(small.Dy()) / float64(area.Dy())
 	across := src.SubImage(small).(*ggfx.Image)
 	c.scratch(small, func(shrunk *ggfx.Image) {
 		op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear, Blend: ggfx.BlendCopy}
-		op.GeoM.Scale(1/float64(k), 1/float64(k))
+		op.GeoM.Scale(sx, sy)
 		op.GeoM.Translate(float64(area.Min.X), float64(area.Min.Y))
 		shrunk.DrawImage(src, op)
-		render.BlurPass(across, shrunk, sigma/float64(k), true, clampEdge)
-		render.BlurPass(shrunk, across, sigma/float64(k), false, clampEdge)
+		render.BlurPass(across, shrunk, sigma*sx, true, clampEdge)
+		render.BlurPass(shrunk, across, sigma*sy, false, clampEdge)
 		op = &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear, Blend: ggfx.BlendCopy}
-		op.GeoM.Scale(float64(k), float64(k))
+		op.GeoM.Scale(1/sx, 1/sy)
 		op.GeoM.Translate(float64(area.Min.X), float64(area.Min.Y))
 		src.DrawImage(shrunk, op)
 	})
@@ -198,7 +206,7 @@ func (c *Canvas) FadeEdges(r Rect, horizontal bool, lead, trail float64, paint f
 	// for a list that fades out at its foot, 78 MB on a 6K display.
 	area := c.physical(r).Intersect(c.Image.Bounds())
 	if area.Empty() {
-		paint(c)
+		paint(c.into(nil))
 		return
 	}
 	c.layer(area, paint, func(img *ggfx.Image) {
@@ -236,33 +244,23 @@ func (c *Canvas) FadeEdges(r Rect, horizontal bool, lead, trail float64, paint f
 
 const fadeRampLength = 64
 
-// rampImage is the ramp FadeEdges masks with: fadeRampLength texels of
-// white from clear to opaque along a smoothstep, so the fade eases out of
-// the content with no edge where it starts, made once, alpha-only.
-var rampImage *ggfx.Image
-
-// fadeRamp is the ramp, a region of a larger image whose texels around it
-// repeat its edges: scaled with linear filtering, it then blends with
-// itself at its ends and sides, not with what is outside it. Blended with
-// clear texels, as a lone row of them was, it was half clear along its
-// top and bottom rows and where it meets the content, which showed as a
-// step in a line running into the fade.
-func fadeRamp() *ggfx.Image {
-	if rampImage == nil {
-		const w, h = fadeRampLength + 2, 3
-		src := image.NewAlpha(image.Rect(0, 0, w, h))
-		for x := range w {
-			t := gem.Clamp(float64(x-1)/(fadeRampLength-1), 0, 1)
-			a := uint8(math.Round(t * t * (3 - 2*t) * 255))
-			for y := range h {
-				src.Pix[y*src.Stride+x] = a
-			}
+// fadeRamp is the ramp FadeEdges masks with: fadeRampLength texels of white
+// from clear to opaque along a smoothstep, a region of a larger image whose
+// texels around it repeat its edges so linear filtering blends with itself at
+// its ends and sides rather than with clear texels outside it.
+var fadeRamp = sync.OnceValue(func() *ggfx.Image {
+	const w, h = fadeRampLength + 2, 3
+	src := image.NewAlpha(image.Rect(0, 0, w, h))
+	for x := range w {
+		t := gem.Clamp(float64(x-1)/(fadeRampLength-1), 0, 1)
+		a := uint8(math.Round(t * t * (3 - 2*t) * 255))
+		for y := range h {
+			src.Pix[y*src.Stride+x] = a
 		}
-		full := ggfx.NewImageFromImageWithOptions(src, &ggfx.NewImageFromImageOptions{Format: ggfx.PixelFormatAlpha})
-		rampImage = full.SubImage(image.Rect(1, 1, 1+fadeRampLength, 2)).(*ggfx.Image)
 	}
-	return rampImage
-}
+	full := ggfx.NewImageFromImageWithOptions(src, &ggfx.NewImageFromImageOptions{Format: ggfx.PixelFormatAlpha})
+	return full.SubImage(image.Rect(1, 1, 1+fadeRampLength, 2)).(*ggfx.Image)
+})
 
 // Transform paints through m: what paint draws is moved by m, and so is the
 // input its hit regions receive. A pointer is matched through the inverse
@@ -290,9 +288,7 @@ func (c *Canvas) Transform(m Affine, paint func(dst *Canvas)) {
 		// paints, so what it retains survives a scale passing zero. The
 		// space it paints in takes no point, and an overlay scheduled in
 		// it goes through m too, and so shows nothing either.
-		c.layer(image.Rectangle{}, func(layer *Canvas) {
-			paint(layer.Inert().enter(m, Affine{}, func(Point) bool { return false }))
-		}, func(*ggfx.Image) {})
+		paint(c.into(nil).Inert().enter(m, Affine{}, func(Point) bool { return false }))
 		return
 	}
 	area, visible := c.transformArea(inverse)
@@ -302,9 +298,9 @@ func (c *Canvas) Transform(m Affine, paint func(dst *Canvas)) {
 		paint(c.into(nil).enter(m, inverse, nil))
 		return
 	}
-	// The transformed subtree lands within area, which is where the
+	// The transformed subtree lands within m(area), which is where the
 	// widget painting draws: what it drew inside is in other coordinates.
-	c.fs().drew(c.logicalRect(area), 0)
+	c.fs().drew(m.Bounds(c.logicalRect(area)), 0)
 	c.layer(area, func(layer *Canvas) { paint(layer.enter(m, inverse, nil)) }, func(img *ggfx.Image) {
 		op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
 		op.GeoM.Translate(float64(img.Bounds().Min.X), float64(img.Bounds().Min.Y))

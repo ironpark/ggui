@@ -225,10 +225,11 @@ func (a *App) handleEvent(ev ggwd.Event) error {
 			}
 		}
 		// The menu bar and the status bar exist once the engine has a
-		// window.
+		// window. Rebuild a pre-Run menu set so signal changes made before
+		// StartEvent (or during Setup) are reflected in the installed menu.
 		nativemenu.Handle(a.menuSelected)
-		if a.menu != nil && nativemenu.Supported() {
-			nativemenu.Set(a.menu.native)
+		if a.menu != nil {
+			a.SetMenu(a.menu.items...)
 		}
 		for _, t := range a.trays {
 			t.install()
@@ -649,8 +650,9 @@ func watchSystemDark() {
 			continue
 		}
 		if a := runningApp.Load(); a != nil {
-			last = dark
-			a.post(func() { systemDark.Set(dark) })
+			if w := a.activeWindow(); w != nil && w.tryPost(func() { systemDark.Set(dark) }) {
+				last = dark
+			}
 		}
 	}
 }

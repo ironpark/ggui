@@ -199,3 +199,35 @@ func TestLayerPoolShrinksWhatOnlySmallAreasTake(t *testing.T) {
 		p.EndFrame()
 	}
 }
+
+func TestLayerPoolBorrowAllocPanicDoesNotDoubleFreeOrLeakDepth(t *testing.T) {
+	var p LayerPool[*fakeTex]
+	var gauge int64
+	p.Gauge = func(b int64) { gauge += b }
+
+	small := p.Borrow(window, image.Rect(0, 0, 10, 10), allocFake)
+	p.Return()
+
+	var recovered any
+	func() {
+		defer func() { recovered = recover() }()
+		p.Borrow(window, image.Rectangle{}, func(image.Rectangle) *fakeTex {
+			panic("oom")
+		})
+	}()
+	if recovered != "oom" {
+		t.Fatalf("recovered = %v, want oom", recovered)
+	}
+	if !small.freed {
+		t.Fatal("replaced small layer was not freed")
+	}
+	if p.Depth() != 0 || p.Len() != 0 || gauge != 0 {
+		t.Fatalf("after alloc panic: depth=%d len=%d gauge=%d, want 0 0 0", p.Depth(), p.Len(), gauge)
+	}
+	// EndFrame and FreeAll must not double-free small or decrement gauge below 0.
+	p.EndFrame()
+	p.FreeAll()
+	if gauge != 0 {
+		t.Fatalf("after cleanup gauge = %d, want 0", gauge)
+	}
+}

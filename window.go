@@ -534,8 +534,11 @@ func (w *Window) Semantics() *SemTree {
 
 // wantSemantics makes every frame from the next on build the tree.
 func (w *Window) wantSemantics() {
-	if !w.semWanted.Swap(true) && w.wake != nil {
-		w.wake()
+	if !w.semWanted.Swap(true) {
+		w.markDirty(dirtyOther)
+		if w.wake != nil {
+			w.wake()
+		}
 	}
 }
 
@@ -619,14 +622,15 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 	if w.cursor != cursor {
 		ev.Window.SetCursorShape(w.cursor)
 	}
+	if w.wakeTimer != nil {
+		w.wakeTimer.Stop()
+		w.wakeTimer = nil
+	}
 	if next {
 		ev.Window.RequestFrame()
 	} else if !wake.IsZero() {
 		// A caret or a delayed tooltip changes at a known time; sleep
 		// until then rather than painting every frame.
-		if w.wakeTimer != nil {
-			w.wakeTimer.Stop()
-		}
 		w.wakeTimer = time.AfterFunc(max(wake.Sub(FrameTime()), 0), w.wakeFrame)
 	}
 	return nil
@@ -709,6 +713,10 @@ const backdropFrames = 120
 // whether the next frame needs one, which a screen its driver can sample
 // never does: a BackdropBlur reads it in place.
 func (w *Window) presentBackdrop(screen, target *ggfx.Image) {
+	w.finishBackdrop(screen, target, false)
+}
+
+func (w *Window) finishBackdrop(screen, target *ggfx.Image, partial bool) {
 	if target != screen {
 		screen.DrawImage(target, &ggfx.DrawImageOptions{Blend: ggfx.BlendCopy})
 	}
@@ -718,7 +726,7 @@ func (w *Window) presentBackdrop(screen, target *ggfx.Image) {
 			// This frame skipped its blurs; draw the next one with them.
 			w.requestFrame()
 		}
-	} else if w.backdropTTL > 0 {
+	} else if !partial && w.backdropTTL > 0 {
 		w.backdropTTL--
 	}
 	// Kept for no blur, it goes, after this copy.
@@ -779,28 +787,37 @@ func (w *Window) wantsFrame(f frameInput) bool {
 	// request was held within a scroll's viewport, which is then noted as
 	// contained; see Invalidate.
 	relayout := w.root != nil && layoutGen() != w.laidGen
+	anim := wd.anims.active()
+	cb := len(w.frame) > 0
+	input := f.drag || w.touch.active || w.touch.waiting || w.input.touchMotion.target != nil
 	if relayout && (freeGen() != w.laidFree || len(w.frameLoop.contained) == 0) {
 		w.dirty.Or(uint32(dirtyLayout))
+	}
+	if anim {
+		w.dirty.Or(uint32(dirtyAnim))
+		wd.anims.noteDirtiers()
+	}
+	if cb {
+		w.dirty.Or(uint32(dirtyCallback))
+	}
+	if input {
+		w.dirty.Or(uint32(dirtyInput))
 	}
 	switch {
 	case relayout:
 		framestats.For(framestats.Layout)
-	case wd.anims.active():
+	case anim:
 		framestats.For(framestats.Animation)
-		w.dirty.Or(uint32(dirtyAnim))
-		wd.anims.noteDirtiers()
 	case wd.frame.timeRead():
 		// Only what read the time changes: the frame may be painted in
 		// part. What else changes by then marks it dirty itself.
 		framestats.For(framestats.Time)
-	case len(w.frame) > 0:
+	case cb:
 		framestats.For(framestats.Callback)
-		w.dirty.Or(uint32(dirtyCallback))
 	case w.hasPosted():
 		framestats.For(framestats.Posted)
-	case f.drag || w.touch.active || w.touch.waiting || w.input.touchMotion.target != nil:
+	case input:
 		framestats.For(framestats.Input)
-		w.dirty.Or(uint32(dirtyInput))
 	default:
 		return false
 	}
@@ -857,6 +874,9 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 			dirtyBits |= dirtyScale
 			w.canvas.scale = scale
 		}
+	}
+	if w.canvas.fs().semOff && (w.performs.Load() > 0 || w.semWanted.Load() || w.ax.Listening()) {
+		dirtyBits |= dirtyOther
 	}
 	asked := w.takeRepaints()
 	pointer := w.pointerAsked

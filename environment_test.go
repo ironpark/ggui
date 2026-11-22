@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/property"
 )
 
 func TestEnvironmentReplacementsPreserveParentsWithoutAccumulatingBindings(t *testing.T) {
@@ -226,5 +227,51 @@ func TestCurrentEnvSubscribesOnlyOutsideLayout(t *testing.T) {
 	}
 	if inside != 1 {
 		t.Errorf("read in layout ran %d times, want 1: it subscribed", inside)
+	}
+}
+
+type testEnvToken string
+
+func (t testEnvToken) RGBA() (uint32, uint32, uint32, uint32) { return color.White.RGBA() }
+func (t testEnvToken) Resolve(Env) color.Color                { return color.White }
+
+func TestEqualColorHandlesEnvColorAndTypedNilAndEnvMemoNonComparable(t *testing.T) {
+	t.Parallel()
+	// Two distinct EnvColor tokens with the same root-theme RGBA must compare unequal.
+	if property.Equal[color.Color](testEnvToken("a"), testEnvToken("b")) {
+		t.Fatal("distinct EnvColor tokens compared equal")
+	}
+	if !property.Equal[color.Color](testEnvToken("a"), testEnvToken("a")) {
+		t.Fatal("identical EnvColor tokens compared unequal")
+	}
+	if property.Equal[color.Color](testEnvToken("a"), color.White) {
+		t.Fatal("EnvColor token compared equal to concrete color")
+	}
+	var nilRGBA *color.RGBA
+	if !property.Equal[color.Color](nilRGBA, nil) || !(TextStyle{Color: nilRGBA}).Equal(TextStyle{}) {
+		t.Fatal("typed-nil color did not compare equal to nil")
+	}
+	if (TextStyle{Color: testEnvToken("a")}).Equal(TextStyle{Color: testEnvToken("b")}) {
+		t.Fatal("TextStyle.Equal treated distinct EnvColors as equal")
+	}
+
+	// Non-comparable Env values (including structs with uncomparable interfaces)
+	// must not panic in Env.With / Env.memo.
+	type wrap struct{ V any }
+	kSlice := NewEnvKey[[]int]("slice")
+	kWrap := NewEnvKey[wrap]("wrap")
+	e := Env{}.With(kSlice, []int{1, 2}).With(kWrap, wrap{V: []int{3}})
+	if got, ok := e.Get(kSlice); !ok || len(got) != 2 {
+		t.Fatalf("slice env value = %v, %v", got, ok)
+	}
+
+	// envMemo.put updating an existing key at capacity must not rotate generations.
+	var m envMemo
+	for i := range envMemoMin {
+		m.put(derivedKey{from: uint64(i), key: textKey, val: i}, Env{rev: uint64(i)})
+	}
+	m.put(derivedKey{from: 0, key: textKey, val: 0}, Env{rev: 999})
+	if len(m.prev) != 0 {
+		t.Fatalf("updating an existing envMemo key rotated generations (prev=%d)", len(m.prev))
 	}
 }

@@ -95,7 +95,7 @@ func Shade(dst *ggfx.Image, f Field, col color.Color) {
 			return
 		}
 	}
-	if f.Half.W < 0 || f.Half.H < 0 {
+	if f.Half.W <= 0 || f.Half.H <= 0 {
 		return
 	}
 	// A turned shape covers the box its corners reach, not its own.

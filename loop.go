@@ -384,7 +384,10 @@ func (l *frameLoop) close() {
 }
 
 // post queues fn to run on the UI thread before the next frame's input.
-func (l *frameLoop) post(fn func()) {
+func (l *frameLoop) post(fn func()) { l.tryPost(fn) }
+
+// tryPost queues fn like post and reports whether l was still open to accept it.
+func (l *frameLoop) tryPost(fn func()) bool {
 	l.postMu.Lock()
 	queued := !l.closed
 	if queued {
@@ -396,6 +399,7 @@ func (l *frameLoop) post(fn func()) {
 	if queued && l.wake != nil {
 		l.wake()
 	}
+	return queued
 }
 
 // hasPosted reports whether work is waiting for the next frame.
@@ -553,8 +557,11 @@ func (l *frameLoop) paint(p paintPass) (bool, error) {
 	// done. The buffer of the frame before takes the new regions: input
 	// keeps copies of the regions it follows, never a pointer into it.
 	spare, spareWithins := f.prev, f.prevWithins
-	f.prev, f.hits = f.hits, spare[:0]
-	f.prevWithins, f.withins = f.withins, spareWithins[:0]
+	clear(spare)
+	clear(spareWithins)
+	spare, spareWithins = spare[:0], spareWithins[:0]
+	f.prev, f.hits = f.hits, spare
+	f.prevWithins, f.withins = f.withins, spareWithins
 	// A frame that ends before painting leaves the buffers as they were,
 	// so the one input routes to is never painted into.
 	unswap := func() {

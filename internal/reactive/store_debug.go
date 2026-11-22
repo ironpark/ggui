@@ -38,6 +38,11 @@ func watchSelect[M, T any](s *Store[M], d *DerivedValue[T], fn func(M) T) {
 		if d.eff.disposed {
 			return false, false
 		}
+		// A Select that has not been evaluated yet or is currently dirty from
+		// a published store change must not be eagerly evaluated here.
+		if d.eff.state == stateDirty || len(d.eff.sources) == 0 {
+			return false, true
+		}
 		return !same(d, Untrack(d.Get), fn(s.model)), true
 	}})
 }

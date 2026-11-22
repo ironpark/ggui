@@ -588,13 +588,11 @@ func (s *Interactive) AutoKey() { s.auto = reactive.AutoID() }
 
 // Semantics implements Semantic.
 func (s *Interactive) Semantics() (Role, string) {
-	return s.Role, s.SemanticName(
-
-	// ConsumesKey implements KeyConsumer: a control acts on Space and Enter.
-	// A control that acts on more keys overrides it.
-	)
+	return s.Role, s.SemanticName()
 }
 
+// ConsumesKey implements KeyConsumer: a control acts on Space and Enter.
+// A control that acts on more keys overrides it.
 func (s *Interactive) ConsumesKey(ev KeyEvent) bool { return Activates(ev) }
 
 // BindInert borrows a non-nil reader for input availability.
@@ -733,7 +731,14 @@ type FocusRef struct {
 // posted work is this frame. Focus inside an open dialog's trap stays
 // there; a widget outside it is not focused. It does nothing to an attached
 // widget with nothing focusable, such as a disabled field.
-func (f *FocusRef) Focus() { f.pending = true }
+func (f *FocusRef) Focus() {
+	f.pending = true
+	if h, ok := LookupHost(); ok {
+		if w, ok := h.(*Window); ok {
+			w.markDirty(dirtyOther)
+		}
+	}
+}
 
 // Focused reports whether focus was inside the attached widget when it
 // was last painted.
@@ -794,6 +799,7 @@ type CachedWidget struct {
 	// cache's alone, so a source is kept once, not by every cache above it.
 	sources []sourceRead
 	kids    []kidCache
+	kidIdx  map[*CachedWidget]int // lazy index into kids once len(kids) > mostScannedReads
 
 	outer   *CachedWidget // the nearest Cached above, told when this one is
 	dirty   bool
@@ -869,6 +875,7 @@ func (c *CachedWidget) Layout(cs Constraints, env Env) Size {
 	}
 	clear(c.kids)
 	c.sources, c.kids = c.sources[:0], c.kids[:0]
+	clear(c.kidIdx)
 	c.measuring = true
 	reactive.Measure(c.record, func() { c.size = c.child.Layout(cs, env.With(cacheOwner, c)) })
 	c.measuring = false
@@ -889,10 +896,30 @@ func (c *CachedWidget) tellOuter() {
 	if o == nil {
 		return
 	}
-	for i := range o.kids {
-		if o.kids[i].c == c {
+	if o.kidIdx != nil && len(o.kidIdx) == len(o.kids) {
+		if i, ok := o.kidIdx[c]; ok {
 			o.kids[i].gen = c.gen
 			return
+		}
+	} else if len(o.kids) > mostScannedReads {
+		if o.kidIdx == nil {
+			o.kidIdx = make(map[*CachedWidget]int, len(o.kids)+1)
+		} else {
+			clear(o.kidIdx)
+		}
+		for i, k := range o.kids {
+			o.kidIdx[k.c] = i
+		}
+		if i, ok := o.kidIdx[c]; ok {
+			o.kids[i].gen = c.gen
+			return
+		}
+	} else {
+		for i := range o.kids {
+			if o.kids[i].c == c {
+				o.kids[i].gen = c.gen
+				return
+			}
 		}
 	}
 	if !o.measuring && len(o.kids) >= mostLateKids {
@@ -900,7 +927,11 @@ func (c *CachedWidget) tellOuter() {
 		o.invalidate()
 		return
 	}
+	idx := len(o.kids)
 	o.kids = append(o.kids, kidCache{c, c.gen})
+	if o.kidIdx != nil {
+		o.kidIdx[c] = idx
+	}
 }
 
 // Paint implements Widget.

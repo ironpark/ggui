@@ -361,3 +361,45 @@ func TestEqualComparesPlainValuesWithoutAllocating(t *testing.T) {
 		t.Error("a NaN inside a struct reads as unchanged")
 	}
 }
+
+func TestEqualRegisterEqualPlainNamedFloatAndTypedNilColor(t *testing.T) {
+	t.Parallel()
+	// RegisterEqual must run even for a plain struct.
+	type plainRegistered struct{ A, B int }
+	RegisterEqual(func(x, y plainRegistered) bool { return x.A == y.A })
+	if !Equal(plainRegistered{1, 2}, plainRegistered{1, 99}) {
+		t.Fatal("RegisterEqual was ignored for a plain struct")
+	}
+	if Equal(plainRegistered{1, 2}, plainRegistered{2, 2}) {
+		t.Fatal("RegisterEqual returned true for unequal plain structs")
+	}
+
+	// Named float kinds treat NaN as equal to NaN.
+	type f64 float64
+	type f32 float32
+	nan := math.NaN()
+	if !Equal(f64(nan), f64(nan)) {
+		t.Fatal("named float64 NaNs compared unequal")
+	}
+	if !Equal(f32(nan), f32(nan)) {
+		t.Fatal("named float32 NaNs compared unequal")
+	}
+	if !Equal[any](f64(nan), f64(nan)) {
+		t.Fatal("named float64 NaNs inside any compared unequal")
+	}
+
+	// Typed-nil color.Color must not panic.
+	var nilRGBA *color.RGBA
+	if !Equal[color.Color](nilRGBA, nilRGBA) {
+		t.Fatal("two typed-nil colors compared unequal")
+	}
+	if Equal[color.Color](nilRGBA, color.Black) {
+		t.Fatal("typed-nil color compared equal to non-nil color")
+	}
+	if !Equal[*color.RGBA](nil, nil) {
+		t.Fatal("nil *color.RGBA compared unequal to nil")
+	}
+	if Equal[*color.RGBA](nil, &color.RGBA{}) {
+		t.Fatal("nil *color.RGBA compared equal to non-nil *color.RGBA")
+	}
+}

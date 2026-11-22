@@ -741,3 +741,53 @@ func TestAMotionMovedInLayoutAllocatesNothing(t *testing.T) {
 		t.Fatalf("%v allocations a step", n)
 	}
 }
+
+func TestAnimEdgeCases(t *testing.T) {
+	t.Parallel()
+	// Nil easing defaults to EaseOut and repeated Set to same target keeps progress.
+	tw := Tween(0.0, 100*time.Millisecond).Easing(nil)
+	tw.Set(100)
+	t0 := time.Unix(1000, 0)
+	tw.step(t0)
+	tw.step(t0.Add(50 * time.Millisecond))
+	mid := Untrack(tw.Get)
+	if mid <= 0 || mid >= 100 {
+		t.Fatalf("mid = %v, want (0, 100)", mid)
+	}
+	tw.Set(100) // same target while running: must not reset start
+	tw.step(t0.Add(100 * time.Millisecond))
+	if Untrack(tw.Get) != 100 || tw.active() {
+		t.Fatalf("after same-target Set: val=%v active=%v, want 100 false", Untrack(tw.Get), tw.active())
+	}
+
+	// Motion.MoveTo from rest starts motion without spuriously calling frame.animate()
+	// (so contained callers using At(now) keep damage inside their viewport); Value reports moving.
+	var m Motion
+	m.MoveTo(0, t0, 100*time.Millisecond)
+	m.MoveTo(1, t0, 100*time.Millisecond)
+	if _, moving := m.At(t0); !moving {
+		t.Fatal("Motion.At should report moving after MoveTo to new target")
+	}
+
+	// Sprung.Set when already at rest at target does not activate.
+	sp := Spring(5.0)
+	sp.Set(5.0)
+	if sp.active() {
+		t.Fatal("Sprung.Set at rest activated animation")
+	}
+
+	// TimelineValue.step clamps negative elapsed and fast-forwards huge jumps.
+	tl := Timeline(10 * time.Millisecond).Repeat(-1).Alternate()
+	tl.Play()
+	tl.step(t0)
+	tl.step(t0.Add(-5 * time.Millisecond))
+	if got := Untrack(tl.Get); got < 0 || got > 1 {
+		t.Fatalf("negative elapsed gave out-of-range progress %v", got)
+	}
+	// 10 hours = 3,600,000 cycles: must complete instantaneously via modulo fast-forward.
+	tl.step(t0.Add(10*time.Hour + 25*time.Millisecond))
+	if got := Untrack(tl.Get); math.Abs(got-0.5) > 1e-6 {
+		t.Fatalf("after 10h+25ms alternating 10ms timeline: got %v, want 0.5", got)
+	}
+	tl.Stop()
+}

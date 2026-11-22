@@ -208,3 +208,79 @@ func TestResourceDisposedComponentIgnoresCompletionWhileAppLives(t *testing.T) {
 		t.Fatal("disposed resource accepted a result")
 	}
 }
+
+func TestRememberSupportsMultipleLiveHoldersAndPanicDrop(t *testing.T) {
+	t.Parallel()
+	showA, showB := State(true), State(true)
+	inits, disposed := 0, 0
+	var gotA, gotB *int
+	p := ProbeBuilder(func() Widget {
+		return column(
+			View(showA, func(on bool) Widget {
+				if on {
+					gotA = Remember("shared", func() *int {
+						inits++
+						OnCleanup(func() { disposed++ })
+						n := inits
+						return &n
+					})
+				}
+				return sized(1, 1)
+			}),
+			View(showB, func(on bool) Widget {
+				if on {
+					gotB = Remember("shared", func() *int {
+						inits++
+						OnCleanup(func() { disposed++ })
+						n := inits
+						return &n
+					})
+				}
+				return sized(1, 1)
+			}),
+		)
+	}, Sz(10, 10))
+	defer p.Close()
+	p.Frame()
+	if inits != 1 || gotA != gotB || disposed != 0 {
+		t.Fatalf("initial: inits=%d same=%v disposed=%d", inits, gotA == gotB, disposed)
+	}
+
+	// View B stops asking; View A still holds it, so it must not be disposed.
+	showB.Set(false)
+	p.Frame()
+	if disposed != 0 {
+		t.Fatalf("disposed shared Remember entry while View A still held it (disposed=%d)", disposed)
+	}
+
+	// Now View A also stops asking; entry must be disposed.
+	showA.Set(false)
+	p.Frame()
+	if disposed != 1 {
+		t.Fatalf("disposed=%d after all holders dropped, want 1", disposed)
+	}
+
+	// Panic inside boundary.build still drops stale entries via defer.
+	droppedOnPanic := false
+	disposeRoot := Root(func() {
+		remembering(func() int {
+			b := newBoundary()
+			b.build(func() Widget {
+				Remember("stale", func() int {
+					OnCleanup(func() { droppedOnPanic = true })
+					return 1
+				})
+				return sized(1, 1)
+			})
+			func() {
+				defer func() { recover() }()
+				b.build(func() Widget { panic("build boom") })
+			}()
+			return 0
+		})
+	})
+	defer disposeRoot()
+	if !droppedOnPanic {
+		t.Fatal("stale Remember entry was not dropped when boundary.build panicked")
+	}
+}

@@ -88,7 +88,11 @@ func (f *frameState) closeScope(w Widget, marks uint64) {
 	if n := len(f.scopes); n > 0 {
 		p := &f.scopes[n-1]
 		p.kids += total
-		p.bounds = p.bounds.Cover(s.bounds)
+		// Do not merge unplaced local bounds (from inside a Transform or
+		// shape clip) into a placed parent's window-coordinate bounds.
+		if s.placed || !p.placed {
+			p.bounds = p.bounds.Cover(s.bounds)
+		}
 	}
 }
 
@@ -185,6 +189,7 @@ type motionState struct {
 func (f *motionState) startMotion() {
 	f.scopes, f.motion, f.movers = f.scopes[:0], f.motion[:0], f.movers[:0]
 	f.motionLost, f.overlaid, f.spilled = false, false, false
+	f.partial, f.regions, f.moved = false, nil, false
 }
 
 // noteMotion decides, after a frame painted into target, whether the next
@@ -387,7 +392,14 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 	// observes input or listens for a shortcut: what the last whole frame
 	// registered stands.
 	background := w.background()
+	committed := false
 	f.partial, f.regions, f.moved = true, damage, pointer
+	defer func() {
+		f.partial, f.regions, f.moved = false, nil, false
+		if !committed {
+			f.retained.abortPartial()
+		}
+	}()
 	opened := func() bool {
 		defer reactive.EnterLayout()()
 		for _, d := range damage {
@@ -402,14 +414,13 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 				// delay, and shows beyond the regions. The frame is painted
 				// whole instead, over what this one painted, and its overlays
 				// queued again.
+				clear(f.overlays)
 				f.overlays = f.overlays[:0]
 				return true
 			}
 		}
 		return false
 	}()
-	f.partial, f.regions, f.moved = false, nil, false
-	f.retained.endPartial()
 	switch {
 	case opened:
 		framestats.Refuse("overlay")
@@ -418,6 +429,8 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 		framestats.Refuse("spilled")
 		return false
 	}
+	f.retained.endPartial()
+	committed = true
 	// The layers are trimmed by whole frames alone: one painted in part
 	// uses those of the regions it paints, and freeing the rest would make
 	// the next whole frame allocate them again.
@@ -428,14 +441,17 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 	w.drew = FramePartial
 	if setDamage != nil {
 		// setDamage copies what it is given: the slice is the window's.
+		bounds := target.Bounds()
 		w.damagePx = w.damagePx[:0]
 		for _, r := range now {
-			w.damagePx = append(w.damagePx, c.physical(r))
+			if px := c.physical(r).Intersect(bounds); !px.Empty() {
+				w.damagePx = append(w.damagePx, px)
+			}
 		}
 		setDamage(w.damagePx)
 	}
 	w.noteMotion(target)
-	w.presentBackdrop(screen, target)
+	w.finishBackdrop(screen, target, true)
 	return true
 }
 

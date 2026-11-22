@@ -375,3 +375,26 @@ func TestClipNestsAndTrimsRegions(t *testing.T) {
 		t.Fatalf("hits = %+v, want one region trimmed to {25 25 25 25}", c.hits)
 	}
 }
+
+func TestPhysicalGuardsEmptyAndNonFiniteAndComparableIDRejectsUncomparableInterface(t *testing.T) {
+	t.Parallel()
+	c := &Canvas{scale: 2}
+	for _, r := range []Rect{
+		Rct(Pt(10.3, 10.3), Sz(0, 0)),
+		Rct(Pt(10, 10), Sz(-5, 10)),
+		Rct(Pt(math.NaN(), 0), Sz(10, 10)),
+		Rct(Pt(0, 0), Sz(math.Inf(1), 10)),
+	} {
+		if got := c.physical(r); !got.Empty() {
+			t.Fatalf("physical(%+v) = %v, want empty", r, got)
+		}
+	}
+
+	type idWrap struct{ V any }
+	if comparableID(idWrap{V: []int{1}}) {
+		t.Fatal("comparableID accepted struct containing slice inside interface")
+	}
+	if !comparableID(idWrap{V: "ok"}) {
+		t.Fatal("comparableID rejected struct containing string inside interface")
+	}
+}

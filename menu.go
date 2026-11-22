@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ironpark/ggui/internal/platform/nativemenu"
+	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggwd/native"
 )
 
@@ -38,11 +39,12 @@ type MenuItem struct {
 	Checked   Readable[bool]
 	Items     []MenuItem // a submenu's entries
 	Separator bool
+	submenu   bool // distinguishes an empty Menu(...) submenu from an action
 }
 
 // Menu returns a menu, or a submenu within one, labelled label.
 func Menu(label string, items ...MenuItem) MenuItem {
-	return MenuItem{Label: label, Items: items}
+	return MenuItem{Label: label, Items: items, submenu: true}
 }
 
 // MenuAction returns an entry that runs run, on chord when it is not
@@ -106,10 +108,19 @@ type menuSet struct {
 // Checked readers until release.
 func (a *App) newMenuSet(items []MenuItem) *menuSet {
 	s := &menuSet{items: items}
-	s.dispose = Root(func() {
-		for _, m := range items {
-			s.native = append(s.native, a.nativeItem(s, m))
-		}
+	var rt *reactive.Runtime
+	if a.Window != nil {
+		rt = a.rt
+	}
+	if rt == nil {
+		rt = reactive.Base()
+	}
+	reactive.WithOwner(nil, func() {
+		s.dispose = rt.Root(func() {
+			for _, m := range items {
+				s.native = append(s.native, a.nativeItem(s, m))
+			}
+		})
 	})
 	return s
 }
@@ -159,7 +170,7 @@ func (a *App) nativeItem(s *menuSet, m MenuItem) nativemenu.Item {
 	if m.Separator {
 		return nativemenu.Item{Separator: true}
 	}
-	if len(m.Items) > 0 {
+	if m.submenu || len(m.Items) > 0 {
 		it := nativemenu.Item{Title: m.Label}
 		for _, e := range m.Items {
 			it.Items = append(it.Items, a.nativeItem(s, e))
@@ -247,7 +258,7 @@ func (a *App) addMenuShortcuts(w *Window) {
 	}
 	for _, id := range a.menu.ids {
 		if chord := a.actions[id].Chord; chord != "" {
-			w.menuShortcuts = append(w.menuShortcuts, w.Shortcut(chord, func() { a.runAction(id) }))
+			w.menuShortcuts = append(w.menuShortcuts, w.Shortcut(chord, func() { a.runActionIn(w, id) }))
 		}
 	}
 }
@@ -329,7 +340,7 @@ func NativeContextMenu() bool { return nativemenu.ContextSupported() }
 // It returns false if the platform is unsupported, the window is not open, or
 // there are no entries; dismissal without selecting an action still returns true.
 func (w *Window) ShowContextMenu(at Point, items ...MenuItem) bool {
-	if w == nil || w.Closed() || !NativeContextMenu() || len(items) == 0 {
+	if w == nil || w.app == nil || w.Closed() || !NativeContextMenu() || len(items) == 0 {
 		return false
 	}
 	nw := w.window.Load()

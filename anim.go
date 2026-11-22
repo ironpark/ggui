@@ -298,6 +298,9 @@ func (t *Tweened[T]) Set(target T) {
 	if t.disposed {
 		return
 	}
+	if t.running && property.Equal(t.to, target) {
+		return
+	}
 	t.from, t.to = Untrack(t.sig.Get), target
 	if t.duration <= 0 && t.delay <= 0 || property.Equal(t.from, t.to) {
 		t.sig.Set(target)
@@ -342,7 +345,11 @@ func (t *Tweened[T]) step(now time.Time) bool {
 		t.running = false
 		return false
 	}
-	f := t.ease(gem.Clamp(p, 0, 1))
+	ease := t.ease
+	if ease == nil {
+		ease = EaseOut
+	}
+	f := ease(gem.Clamp(p, 0, 1))
 	if !t.running {
 		return false
 	}
@@ -439,9 +446,22 @@ func (s *Sprung[T]) Set(target T) {
 	if s.disposed {
 		return
 	}
+	to := s.vec.Split(target)
+	if !s.running && property.Equal(s.goal, target) {
+		atRest := true
+		for i := range s.k {
+			if s.k[i].Pos != to[i] || s.k[i].Vel != 0 {
+				atRest = false
+				break
+			}
+		}
+		if atRest {
+			return
+		}
+	}
 	s.goal = target
-	for i, to := range s.vec.Split(target) {
-		s.k[i].To = to
+	for i, v := range to {
+		s.k[i].To = v
 	}
 	if !s.running {
 		s.last = time.Time{}
@@ -543,8 +563,10 @@ func (m *Motion) MoveTo(target float64, now time.Time, d time.Duration) {
 	}
 }
 
-// moveTo is MoveTo, reporting whether the motion was under way at now
-// rather than asking for a frame for it.
+// moveTo is MoveTo, reporting whether the motion was already under way at now
+// rather than asking for a frame for it. Callers that drive their own frames
+// via At (such as ScrollWidget's contained scroll animation) rely on MoveTo
+// from rest not calling frame.animate(); Paint callers follow MoveTo with Value.
 func (m *Motion) moveTo(target float64, now time.Time, d time.Duration) (moving bool) {
 	if !m.init || d <= 0 {
 		m.duration = 0
@@ -907,7 +929,7 @@ func (tl *TimelineValue) step(now time.Time) bool {
 	for {
 		end := tl.end()
 		left := (end - tl.from) * tl.dir // the part of the run still ahead
-		elapsed := float64(now.Sub(tl.start)) / d
+		elapsed := max(float64(now.Sub(tl.start))/d, 0)
 		if elapsed < left {
 			tl.sig.Set(tl.from + tl.dir*elapsed)
 			return true
@@ -919,7 +941,11 @@ func (tl *TimelineValue) step(now time.Time) bool {
 			return false
 		}
 		// The cycle ended inside this frame: start the next where it did.
-		tl.start = tl.start.Add(time.Duration(left * d))
+		if left == 1 {
+			tl.start = tl.start.Add(tl.duration)
+		} else {
+			tl.start = tl.start.Add(time.Duration(left * d))
+		}
 		if tl.left > 0 {
 			tl.left--
 		}
@@ -934,6 +960,24 @@ func (tl *TimelineValue) step(now time.Time) bool {
 			tl.from, tl.dir = end, -tl.dir
 		} else {
 			tl.from = 1 - end
+		}
+		// Fast-forward full cycles modulo duration when no OnDone callbacks
+		// need to fire per cycle, preventing UI freezes after a long pause.
+		if len(tl.done) == 0 && tl.left != 0 {
+			if rem := now.Sub(tl.start); rem >= tl.duration {
+				cycles := int64(rem / tl.duration)
+				if tl.left > 0 && cycles > int64(tl.left) {
+					cycles = int64(tl.left)
+				}
+				tl.start = tl.start.Add(time.Duration(cycles) * tl.duration)
+				if tl.left > 0 {
+					tl.left -= int(cycles)
+				}
+				if tl.alternate && cycles%2 == 1 {
+					end2 := tl.end()
+					tl.from, tl.dir = end2, -tl.dir
+				}
+			}
 		}
 	}
 }
