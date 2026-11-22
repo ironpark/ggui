@@ -462,9 +462,11 @@ func (n *Native) finish(ctx context.Context, r buildResult) error {
 		}
 		return nil
 	}
-	if ctx.Err() != nil {
+	select {
+	case <-ctx.Done():
 		n.step.Stop()
 		return nil
+	default:
 	}
 	if r.err != nil {
 		what := "build failed"

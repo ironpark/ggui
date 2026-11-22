@@ -235,7 +235,7 @@ func (s *inotify) addTree(dir string) {
 			return filepath.SkipAll
 		}
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr // an unreadable entry is skipped; the walk goes on
 		}
 		if p != dir {
 			s.push(p)
