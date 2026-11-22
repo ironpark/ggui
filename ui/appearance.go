@@ -237,31 +237,30 @@ func colorOr(value, fallback color.Color) color.Color {
 // Shared hover timing for disclosure headers, independent of their opening motion.
 var disclosureHoverSlot = ggui.NewSlot[*ggui.Motion]("disclosure hover")
 
+// Ring describes a keyboard focus indicator: Color strokes the border of
+// Rect, rounded by Radius, and a soft three-pixel halo surrounds it. The
+// ring eases in and out over Motion (typically env.Motion(Theme.MotionFast),
+// which lands at once under reduced motion); zero switches at once.
+type Ring struct {
+	Theme  *uitheme.Theme
+	Rect   ggui.Rect
+	Radius float64
+	Color  color.Color
+	Motion time.Duration
+}
+
 // FocusRing draws the keyboard focus indicator for a control: a border stroke
-// in ring and a soft three-pixel halo outside r, easing in and out over motion
-// (typically env.Motion(t.MotionFast)).
-func FocusRing(dst *ggui.Canvas, state *ggui.Interactive, t *uitheme.Theme, r ggui.Rect, radius float64, ring color.Color, motion time.Duration) {
-	focusRing(dst, state, t, r, radius, ring, motion)
-}
-
-// controlFocusRing draws the keyboard focus of a control: the ring color on
-// its border and the three-pixel soft halo around it. The ring eases in and
-// out over motion (typically env.Motion(t.MotionFast), which lands at once
-// under reduced motion), retained under the control's identity, and rests once
-// it arrives, so an idle control asks for no frame.
-func controlFocusRing(dst *ggui.Canvas, state *ggui.Interactive, t *uitheme.Theme, r ggui.Rect, radius float64, ring color.Color, motion time.Duration) {
-	focusRing(dst, state, t, r, radius, ring, motion)
-}
-
-// focusRing is controlFocusRing easing over motion; zero switches at once.
-func focusRing(dst *ggui.Canvas, state *ggui.Interactive, t *uitheme.Theme, r ggui.Rect, radius float64, ring color.Color, motion time.Duration) {
+// in ring.Color and a soft three-pixel halo outside ring.Rect, easing in and
+// out over ring.Motion, retained under the control's identity, and resting
+// once it arrives, so an idle control asks for no frame.
+func FocusRing(dst *ggui.Canvas, state *ggui.Interactive, ring Ring) {
 	on := state.Focused && state.FocusVisible && !state.IsInert()
-	k := ease(dst, t, state.Anchor(r), focusRingSlot, pick(on, 1.0, 0.0), motion)
+	k := ease(dst, ring.Theme, state.Anchor(ring.Rect), focusRingSlot, pick(on, 1.0, 0.0), ring.Motion)
 	if k <= 0 {
 		return
 	}
-	dst.StrokeRoundRect(r, radius, t.BorderWidth, fade(ring, k))
-	haloStroke(dst, r, radius, fade(t.Halo(ring), k))
+	dst.StrokeRoundRect(ring.Rect, ring.Radius, ring.Theme.BorderWidth, fade(ring.Color, k))
+	haloStroke(dst, ring.Rect, ring.Radius, fade(ring.Theme.Halo(ring.Color), k))
 }
 
 // DashedBorder strokes a rounded dashed outline inside r with the given corner

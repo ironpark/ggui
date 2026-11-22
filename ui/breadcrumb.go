@@ -251,7 +251,7 @@ func (l *breadcrumbLink) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	l.Hit(dst, r, l, ggui.CursorShapePointer)
 	dst.Paint(l.label, r)
 	ring := ggui.Rct(r.Origin.Add(ggui.Pt(-3, 0)), ggui.Sz(r.Size.W+6, r.Size.H))
-	controlFocusRing(dst, &l.Interactive, t, ring, t.RadiusSm/2, t.Ring, l.motion)
+	FocusRing(dst, &l.Interactive, Ring{Theme: t, Rect: ring, Radius: t.RadiusSm / 2, Color: t.Ring, Motion: l.motion})
 }
 
 var breadcrumbHoverSlot = ggui.NewSlot[*ggui.Motion]("breadcrumb hover")

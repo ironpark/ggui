@@ -284,7 +284,7 @@ func (i *ItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	})
 	if i.onTap != nil {
 		// The ring is a shadow, which transition-colors does not ease.
-		focusRing(dst, &i.Interactive, t, r, t.Radius, t.Ring, 0)
+		FocusRing(dst, &i.Interactive, Ring{Theme: t, Rect: r, Radius: t.Radius, Color: t.Ring, Motion: 0})
 	}
 }
 

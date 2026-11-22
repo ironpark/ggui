@@ -829,7 +829,7 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	} else if selected {
 		dst.FillCircle(glyph.Center(), 4, t.PrimaryFg)
 	}
-	ui.FocusRing(dst, &c.Interactive, t, r, tokens.QuestionRadius, t.Ring, motion)
+	ui.FocusRing(dst, &c.Interactive, ui.Ring{Theme: t, Rect: r, Radius: tokens.QuestionRadius, Color: t.Ring, Motion: motion})
 }
 func (c *questionChoice) HandlePointer(ev ggui.PointerEvent) bool {
 	if c.IsInert() {

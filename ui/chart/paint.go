@@ -157,7 +157,7 @@ func (c *Widget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if c.legend {
 		c.paintLegend(dst, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+r.Size.H-legendH), ggui.Sz(r.Size.W, legendH)))
 	}
-	ui.FocusRing(dst, &c.Interactive, c.theme, r, c.theme.RadiusSm, c.theme.Ring, c.env.Motion(c.theme.MotionFast))
+	ui.FocusRing(dst, &c.Interactive, ui.Ring{Theme: c.theme, Rect: r, Radius: c.theme.RadiusSm, Color: c.theme.Ring, Motion: c.env.Motion(c.theme.MotionFast)})
 	if c.active >= 0 && c.active < len(c.data) && !c.tooltip.Disabled {
 		c.paintTooltip(dst, r)
 	}
