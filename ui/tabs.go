@@ -282,17 +282,7 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 	if !t.vertical {
 		header = ggui.Rct(r.Origin, ggui.Sz(r.Size.W, strip.Size.H))
 	}
-
-	t.labelRect = t.labelRect[:0]
-	for i, s := range t.labelSize {
-		var lr ggui.Rect
-		if t.vertical {
-			lr = ggui.Rct(ggui.Pt(strip.Origin.X+tabInset, strip.Origin.Y+tabInset+t.labelX[i]), ggui.Sz(max(strip.Size.W-2*tabInset, 0), s.H))
-		} else {
-			lr = mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+tabInset+t.labelX[i], r.Origin.Y+tabInset), ggui.Sz(s.W, max(strip.Size.H-2*tabInset, 0))), r, t.rtl)
-		}
-		t.labelRect = append(t.labelRect, lr)
-	}
+	t.placeLabels(strip, r)
 	cur := t.index()
 	// Each label eases into and out of being the shown one where it stands,
 	// as shadcn's triggers do under transition-all: the surface of the one
@@ -303,54 +293,11 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		t.shown = append(t.shown, controlkit.Ease(dst, t.theme, ggui.Anchor{Rect: header, ID: i}, tabShownSlot, pick(i == cur, 1.0, 0.0), t.motion))
 	}
 	if !t.line {
-		dst.FillRoundRect(strip, th.Radius, th.Muted)
-		dark := controlkit.IsDark(th.Bg)
-		for i, lr := range t.labelRect {
-			k := t.shown[i]
-			if k <= 0 {
-				continue
-			}
-			if dark {
-				dst.FillRoundRect(lr, th.RadiusSm, fade(fade(th.InputBorder, .3), k))
-				dst.StrokeRoundRect(lr, th.RadiusSm, th.BorderWidth, fade(th.InputBorder, k))
-				continue
-			}
-			shadow := th.CardShadow
-			shadow.Color = fade(shadow.Color, k)
-			dst.Shadow(lr, th.RadiusSm, shadow)
-			dst.FillRoundRect(lr, th.RadiusSm, fade(th.Bg, k))
-		}
+		t.paintStrip(dst, strip)
 	}
-	for i, lr := range t.labelRect {
-		dst.Describe(lr, tabLabel{t, i})
-		if !t.IsInert() && t.enabled(i) {
-			dst.HitPointer(lr, tabLabel{t, i})
-			dst.HitKey(lr, tabLabel{t, i})
-			dst.HitCursor(lr, ggui.CursorShapeDefault)
-		}
-		if label := t.labels[i]; label != nil {
-			over := i == t.hover && i != cur && !t.IsInert() && t.enabled(i)
-			hover := controlkit.Ease(dst, t.theme, ggui.Anchor{Rect: header, ID: i}, tabHoverSlot, pick(over, 1.0, 0.0), t.motion)
-			label.Color(t.labelColor(i, max(hover, t.shown[i])))
-		}
-		dst.Paint(t.heads[i], lr)
-	}
-	for i, lr := range t.labelRect {
-		k := t.shown[i]
-		if !t.line || k <= 0 {
-			continue
-		}
-		// The bar by the shown label is the text color whatever the accent,
-		// and nothing is ruled along the rest of the strip. It fades in
-		// and out with its label, shadcn's after:transition-opacity.
-		bar := fade(pick(t.IsInert() || !t.enabled(i), th.Disabled(th.Fg), th.Fg), k)
-		at := t.barRect(strip, lr)
-		if s := dst.Scale(); s > 0 && !t.vertical {
-			// On whole device pixels, as a browser snaps a box it paints:
-			// a pixel past the strip at 1x rather than a blurred edge.
-			at.Origin.Y = math.Round(at.Origin.Y*s) / s
-		}
-		dst.FillRect(at, bar)
+	t.paintLabels(dst, header, cur)
+	if t.line {
+		t.paintUnderlines(dst, strip)
 	}
 	if t.focusPending && t.focusIndex() >= 0 {
 		dst.RequestFocus(tabLabel{t, t.focusIndex()})
@@ -368,6 +315,90 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 			}
 		}
 		dst.Paint(t.tabs[cur].Content, ggui.Rct(at, t.bodySize))
+	}
+}
+
+// placeLabels finds where each label stands in strip, which lies in r:
+// one under another down a vertical strip, side by side along a
+// horizontal one, mirrored under right-to-left.
+func (t *TabsWidget) placeLabels(strip, r ggui.Rect) {
+	t.labelRect = t.labelRect[:0]
+	for i, s := range t.labelSize {
+		var lr ggui.Rect
+		if t.vertical {
+			lr = ggui.Rct(ggui.Pt(strip.Origin.X+tabInset, strip.Origin.Y+tabInset+t.labelX[i]), ggui.Sz(max(strip.Size.W-2*tabInset, 0), s.H))
+		} else {
+			lr = mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+tabInset+t.labelX[i], r.Origin.Y+tabInset), ggui.Sz(s.W, max(strip.Size.H-2*tabInset, 0))), r, t.rtl)
+		}
+		t.labelRect = append(t.labelRect, lr)
+	}
+}
+
+// paintStrip paints the muted strip of the default tabs and, under each
+// label as far as it is shown, the raised surface of the shown tab: a
+// card with its shadow on a light page, an outlined tint on a dark one.
+func (t *TabsWidget) paintStrip(dst *ggui.Canvas, strip ggui.Rect) {
+	th := t.theme
+	dst.FillRoundRect(strip, th.Radius, th.Muted)
+	dark := controlkit.IsDark(th.Bg)
+	for i, lr := range t.labelRect {
+		k := t.shown[i]
+		if k <= 0 {
+			continue
+		}
+		if dark {
+			dst.FillRoundRect(lr, th.RadiusSm, fade(fade(th.InputBorder, .3), k))
+			dst.StrokeRoundRect(lr, th.RadiusSm, th.BorderWidth, fade(th.InputBorder, k))
+			continue
+		}
+		shadow := th.CardShadow
+		shadow.Color = fade(shadow.Color, k)
+		dst.Shadow(lr, th.RadiusSm, shadow)
+		dst.FillRoundRect(lr, th.RadiusSm, fade(th.Bg, k))
+	}
+}
+
+// paintLabels paints each label as a tab of the strip's node, taking the
+// pointer and the keys while it can be picked, in the color of how far it
+// is shown or hovered. The shown label, cur, takes no hover, and the hover
+// eases under header.
+func (t *TabsWidget) paintLabels(dst *ggui.Canvas, header ggui.Rect, cur int) {
+	for i, lr := range t.labelRect {
+		dst.Describe(lr, tabLabel{t, i})
+		if !t.IsInert() && t.enabled(i) {
+			dst.HitPointer(lr, tabLabel{t, i})
+			dst.HitKey(lr, tabLabel{t, i})
+			dst.HitCursor(lr, ggui.CursorShapeDefault)
+		}
+		if label := t.labels[i]; label != nil {
+			over := i == t.hover && i != cur && !t.IsInert() && t.enabled(i)
+			hover := controlkit.Ease(dst, t.theme, ggui.Anchor{Rect: header, ID: i}, tabHoverSlot, pick(over, 1.0, 0.0), t.motion)
+			label.Color(t.labelColor(i, max(hover, t.shown[i])))
+		}
+		dst.Paint(t.heads[i], lr)
+	}
+}
+
+// paintUnderlines paints the bar of the line variant by each label as far
+// as it is shown.
+func (t *TabsWidget) paintUnderlines(dst *ggui.Canvas, strip ggui.Rect) {
+	th := t.theme
+	for i, lr := range t.labelRect {
+		k := t.shown[i]
+		if k <= 0 {
+			continue
+		}
+		// The bar by the shown label is the text color whatever the accent,
+		// and nothing is ruled along the rest of the strip. It fades in
+		// and out with its label, shadcn's after:transition-opacity.
+		bar := fade(pick(t.IsInert() || !t.enabled(i), th.Disabled(th.Fg), th.Fg), k)
+		at := t.barRect(strip, lr)
+		if s := dst.Scale(); s > 0 && !t.vertical {
+			// On whole device pixels, as a browser snaps a box it paints:
+			// a pixel past the strip at 1x rather than a blurred edge.
+			at.Origin.Y = math.Round(at.Origin.Y*s) / s
+		}
+		dst.FillRect(at, bar)
 	}
 }
 
