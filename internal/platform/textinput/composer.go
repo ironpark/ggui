@@ -175,22 +175,14 @@ func (c *Commit) SurroundingText() (before, after string) {
 func (c *Composer) Update() (handled bool, err error) {
 	for {
 		if c.s == nil {
-			var opts *SessionOptions
-			if c.OnNewSession != nil {
-				opts = c.OnNewSession()
-				if opts == nil {
-					break
-				}
-			}
-			var sess *session
-			sess, err = startSession(opts)
+			var open bool
+			open, err = c.openSession()
 			if err != nil {
 				return false, err
 			}
-			if sess == nil {
-				break
+			if !open {
+				return handled, nil
 			}
-			c.s = sess
 		}
 
 		if err = c.s.Update(); err != nil {
@@ -199,47 +191,91 @@ func (c *Composer) Update() (handled bool, err error) {
 			return handled, err
 		}
 
-		if c.s.IsCommitted() {
-			if c.OnCommit != nil {
-				c.OnCommit(c.s.Commit())
-			}
-			c.dispatchEmptyComposition()
-			// A commit whose key passes through to the game leaves handled false.
-			if !c.s.IsCommittedWithPassthroughKey() {
-				handled = true
-			}
-			endedByUser := c.s.IsClosedByUser()
-			c.s = nil
-			if endedByUser {
-				c.dispatchEndByUser()
-				break
-			}
-			continue
-		}
-
-		if c.s.IsClosed() {
-			// The user's ending discards no composition: what the user last saw
-			// is committed, as Confirm does.
-			if c.s.IsClosedByUser() && c.OnCommit != nil && c.s.loadComposition().text != "" {
-				c.OnCommit(c.s.compositionAsCommit())
-			}
-			endedByUser := c.s.IsClosedByUser()
-			c.s = nil
-			c.dispatchEmptyComposition()
-			if endedByUser {
-				c.dispatchEndByUser()
-			}
+		h, again := c.stepSession()
+		handled = handled || h
+		if !again {
 			break
 		}
-
-		// Active session: composing or idle.
-		c.dispatchComposition(c.s.Composition())
-		if c.s.IsCompositing() {
-			handled = true
-		}
-		break
 	}
 	return handled, nil
+}
+
+// stepSession dispatches what one session tick produced and reports
+// whether the loop should open another session: a commit the user did
+// not end leaves one more pass.
+func (c *Composer) stepSession() (handled, again bool) {
+	if c.s.IsCommitted() {
+		h, endedByUser := c.commitSession()
+		return h, !endedByUser
+	}
+	if c.s.IsClosed() {
+		c.closeSession()
+		return false, false
+	}
+	// Active session: composing or idle.
+	return c.dispatchActive(), false
+}
+
+// commitSession dispatches the committed text and an empty composition,
+// and reports whether the IME consumed the key and whether the user ended
+// the session.
+func (c *Composer) commitSession() (handled, endedByUser bool) {
+	if c.OnCommit != nil {
+		c.OnCommit(c.s.Commit())
+	}
+	c.dispatchEmptyComposition()
+	// A commit whose key passes through to the game leaves handled false.
+	handled = !c.s.IsCommittedWithPassthroughKey()
+	endedByUser = c.s.IsClosedByUser()
+	c.s = nil
+	if endedByUser {
+		c.dispatchEndByUser()
+	}
+	return handled, endedByUser
+}
+
+// openSession starts a session when the platform offers one, reporting
+// whether a session is running.
+func (c *Composer) openSession() (bool, error) {
+	var opts *SessionOptions
+	if c.OnNewSession != nil {
+		opts = c.OnNewSession()
+		if opts == nil {
+			return false, nil
+		}
+	}
+	sess, err := startSession(opts)
+	if err != nil {
+		return false, err
+	}
+	if sess == nil {
+		return false, nil
+	}
+	c.s = sess
+	return true, nil
+}
+
+// closeSession ends a session the platform closed: the user's ending
+// commits what they last saw, as Confirm does.
+func (c *Composer) closeSession() {
+	// The user's ending discards no composition: what the user last saw
+	// is committed, as Confirm does.
+	if c.s.IsClosedByUser() && c.OnCommit != nil && c.s.loadComposition().text != "" {
+		c.OnCommit(c.s.compositionAsCommit())
+	}
+	endedByUser := c.s.IsClosedByUser()
+	c.s = nil
+	c.dispatchEmptyComposition()
+	if endedByUser {
+		c.dispatchEndByUser()
+	}
+}
+
+// dispatchActive reports the session's composition and whether the IME
+// is composing.
+func (c *Composer) dispatchActive() bool {
+	c.dispatchComposition(c.s.Composition())
+	return c.s.IsCompositing()
 }
 
 // Confirm ends the current session if any. Any in-progress composition is
