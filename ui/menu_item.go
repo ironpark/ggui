@@ -377,22 +377,7 @@ func (it *MenuItemWidget) paintRow(dst *ggui.Canvas, r ggui.Rect) {
 	t := it.theme
 	// A disabled item takes no input but is still part of the menu.
 	dst.Describe(r, it)
-	lit := false
-	if !it.IsInert() {
-		dst.HitPointer(r, it)
-		lit = it.active || (it.onHover == nil && it.Hovered)
-		if lit {
-			var fill color.Color = t.Accent
-			radius := t.RadiusSm
-			switch {
-			case it.destructive:
-				fill = fade(t.Destructive, pick(controlkit.IsDark(t.Bg), .2, .1))
-			case it.style == commandStyle:
-				fill, radius = t.Muted, t.Radius*.6
-			}
-			dst.FillRoundRect(r, pick(it.radius > 0, it.radius, radius), fill)
-		}
-	}
+	lit := it.paintHighlight(dst, r)
 	ink := it.ink(lit)
 	it.text.Color(ink)
 	right := r.Origin.X + r.Size.W - it.pad.Right
@@ -425,6 +410,30 @@ func (it *MenuItemWidget) paintRow(dst *ggui.Canvas, r ggui.Rect) {
 		text = dst.Clip(r)
 	}
 	text.Paint(it.text, ggui.Rct(ggui.Pt(r.Origin.X+it.textX, r.Origin.Y+(r.Size.H-it.textSize.H)/2), it.textSize))
+}
+
+// paintHighlight registers the row's pointer input and paints the
+// highlight under it while it is active or hovered, and reports whether
+// it is lit.
+func (it *MenuItemWidget) paintHighlight(dst *ggui.Canvas, r ggui.Rect) bool {
+	if it.IsInert() {
+		return false
+	}
+	dst.HitPointer(r, it)
+	if lit := it.active || (it.onHover == nil && it.Hovered); !lit {
+		return false
+	}
+	t := it.theme
+	var fill color.Color = t.Accent
+	radius := t.RadiusSm
+	switch {
+	case it.destructive:
+		fill = fade(t.Destructive, pick(controlkit.IsDark(t.Bg), .2, .1))
+	case it.style == commandStyle:
+		fill, radius = t.Muted, t.Radius*.6
+	}
+	dst.FillRoundRect(r, pick(it.radius > 0, it.radius, radius), fill)
+	return true
 }
 
 // HandlePointer implements PointerHandler.

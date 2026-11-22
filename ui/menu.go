@@ -287,19 +287,25 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 			m.button.HandleKey(ev)
 		}
 	case ggui.KeyEnter, ggui.KeyNumpadEnter, ggui.KeySpace:
-		if open {
-			// With no row highlighted there is nothing to run, and the
-			// menu stays as it is.
-			m.key(ev)
-			return
-		}
-		m.button.HandleKey(ev)
-		if m.popup.IsOpen() {
-			// Opened from the keyboard, the menu starts on its first row.
-			m.jumpFirst()
-		}
+		m.keyActivate(ev)
 	default:
 		m.button.HandleKey(ev)
+	}
+}
+
+// keyActivate runs the highlighted row of an open menu, or opens a closed
+// one on its first row.
+func (m *MenuWidget) keyActivate(ev ggui.KeyEvent) {
+	if m.popup.IsOpen() {
+		// With no row highlighted there is nothing to run, and the
+		// menu stays as it is.
+		m.key(ev)
+		return
+	}
+	m.button.HandleKey(ev)
+	if m.popup.IsOpen() {
+		// Opened from the keyboard, the menu starts on its first row.
+		m.jumpFirst()
 	}
 }
 
