@@ -543,6 +543,7 @@ func (b *codeBlockBody) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	sides, ends := 2*c.pad, c.padTop+c.padBottom
 	// Plain logs need no second pass over every source line for gutter geometry.
 	if !c.lineNumbers && len(c.lineStyles) == 0 {
+		clear(b.lines)
 		b.lines, b.gutter = b.lines[:0], 0
 		textW := ggui.Unbounded
 		if c.wrap {
@@ -573,6 +574,9 @@ func (b *codeBlockBody) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	sourceLines := strings.Split(c.laidCode, "\n")
 	for len(b.lines) < len(sourceLines) {
 		b.lines = append(b.lines, codeBlockLine{number: widget.Text("").NoWrap().Align(1), marker: widget.Text("").NoWrap()})
+	}
+	if len(sourceLines) < len(b.lines) {
+		clear(b.lines[len(sourceLines):])
 	}
 	b.lines = b.lines[:len(sourceLines)]
 	b.gutter, b.numberW, b.markerW = 0, 0, 0
@@ -613,35 +617,37 @@ func (b *codeBlockBody) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	c := b.owner
 	// The gutter draws only the lines in view; a long log has few of them.
 	visible, gutter := dst.Visible(r), dst.Inert()
-	for i := range b.lines {
-		line := &b.lines[i]
-		at := r.Origin.Add(ggui.Pt(c.pad, c.padTop+line.top))
-		var fill color.Color
-		var annotation string
+	if !visible.Empty() {
 		words := c.words.orDefault()
-		switch line.style {
-		case CodeLineHighlighted:
-			fill, annotation = c.theme.Muted, words.HighlightedLineFormat
-		case CodeLineAdded:
-			fill, annotation = c.theme.Muted, words.AddedLineFormat
-		case CodeLineRemoved:
-			fill, annotation = fade(c.theme.Destructive, .1), words.RemovedLineFormat
-		}
-		if annotation != "" {
-			// The band runs from edge to edge of the viewport or the longest
-			// line, whichever is wider, with the line's leading shared above
-			// and below its glyphs.
-			dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, at.Y-b.leading/2), ggui.Sz(max(r.Size.W, c.viewportW), line.height)), fill)
-			dst.Leaf(ggui.Rct(at, ggui.Sz(max(0, r.Size.W-2*c.pad), line.height)), ggui.Node{Role: ggui.RoleText, Name: fmt.Sprintf(annotation, c.startLine+i)})
-		}
-		if at.Y+line.height < visible.Origin.Y || at.Y > visible.Origin.Y+visible.Size.H {
-			continue
-		}
-		if line.style == CodeLineAdded || line.style == CodeLineRemoved {
-			gutter.Paint(line.marker, ggui.Rct(ggui.Pt(r.Origin.X+c.theme.Space/2, at.Y), ggui.Sz(b.markerW, b.lineH)))
-		}
-		if c.lineNumbers {
-			gutter.Paint(line.number, ggui.Rct(at, ggui.Sz(b.numberW, b.lineH)))
+		for i := range b.lines {
+			line := &b.lines[i]
+			at := r.Origin.Add(ggui.Pt(c.pad, c.padTop+line.top))
+			if at.Y+line.height < visible.Origin.Y || at.Y > visible.Origin.Y+visible.Size.H {
+				continue
+			}
+			var fill color.Color
+			var annotation string
+			switch line.style {
+			case CodeLineHighlighted:
+				fill, annotation = c.theme.Muted, words.HighlightedLineFormat
+			case CodeLineAdded:
+				fill, annotation = c.theme.Muted, words.AddedLineFormat
+			case CodeLineRemoved:
+				fill, annotation = fade(c.theme.Destructive, .1), words.RemovedLineFormat
+			}
+			if annotation != "" {
+				// The band runs from edge to edge of the viewport or the longest
+				// line, whichever is wider, with the line's leading shared above
+				// and below its glyphs.
+				dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, at.Y-b.leading/2), ggui.Sz(max(r.Size.W, c.viewportW), line.height)), fill)
+				dst.Leaf(ggui.Rct(at, ggui.Sz(max(0, r.Size.W-2*c.pad), line.height)), ggui.Node{Role: ggui.RoleText, Name: fmt.Sprintf(annotation, c.startLine+i)})
+			}
+			if line.style == CodeLineAdded || line.style == CodeLineRemoved {
+				gutter.Paint(line.marker, ggui.Rct(ggui.Pt(r.Origin.X+c.theme.Space/2, at.Y), ggui.Sz(b.markerW, b.lineH)))
+			}
+			if c.lineNumbers {
+				gutter.Paint(line.number, ggui.Rct(at, ggui.Sz(b.numberW, b.lineH)))
+			}
 		}
 	}
 	dst.Paint(c.text, ggui.Rct(r.Origin.Add(ggui.Pt(c.pad+b.gutter, c.padTop)), b.textSize))

@@ -787,6 +787,10 @@ func (t *mdTable) update(b markdown.Block) bool {
 			t.names[r][c] = markdown.PlainText(cell)
 		}
 	}
+	if len(all) < len(t.cells) {
+		clear(t.cells[len(all):])
+		clear(t.names[len(all):])
+	}
 	t.cells, t.names = t.cells[:len(all)], t.names[:len(all)]
 	return true
 }

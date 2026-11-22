@@ -68,6 +68,8 @@ type QuestionnaireWidget struct {
 	view           ggui.Widget
 	choices        []*questionChoice
 	input          *TextFieldWidget
+	inputItem      string
+	rtl            bool
 	pendingFocus   bool
 	focusChoice    int
 	shortcuts      QuestionnaireShortcuts
@@ -420,6 +422,7 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	q.active.Get()
 	q.choices = nil
 	q.input = nil
+	q.inputItem = ""
 	i := q.current()
 	if i < 0 {
 		empty := Empty(english().NoQuestions, english().NoQuestionsDetail)
@@ -470,10 +473,8 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	}
 	if item.InputLabel != "" {
 		q.input = TextField(questionTextBinding{q, item}).Name(item.InputLabel).Placeholder(item.Placeholder)
-		q.input.Input().Key(struct {
-			Q    *QuestionnaireWidget
-			Item string
-		}{q, item.Name})
+		q.inputItem = item.Name
+		q.input.Input().Key(childKey{ownerOf(&q.Interactive, q), questionInputKey(item.Name)})
 		q.input.OnKey(func(ev ggui.KeyEvent) bool {
 			if ev.Key == ggui.KeyEnter && (ev.Mods.Ctrl || ev.Mods.Meta || strings.TrimSpace(q.answer(item).Text) != "") {
 				q.Next()
@@ -572,15 +573,22 @@ func (q *QuestionnaireWidget) shortcut(ev ggui.KeyEvent) bool {
 func (q *QuestionnaireWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer q.props.Layout().EndLayout()
 	q.words = stringsOf(env)
+	q.rtl = env.Direction() == ggui.DirRTL
 	size := q.view.Layout(c, env)
-	// The choices are built before a Key given after Questionnaire, so
-	// they take the questionnaire's identity here; see childKey.
+	// The choices and input are built before a Key given after Questionnaire,
+	// so they take the questionnaire's identity here; see childKey.
 	owner := ownerOf(&q.Interactive, q)
 	for _, c := range q.choices {
 		c.SetKey(childKey{owner, [2]string{c.item.Name, c.option.Value}})
 	}
+	if q.input != nil {
+		q.input.Input().Key(childKey{owner, questionInputKey(q.inputItem)})
+	}
 	return size
 }
+
+type questionInputKey string
+
 func (q *QuestionnaireWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.DescribeNode(r, q, func(dst *ggui.Canvas) { dst.Paint(q.view, r) })
 	if q.pendingFocus {
@@ -659,11 +667,12 @@ func (b *questionButton) HandleKey(ev ggui.KeyEvent) {
 	if b.q.shortcut(ev) {
 		return
 	}
-	if ev.Kind == ggui.KeyPress && ev.Key == ggui.KeyArrowLeft {
+	dir := directionalKey(ev, b.q.rtl)
+	if dir.Kind == ggui.KeyPress && dir.Key == ggui.KeyArrowLeft {
 		b.q.Previous()
 		return
 	}
-	if ev.Kind == ggui.KeyPress && ev.Key == ggui.KeyArrowRight {
+	if dir.Kind == ggui.KeyPress && dir.Key == ggui.KeyArrowRight {
 		b.q.Next()
 		return
 	}
@@ -777,7 +786,12 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Paint(c.body, r)
 	// The indicator is a checkbox's 4px-round square, or a radio's circle,
 	// with a 14px check or an 8px dot, as the Checkbox and RadioGroup draw.
-	glyph := ggui.Rct(r.Origin.Add(ggui.Pt(tokens.QuestionChoicePadding.Left, tokens.QuestionChoicePadding.Top+2)), squareGlyph(t))
+	glyphSize := squareGlyph(t)
+	glyphX := r.Origin.X + tokens.QuestionChoicePadding.Left
+	if c.env.Direction() == ggui.DirRTL {
+		glyphX = r.Origin.X + r.Size.W - tokens.QuestionChoicePadding.Right - glyphSize.W
+	}
+	glyph := ggui.Rct(ggui.Pt(glyphX, r.Origin.Y+tokens.QuestionChoicePadding.Top+2), glyphSize)
 	radius := pick(c.item.Multiple, 4, t.ControlSize/2)
 	dst.FillRoundRect(glyph, radius, fade(pick(selected, t.Primary, t.Input), strength))
 	dst.StrokeRoundRect(glyph, radius, t.BorderWidth, fade(pick(selected, t.Primary, t.InputBorder), strength))
@@ -786,7 +800,7 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	} else if selected {
 		dst.FillCircle(glyph.Center(), 4, t.PrimaryFg)
 	}
-	controlFocusRing(dst, &c.Interactive, t, r, tokens.QuestionRadius, t.Ring)
+	controlFocusRing(dst, &c.Interactive, t, r, tokens.QuestionRadius, t.Ring, motion)
 }
 func (c *questionChoice) HandlePointer(ev ggui.PointerEvent) bool {
 	if c.IsInert() {
@@ -802,14 +816,15 @@ func (c *questionChoice) HandleKey(ev ggui.KeyEvent) {
 		return
 	}
 	if ev.Kind == ggui.KeyPress {
-		switch ev.Key {
+		dir := directionalKey(ev, c.env.Direction() == ggui.DirRTL)
+		switch dir.Key {
 		case ggui.KeyArrowUp, ggui.KeyArrowDown:
-			c.q.focusAnswer(pick(ev.Key == ggui.KeyArrowUp, -1, 1), c.index)
+			c.q.focusAnswer(pick(dir.Key == ggui.KeyArrowUp, -1, 1), c.index)
 			return
 		case ggui.KeyArrowLeft, ggui.KeyArrowRight:
 			if !c.item.Multiple {
-				c.q.focusAnswer(pick(ev.Key == ggui.KeyArrowLeft, -1, 1), c.index)
-			} else if ev.Key == ggui.KeyArrowLeft {
+				c.q.focusAnswer(pick(dir.Key == ggui.KeyArrowLeft, -1, 1), c.index)
+			} else if dir.Key == ggui.KeyArrowLeft {
 				c.q.Previous()
 			} else {
 				c.q.Next()

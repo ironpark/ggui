@@ -28,6 +28,7 @@ type delim struct {
 	node      *inode
 	char      byte
 	n, orig   int // left of the run, and its length as written
+	seq       int // monotonic position on the stack, for openersBottom bounds
 	canOpen   bool
 	canClose  bool
 	prev, nxt *delim
@@ -43,13 +44,14 @@ type bracket struct {
 }
 
 type inlineParser struct {
-	s        string
-	pos      int
-	tail     bool // the end of s is where a stream was cut
-	root     inode
-	delims   *delim
-	brackets *bracket
-	noTicks  map[int]bool // backtick runs of a length with no closer left
+	s            string
+	pos          int
+	tail         bool // the end of s is where a stream was cut
+	root         inode
+	delims       *delim
+	nextDelimSeq int
+	brackets     *bracket
+	noTicks      map[int]bool // backtick runs of a length with no closer left
 }
 
 // parseInlines parses the inline content s of a block; tail says it ends
@@ -62,13 +64,15 @@ func parseInlines(s string, tail bool) []Inline {
 	for p.pos < len(s) {
 		p.step()
 	}
-	p.processEmphasis(nil, tail)
 	if tail {
-		// An open bracket at the cut is a link on its way.
+		// An open bracket at the cut is a link on its way; unlink it before
+		// processEmphasis so wrapping open delimiters does not move it under
+		// another parent where unlink would sever following siblings.
 		for b := p.brackets; b != nil; b = b.prev {
 			p.unlink(b.node)
 		}
 	}
+	p.processEmphasis(nil, tail)
 	return convert(p.root.first)
 }
 
@@ -294,7 +298,8 @@ func (p *inlineParser) delimiterRun(c byte) {
 	}
 	left := !isSpace(after) && (!isPunctuation(after) || isSpace(before) || isPunctuation(before))
 	right := !isSpace(before) && (!isPunctuation(before) || isSpace(after) || isPunctuation(after))
-	d := &delim{char: c, n: n, orig: n, prev: p.delims}
+	p.nextDelimSeq++
+	d := &delim{char: c, n: n, orig: n, seq: p.nextDelimSeq, prev: p.delims}
 	if c == '_' {
 		d.canOpen = left && (!right || isPunctuation(before))
 		d.canClose = right && (!left || isPunctuation(after))
@@ -335,12 +340,17 @@ func (p *inlineParser) removeDelim(d *delim) {
 // With closeOpen, those left open are closed at the end of the text, and
 // a run with nothing after it is left out.
 func (p *inlineParser) processEmphasis(bottom *delim, closeOpen bool) {
-	// openersBottom remembers, for each kind of closer, how far down the
-	// stack a search for its opener found none, so the next search stops
-	// there: the matching is linear rather than quadratic.
-	var openersBottom [18]*delim
+	// openersBottom remembers, for each kind of closer, the highest sequence
+	// number down the stack where a search for its opener found none, so the
+	// next search stops there even if earlier delimiters are removed or
+	// spliced out: the matching stays linear rather than quadratic.
+	var openersBottom [18]int
+	bottomSeq := 0
+	if bottom != nil {
+		bottomSeq = bottom.seq
+	}
 	for i := range openersBottom {
-		openersBottom[i] = bottom
+		openersBottom[i] = bottomSeq
 	}
 	closer := p.delims
 	if closer == bottom {
@@ -355,8 +365,9 @@ func (p *inlineParser) processEmphasis(bottom *delim, closeOpen bool) {
 			continue
 		}
 		idx := bottomIndex(closer)
+		stop := openersBottom[idx]
 		var opener *delim
-		for o := closer.prev; o != nil && o != bottom && o != openersBottom[idx]; o = o.prev {
+		for o := closer.prev; o != nil && o.seq > stop; o = o.prev {
 			if o.char != closer.char || !o.canOpen {
 				continue
 			}
@@ -377,7 +388,9 @@ func (p *inlineParser) processEmphasis(bottom *delim, closeOpen bool) {
 			break
 		}
 		if opener == nil {
-			openersBottom[idx] = closer.prev
+			if closer.prev != nil && closer.prev.seq > openersBottom[idx] {
+				openersBottom[idx] = closer.prev.seq
+			}
 			next := closer.nxt
 			if !closer.canOpen {
 				p.removeDelim(closer)
@@ -491,12 +504,16 @@ func (p *inlineParser) closeBracket() {
 	p.unlink(b.node)
 	p.pos = end
 	if !b.image {
-		// A link holds no other link: the brackets before it cannot close
-		// around it.
-		for o := p.brackets; o != nil; o = o.prev {
-			if !o.image {
-				o.active = false
-			}
+		p.deactivateLinks()
+	}
+}
+
+// deactivateLinks marks all open non-image brackets inactive: a link holds
+// no other link, so the brackets before it cannot close around it.
+func (p *inlineParser) deactivateLinks() {
+	for o := p.brackets; o != nil; o = o.prev {
+		if !o.image {
+			o.active = false
 		}
 	}
 }
@@ -633,6 +650,7 @@ func (p *inlineParser) autolink() bool {
 	link.first = &inode{kind: Text, text: inner}
 	link.last = link.first
 	p.append(link)
+	p.deactivateLinks()
 	p.pos = j + 1
 	return true
 }
@@ -712,7 +730,7 @@ func (p *inlineParser) extendedAutolink() bool {
 		return false
 	}
 	end := 0
-	for end < len(s) && s[end] > ' ' && s[end] != '<' {
+	for end < len(s) && s[end] > ' ' && s[end] != '<' && (p.brackets == nil || s[end] != ']') {
 		end++
 	}
 	link := s[:end]
@@ -747,6 +765,7 @@ func (p *inlineParser) extendedAutolink() bool {
 	n.first = &inode{kind: Text, text: link}
 	n.last = n.first
 	p.append(n)
+	p.deactivateLinks()
 	p.pos += len(link)
 	return true
 }

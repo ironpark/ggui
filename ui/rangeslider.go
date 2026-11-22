@@ -209,6 +209,9 @@ func (s *RangeSliderWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		h.Role = ggui.RoleSlider
 		s.thumbs = append(s.thumbs, h)
 	}
+	if n < len(s.thumbs) {
+		clear(s.thumbs[n:])
+	}
 	s.thumbs = s.thumbs[:n]
 	for i, h := range s.thumbs {
 		h.SetInert(s.IsInert())

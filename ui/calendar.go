@@ -275,7 +275,7 @@ func (c *CalendarWidget) syncDate() {
 	v := c.selectionAnchor()
 	if c.active.IsZero() || !v.Equal(c.last) {
 		if v.IsZero() {
-			c.show(c.date(ggui.Now()))
+			c.show(c.date(ggui.FrameTime()))
 		} else {
 			c.show(v)
 		}
@@ -443,9 +443,11 @@ func (f *calendarCaptionFace) Layout(cs ggui.Constraints, env ggui.Env) ggui.Siz
 
 func (f *calendarCaptionFace) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := uitheme.Of(f.env)
-	dst.Paint(f.text, ggui.Rct(ggui.Pt(r.Origin.X+t.Space/4, r.Origin.Y+(r.Size.H-f.size.H)/2), f.size))
-	center := ggui.Pt(r.Origin.X+r.Size.W-calendarCaptionChevron/2, r.Origin.Y+r.Size.H/2)
-	paintIconAt(dst, f.env, icons.ChevronDown, center, calendarCaptionChevron, pick(f.owner.IsInert(), t.Disabled(t.MutedFg), t.MutedFg), 0)
+	rtl := f.env.Direction() == ggui.DirRTL
+	textRect := mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+t.Space/4, r.Origin.Y+(r.Size.H-f.size.H)/2), f.size), r, rtl)
+	dst.Paint(f.text, textRect)
+	chevRect := mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-calendarCaptionChevron, r.Origin.Y+(r.Size.H-calendarCaptionChevron)/2), ggui.Sz(calendarCaptionChevron, calendarCaptionChevron)), r, rtl)
+	paintIconAt(dst, f.env, icons.ChevronDown, chevRect.Center(), calendarCaptionChevron, pick(f.owner.IsInert(), t.Disabled(t.MutedFg), t.MutedFg), 0)
 }
 
 // calendarCaptionChevron is the side of a caption dropdown's chevron.
@@ -671,7 +673,7 @@ func (c *CalendarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 		// Last, so the halo lies over the neighbouring days' fills.
 		if focus.Size.W > 0 {
-			controlFocusRing(dst, &c.Interactive, t, focus, t.RadiusSm, t.Ring)
+			controlFocusRing(dst, &c.Interactive, t, focus, t.RadiusSm, t.Ring, c.env.Motion(t.MotionFast))
 		}
 	})
 }

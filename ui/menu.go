@@ -89,9 +89,17 @@ func (m *MenuWidget) Name(s string) *MenuWidget { m.button.SetName(s); return m 
 func (m *MenuWidget) Disabled(v bool) *MenuWidget {
 	m.button.Disabled(v)
 	if v {
-		m.popup.Hide()
+		m.hide()
 	}
 	return m
+}
+
+// hide closes any open submenus and hides m's popup.
+func (m *MenuWidget) hide() {
+	m.closeSub()
+	if m.popup != nil {
+		m.popup.Hide()
+	}
 }
 
 // Semantics implements ggui.Semantic through the button.
@@ -192,7 +200,7 @@ func (m *MenuWidget) Popup() *widget.PopupWidget { return m.popup }
 
 func (m *MenuWidget) toggle() {
 	if m.popup.IsOpen() {
-		m.popup.Hide()
+		m.hide()
 		return
 	}
 	m.closeSub()
@@ -218,7 +226,7 @@ func (m *MenuWidget) Act(a ggui.Action) bool {
 		m.popup.Show()
 		m.jumpFirst()
 	case ggui.ActionCollapse:
-		m.popup.Hide()
+		m.hide()
 	default:
 		return false
 	}
@@ -230,7 +238,7 @@ func (m *MenuWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer m.props.Layout().EndLayout()
 	m.button.Sync()
 	if m.button.IsInert() {
-		m.popup.Hide()
+		m.hide()
 	}
 	t := uitheme.Of(env)
 	m.theme = t
@@ -240,6 +248,9 @@ func (m *MenuWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 
 // Paint implements Widget.
 func (m *MenuWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	if !m.popup.IsOpen() && m.sub != nil {
+		m.closeSub()
+	}
 	dst.Paint(m.popup, r)
 	if !m.button.IsInert() {
 		// On top of the button's own region, so the arrow keys reach the
@@ -251,7 +262,7 @@ func (m *MenuWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // HandleKey implements KeyHandler.
 func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 	if ev.Kind == ggui.KeyBlur {
-		m.popup.Hide()
+		m.hide()
 	}
 	if ev.Kind == ggui.KeyText && m.popup.IsOpen() {
 		m.typeahead(ev.Text)
@@ -265,7 +276,7 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 	switch ev.Key {
 	case ggui.KeyEscape:
 		if !open || !m.key(ev) {
-			m.popup.Hide()
+			m.hide()
 		}
 	case ggui.KeyArrowUp, ggui.KeyArrowDown:
 		if !open {
@@ -862,7 +873,7 @@ func MenuRadioGroup[T comparable](value ggui.Binding[T], options ...T) *MenuRadi
 	g := &MenuRadioGroupWidget[T]{value: value, options: append([]T(nil), options...)}
 	for _, option := range g.options {
 		row := MenuItem(sprint(option), func() { setChanged(value, option, g.onChange) }).
-			BindChecked(ggui.Map(value, func(v T) bool { return v == option }))
+			BindChecked(equalsReader[T]{r: value, v: option})
 		row.stay = true
 		g.rows = append(g.rows, row)
 		g.entries = append(g.entries, row)
@@ -873,6 +884,9 @@ func MenuRadioGroup[T comparable](value ggui.Binding[T], options ...T) *MenuRadi
 
 // Format sets how each option is shown.
 func (g *MenuRadioGroupWidget[T]) Format(fn func(T) string) *MenuRadioGroupWidget[T] {
+	if fn == nil {
+		fn = sprint[T]
+	}
 	for i, row := range g.rows {
 		row.label = fn(g.options[i])
 		row.text.Content(row.label)
@@ -913,6 +927,9 @@ func (g *MenuRadioGroupWidget[T]) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Pai
 // of.
 func (it *MenuItemWidget) dismiss() {
 	for it != nil {
+		if it.menu != nil {
+			it.menu.closeSub()
+		}
 		if it.popup != nil {
 			it.popup.Hide()
 		}

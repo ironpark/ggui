@@ -510,7 +510,12 @@ type segmentParts struct{ icon, label ggui.Size }
 
 // Format sets how each option is shown and named.
 func (g *ToggleGroupWidget[T]) Format(fn func(T) string) *ToggleGroupWidget[T] {
-	g.formatted = true
+	if fn == nil {
+		g.formatted = false
+		fn = sprint[T]
+	} else {
+		g.formatted = true
+	}
 	g.relabel(fn)
 	return g
 }
@@ -683,7 +688,9 @@ func (g *ToggleGroupWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Siz
 			main, cross = main+o.W, max(cross, o.H)
 		}
 	}
+	inert := g.IsInert()
 	for i, tip := range g.tips {
+		tip.Disabled(inert)
 		tip.Layout(ggui.Tight(g.outer(g.sizes[i])), env)
 	}
 	main += float64(max(len(g.sizes)-1, 0)) * g.gap
@@ -778,6 +785,9 @@ func (g *ToggleGroupWidget[T]) paint(dst *ggui.Canvas, r ggui.Rect) {
 			dst.Paint(g.labels[i], g.middle(seg, x, p.label))
 		}
 		if i < len(g.tips) {
+			if g.tips[i].disabled != inert {
+				g.tips[i].Disabled(inert)
+			}
 			dst.Paint(g.tips[i], seg)
 		}
 		at = at.Add(pick(g.vertical, ggui.Pt(0, main+g.gap), ggui.Pt(main+g.gap, 0)))

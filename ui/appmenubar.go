@@ -25,6 +25,12 @@ func AppMenubar(menus []ggui.MenuItem) ggui.Widget {
 	return Menubar(bar...)
 }
 
+// notReader is a stateless Readable[bool] inverting r without creating a
+// reactive memo or subscription.
+type notReader struct{ r ggui.Readable[bool] }
+
+func (n notReader) Get() bool { return !n.r.Get() }
+
 // menuEntries turns entries of the app's menu model into menu widgets.
 func menuEntries(items []ggui.MenuItem) []ggui.Widget {
 	var out []ggui.Widget
@@ -35,7 +41,7 @@ func menuEntries(items []ggui.MenuItem) []ggui.Widget {
 		case len(m.Items) > 0:
 			sub := MenuSub(m.Label, menuEntries(m.Items)...)
 			if m.Enabled != nil {
-				sub.BindDisabled(ggui.Not(m.Enabled))
+				sub.BindDisabled(notReader{m.Enabled})
 			}
 			out = append(out, sub)
 		default:
@@ -44,7 +50,7 @@ func menuEntries(items []ggui.MenuItem) []ggui.Widget {
 				it.Shortcut(ggui.MustChord(m.Chord).Label())
 			}
 			if m.Enabled != nil {
-				it.BindDisabled(ggui.Not(m.Enabled))
+				it.BindDisabled(notReader{m.Enabled})
 			}
 			if m.Checked != nil {
 				it.BindChecked(m.Checked)

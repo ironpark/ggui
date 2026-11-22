@@ -190,7 +190,12 @@ func (t *TooltipWidget) showKeys() {
 			label = chord.Label()
 		}
 	}
-	if label == "" && t.keys == nil {
+	if label == "" {
+		if t.keys != nil {
+			t.keys = nil
+			t.box = widget.Box(t.tip)
+			t.effect = widget.PopIn(tooltipSurface{t})
+		}
 		return
 	}
 	if t.keys == nil {
@@ -263,7 +268,7 @@ func (t *TooltipWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		escape := state.escape
 		dst.Shortcut(tooltipEscape, func() { *escape = true; ggui.Invalidate(t.env) })
 	}
-	if hovered && !open {
+	if hovered && !open && !t.disabled && !escaped && !state.dismissed {
 		ggui.WakeAt(state.since.Add(delay))
 	}
 	progress := state.reveal.Toggle(open, now, t.env.Motion(t.theme.MotionFast))

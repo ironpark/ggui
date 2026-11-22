@@ -36,7 +36,7 @@ func TestParseColor(t *testing.T) {
 			t.Errorf("ParseColor(%q) = %v, want %v", tc.in, got, tc.want)
 		}
 	}
-	for _, bad := range []string{"", "#12345", "rgb(1 2)", "lab(50 0 0)", "oklch(a b c)", "red"} {
+	for _, bad := range []string{"", "#12345", "rgb(1 2)", "lab(50 0 0)", "oklch(a b c)", "red", "rgb(NaN 0 0)", "rgb(Inf 0 0)", "oklch(0.5 -Inf 0)"} {
 		if c, err := ParseColor(bad); err == nil {
 			t.Errorf("ParseColor(%q) = %v, want an error", bad, c)
 		}
@@ -119,5 +119,40 @@ func TestFromCSSKeepsCustomColors(t *testing.T) {
 	}
 	if first, again := CSSColor("warning"), CSSColor("warning"); first != again {
 		t.Fatal("CSSColor gave two keys for one name")
+	}
+}
+
+func TestFromCSSSelectorsAndVarFallbacks(t *testing.T) {
+	t.Parallel()
+	light, dark, err := FromCSS(`
+		:root {
+			--primary: #112233;
+			--ring: var(--missing, var(--also-missing, var(--primary)));
+		}
+		:root.dark {
+			--primary: #abcdef;
+		}
+		.dark-card {
+			--primary: #ff0000;
+		}
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantLight := color.NRGBA{0x11, 0x22, 0x33, 255}
+	wantDark := color.NRGBA{0xab, 0xcd, 0xef, 255}
+	if !near(light.Primary, wantLight) {
+		t.Errorf("light Primary = %v, want %v (:root.dark leaked into light)", light.Primary, wantLight)
+	}
+	if !near(light.Ring, wantLight) {
+		t.Errorf("light Ring = %v, want %v (nested var fallback failed)", light.Ring, wantLight)
+	}
+	if !near(dark.Primary, wantDark) {
+		t.Errorf("dark Primary = %v, want %v (.dark-card matched .dark or :root.dark missed)", dark.Primary, wantDark)
+	}
+	for _, bad := range []string{"--radius: -4px;", "--radius: NaN;", "--radius: Inf;", "--radius: 1e308rem;"} {
+		if _, err := Default().ApplyCSS(bad); err == nil {
+			t.Errorf("ApplyCSS(%q) succeeded, want error", bad)
+		}
 	}
 }

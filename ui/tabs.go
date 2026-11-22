@@ -155,11 +155,18 @@ func (t *TabsWidget) Disabled(v bool) *TabsWidget { t.SetInert(v); return t }
 // OnChange fires with the new index after the user picks a page.
 func (t *TabsWidget) OnChange(fn func(int)) *TabsWidget { t.onChange = fn; return t }
 
+func (t *TabsWidget) clampIndex(v int) int {
+	if len(t.tabs) == 0 {
+		return -1
+	}
+	return int(clamp(float64(v), 0, float64(len(t.tabs)-1)))
+}
+
 func (t *TabsWidget) index() int {
 	if len(t.tabs) == 0 {
 		return -1
 	}
-	return int(clamp(float64(ggui.Untrack(t.selected.Get)), 0, float64(len(t.tabs)-1)))
+	return t.clampIndex(ggui.Untrack(t.selected.Get))
 }
 
 func (t *TabsWidget) pick(i int) {
@@ -179,7 +186,10 @@ func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t.motion, t.pad = env.Motion(th.MotionFast), th.TabPad
 	t.labelSize, t.labelX = t.labelSize[:0], t.labelX[:0]
 	t.headerH, t.stripW, t.stripH = 0, 0, 0
-	cur := t.index()
+	cur := -1
+	if len(t.tabs) > 0 {
+		cur = t.clampIndex(t.selected.Get())
+	}
 	gap := pick(t.line, tabGap, 0.0)
 	for i, head := range t.heads {
 		t.boxes[i].Padding(t.pad)
@@ -346,7 +356,7 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		t.focusPending = false
 	}
 	if focus := t.focusIndex(); focus >= 0 {
-		controlFocusRing(dst, &t.Interactive, th, t.labelRect[focus], th.RadiusSm, th.Ring)
+		controlFocusRing(dst, &t.Interactive, th, t.labelRect[focus], th.RadiusSm, th.Ring, t.motion)
 	}
 	if cur >= 0 && t.tabs[cur].Content != nil {
 		at := ggui.Pt(r.Origin.X, r.Origin.Y+t.headerH)

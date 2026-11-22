@@ -320,12 +320,20 @@ func (t *ToasterWidget) Len() int {
 
 // Clear drops all notifications and their callbacks.
 func (t *ToasterWidget) Clear() {
+	if len(t.entries) == 0 {
+		return
+	}
 	clear(t.entries)
 	t.entries = nil
+	ggui.Invalidate(t.env)
 }
 
 // Close drops the queue and rejects future Push calls. It is safe to call twice.
-func (t *ToasterWidget) Close() { t.closed = true; t.Clear() }
+func (t *ToasterWidget) Close() {
+	t.closed = true
+	t.Clear()
+	ggui.Invalidate(t.env)
+}
 
 // Layout implements ggui.Widget; put the host anywhere in the root tree.
 func (t *ToasterWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
@@ -579,7 +587,7 @@ func (p *toastPanel) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := p.theme
 	fraction := clamp(float64(e.remaining)/float64(e.duration), 0, 1)
 	inset, thick := t.Space*2, t.BorderWidth*2
-	bar := ggui.Rct(r.Origin.Add(ggui.Pt(inset, r.Size.H-t.Space/2-thick)), ggui.Sz((r.Size.W-inset*2)*fraction, thick))
+	bar := ggui.Rct(r.Origin.Add(ggui.Pt(inset, r.Size.H-t.Space/2-thick)), ggui.Sz(max(0, r.Size.W-inset*2)*fraction, thick))
 	dst.FillRoundRect(bar, thick/2, pick(p.kind == ToastError, t.Destructive, t.Primary))
 }
 

@@ -721,7 +721,7 @@ func (b *CarouselNavigationWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 		angle = math.Pi
 	}
 	paintIconAt(d, b.env, role, r.Center(), t.IconSize, col, angle)
-	controlFocusRing(d, &b.Interactive, t, r, min(r.Size.W, r.Size.H)/2, t.Ring)
+	controlFocusRing(d, &b.Interactive, t, r, min(r.Size.W, r.Size.H)/2, t.Ring, b.motion)
 }
 func (b *CarouselNavigationWidget) HandlePointer(e ggui.PointerEvent) bool {
 	return b.Pointer(e, b.activate)

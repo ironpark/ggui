@@ -336,7 +336,7 @@ func (a *AttachmentWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		a.paintMedia(inner, translated(a.mediaRect, r.Origin), state)
 		titleRect := translated(a.textRect, r.Origin)
 		a.titleText.Paint(inner, titleRect)
-		if !a.reduced && (state == AttachmentUploading || state == AttachmentProcessing) {
+		if !a.reduced && (state == AttachmentUploading || state == AttachmentProcessing) && !inner.Visible(titleRect).Empty() {
 			// A moving highlight across the glyphs, rather than pulsing the
 			// whole card: from the foreground toward the muted one, which
 			// reads on the card surface whichever way the theme runs.
@@ -445,8 +445,8 @@ func attachmentDashedBorder(dst *ggui.Canvas, r ggui.Rect, radius, width float64
 	}
 	total := 2*(straightX+straightY) + 4*arc
 	for d := 0.0; d < total; d += 7 {
-		for at := d; at < min(d+4, total); at += 1 {
-			dst.StrokeLine(point(at), point(min(at+1, min(d+4, total))), width, col)
+		if end := min(d+4, total); end > d {
+			dst.StrokeLine(point(d), point(end), width, col)
 		}
 	}
 }

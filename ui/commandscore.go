@@ -52,12 +52,25 @@ func commandScore(text, query string) float64 {
 // commandScoreOf is commandScore for query as it is.
 func commandScoreOf(text, query string) float64 {
 	s, q := []rune(text), []rune(query)
-	lq := lowerRunes(q)
-	var last []rune
-	if len(lq) > 0 {
-		last = hangul.Keys([]rune{}, lq[len(lq)-1])
+	if len(q) == 0 {
+		if len(s) == 0 {
+			return scoreContinue
+		}
+		return penaltyIncomplete
 	}
-	m := scorer{s: s, q: q, ls: lowerRunes(s), lq: lq, last: last, memo: map[[2]int]float64{}}
+	if len(s) == 0 {
+		return 0
+	}
+	lq := lowerRunes(q)
+	last := hangul.Keys([]rune{}, lq[len(lq)-1])
+	m := scorer{s: s, q: q, ls: lowerRunes(s), lq: lq, last: last}
+	if !m.canMatch() {
+		return 0
+	}
+	m.memo = make([]float64, len(s)*len(q))
+	for i := range m.memo {
+		m.memo[i] = -1
+	}
 	return m.from(0, 0)
 }
 
@@ -65,7 +78,43 @@ func commandScoreOf(text, query string) float64 {
 type scorer struct {
 	s, q, ls, lq []rune
 	last         []rune // the keys of the query's last rune
-	memo         map[[2]int]float64
+	memo         []float64
+}
+
+// canMatch reports in O(|s|) time whether q can match s under normal,
+// transposed, doubled-letter, or Hangul transitions. It never returns false
+// for a query that from(0, 0) would score > 0.
+func (m *scorer) canMatch() bool {
+	ls, lq := m.ls, m.lq
+	qn := len(lq)
+	if qn == 0 {
+		return true
+	}
+	hi := 0
+	for i := range ls {
+		before := rune(-1)
+		if i > 0 {
+			before = ls[i-1]
+		}
+		if m.take(i, hi) > 0 {
+			if hi+1 < qn && (before == lq[hi+1] || (lq[hi+1] == lq[hi] && before != lq[hi])) {
+				hi += 2
+			} else {
+				hi++
+			}
+			if hi >= qn {
+				return true
+			}
+		} else if hi > 0 && m.take(i, hi-1) > 0 {
+			if before == lq[hi] || (lq[hi] == lq[hi-1] && before != lq[hi-1]) {
+				hi++
+				if hi >= qn {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // take is how many runes of the text from at the query's rune qi takes: 1
@@ -116,32 +165,34 @@ func isSpaceBreak(r rune) bool { return r == '-' || unicode.IsSpace(r) }
 
 func isGapBreak(r rune) bool { return strings.ContainsRune(`\/_+.#"@[({&`, r) }
 
-// countRunes counts the runes of s that is reports true for.
-func countRunes(s []rune, is func(rune) bool) int {
-	n := 0
-	for _, r := range s {
-		if is(r) {
-			n++
-		}
-	}
-	return n
-}
-
 // from scores q[qi:] against s[si:].
 func (m *scorer) from(si, qi int) float64 {
-	s, q, ls, lq, memo := m.s, m.q, m.ls, m.lq, m.memo
+	s, q, ls, lq := m.s, m.q, m.ls, m.lq
 	if qi == len(q) {
 		if si == len(s) {
 			return scoreContinue
 		}
 		return penaltyIncomplete
 	}
-	key := [2]int{si, qi}
-	if v, ok := memo[key]; ok {
+	if si >= len(s) {
+		return 0
+	}
+	idx := si*len(q) + qi
+	if v := m.memo[idx]; v >= 0 {
 		return v
 	}
 	high := 0.0
+	gaps, spaces := 0, 0
 	for at := si; at < len(s); at++ {
+		if at >= si+2 {
+			prev := s[at-2]
+			if isGapBreak(prev) {
+				gaps++
+			}
+			if isSpaceBreak(prev) {
+				spaces++
+			}
+		}
 		n := m.take(at, qi)
 		if n == 0 {
 			continue
@@ -156,13 +207,13 @@ func (m *scorer) from(si, qi int) float64 {
 				score *= scoreContinue
 			case isGapBreak(s[at-1]):
 				score *= scoreGapJump
-				if n := countRunes(s[si:at-1], isGapBreak); n > 0 && si > 0 {
-					score *= math.Pow(penaltySkipped, float64(n))
+				if gaps > 0 && si > 0 {
+					score *= math.Pow(penaltySkipped, float64(gaps))
 				}
 			case isSpaceBreak(s[at-1]):
 				score *= scoreSpaceJump
-				if n := countRunes(s[si:at-1], isSpaceBreak); n > 0 && si > 0 {
-					score *= math.Pow(penaltySkipped, float64(n))
+				if spaces > 0 && si > 0 {
+					score *= math.Pow(penaltySkipped, float64(spaces))
 				}
 			default:
 				score *= scoreLetterJump
@@ -190,7 +241,7 @@ func (m *scorer) from(si, qi int) float64 {
 		}
 		high = max(high, score)
 	}
-	memo[key] = high
+	m.memo[idx] = high
 	return high
 }
 

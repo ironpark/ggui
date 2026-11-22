@@ -40,7 +40,7 @@ func (s *SkeletonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		radius = min(r.Size.W, r.Size.H) / 2
 	}
 	factor := 1.0
-	if !s.reduced {
+	if !s.reduced && !dst.Visible(r).Empty() {
 		factor = pulse(.5)
 	}
 	dst.FillRoundRect(r, radius, fade(s.theme.Muted, factor))

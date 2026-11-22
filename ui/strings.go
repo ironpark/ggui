@@ -369,12 +369,20 @@ func ProvideStrings(s Strings, child ggui.Widget) *ggui.EnvWidget {
 //	root := ui.BindStrings(lang, app) // lang.Set(korean) switches it
 func BindStrings(r ggui.Readable[Strings], child ggui.Widget) *ggui.EnvWidget {
 	property.Require(r, "BindStrings")
-	var last *Strings
+	var (
+		hasPrev bool
+		prevRaw Strings
+		last    *Strings
+	)
 	return ggui.WithEnv(func(env ggui.Env) ggui.Env {
-		s := r.Get().withDefaults()
-		if last == nil || *last != s {
-			last = new(Strings)
-			*last = s
+		raw := r.Get()
+		if !hasPrev || raw != prevRaw {
+			hasPrev, prevRaw = true, raw
+			s := raw.withDefaults()
+			if last == nil || *last != s {
+				last = new(Strings)
+				*last = s
+			}
 		}
 		return env.With(stringsKey, last)
 	}, child)

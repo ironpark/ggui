@@ -239,12 +239,11 @@ var disclosureHoverSlot = ggui.NewSlot[*ggui.Motion]("disclosure hover")
 
 // controlFocusRing draws the keyboard focus of a control: the ring color on
 // its border and the three-pixel soft halo around it. The ring eases in and
-// out over the theme's MotionFast, retained under the control's identity,
-// and rests once it arrives, so an idle control asks for no frame. A
-// caller that knows its Env calls focusRing with env.Motion(t.MotionFast),
-// which lands at once under reduced motion.
-func controlFocusRing(dst *ggui.Canvas, state *ggui.Interactive, t *uitheme.Theme, r ggui.Rect, radius float64, ring color.Color) {
-	focusRing(dst, state, t, r, radius, ring, t.MotionFast)
+// out over motion (typically env.Motion(t.MotionFast), which lands at once
+// under reduced motion), retained under the control's identity, and rests once
+// it arrives, so an idle control asks for no frame.
+func controlFocusRing(dst *ggui.Canvas, state *ggui.Interactive, t *uitheme.Theme, r ggui.Rect, radius float64, ring color.Color, motion time.Duration) {
+	focusRing(dst, state, t, r, radius, ring, motion)
 }
 
 // focusRing is controlFocusRing easing over motion; zero switches at once.

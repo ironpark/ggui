@@ -654,7 +654,7 @@ func (r *tableRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 	if r.index.Get() < len(r.table.rows.Get())-1 {
 		dst.FillRect(ggui.Rct(ggui.Pt(rc.Origin.X, rc.Origin.Y+rc.Size.H-th.BorderWidth), ggui.Sz(rc.Size.W, th.BorderWidth)), th.Border)
 	}
-	controlFocusRing(dst, &r.Interactive, th, rc, th.Radius, th.Ring)
+	controlFocusRing(dst, &r.Interactive, th, rc, th.Radius, th.Ring, r.motion)
 }
 
 // pick activates the row: it becomes the selected row of BindSelected and

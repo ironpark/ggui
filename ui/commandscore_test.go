@@ -110,3 +110,22 @@ func TestCommandScoreReadsKoreanAsTyped(t *testing.T) {
 		t.Errorf("a syllable being typed scores %v, the word itself %v", typed, exact)
 	}
 }
+
+func TestCommandScorePrecheckEdgeCases(t *testing.T) {
+	t.Parallel()
+	// Chained transposition where greedy single-frontier skipping would miss.
+	if got := commandScore("babc", "abac"); math.Abs(got-0.017) > 1e-12 {
+		t.Fatalf("commandScore(babc, abac) = %v, want 0.017", got)
+	}
+	if got := commandScore("ab", "aa"); got <= 0 {
+		t.Fatalf("commandScore(ab, aa) = %v, want > 0", got)
+	}
+	if got := commandScore("a", "aaa"); got != 0 {
+		t.Fatalf("commandScore(a, aaa) = %v, want 0", got)
+	}
+	// Long non-matching string must short-circuit via canMatch.
+	longText := string(make([]rune, 2000))
+	if got := commandScore(longText, "notfound"); got != 0 {
+		t.Fatalf("commandScore(longText, notfound) = %v, want 0", got)
+	}
+}

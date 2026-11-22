@@ -27,14 +27,15 @@ type FieldWidget struct {
 	controlFirst bool
 	carded       bool
 
-	caption *LabelWidget
-	note    *widget.TextWidget // the description
-	alert   *widget.TextWidget // the error
-	alerts  fieldErrorList     // the errors, when there are several
-	column  *widget.ColumnWidget
-	row     *widget.RowWidget // the body of a Horizontal field, holding column
-	card    *FieldCardWidget  // the body of a Card field
-	shape   fieldShape        // what column, row and card were built for
+	caption  *LabelWidget
+	note     *widget.TextWidget // the description
+	alert    *widget.TextWidget // the error
+	alerts   fieldErrorList     // the errors, when there are several
+	column   *widget.ColumnWidget
+	row      *widget.RowWidget // the body of a Horizontal field, holding column
+	card     *FieldCardWidget  // the body of a Card field
+	shape    fieldShape        // what column, row and card were built for
+	cardHelp string            // help text baked into card's FieldDescription
 }
 
 // fieldShape is what decides which widgets a Field's body holds.
@@ -178,8 +179,9 @@ func (f *FieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	f.alert.Content(e).Style(t.Text).Color(t.Destructive)
 	// The body is rebuilt only when a part comes or goes, so its layout
 	// cache and the caption's survive a relayout.
-	if shape := (fieldShape{f.help != "", len(errors) > 0, f.horizontal, f.controlFirst, len(errors) > 1, f.carded}); f.column == nil || shape != f.shape {
+	if shape := (fieldShape{f.help != "", len(errors) > 0, f.horizontal, f.controlFirst, len(errors) > 1, f.carded}); f.column == nil || shape != f.shape || (shape.carded && f.help != f.cardHelp) {
 		f.shape = shape
+		f.cardHelp = pick(shape.carded, f.help, "")
 		parts := make([]ggui.Widget, 0, 4)
 		if shape.carded {
 			parts = append(parts, FieldTitle(f.label))

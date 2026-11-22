@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"io/fs"
 	"math"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -25,8 +26,9 @@ import (
 // A shared SVG retains at most eight device-resolution rasterizations, and
 // every SVG's together at most 32 MB, the least recently drawn let go first.
 type SVG struct {
-	doc   *svg.Document
-	cache []*raster // under rasters.mu, least recently drawn first
+	doc        *svg.Document
+	cache      []*raster // under rasters.mu, least recently drawn first
+	cleanupSet bool      // under rasters.mu; runtime.AddCleanup registered
 }
 
 // raster is an SVG drawn at a size, on the GPU. It is on its SVG's cache
@@ -113,12 +115,33 @@ func (l *rasterList) free(r *raster) {
 	framestats.FreedOf(framestats.Icons, r.bounds(), rasterFormat)
 }
 
-// trim frees the least recently drawn rasters past the budget, sparing the
-// one most recently drawn.
+// sweepDead frees every raster whose owning SVG has been garbage collected.
+func (l *rasterList) sweepDead() {
+	for r := l.tail; r != nil; {
+		prev := r.prev
+		if r.owner.Value() == nil {
+			l.free(r)
+		}
+		r = prev
+	}
+}
+
+// trim frees dead owners' rasters first and then the least recently drawn
+// rasters past the budget, sparing the one most recently drawn.
 func (l *rasterList) trim() {
 	budget := l.budget
 	if budget == 0 {
 		budget = rasterBudget
+	}
+	if l.bytes <= budget {
+		return
+	}
+	for r := l.tail; r != nil && l.bytes > budget; {
+		prev := r.prev
+		if r != l.head && r.owner.Value() == nil {
+			l.free(r)
+		}
+		r = prev
 	}
 	for l.bytes > budget && l.tail != nil && l.tail != l.head {
 		l.free(l.tail)
@@ -262,21 +285,50 @@ func (s *SVG) Draw(dst *ggui.Canvas, r ggui.Rect, col color.Color, rotation floa
 	at := ggui.FitContain.Place(ggui.Sz(1, 1), r)
 	opts := ggui.ImageOptions{Fit: ggui.FitFill, Tint: col, Rotation: rotation}
 	rasters.mu.Lock()
-	defer rasters.mu.Unlock()
 	for i, c := range s.cache {
 		if c.size == size {
 			s.cache = append(slices.Delete(s.cache, i, i+1), c)
 			rasters.touch(c)
-			dst.DrawImage(c.image, at, opts)
+			img := c.image
+			rasters.mu.Unlock()
+			dst.DrawImage(img, at, opts)
+			runtime.KeepAlive(s)
+			return
+		}
+	}
+	rasters.mu.Unlock()
+
+	img := s.upload(size)
+
+	rasters.mu.Lock()
+	for i, c := range s.cache {
+		if c.size == size {
+			s.cache = append(slices.Delete(s.cache, i, i+1), c)
+			rasters.touch(c)
+			cached := c.image
+			rasters.mu.Unlock()
+			img.Deallocate()
+			dst.DrawImage(cached, at, opts)
+			runtime.KeepAlive(s)
 			return
 		}
 	}
 	if len(s.cache) == 8 {
 		rasters.free(s.cache[0])
 	}
-	c := &raster{size: size, image: s.upload(size), owner: weak.Make(s)}
+	if !s.cleanupSet {
+		s.cleanupSet = true
+		runtime.AddCleanup(s, func(struct{}) {
+			rasters.mu.Lock()
+			rasters.sweepDead()
+			rasters.mu.Unlock()
+		}, struct{}{})
+	}
+	c := &raster{size: size, image: img, owner: weak.Make(s)}
 	s.cache = append(s.cache, c)
 	rasters.add(c)
-	dst.DrawImage(c.image, at, opts)
 	rasters.trim()
+	rasters.mu.Unlock()
+	dst.DrawImage(img, at, opts)
+	runtime.KeepAlive(s)
 }

@@ -92,7 +92,7 @@ func (s *SpinnerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Leaf(r, ggui.Node{Role: ggui.RoleStatus, Name: s.name})
 	}
 	phase := 0.0
-	if !s.reduced {
+	if !s.reduced && !dst.Visible(r).Empty() {
 		phase = spinPhase()
 	}
 	paintIcon(dst, s.env, icons.Loader, r, s.ink, phase)

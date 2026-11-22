@@ -78,7 +78,13 @@ func (l *ListBoxWidget[T, K]) OnSelect(fn func(T)) *ListBoxWidget[T, K] { l.onSe
 
 // RowName names each row for Probe.Find, the inspector and screen readers;
 // the default is the key.
-func (l *ListBoxWidget[T, K]) RowName(fn func(T) string) *ListBoxWidget[T, K] { l.label = fn; return l }
+func (l *ListBoxWidget[T, K]) RowName(fn func(T) string) *ListBoxWidget[T, K] {
+	if fn == nil {
+		fn = func(item T) string { return sprint(l.key(item)) }
+	}
+	l.label = fn
+	return l
+}
 
 // Name sets the list's accessible name.
 func (l *ListBoxWidget[T, K]) Name(name string) *ListBoxWidget[T, K] {
@@ -204,7 +210,7 @@ func (r *listRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 		dst.FillRoundRect(rc, th.Radius, fade(th.Accent, amount))
 	}
 	dst.Clip(rc).Paint(r.box, rc)
-	controlFocusRing(dst, &r.Interactive, th, rc, th.Radius, th.Ring)
+	controlFocusRing(dst, &r.Interactive, th, rc, th.Radius, th.Ring, r.motion)
 	if l.nav.claim(r.key) {
 		dst.RequestFocus(r)
 	} else if chosen && l.reveal {
