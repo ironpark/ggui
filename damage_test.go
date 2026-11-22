@@ -84,7 +84,8 @@ func TestMotionRegionsMergeWhereTheyMeet(t *testing.T) {
 }
 
 func TestAPartialFrameSkipsWhatItsRegionMisses(t *testing.T) {
-	f := &frameState{partial: true, damage: Rct(Pt(100, 100), Sz(10, 10))}
+	f := &frameState{}
+	f.partial, f.damage = true, Rct(Pt(100, 100), Sz(10, 10))
 	c := &Canvas{}
 	if !f.skips(c, Rct(Pt(300, 300), Sz(20, 20))) {
 		t.Fatal("a widget far from the region was painted")
