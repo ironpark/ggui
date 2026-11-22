@@ -423,43 +423,13 @@ func (l *ReorderableWidget[T, K]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	n := len(f.children)
 	now := ggui.FrameTime()
 	dur := l.env.Motion(reorderDuration)
-	d := -1
-	if st.dragging {
-		if d = l.index(st.key); d < 0 || d >= n {
-			st.dragging, d = false, -1 // the row went away mid-drag
-		}
-	}
-	// Where the lifted row is, and the slot it would drop into: the number
-	// of other rows whose middle is above its middle.
-	var lifted ggui.Rect
-	slot, span := 0, 0.0
-	if d >= 0 {
-		size := f.rects[d].Size
-		y := gem.Clamp(st.at.Y-st.grab.Y, r.Origin.Y, max(r.Origin.Y, r.Origin.Y+r.Size.H-size.H))
-		lifted = ggui.Rct(ggui.Pt(r.Origin.X+f.rects[d].Origin.X, y), size)
-		middle := y - r.Origin.Y + size.H/2
-		for j := range n {
-			if j != d && f.rects[j].Origin.Y+f.rects[j].Size.H/2 < middle {
-				slot++
-			}
-		}
-		st.to = gem.Pick(slot <= d, slot, slot+1)
-		span = size.H + l.gap()
-	}
+	lift := l.liftedRow(r, n)
 	if st.settle != nil {
-		// The rows were just moved: each eases from where it was drawn.
-		for i, k := range f.keys[:n] {
-			if was, ok := st.settle[k]; ok {
-				m := new(ggui.Motion)
-				m.MoveTo(was-f.rects[i].Origin.Y, now, 0)
-				st.shift[k] = m
-			}
-		}
-		st.settle = nil
+		l.easeSettled(n, now)
 	}
 	// Rows move only around a drag and while they settle after a move; a
 	// list at rest skips their motions and leaves painted empty for drawn.
-	moving := d >= 0 || len(st.shift) > 0
+	moving := lift.from >= 0 || len(st.shift) > 0
 	clear(st.painted)
 	// The row holding focus takes the move keys: the one its middle is in,
 	// as rows easing past each other overlap.
@@ -471,12 +441,12 @@ func (l *ReorderableWidget[T, K]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Node(r, listNode(n), func(dst *ggui.Canvas) {
 		for i, child := range f.children {
 			k := f.keys[i]
-			if i == d {
+			if i == lift.from {
 				continue
 			}
 			dy := 0.0
 			if moving {
-				dy = l.shiftRow(k, i, d, slot, span, now, dur)
+				dy = l.shiftRow(k, i, lift, now, dur)
 			}
 			rc := ggui.Rct(r.Origin.Add(f.rects[i].Origin).Add(ggui.Pt(0, dy)), f.rects[i].Size)
 			// Only where the row shows: one scrolled out of a Scroll's
@@ -495,16 +465,74 @@ func (l *ReorderableWidget[T, K]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 	})
 	for k := range st.shift {
-		if _, ok := st.painted[k]; !ok && (d < 0 || k != st.key) {
+		if _, ok := st.painted[k]; !ok && (lift.from < 0 || k != st.key) {
 			delete(st.shift, k) // a row that is gone
 		}
 	}
-	if d < 0 {
+	if lift.from < 0 {
 		return
 	}
-	st.painted[st.key] = lifted.Origin.Y - r.Origin.Y
-	row := f.children[d]
+	l.paintLifted(dst, r, lift, now)
+}
+
+// reorderLift is the row a drag has lifted, as one paint places it: its
+// index from, -1 with no drag, the slot it would drop into, how far the
+// rows it passes move out of its way, and where it is drawn.
+type reorderLift struct {
+	from, slot int
+	span       float64
+	rect       ggui.Rect
+}
+
+// liftedRow returns where the lifted row is, and the slot it would drop
+// into: the number of other rows whose middle is above its middle. A row
+// that went away mid-drag ends the drag.
+func (l *ReorderableWidget[T, K]) liftedRow(r ggui.Rect, n int) reorderLift {
+	f, st := l.list, l.st
+	lift := reorderLift{from: -1}
+	if !st.dragging {
+		return lift
+	}
+	d := l.index(st.key)
+	if d < 0 || d >= n {
+		st.dragging = false // the row went away mid-drag
+		return lift
+	}
+	size := f.rects[d].Size
+	y := gem.Clamp(st.at.Y-st.grab.Y, r.Origin.Y, max(r.Origin.Y, r.Origin.Y+r.Size.H-size.H))
+	lift.rect = ggui.Rct(ggui.Pt(r.Origin.X+f.rects[d].Origin.X, y), size)
+	middle := y - r.Origin.Y + size.H/2
+	for j := range n {
+		if j != d && f.rects[j].Origin.Y+f.rects[j].Size.H/2 < middle {
+			lift.slot++
+		}
+	}
+	st.to = gem.Pick(lift.slot <= d, lift.slot, lift.slot+1)
+	lift.from, lift.span = d, size.H+l.gap()
+	return lift
+}
+
+// easeSettled sets each row just moved easing from where it was drawn.
+func (l *ReorderableWidget[T, K]) easeSettled(n int, now time.Time) {
+	f, st := l.list, l.st
+	for i, k := range f.keys[:n] {
+		if was, ok := st.settle[k]; ok {
+			m := new(ggui.Motion)
+			m.MoveTo(was-f.rects[i].Origin.Y, now, 0)
+			st.shift[k] = m
+		}
+	}
+	st.settle = nil
+}
+
+// paintLifted draws the lifted row over everything, with its shadow, on a
+// region that catches its drop, and scrolls the list along with the drag.
+func (l *ReorderableWidget[T, K]) paintLifted(dst *ggui.Canvas, r ggui.Rect, lift reorderLift, now time.Time) {
+	st := l.st
+	st.painted[st.key] = lift.rect.Origin.Y - r.Origin.Y
+	row := l.list.children[lift.from]
 	token := reorderToken{st}
+	lifted := lift.rect
 	dst.Overlay(func(o *ggui.Canvas) {
 		// Catch the drop anywhere, so a release away from the list still
 		// puts the row down; Escape alone cancels.
@@ -515,17 +543,18 @@ func (l *ReorderableWidget[T, K]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	l.autoScroll(now)
 }
 
-// shiftRow eases row i, keyed k, out of the way of the row lifted from d
-// toward slot and returns how far it is moved. A row back in its place
-// with no drag under way drops its motion.
-func (l *ReorderableWidget[T, K]) shiftRow(k K, i, d, slot int, span float64, now time.Time, dur time.Duration) float64 {
+// shiftRow eases row i, keyed k, out of the way of the lifted row toward
+// its slot and returns how far it is moved. A row back in its place with
+// no drag under way drops its motion.
+func (l *ReorderableWidget[T, K]) shiftRow(k K, i int, lift reorderLift, now time.Time, dur time.Duration) float64 {
 	st := l.st
+	d := lift.from
 	target := 0.0
 	switch {
-	case d >= 0 && i < d && i >= slot:
-		target = span
-	case d >= 0 && i > d && i-1 < slot:
-		target = -span
+	case d >= 0 && i < d && i >= lift.slot:
+		target = lift.span
+	case d >= 0 && i > d && i-1 < lift.slot:
+		target = -lift.span
 	}
 	m := st.shift[k]
 	if m == nil {

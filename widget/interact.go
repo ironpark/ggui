@@ -136,6 +136,23 @@ func (p *PointerWidget) CaptureDrag() bool { return p.onDrag != nil }
 // HandlePointer implements PointerHandler.
 func (p *PointerWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	switch ev.Kind {
+	case ggui.PointerDown, ggui.PointerUp, ggui.PointerDrag, ggui.PointerTap:
+		return p.pointerPress(ev)
+	case ggui.PointerMove, ggui.PointerEnter, ggui.PointerExit:
+		return p.pointerHover(ev)
+	case ggui.PointerScroll:
+		if p.onScroll != nil {
+			p.onScroll(ev.Scroll)
+		}
+		return p.onScroll != nil
+	}
+	return false
+}
+
+// pointerPress runs the callbacks of a press, a button going down, coming
+// up, dragging while held or tapping, and reports whether it took ev.
+func (p *PointerWidget) pointerPress(ev ggui.PointerEvent) bool {
+	switch ev.Kind {
 	case ggui.PointerDown:
 		if p.onDown != nil {
 			p.onDown(ev)
@@ -156,6 +173,14 @@ func (p *PointerWidget) HandlePointer(ev ggui.PointerEvent) bool {
 			p.onTap()
 		}
 		return p.onTap != nil
+	}
+	return false
+}
+
+// pointerHover runs the callbacks of the cursor moving over the child,
+// entering it or leaving it, and reports whether it took ev.
+func (p *PointerWidget) pointerHover(ev ggui.PointerEvent) bool {
+	switch ev.Kind {
 	case ggui.PointerMove:
 		if p.onMove != nil {
 			p.onMove(ev)
@@ -171,11 +196,6 @@ func (p *PointerWidget) HandlePointer(ev ggui.PointerEvent) bool {
 			p.onExit()
 		}
 		return true
-	case ggui.PointerScroll:
-		if p.onScroll != nil {
-			p.onScroll(ev.Scroll)
-		}
-		return p.onScroll != nil
 	}
 	return false
 }
