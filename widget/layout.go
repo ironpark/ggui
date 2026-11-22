@@ -985,3 +985,31 @@ func (r *ResponsiveWidget) Baseline() (float64, bool) { return ggui.BaselineOf(r
 
 // Paint implements Widget.
 func (r *ResponsiveWidget) Paint(dst *ggui.Canvas, rect ggui.Rect) { dst.Paint(r.current, rect) }
+
+// aspectFit is the size a widget with a natural aspect ratio takes: the
+// fixed width and height when both are set, one side deriving the other
+// from the ratio, or the natural size shrunk to what fits.
+func aspectFit(natural ggui.Size, width, height float64, c ggui.Constraints) ggui.Size {
+	want := natural
+	ratio := 1.0
+	if natural.W > 0 && natural.H > 0 {
+		ratio = natural.W / natural.H
+	}
+	switch {
+	case width > 0 && height > 0:
+		want = ggui.Sz(width, height)
+	case width > 0:
+		want = ggui.Sz(width, width/ratio)
+	case height > 0:
+		want = ggui.Sz(height*ratio, height)
+	default:
+		// Natural size, shrunk to what fits.
+		if want.W > c.MaxW {
+			want = ggui.Sz(c.MaxW, c.MaxW/ratio)
+		}
+		if want.H > c.MaxH {
+			want = ggui.Sz(c.MaxH*ratio, c.MaxH)
+		}
+	}
+	return c.Constrain(want)
+}

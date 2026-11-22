@@ -109,29 +109,7 @@ func (w *ImageWidget) natural() ggui.Size {
 // Layout implements ggui.Widget.
 func (w *ImageWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer w.props.Layout().EndLayout()
-	n := w.natural()
-	want := n
-	ratio := 1.0
-	if n.W > 0 && n.H > 0 {
-		ratio = n.W / n.H
-	}
-	switch {
-	case w.width > 0 && w.height > 0:
-		want = ggui.Sz(w.width, w.height)
-	case w.width > 0:
-		want = ggui.Sz(w.width, w.width/ratio)
-	case w.height > 0:
-		want = ggui.Sz(w.height*ratio, w.height)
-	default:
-		// Natural size, shrunk to what fits.
-		if want.W > c.MaxW {
-			want = ggui.Sz(c.MaxW, c.MaxW/ratio)
-		}
-		if want.H > c.MaxH {
-			want = ggui.Sz(c.MaxH*ratio, c.MaxH)
-		}
-	}
-	return c.Constrain(want)
+	return aspectFit(w.natural(), w.width, w.height, c)
 }
 
 // Paint implements ggui.Widget.
