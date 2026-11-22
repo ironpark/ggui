@@ -387,54 +387,15 @@ func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	b.box.Radius(b.corner)
 	b.style = b.variant.Style(t)
-	label := b.style.Label
-	if b.IsInert() {
-		label = t.Disabled(label)
-	}
-	if b.label != nil {
-		b.label.Color(label) // Paint swaps in HoverLabel
-	}
-	textStyle := t.Text.Merge(t.Label).Merge(ggui.TextStyle{Color: label})
-	if size.TextSize > 0 {
-		textStyle.Size, textStyle.LineHeight = size.TextSize, size.LineHeight
-	}
-	contentEnv := env.WithText(textStyle)
+	contentEnv := b.labelEnv(env, &size)
 	ct := b.content
 	ct.rtl = env.Direction() == ggui.DirRTL
 	// A toggle keeps shadcn's gap-1 at every size.
 	ct.gap = pick(size.Gap > 0 && !toggle, size.Gap, pick(toggle, t.Space/2, t.Space*.75))
 	ct.iconSize = pick(size.IconSize > 0, size.IconSize, t.IconSize)
 	ct.themeIcon = t.IconSize
-	pad := b.pad
 	if !b.padded {
-		pad = size.Pad
-		if size.IconPad > 0 {
-			left, right := ct.lead != nil, ct.trail != nil
-			if ct.rtl {
-				left, right = right, left
-			}
-			if left {
-				pad.Left = min(pad.Left, size.IconPad)
-			}
-			if right {
-				pad.Right = min(pad.Right, size.IconPad)
-			}
-		}
-		// CSS heights include the line box. Center the native font metrics in
-		// that height instead of adding web line-height padding a second time.
-		if b.label != nil && size.Height > 0 && env.TextScale() <= 1 {
-			content := ct.Layout(pad.Shrink(c).Loosen(), contentEnv)
-			if content.H <= size.Height {
-				pad.Top, pad.Bottom = (size.Height-content.H)/2, (size.Height-content.H)/2
-			}
-		}
-		b.pad = pad
-		b.box.Padding(pad)
-		c.MinH = min(c.MaxH, max(c.MinH, size.Height))
-		if toggle {
-			// shadcn's min-w-8: a toggle is never narrower than it is tall.
-			c.MinW = min(c.MaxW, max(c.MinW, size.Height))
-		}
+		c = b.fitPadding(c, &size, contentEnv)
 	}
 	b.box.Size(0, 0)
 
@@ -449,75 +410,164 @@ func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	return out
 }
 
+// labelEnv is env with the label's text style: the variant's label color,
+// greyed while the button is disabled, at the size's text size where it
+// sets one.
+func (b *ButtonWidget) labelEnv(env ggui.Env, size *ButtonSize) ggui.Env {
+	t := b.theme
+	label := b.style.Label
+	if b.IsInert() {
+		label = t.Disabled(label)
+	}
+	if b.label != nil {
+		b.label.Color(label) // Paint swaps in HoverLabel
+	}
+	textStyle := t.Text.Merge(t.Label).Merge(ggui.TextStyle{Color: label})
+	if size.TextSize > 0 {
+		textStyle.Size, textStyle.LineHeight = size.TextSize, size.LineHeight
+	}
+	return env.WithText(textStyle)
+}
+
+// fitPadding gives a button left at its size's padding that padding, cut
+// to the icon padding on a side an icon sits, with the label centered in
+// the size's height; it is c held to at least that height, and a toggle to
+// at least that width.
+func (b *ButtonWidget) fitPadding(c ggui.Constraints, size *ButtonSize, contentEnv ggui.Env) ggui.Constraints {
+	ct := b.content
+	pad := size.Pad
+	if size.IconPad > 0 {
+		left, right := ct.lead != nil, ct.trail != nil
+		if ct.rtl {
+			left, right = right, left
+		}
+		if left {
+			pad.Left = min(pad.Left, size.IconPad)
+		}
+		if right {
+			pad.Right = min(pad.Right, size.IconPad)
+		}
+	}
+	// CSS heights include the line box. Center the native font metrics in
+	// that height instead of adding web line-height padding a second time.
+	if b.label != nil && size.Height > 0 && contentEnv.TextScale() <= 1 {
+		content := ct.Layout(pad.Shrink(c).Loosen(), contentEnv)
+		if content.H <= size.Height {
+			pad.Top, pad.Bottom = (size.Height-content.H)/2, (size.Height-content.H)/2
+		}
+	}
+	b.pad = pad
+	b.box.Padding(pad)
+	c.MinH = min(c.MaxH, max(c.MinH, size.Height))
+	if b.toggleValue != nil {
+		// shadcn's min-w-8: a toggle is never narrower than it is tall.
+		c.MinW = min(c.MaxW, max(c.MinW, size.Height))
+	}
+	return c
+}
+
 // Baseline implements ggui.Baseliner: the label's, inside the padding.
 func (b *ButtonWidget) Baseline() (float64, bool) { return b.box.Baseline() }
 
+// buttonPaint is one Paint of a button: its state, the colors it eased to,
+// and the box it draws them in.
+type buttonPaint struct {
+	anchor              ggui.Anchor
+	shape               joinedBox
+	fill, label, border color.Color
+	hover, invalid      float64
+	inert, toggle       bool
+	isInvalid           bool
+}
+
 // Paint implements Widget.
 func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	t := b.theme
+	k := buttonPaint{inert: b.IsInert(), toggle: b.toggleValue != nil}
+	b.easeHover(dst, r, &k)
+	if k.inert {
+		k.fill, k.label = t.Disabled(k.fill), t.Disabled(k.label)
+	}
+	if b.label != nil {
+		b.label.Color(k.label)
+	}
+	b.content.tint(k.label)
+	b.easeInvalid(dst, &k)
+
+	b.Hit(dst, r, b, pick(b.variant == ButtonLink, ggui.CursorShapePointer, ggui.CursorShapeDefault))
+	if b.chorded && !k.inert && b.onTap != nil {
+		dst.Shortcut(b.chord, b.onTap)
+	}
+	// A menu trigger and a toggle stay put: shadcn nudges neither.
+	if b.Pressed && b.Hovered && !k.inert && b.expands == nil && !k.toggle {
+		r.Origin.Y++
+	}
+	k.shape.rect = r
+	b.paintSurface(dst, &k)
+	b.paintUnderline(dst, &k)
+	b.paintFocusRing(dst, &k)
+}
+
+// easeHover takes the variant's fill and label, or a toggle's while it is
+// on, and eases them toward the variant's hovered look.
+func (b *ButtonWidget) easeHover(dst *ggui.Canvas, r ggui.Rect, k *buttonPaint) {
 	t, st := b.theme, b.style
-	inert := b.IsInert()
-	fill, label := st.Fill, st.Label
-	toggle := b.toggleValue != nil
-	if toggle && b.toggleValue() {
-		fill, label = t.Muted, t.Fg
+	k.fill, k.label = st.Fill, st.Label
+	if k.toggle && b.toggleValue() {
+		k.fill, k.label = t.Muted, t.Fg
 	}
 	// An open outline or ghost trigger reads as hovered; a secondary one
 	// keeps its resting surface, as shadcn's aria-expanded:bg-secondary does.
 	expanded := b.expands != nil && b.expands() && (b.variant == ButtonOutline || b.variant == ButtonGhost)
-	anchor := b.Anchor(r)
-	hover := controlkit.Ease(dst, b.theme, anchor, buttonHoverSlot, pick((b.Hovered || expanded) && !inert, 1.0, 0.0), b.motion)
-	if hover >= 1 {
-		fill = st.Hover
-	} else if hover > 0 {
-		fill = mix(controlkit.ColorOr(fill, color.Transparent), controlkit.ColorOr(st.Hover, color.Transparent), hover)
+	k.anchor = b.Anchor(r)
+	k.hover = controlkit.Ease(dst, b.theme, k.anchor, buttonHoverSlot, pick((b.Hovered || expanded) && !k.inert, 1.0, 0.0), b.motion)
+	if k.hover >= 1 {
+		k.fill = st.Hover
+	} else if k.hover > 0 {
+		k.fill = mix(controlkit.ColorOr(k.fill, color.Transparent), controlkit.ColorOr(st.Hover, color.Transparent), k.hover)
 	}
-	if st.HoverLabel != nil && hover > 0 {
-		label = mix(label, st.HoverLabel, hover)
+	if st.HoverLabel != nil && k.hover > 0 {
+		k.label = mix(k.label, st.HoverLabel, k.hover)
 	}
+}
 
-	if inert {
-		fill, label = t.Disabled(fill), t.Disabled(label)
+// easeInvalid takes the variant's border, greyed while disabled, and eases
+// it toward the destructive line of an invalid button.
+func (b *ButtonWidget) easeInvalid(dst *ggui.Canvas, k *buttonPaint) {
+	t := b.theme
+	k.border = b.style.Border
+	if k.border != nil && k.inert {
+		k.border = t.Disabled(k.border)
 	}
-	if b.label != nil {
-		b.label.Color(label)
-	}
-	b.content.tint(label)
-	border := st.Border
-	if border != nil && inert {
-		border = t.Disabled(border)
-	}
-	radius, sides := b.corner, b.sides.within(dst)
+	k.shape.radius, k.shape.sides = b.corner, b.sides.within(dst)
 	// shadcn's aria-invalid:border-destructive aria-invalid:ring-3
 	// aria-invalid:ring-destructive/20, eased as transition-all eases it.
 	// A button has a transparent border to color; a toggle has one only
 	// in its outline variant, and no ring until it is focused.
-	isInvalid := b.invalidProp.Get()
-	invalid := controlkit.Ease(dst, b.theme, anchor, buttonInvalidSlot, pick(isInvalid, 1.0, 0.0), b.motion)
-	if invalid > 0 && (!toggle || border != nil) {
-		line := pick(toggle, t.Destructive, invalidBorder(t))
-		if inert {
+	k.isInvalid = b.invalidProp.Get()
+	k.invalid = controlkit.Ease(dst, b.theme, k.anchor, buttonInvalidSlot, pick(k.isInvalid, 1.0, 0.0), b.motion)
+	if k.invalid > 0 && (!k.toggle || k.border != nil) {
+		line := pick(k.toggle, t.Destructive, invalidBorder(t))
+		if k.inert {
 			line = t.Disabled(line)
 		}
-		border = mix(controlkit.ColorOr(border, fade(line, 0)), line, invalid)
+		k.border = mix(controlkit.ColorOr(k.border, fade(line, 0)), line, k.invalid)
 	}
+}
 
-	b.Hit(dst, r, b, pick(b.variant == ButtonLink, ggui.CursorShapePointer, ggui.CursorShapeDefault))
-	if b.chorded && !inert && b.onTap != nil {
-		dst.Shortcut(b.chord, b.onTap)
-	}
-	// A menu trigger and a toggle stay put: shadcn nudges neither.
-	if b.Pressed && b.Hovered && !inert && b.expands == nil && !toggle {
-		r.Origin.Y++
-	}
-	shape := joinedBox{rect: r, radius: radius, sides: sides}
-	if st.Shadow && !inert {
+// paintSurface draws the shadow, the halo of an invalid button and the box
+// with its fill and border.
+func (b *ButtonWidget) paintSurface(dst *ggui.Canvas, k *buttonPaint) {
+	t, shape := b.theme, k.shape
+	r, radius, sides := shape.rect, shape.radius, shape.sides
+	if b.style.Shadow && !k.inert {
 		dst.Shadow(r, radius, t.CardShadow)
 	}
-	if invalid > 0 && !inert && !toggle {
+	if k.invalid > 0 && !k.inert && !k.toggle {
 		// Joined to its neighbours the ring is the group's to draw over
 		// them; alone, the box draws the line and only the halo is left.
-		if halo := fade(destructiveRing(t), invalid); sides.Any() {
-			joinedFocusRing(dst, t, shape, border, halo)
+		if halo := fade(destructiveRing(t), k.invalid); sides.Any() {
+			joinedFocusRing(dst, t, shape, k.border, halo)
 		} else {
 			controlkit.HaloStroke(dst, r, radius, t.Halo(halo))
 		}
@@ -526,41 +576,53 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		// A box rounds every corner alike, so the surface of a button joined
 		// to a neighbour is drawn here and the box draws the content alone.
 		b.box.Fill(nil).Border(0, nil)
-		paintJoinedBox(dst, shape, fill, t.BorderWidth, border)
+		paintJoinedBox(dst, shape, k.fill, t.BorderWidth, k.border)
 	} else {
-		b.box.Fill(fill).Border(pick(border != nil, t.BorderWidth, 0), border)
+		b.box.Fill(k.fill).Border(pick(k.border != nil, t.BorderWidth, 0), k.border)
 	}
 	dst.Paint(b.box, r)
-	if st.Underline && hover > 0 {
-		if base, ok := b.box.Baseline(); ok {
-			pad := b.pad
-			// shadcn's underline-offset-4: the line's top edge is 4px
-			// under the alphabetic baseline, and it grows down from there.
-			y := r.Origin.Y + base + t.Space/2
-			if b.label != nil {
-				if ascent, ok := b.label.Baseline(); ok {
-					y = paintedBaseline(r.Origin.Y+base-ascent, ascent, dst.Scale()) + t.Space/2
-				}
-			}
-			dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X+pad.Left, y), ggui.Sz(r.Size.W-pad.Left-pad.Right, 1)), fade(label, hover))
+}
+
+// paintUnderline draws the underline of a variant that has one, faded in
+// with the hover.
+func (b *ButtonWidget) paintUnderline(dst *ggui.Canvas, k *buttonPaint) {
+	if !b.style.Underline || k.hover <= 0 {
+		return
+	}
+	base, ok := b.box.Baseline()
+	if !ok {
+		return
+	}
+	t, r, pad := b.theme, k.shape.rect, b.pad
+	// shadcn's underline-offset-4: the line's top edge is 4px
+	// under the alphabetic baseline, and it grows down from there.
+	y := r.Origin.Y + base + t.Space/2
+	if b.label != nil {
+		if ascent, ok := b.label.Baseline(); ok {
+			y = paintedBaseline(r.Origin.Y+base-ascent, ascent, dst.Scale()) + t.Space/2
 		}
 	}
-	// The ring eases in and out with the rest of the button, as shadcn's
-	// transition-all has it, and rests once it arrives. In a ButtonGroup
-	// the group draws it, over the children, and the one easing out around
-	// the button that lost the focus beside the one coming in.
-	focused := b.Focused && b.FocusVisible && !inert
-	if k := controlkit.Ease(dst, b.theme, anchor, focusRingSlot, pick(focused, 1.0, 0.0), b.motion); k > 0 {
+	dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X+pad.Left, y), ggui.Sz(r.Size.W-pad.Left-pad.Right, 1)), fade(k.label, k.hover))
+}
+
+// paintFocusRing eases the focus ring in and out with the rest of the
+// button, as shadcn's transition-all has it, and rests once it arrives. In
+// a ButtonGroup the group draws it, over the children, and the one easing
+// out around the button that lost the focus beside the one coming in.
+func (b *ButtonWidget) paintFocusRing(dst *ggui.Canvas, k *buttonPaint) {
+	t, st := b.theme, b.style
+	focused := b.Focused && b.FocusVisible && !k.inert
+	if e := controlkit.Ease(dst, b.theme, k.anchor, focusRingSlot, pick(focused, 1.0, 0.0), b.motion); e > 0 {
 		ring := controlkit.ColorOr(st.Ring, t.Ring)
 		line := controlkit.ColorOr(st.FocusBorder, ring)
 		// An invalid control keeps its destructive border and ring while
 		// focused: aria-invalid sorts after focus-visible. The button
 		// already wears that ring, and the toggle puts it on here.
-		if isInvalid {
-			ring, line = destructiveRing(t), controlkit.ColorOr(border, t.Destructive)
+		if k.isInvalid {
+			ring, line = destructiveRing(t), controlkit.ColorOr(k.border, t.Destructive)
 		}
-		if !isInvalid || toggle {
-			joinedFocusRing(dst, t, shape, fade(line, k), fade(ring, k))
+		if !k.isInvalid || k.toggle {
+			joinedFocusRing(dst, t, k.shape, fade(line, e), fade(ring, e))
 		}
 	}
 }
