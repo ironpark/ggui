@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hajimehoshi/bitmapfont/v4"
+	"golang.org/x/image/font/basicfont"
+	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggui/internal/third_party/text/internal/testfonts"
 )
 
 // A monochrome glyph's image is alpha-only, a color glyph's RGBA.
@@ -38,7 +38,7 @@ func TestGlyphImageFormats(t *testing.T) {
 		}
 	}
 	formats("outline", &GoTextFace{Source: latin, Size: 16}, "Hello, world", ggfx.PixelFormatAlpha)
-	formats("GoXFace", NewGoXFace(bitmapfont.Face), "Hello", ggfx.PixelFormatAlpha)
+	formats("GoXFace", NewGoXFace(basicfont.Face7x13), "Hello", ggfx.PixelFormatAlpha)
 	for _, c := range []struct{ font, s string }{
 		{"chromacheck-svg.ttf", ""},
 		{"chromacheck-cbdt.ttf", ""},
@@ -60,7 +60,7 @@ func TestGlyphImageFormats(t *testing.T) {
 // A monochrome glyph's alpha image draws, tinted, scaled and at a subpixel
 // offset, exactly as the white RGBA mask it was before.
 func TestAlphaGlyphDrawsAsWhiteRGBA(t *testing.T) {
-	for _, data := range [][]byte{goregular.TTF, testfonts.MPlus1pRegular_ttf} {
+	for _, data := range [][]byte{goregular.TTF, gobold.TTF} {
 		src, err := NewGoTextFaceSource(bytes.NewReader(data))
 		if err != nil {
 			t.Fatal(err)

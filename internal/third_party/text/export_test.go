@@ -14,41 +14,6 @@
 
 package text
 
-import (
-	"github.com/ironpark/ggui/internal/third_party/typesetting/bidi"
-	"golang.org/x/image/math/fixed"
-)
-
-func L2VisualOrder(levels []bidi.Level) []int {
-	return appendL2VisualOrder(nil, levels)
-}
-
-func Fixed26_6ToFloat32(x fixed.Int26_6) float32 {
-	return fixed26_6ToFloat32(x)
-}
-
-func Fixed26_6ToFloat64(x fixed.Int26_6) float64 {
-	return fixed26_6ToFloat64(x)
-}
-
-func Float32ToFixed26_6(x float32) fixed.Int26_6 {
-	return float32ToFixed26_6(x)
-}
-
-func Float64ToFixed26_6(x float64) fixed.Int26_6 {
-	return float64ToFixed26_6(x)
-}
-
-type RuneToBoolMap = runeToBoolMap
-
-func (rtb *RuneToBoolMap) Set(rune rune, value bool) {
-	rtb.set(rune, value)
-}
-
-func (rtb *RuneToBoolMap) Get(rune rune) (bool, bool) {
-	return rtb.get(rune)
-}
-
 // SVGGlyphDocument extracts the SVG document describing only the glyph
 // gid from an OpenType SVG document.
 func SVGGlyphDocument(source []byte, gid uint32) []byte {

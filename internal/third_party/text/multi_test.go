@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/hajimehoshi/bitmapfont/v4"
+	"golang.org/x/image/font/basicfont"
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/ironpark/ggfx"
@@ -27,7 +27,7 @@ import (
 )
 
 func TestMultiFace(t *testing.T) {
-	faces := []text.Face{text.NewGoXFace(bitmapfont.Face)}
+	faces := []text.Face{text.NewGoXFace(basicfont.Face7x13)}
 	f, err := text.NewMultiFace(faces...)
 	if err != nil {
 		t.Fatal(err)
@@ -65,7 +65,7 @@ func TestMultiFaceFallback(t *testing.T) {
 
 // Issue #3284
 func TestMultiFaceAdvance(t *testing.T) {
-	f := text.NewGoXFace(bitmapfont.Face)
+	f := text.NewGoXFace(basicfont.Face7x13)
 	f1 := text.NewLimitedFace(f)
 	f1.AddUnicodeRange(0x0000, 0x007F)
 	f2 := text.NewLimitedFace(f)

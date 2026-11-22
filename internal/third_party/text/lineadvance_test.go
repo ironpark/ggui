@@ -4,15 +4,15 @@ import (
 	"bytes"
 	"testing"
 
+	"golang.org/x/image/font/gofont/gobold"
+	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/gofont/goregular"
-
-	"github.com/ironpark/ggui/internal/third_party/text/internal/testfonts"
 )
 
 // The advance a line's glyphs add up to is the one advanceAt finds for
 // its end, which a MultiFace placed each face's run by.
 func TestALinesGlyphsAdvanceAsAdvanceAtSays(t *testing.T) {
-	for _, data := range [][]byte{goregular.TTF, testfonts.MPlus1pRegular_ttf, testfonts.TerminusTTF_ttf} {
+	for _, data := range [][]byte{goregular.TTF, gobold.TTF, gomono.TTF} {
 		src, err := NewGoTextFaceSource(bytes.NewReader(data))
 		if err != nil {
 			t.Fatal(err)
@@ -35,8 +35,8 @@ func TestALinesGlyphsAdvanceAsAdvanceAtSays(t *testing.T) {
 // and Hangul in a fallback chain do, as each frame that draws it does.
 func BenchmarkMultiFaceLine(b *testing.B) {
 	latin, _ := NewGoTextFaceSource(bytes.NewReader(goregular.TTF))
-	cjk, _ := NewGoTextFaceSource(bytes.NewReader(testfonts.MPlus1pRegular_ttf))
-	m, err := NewMultiFace(&GoTextFace{Source: latin, Size: 13}, &GoTextFace{Source: cjk, Size: 13})
+	fallback, _ := NewGoTextFaceSource(bytes.NewReader(gomono.TTF))
+	m, err := NewMultiFace(&GoTextFace{Source: latin, Size: 13}, &GoTextFace{Source: fallback, Size: 13})
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -51,8 +51,8 @@ func BenchmarkMultiFaceLine(b *testing.B) {
 // BenchmarkMultiFaceText lays a paragraph of two faces out as a draw does.
 func BenchmarkMultiFaceText(b *testing.B) {
 	latin, _ := NewGoTextFaceSource(bytes.NewReader(goregular.TTF))
-	cjk, _ := NewGoTextFaceSource(bytes.NewReader(testfonts.MPlus1pRegular_ttf))
-	m, err := NewMultiFace(&GoTextFace{Source: latin, Size: 13}, &GoTextFace{Source: cjk, Size: 13})
+	fallback, _ := NewGoTextFaceSource(bytes.NewReader(gomono.TTF))
+	m, err := NewMultiFace(&GoTextFace{Source: latin, Size: 13}, &GoTextFace{Source: fallback, Size: 13})
 	if err != nil {
 		b.Fatal(err)
 	}
