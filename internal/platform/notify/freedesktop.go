@@ -77,27 +77,34 @@ func fdAction(key string) (string, bool) {
 // the "@" Go dials one by. It is "" where there is no bus to be found.
 func sessionBusPath(getenv func(string) string, exists func(string) bool) string {
 	if addr := getenv("DBUS_SESSION_BUS_ADDRESS"); addr != "" {
-		for a := range strings.SplitSeq(addr, ";") {
-			rest, ok := strings.CutPrefix(a, "unix:")
-			if !ok {
-				continue
-			}
-			for kv := range strings.SplitSeq(rest, ",") {
-				k, v, _ := strings.Cut(kv, "=")
-				v = unescapeAddress(v)
-				switch k {
-				case "path":
-					return v
-				case "abstract":
-					return "@" + v
-				}
-			}
-		}
-		return ""
+		return addressPath(addr)
 	}
 	if dir := getenv("XDG_RUNTIME_DIR"); dir != "" {
 		if p := path.Join(dir, "bus"); exists(p) {
 			return p
+		}
+	}
+	return ""
+}
+
+// addressPath returns the socket a DBUS_SESSION_BUS_ADDRESS names: the
+// first unix path or abstract name, an abstract name with the "@" Go
+// dials one by.
+func addressPath(addr string) string {
+	for a := range strings.SplitSeq(addr, ";") {
+		rest, ok := strings.CutPrefix(a, "unix:")
+		if !ok {
+			continue
+		}
+		for kv := range strings.SplitSeq(rest, ",") {
+			k, v, _ := strings.Cut(kv, "=")
+			v = unescapeAddress(v)
+			switch k {
+			case "path":
+				return v
+			case "abstract":
+				return "@" + v
+			}
 		}
 	}
 	return ""

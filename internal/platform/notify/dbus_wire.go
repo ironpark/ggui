@@ -130,72 +130,109 @@ func readMessage(r io.Reader) (*message, error) {
 	if _, err := io.ReadFull(r, fixed[:]); err != nil {
 		return nil, err
 	}
-	var order binary.ByteOrder
-	switch fixed[0] {
-	case 'l':
-		order = binary.LittleEndian
-	case 'B':
-		order = binary.BigEndian
-	default:
-		return nil, fmt.Errorf("dbus: bad endianness %q", fixed[0])
+	order, err := byteOrder(fixed[0])
+	if err != nil {
+		return nil, err
 	}
 	bodyLen := order.Uint32(fixed[4:])
 	fieldsLen := order.Uint32(fixed[12:])
+	buf, headerLen, err := readParts(r, fixed, bodyLen, fieldsLen)
+	if err != nil {
+		return nil, err
+	}
+	m := &message{typ: fixed[1], flags: fixed[2], serial: order.Uint32(fixed[8:])}
+	if err := m.readHeader(buf[:headerLen], order); err != nil {
+		return nil, err
+	}
+	padded := (headerLen + 7) &^ 7
+	if err := m.readBody(buf[padded:], order); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// byteOrder returns the order an endianness mark names.
+func byteOrder(mark byte) (binary.ByteOrder, error) {
+	switch mark {
+	case 'l':
+		return binary.LittleEndian, nil
+	case 'B':
+		return binary.BigEndian, nil
+	}
+	return nil, fmt.Errorf("dbus: bad endianness %q", mark)
+}
+
+// readParts reads the rest of the message, the padded header and the
+// body, and returns the buffer and the header's length before padding.
+func readParts(r io.Reader, fixed [16]byte, bodyLen, fieldsLen uint32) ([]byte, int, error) {
 	if fieldsLen > maxArray || bodyLen > maxMessage {
-		return nil, errors.New("dbus: message too long")
+		return nil, 0, errors.New("dbus: message too long")
 	}
 	headerLen := 16 + int(fieldsLen)
 	padded := (headerLen + 7) &^ 7
 	if padded+int(bodyLen) > maxMessage {
-		return nil, errors.New("dbus: message too long")
+		return nil, 0, errors.New("dbus: message too long")
 	}
 	buf := make([]byte, padded+int(bodyLen))
 	copy(buf, fixed[:])
 	if _, err := io.ReadFull(r, buf[16:]); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	m := &message{typ: fixed[1], flags: fixed[2], serial: order.Uint32(fixed[8:])}
-	d := decoder{b: buf[:headerLen], pos: 12, order: order}
+	return buf, headerLen, nil
+}
+
+// readHeader decodes the header's fields into m.
+func (m *message) readHeader(buf []byte, order binary.ByteOrder) error {
+	d := decoder{b: buf, pos: 12, order: order}
 	fields, err := d.value("a(yv)", 0)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	for _, f := range fields.([]any) {
-		f := f.([]any)
-		code, v := f[0].(byte), f[1].(variant)
-		s, _ := v.val.(string)
-		switch code {
-		case fieldPath:
-			m.path = s
-		case fieldInterface:
-			m.iface = s
-		case fieldMember:
-			m.member = s
-		case fieldErrorName:
-			m.errName = s
-		case fieldReplySerial:
-			m.replySerial, _ = v.val.(uint32)
-		case fieldDestination:
-			m.dest = s
-		case fieldSender:
-			m.sender = s
-		case fieldSignature:
-			m.sig = s
-		}
+		m.readField(f.([]any))
 	}
+	return nil
+}
+
+// readField stores one header field's value in m.
+func (m *message) readField(f []any) {
+	code, v := f[0].(byte), f[1].(variant)
+	s, _ := v.val.(string)
+	switch code {
+	case fieldPath:
+		m.path = s
+	case fieldInterface:
+		m.iface = s
+	case fieldMember:
+		m.member = s
+	case fieldErrorName:
+		m.errName = s
+	case fieldReplySerial:
+		m.replySerial, _ = v.val.(uint32)
+	case fieldDestination:
+		m.dest = s
+	case fieldSender:
+		m.sender = s
+	case fieldSignature:
+		m.sig = s
+	}
+}
+
+// readBody decodes the body's values into m.body.
+func (m *message) readBody(buf []byte, order binary.ByteOrder) error {
 	types, err := splitSig(m.sig)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	bd := decoder{b: buf[padded:], order: order}
+	bd := decoder{b: buf, order: order}
 	for _, t := range types {
 		v, err := bd.value(t, 0)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		m.body = append(m.body, v)
 	}
-	return m, nil
+	return nil
 }
 
 // splitSig splits a signature into its complete types.
@@ -234,17 +271,9 @@ func nextType(sig string, depth int) (string, string, error) {
 		if c == '{' {
 			end = '}'
 		}
-		i, n := 1, 0
-		for {
-			if i < len(sig) && sig[i] == end {
-				break
-			}
-			_, rest, err := nextType(sig[i:], depth+1)
-			if err != nil {
-				return "", "", err
-			}
-			i = len(sig) - len(rest)
-			n++
+		i, n, err := scanFields(sig, end, depth)
+		if err != nil {
+			return "", "", err
 		}
 		if n == 0 || c == '{' && n != 2 {
 			return "", "", fmt.Errorf("dbus: bad signature %q", sig)
@@ -252,6 +281,25 @@ func nextType(sig string, depth int) (string, string, error) {
 		return sig[:i+1], sig[i+1:], nil
 	}
 	return "", "", fmt.Errorf("dbus: bad signature %q", sig)
+}
+
+// scanFields scans the container sig opens, closed by end, and returns
+// the index just past its last member and how many complete types it
+// holds.
+func scanFields(sig string, end byte, depth int) (i, n int, err error) {
+	i, n = 1, 0
+	for {
+		if i < len(sig) && sig[i] == end {
+			break
+		}
+		_, rest, err := nextType(sig[i:], depth+1)
+		if err != nil {
+			return 0, 0, err
+		}
+		i = len(sig) - len(rest)
+		n++
+	}
+	return i, n, nil
 }
 
 // alignment is the boundary a value of type t starts on.
@@ -292,18 +340,41 @@ func (e *encoder) value(t string, v any, depth int) error {
 	if depth > maxDepth {
 		return errors.New("dbus: value nested too deep")
 	}
-	bad := func() error { return fmt.Errorf("dbus: %T is not a value of type %s", v, t) }
+	switch t[0] {
+	case 'y', 'b', 'i', 'u':
+		return e.number(t, v)
+	case 's', 'o', 'g':
+		return e.text(t, v)
+	case 'a':
+		return e.array(t, v, depth)
+	case '(':
+		return e.fields(t, v, depth)
+	case '{':
+		return e.entry(t, v, depth)
+	case 'v':
+		return e.variant(t, v, depth)
+	default:
+		return fmt.Errorf("dbus: type %s is not supported", t)
+	}
+}
+
+func badValue(v any, t string) error {
+	return fmt.Errorf("dbus: %T is not a value of type %s", v, t)
+}
+
+// number writes v as one of the numeric basic types.
+func (e *encoder) number(t string, v any) error {
 	switch t[0] {
 	case 'y':
 		b, ok := v.(byte)
 		if !ok {
-			return bad()
+			return badValue(v, t)
 		}
 		e.b = append(e.b, b)
 	case 'b':
 		b, ok := v.(bool)
 		if !ok {
-			return bad()
+			return badValue(v, t)
 		}
 		n := uint32(0)
 		if b {
@@ -313,100 +384,119 @@ func (e *encoder) value(t string, v any, depth int) error {
 	case 'i':
 		n, ok := v.(int32)
 		if !ok {
-			return bad()
+			return badValue(v, t)
 		}
 		e.u32(uint32(n))
 	case 'u':
 		n, ok := v.(uint32)
 		if !ok {
-			return bad()
+			return badValue(v, t)
 		}
 		e.u32(n)
+	}
+	return nil
+}
+
+// text writes v as one of the string-like basic types.
+func (e *encoder) text(t string, v any) error {
+	switch t[0] {
 	case 's', 'o':
 		s, ok := v.(string)
 		if !ok || strings.IndexByte(s, 0) >= 0 {
-			return bad()
+			return badValue(v, t)
 		}
 		e.str(s)
 	case 'g':
 		s, ok := v.(string)
 		if !ok || len(s) > 255 {
-			return bad()
+			return badValue(v, t)
 		}
 		e.b = append(e.b, byte(len(s)))
 		e.b = append(e.b, s...)
 		e.b = append(e.b, 0)
-	case 'a':
-		elem := t[1:]
-		var items []any
-		switch v := v.(type) {
-		case []any:
-			items = v
-		case []string:
-			for _, s := range v {
-				items = append(items, s)
-			}
-		default:
-			return bad()
-		}
-		e.u32(0)
-		at := len(e.b) - 4
-		e.pad(alignment(elem))
-		start := len(e.b)
-		for _, item := range items {
-			if err := e.value(elem, item, depth+1); err != nil {
-				return err
-			}
-		}
-		binary.LittleEndian.PutUint32(e.b[at:], uint32(len(e.b)-start))
-	case '(':
-		fields, ok := v.([]any)
-		if !ok {
-			return bad()
-		}
-		types, err := splitSig(t[1 : len(t)-1])
-		if err != nil {
-			return err
-		}
-		if len(types) != len(fields) {
-			return bad()
-		}
-		e.pad(8)
-		for i, ft := range types {
-			if err := e.value(ft, fields[i], depth+1); err != nil {
-				return err
-			}
-		}
-	case '{':
-		kv, ok := v.(dictEntry)
-		if !ok {
-			return bad()
-		}
-		types, err := splitSig(t[1 : len(t)-1])
-		if err != nil {
-			return err
-		}
-		e.pad(8)
-		if err := e.value(types[0], kv.key, depth+1); err != nil {
-			return err
-		}
-		return e.value(types[1], kv.val, depth+1)
-	case 'v':
-		vv, ok := v.(variant)
-		if !ok {
-			return bad()
-		}
-		if _, rest, err := nextType(vv.sig, 0); err != nil || rest != "" {
-			return fmt.Errorf("dbus: variant of signature %q", vv.sig)
-		}
-		if err := e.value("g", vv.sig, depth+1); err != nil {
-			return err
-		}
-		return e.value(vv.sig, vv.val, depth+1)
-	default:
-		return fmt.Errorf("dbus: type %s is not supported", t)
 	}
 	return nil
+}
+
+// array writes v as an array of the element type t names.
+func (e *encoder) array(t string, v any, depth int) error {
+	elem := t[1:]
+	var items []any
+	switch v := v.(type) {
+	case []any:
+		items = v
+	case []string:
+		for _, s := range v {
+			items = append(items, s)
+		}
+	default:
+		return badValue(v, t)
+	}
+	e.u32(0)
+	at := len(e.b) - 4
+	e.pad(alignment(elem))
+	start := len(e.b)
+	for _, item := range items {
+		if err := e.value(elem, item, depth+1); err != nil {
+			return err
+		}
+	}
+	binary.LittleEndian.PutUint32(e.b[at:], uint32(len(e.b)-start))
+	return nil
+}
+
+// fields writes v as a struct of the field types t names.
+func (e *encoder) fields(t string, v any, depth int) error {
+	fields, ok := v.([]any)
+	if !ok {
+		return badValue(v, t)
+	}
+	types, err := splitSig(t[1 : len(t)-1])
+	if err != nil {
+		return err
+	}
+	if len(types) != len(fields) {
+		return badValue(v, t)
+	}
+	e.pad(8)
+	for i, ft := range types {
+		if err := e.value(ft, fields[i], depth+1); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// entry writes v as a dict entry of the key and value types t names.
+func (e *encoder) entry(t string, v any, depth int) error {
+	kv, ok := v.(dictEntry)
+	if !ok {
+		return badValue(v, t)
+	}
+	types, err := splitSig(t[1 : len(t)-1])
+	if err != nil {
+		return err
+	}
+	e.pad(8)
+	if err := e.value(types[0], kv.key, depth+1); err != nil {
+		return err
+	}
+	return e.value(types[1], kv.val, depth+1)
+}
+
+// variant writes v's signature then v's value.
+func (e *encoder) variant(t string, v any, depth int) error {
+	vv, ok := v.(variant)
+	if !ok {
+		return badValue(v, t)
+	}
+	if _, rest, err := nextType(vv.sig, 0); err != nil || rest != "" {
+		return fmt.Errorf("dbus: variant of signature %q", vv.sig)
+	}
+	if err := e.value("g", vv.sig, depth+1); err != nil {
+		return err
+	}
+	return e.value(vv.sig, vv.val, depth+1)
 }
 
 // decoder reads values from b, whose first byte is aligned on 8.
@@ -453,6 +543,28 @@ func (d *decoder) value(t string, depth int) (any, error) {
 		return nil, errors.New("dbus: value nested too deep")
 	}
 	switch t[0] {
+	case 'y', 'b', 'i', 'u', 'h':
+		return d.smallInt(t)
+	case 'n', 'q':
+		return d.int16(t)
+	case 'x', 't', 'd':
+		return d.int64()
+	case 's', 'o', 'g':
+		return d.text(t)
+	case 'a':
+		return d.array(t, depth)
+	case '(', '{':
+		return d.fields(t, depth)
+	case 'v':
+		return d.variant(depth)
+	default:
+		return nil, fmt.Errorf("dbus: type %s is not supported", t)
+	}
+}
+
+// smallInt reads a value of a type that fits in a uint32.
+func (d *decoder) smallInt(t string) (any, error) {
+	switch t[0] {
 	case 'y':
 		b, err := d.take(1)
 		if err != nil {
@@ -467,27 +579,40 @@ func (d *decoder) value(t string, depth int) (any, error) {
 		return int32(n), err
 	case 'u', 'h':
 		return d.u32()
-	case 'n', 'q':
-		if err := d.align(2); err != nil {
-			return nil, err
-		}
-		b, err := d.take(2)
-		if err != nil {
-			return nil, err
-		}
-		if t[0] == 'n' {
-			return int16(d.order.Uint16(b)), nil
-		}
-		return d.order.Uint16(b), nil
-	case 'x', 't', 'd':
-		if err := d.align(8); err != nil {
-			return nil, err
-		}
-		b, err := d.take(8)
-		if err != nil {
-			return nil, err
-		}
-		return d.order.Uint64(b), nil
+	}
+	return nil, fmt.Errorf("dbus: type %s is not supported", t)
+}
+
+// int16 reads a value of a 16-bit type.
+func (d *decoder) int16(t string) (any, error) {
+	if err := d.align(2); err != nil {
+		return nil, err
+	}
+	b, err := d.take(2)
+	if err != nil {
+		return nil, err
+	}
+	if t[0] == 'n' {
+		return int16(d.order.Uint16(b)), nil
+	}
+	return d.order.Uint16(b), nil
+}
+
+// int64 reads a value of a 64-bit type.
+func (d *decoder) int64() (any, error) {
+	if err := d.align(8); err != nil {
+		return nil, err
+	}
+	b, err := d.take(8)
+	if err != nil {
+		return nil, err
+	}
+	return d.order.Uint64(b), nil
+}
+
+// text reads a value of a string-like type.
+func (d *decoder) text(t string) (any, error) {
+	switch t[0] {
 	case 's', 'o':
 		n, err := d.u32()
 		if err != nil {
@@ -511,68 +636,77 @@ func (d *decoder) value(t string, depth int) (any, error) {
 			return nil, err
 		}
 		return string(b[:l[0]]), nil
-	case 'a':
-		n, err := d.u32()
-		if err != nil {
-			return nil, err
-		}
-		if n > maxArray {
-			return nil, errors.New("dbus: array too long")
-		}
-		elem := t[1:]
-		if err := d.align(alignment(elem)); err != nil {
-			return nil, err
-		}
-		if int(n) > len(d.b)-d.pos {
-			return nil, errShort
-		}
-		end := d.pos + int(n)
-		items := []any{}
-		for d.pos < end {
-			v, err := d.value(elem, depth+1)
-			if err != nil {
-				return nil, err
-			}
-			items = append(items, v)
-		}
-		if d.pos != end {
-			return nil, errors.New("dbus: array elements overrun its length")
-		}
-		return items, nil
-	case '(', '{':
-		if err := d.align(8); err != nil {
-			return nil, err
-		}
-		types, err := splitSig(t[1 : len(t)-1])
-		if err != nil {
-			return nil, err
-		}
-		var fields []any
-		for _, ft := range types {
-			v, err := d.value(ft, depth+1)
-			if err != nil {
-				return nil, err
-			}
-			fields = append(fields, v)
-		}
-		if t[0] == '{' {
-			return dictEntry{fields[0], fields[1]}, nil
-		}
-		return fields, nil
-	case 'v':
-		s, err := d.value("g", depth+1)
-		if err != nil {
-			return nil, err
-		}
-		sig := s.(string)
-		if _, rest, err := nextType(sig, depth+1); err != nil || rest != "" {
-			return nil, fmt.Errorf("dbus: variant of signature %q", sig)
-		}
-		v, err := d.value(sig, depth+1)
-		if err != nil {
-			return nil, err
-		}
-		return variant{sig, v}, nil
 	}
 	return nil, fmt.Errorf("dbus: type %s is not supported", t)
+}
+
+// array reads an array of the element type t names.
+func (d *decoder) array(t string, depth int) (any, error) {
+	n, err := d.u32()
+	if err != nil {
+		return nil, err
+	}
+	if n > maxArray {
+		return nil, errors.New("dbus: array too long")
+	}
+	elem := t[1:]
+	if err := d.align(alignment(elem)); err != nil {
+		return nil, err
+	}
+	if int(n) > len(d.b)-d.pos {
+		return nil, errShort
+	}
+	end := d.pos + int(n)
+	items := []any{}
+	for d.pos < end {
+		v, err := d.value(elem, depth+1)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, v)
+	}
+	if d.pos != end {
+		return nil, errors.New("dbus: array elements overrun its length")
+	}
+	return items, nil
+}
+
+// fields reads a struct or a dict entry of the field types t names.
+func (d *decoder) fields(t string, depth int) (any, error) {
+	if err := d.align(8); err != nil {
+		return nil, err
+	}
+	types, err := splitSig(t[1 : len(t)-1])
+	if err != nil {
+		return nil, err
+	}
+	var fields []any
+	for _, ft := range types {
+		v, err := d.value(ft, depth+1)
+		if err != nil {
+			return nil, err
+		}
+		fields = append(fields, v)
+	}
+	if t[0] == '{' {
+		return dictEntry{fields[0], fields[1]}, nil
+	}
+	return fields, nil
+}
+
+// variant reads a variant: its signature then its value.
+func (d *decoder) variant(depth int) (any, error) {
+	s, err := d.value("g", depth+1)
+	if err != nil {
+		return nil, err
+	}
+	sig := s.(string)
+	if _, rest, err := nextType(sig, depth+1); err != nil || rest != "" {
+		return nil, fmt.Errorf("dbus: variant of signature %q", sig)
+	}
+	v, err := d.value(sig, depth+1)
+	if err != nil {
+		return nil, err
+	}
+	return variant{sig, v}, nil
 }
