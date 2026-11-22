@@ -44,27 +44,48 @@ type Canvas struct {
 	*frameState
 }
 
-// frameState is everything a frame accumulates once: what was painted, what
-// it retained, and the accessibility tree built alongside. Every Canvas in a
-// Clip chain reaches the same one through root, so a field added here is
-// shared by construction and needs no clearing when a child Canvas is made.
+// frameState is everything a frame accumulates once: per-pass transient state
+// (reset on every paint pass, whole or partial) and cross-frame retained and
+// pooled buffers (advanced only on whole frames). Every Canvas in a Clip chain
+// reaches the same one through root, so a field added here is shared by
+// construction and needs no clearing when a child Canvas is made.
 type frameState struct {
-	logical  Size // the window in logical pixels, for Size
-	overlays []overlay
+	passState    // per-pass transient state; reset by beginPass / endPass
+	frameBuffers // cross-frame double buffers, retained slots, and pools
+}
+
+// passState holds the transient state scoped to a single paint pass (whole or
+// partial). beginPass initializes it before painting and endPass clears
+// transient references when the pass finishes.
+type passState struct {
 	// clock is the frame clock of the world painting, for the length of a
 	// paint, so that Paint finds it without asking which goroutine runs.
 	// Outside a paint it is nil, and Paint asks.
 	clock *frameClock
 
-	// The images Layer lends, by depth: as large as the areas the layers
-	// at that depth took this frame, kept for the next frame's, and freed
-	// at the end of one that took them no more.
-	layers render.LayerPool[*ggfx.Image]
+	overlays []overlay
 
 	// backdrop records that a BackdropBlur read the window's own image
 	// this frame, or wanted to: the window keeps a backbuffer for it where
 	// its screen cannot be read.
 	backdrop bool
+
+	// cur is where in the tree of regions the paint is: see parentFor.
+	cur regionCursor
+
+	motionState // what a frame painted in part repaints; see damage.go
+}
+
+// frameBuffers holds the state that persists across frames: the logical
+// viewport, double-buffered hit regions, retained slots, Canvas and layer
+// pools, inspector trace, and accessibility staging buffer.
+type frameBuffers struct {
+	logical Size // the window in logical pixels, for Size
+
+	// The images Layer lends, by depth: as large as the areas the layers
+	// at that depth took this frame, kept for the next frame's, and freed
+	// at the end of one that took them no more.
+	layers render.LayerPool[*ggfx.Image]
 
 	inputView    // where the pointer and focus were as the paint began
 	paintedInput // what the paint registers for input
@@ -73,7 +94,21 @@ type frameState struct {
 	canvasPool   // the Canvases Clip hands out
 	traceState   // every widget painted, for the inspector; see inspector.go
 	semState     // the accessibility tree; see semantics.go
-	motionState  // what a frame painted in part repaints; see damage.go
+}
+
+// beginPass initializes per-pass state for a paint (whole or partial).
+func (f *frameState) beginPass(clock *frameClock) {
+	f.resetCanvases()
+	f.clock = clock
+	f.startMotion()
+	f.backdrop = false
+	f.cur = regionCursor{}
+}
+
+// endPass clears transient per-pass references once a paint pass finishes.
+func (f *frameState) endPass() {
+	f.resetCanvases()
+	f.clock = nil
 }
 
 // paintedInput is what a paint registers for input to take when it ends:
@@ -91,8 +126,33 @@ type paintedInput struct {
 	revealRequests       []Rect
 	inputObservers       []inputObserver
 	shortcuts            []paintedShortcut
-	// cur is where in the tree of regions the paint is: see parentFor.
-	cur regionCursor
+}
+
+// regionSwap records the spare buffers rotated out by swapBuffers so a frame
+// that ends before painting can restore hits/prev without allocating a closure.
+type regionSwap struct {
+	spare        []hitRegion
+	spareWithins []withinEntry
+}
+
+// swapBuffers rotates hits/withins into prev/prevWithins and clears the spare
+// buffers for the new paint, keeping last frame's regions readable for Adopter
+// handoff and input routing until the paint finishes.
+func (p *paintedInput) swapBuffers() regionSwap {
+	spare, spareWithins := p.prev, p.prevWithins
+	clear(spare)
+	clear(spareWithins)
+	spare, spareWithins = spare[:0], spareWithins[:0]
+	p.prev, p.hits = p.hits, spare
+	p.prevWithins, p.withins = p.withins, spareWithins
+	return regionSwap{spare: spare, spareWithins: spareWithins}
+}
+
+// unswapBuffers restores the double-buffer state after an aborted paint before
+// anything painted into the spare buffers.
+func (p *paintedInput) unswapBuffers(s regionSwap) {
+	p.hits, p.prev = p.prev, s.spare
+	p.withins, p.prevWithins = p.prevWithins, s.spareWithins
 }
 
 // regionCursor is where in the region tree the paint is, as indices plus
@@ -289,7 +349,7 @@ func (c *Canvas) fs() *frameState {
 	}
 	r := c.root()
 	if r.frameState == nil {
-		r.frameState = &frameState{layers: render.LayerPool[*ggfx.Image]{Gauge: gaugeLayers}}
+		r.frameState = &frameState{frameBuffers: frameBuffers{layers: render.LayerPool[*ggfx.Image]{Gauge: gaugeLayers}}}
 	}
 	c.frameState = r.frameState
 	return c.frameState

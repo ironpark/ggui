@@ -556,18 +556,7 @@ func (l *frameLoop) paint(p paintPass) (bool, error) {
 	// Adopter handoff, and input keeps routing to them until the paint is
 	// done. The buffer of the frame before takes the new regions: input
 	// keeps copies of the regions it follows, never a pointer into it.
-	spare, spareWithins := f.prev, f.prevWithins
-	clear(spare)
-	clear(spareWithins)
-	spare, spareWithins = spare[:0], spareWithins[:0]
-	f.prev, f.hits = f.hits, spare
-	f.prevWithins, f.withins = f.withins, spareWithins
-	// A frame that ends before painting leaves the buffers as they were,
-	// so the one input routes to is never painted into.
-	unswap := func() {
-		f.hits, f.prev = f.prev, spare
-		f.withins, f.prevWithins = f.prevWithins, spareWithins
-	}
+	swap := f.paintedInput.swapBuffers()
 	f.logical = p.size
 	f.traceState.reset(p.tracing)
 	f.inputView.take(in)
@@ -575,11 +564,11 @@ func (l *frameLoop) paint(p paintPass) (bool, error) {
 	c.resetSemantics()
 	f.semOff = p.semOff
 	if err := l.settle(p.size); err != nil {
-		unswap()
+		f.paintedInput.unswapBuffers(swap)
 		return false, err
 	}
 	if l.closed || l.root == nil {
-		unswap()
+		f.paintedInput.unswapBuffers(swap)
 		return false, nil
 	}
 	if p.hooks != nil {
@@ -615,19 +604,14 @@ func (l *frameLoop) paint(p paintPass) (bool, error) {
 // BackdropBlur has read the image yet. Defer endPaint with what it returns.
 func (l *frameLoop) beginPaint(c *Canvas) *frameState {
 	f := c.fs()
-	f.resetCanvases()
-	f.clock = &l.world().frame
-	f.startMotion()
-	f.backdrop = false
-	f.cur = regionCursor{}
+	f.beginPass(&l.world().frame)
 	return f
 }
 
 // endPaint ends the paint beginPaint began: no Canvas Clip handed out
 // outlives it, and outside a paint, Paint asks for the clock.
 func endPaint(f *frameState) {
-	f.resetCanvases()
-	f.clock = nil
+	f.endPass()
 }
 
 // settle completes structural work, including mounts discovered by layout,
