@@ -220,7 +220,7 @@ func (t *TextInputWidget) eachLine(v *inputView, lo, hi int, fn func(i int, a, b
 		if hi > sp.End && i+1 < len(spans) {
 			runOn = t.advance(" ")
 		}
-		t.spanX(v.shown, sp, t.bidiAt(v.wrapped, i), lo, hi, runOn, func(a, b float64) { fn(i, a, b) })
+		t.spanX(shownLine{text: v.shown, span: sp, bidi: t.bidiAt(v.wrapped, i)}, lo, hi, runOn, func(a, b float64) { fn(i, a, b) })
 	}
 }
 
@@ -283,14 +283,21 @@ func placeholderLines(s string, multiline bool) []string {
 	return []string{strings.ReplaceAll(s, "\n", " ")}
 }
 
+type shownLine struct {
+	text string
+	span textlayout.Span
+	bidi *editlayout.Line
+}
+
 // spanX calls fn with the stretches, from the line's left edge, that the
-// offsets lo to hi of s cover on the line sp of it, laid out as bl, or
-// as it is when bl is nil: one stretch, or one per piece of a reordered
-// line. runOn more is covered past the line's end.
-func (t *TextInputWidget) spanX(s string, sp textlayout.Span, bl *editlayout.Line, lo, hi int, runOn float64, fn func(a, b float64)) {
+// offsets lo to hi of the text cover on the line's span of it, laid out as
+// its bidi layout, or as it is when that is nil: one stretch, or one per
+// piece of a reordered line. runOn more is covered past the line's end.
+func (t *TextInputWidget) spanX(line shownLine, lo, hi int, runOn float64, fn func(a, b float64)) {
+	sp, bl := line.span, line.bidi
 	a, b := max(lo, sp.Start), min(hi, sp.End)
 	if bl == nil {
-		fn(t.advance(s[sp.Start:a]), t.advance(s[sp.Start:b])+runOn)
+		fn(t.advance(line.text[sp.Start:a]), t.advance(line.text[sp.Start:b])+runOn)
 		return
 	}
 	scale := t.measureScale()
@@ -319,7 +326,7 @@ func (t *TextInputWidget) drawText(v *inputView, i int, colors []TextColor, op *
 		if p.Color != nil {
 			col = ggui.ResolveColor(p.Color, t.env)
 		}
-		t.spanX(s, sp, bl, p.Start, p.End, 0, func(a, b float64) {
+		t.spanX(shownLine{text: s, span: sp, bidi: bl}, p.Start, p.End, 0, func(a, b float64) {
 			// A glyph may stand out past the line's ends, as an italic's
 			// does: the clip there runs on.
 			if a <= 0 {

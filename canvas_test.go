@@ -376,7 +376,7 @@ func TestClipNestsAndTrimsRegions(t *testing.T) {
 	}
 }
 
-func TestPhysicalGuardsEmptyAndNonFiniteAndComparableIDRejectsUncomparableInterface(t *testing.T) {
+func TestPhysicalGuardsEmptyAndNonFiniteAndHashableIDRejectsUncomparableInterface(t *testing.T) {
 	t.Parallel()
 	c := &Canvas{scale: 2}
 	for _, r := range []Rect{
