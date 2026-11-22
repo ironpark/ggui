@@ -232,12 +232,22 @@ func (w *Watcher) classify(b fswatch.Batch) (real, cosmetic, dirs []string, list
 	if len(maybe) == 0 {
 		return real, cosmetic, dirs, false
 	}
-	paths := make([]string, len(maybe))
-	for i, e := range maybe {
+	moved, list := w.outside(maybe)
+	dirs = append(dirs, moved...)
+	slices.Sort(dirs)
+	return real, cosmetic, slices.Compact(dirs), list
+}
+
+// outside sorts the changes to paths outside the set: what is ignored
+// passes in silence, an edit to a Go file may make it one the program is
+// built from, and a file that came or went changed its directory.
+func (w *Watcher) outside(events []fswatch.Event) (dirs []string, list bool) {
+	paths := make([]string, len(events))
+	for i, e := range events {
 		paths[i] = e.Path
 	}
 	ignored := w.o.Ignore.Filter(paths)
-	for i, e := range maybe {
+	for i, e := range events {
 		switch {
 		case ignored[i]:
 		case e.Op == fswatch.Write:
@@ -246,8 +256,7 @@ func (w *Watcher) classify(b fswatch.Batch) (real, cosmetic, dirs []string, list
 			dirs = append(dirs, filepath.Dir(e.Path))
 		}
 	}
-	slices.Sort(dirs)
-	return real, cosmetic, slices.Compact(dirs), list
+	return dirs, list
 }
 
 // listed is the outcome of a List.
@@ -282,127 +291,157 @@ func (w *Watcher) Run(ctx context.Context, out chan<- Change) {
 		<-fsDone
 	}()
 
-	var (
-		outbox    *Change
-		pend      *pending
-		listGen   int  // listings started
-		listing   bool // one is running
-		listAgain bool // another is wanted when it ends
-		results   = make(chan listed, 1)
-	)
-	emit := func(c Change) {
-		if len(c.Real) > 0 {
-			// A build is coming, which reads the tree as it is then;
-			// whatever waited for a listing is in it.
-			pend = nil
-		}
-		if outbox == nil {
-			outbox = &c
-		} else {
-			outbox.merge(c)
-		}
-	}
-	startList := func() {
-		if w.o.List == nil {
-			return
-		}
-		if listing {
-			listAgain = true
-			return
-		}
-		listing = true
-		listGen++
-		gen := listGen
-		go func() {
-			paths, err := w.o.List(ctx)
-			results <- listed{gen, paths, err}
-		}()
-	}
-	// wait holds a change until a listing that starts after now ends.
-	wait := func(dirs, cosmetic []string, at time.Time) {
-		next := listGen + 1
-		if pend == nil {
-			pend = &pending{at: at}
-		}
-		pend.after = next
-		pend.dirs = union(pend.dirs, dirs)
-		pend.cosmetic = union(pend.cosmetic, cosmetic)
-		startList()
-	}
-	take := func(b fswatch.Batch) {
-		if len(b.Changes) == 0 {
-			return
-		}
-		real, cosmetic, dirs, list := w.classify(b)
-		switch {
-		case len(real) > 0:
-			w.tracef("scan: %d changed (%v), %d in comments or layout only", len(real), short(real), len(cosmetic))
-			emit(Change{Real: real, Cosmetic: cosmetic, At: b.At})
-			startList() // an import may have come or gone
-		case len(dirs) > 0 || list:
-			w.tracef("scan: a directory or a file outside the build changed; listing the sources again")
-			wait(dirs, cosmetic, b.At)
-		case len(cosmetic) > 0:
-			w.tracef("scan: %v changed in comments or layout only", short(cosmetic))
-			emit(Change{Cosmetic: cosmetic, At: b.At})
-		}
-	}
-
-	for {
+	s := runState{w: w, results: make(chan listed, 1)}
+	var stop bool
+	for !stop {
 		var send chan<- Change
 		var c Change
-		if outbox != nil {
-			send, c = out, *outbox
+		if s.outbox != nil {
+			send, c = out, *s.outbox
 		}
 		select {
 		case <-ctx.Done():
 			return
 		case send <- c:
-			outbox = nil
+			s.outbox = nil
 		case b := <-batches:
-			take(b)
+			s.take(ctx, b)
 		case <-w.relists:
 			w.tracef("asked to list the sources again")
-			startList()
+			s.startList(ctx)
 		case reply := <-w.syncs:
-			take(w.fs.Sync(ctx))
-			var c Change
-			if outbox != nil {
-				c, outbox = *outbox, nil
-			}
-			reply <- c
-		case r := <-results:
-			listing = false
-			if r.err != nil {
-				if ctx.Err() != nil {
-					return
-				}
-				w.tracef("listing the sources failed: %v", r.err)
-				if pend != nil && r.gen >= pend.after && len(pend.dirs) > 0 {
-					// Let the build say what is wrong.
-					emit(Change{Real: pend.dirs, At: pend.at})
-				}
-			} else {
-				added := w.Set(r.paths)
-				if pend != nil && r.gen >= pend.after {
-					switch {
-					case len(added) > 0:
-						w.tracef("listed: %d new to the build (%v)", len(added), short(added))
-						emit(Change{Real: added, Cosmetic: pend.cosmetic, At: pend.at})
-					case len(pend.cosmetic) > 0:
-						emit(Change{Cosmetic: pend.cosmetic, At: pend.at})
-					default:
-						w.tracef("listed: nothing new to the build; nothing to do")
-					}
-					pend = nil
-				}
-			}
-			if listAgain {
-				listAgain = false
-				startList()
-			}
+			reply <- s.scanNow(ctx)
+		case r := <-s.results:
+			stop = s.listEnded(ctx, r)
 		}
 	}
+}
+
+// runState is what Run keeps between the things it waits on: the change
+// waiting to be sent, the change waiting for a listing, and the listings.
+type runState struct {
+	w         *Watcher
+	outbox    *Change
+	pend      *pending
+	listGen   int  // listings started
+	listing   bool // one is running
+	listAgain bool // another is wanted when it ends
+	results   chan listed
+}
+
+// emit puts c in the outbox, merged with what waits there to be sent.
+func (s *runState) emit(c Change) {
+	if len(c.Real) > 0 {
+		// A build is coming, which reads the tree as it is then;
+		// whatever waited for a listing is in it.
+		s.pend = nil
+	}
+	if s.outbox == nil {
+		s.outbox = &c
+	} else {
+		s.outbox.merge(c)
+	}
+}
+
+// startList has the set listed again on a goroutine of its own, which
+// sends the outcome on results. Asked while a listing runs, it lists once
+// more when that one ends.
+func (s *runState) startList(ctx context.Context) {
+	list := s.w.o.List
+	if list == nil {
+		return
+	}
+	if s.listing {
+		s.listAgain = true
+		return
+	}
+	s.listing = true
+	s.listGen++
+	gen, results := s.listGen, s.results
+	go func() {
+		paths, err := list(ctx)
+		results <- listed{gen, paths, err}
+	}()
+}
+
+// wait holds a change until a listing that starts after now ends.
+func (s *runState) wait(ctx context.Context, dirs, cosmetic []string, at time.Time) {
+	next := s.listGen + 1
+	if s.pend == nil {
+		s.pend = &pending{at: at}
+	}
+	s.pend.after = next
+	s.pend.dirs = union(s.pend.dirs, dirs)
+	s.pend.cosmetic = union(s.pend.cosmetic, cosmetic)
+	s.startList(ctx)
+}
+
+// take sorts what a scan found into a change to send and one that waits
+// for the set to be listed again.
+func (s *runState) take(ctx context.Context, b fswatch.Batch) {
+	if len(b.Changes) == 0 {
+		return
+	}
+	real, cosmetic, dirs, list := s.w.classify(b)
+	switch {
+	case len(real) > 0:
+		s.w.tracef("scan: %d changed (%v), %d in comments or layout only", len(real), short(real), len(cosmetic))
+		s.emit(Change{Real: real, Cosmetic: cosmetic, At: b.At})
+		s.startList(ctx) // an import may have come or gone
+	case len(dirs) > 0 || list:
+		s.w.tracef("scan: a directory or a file outside the build changed; listing the sources again")
+		s.wait(ctx, dirs, cosmetic, b.At)
+	case len(cosmetic) > 0:
+		s.w.tracef("scan: %v changed in comments or layout only", short(cosmetic))
+		s.emit(Change{Cosmetic: cosmetic, At: b.At})
+	}
+}
+
+// scanNow has fswatch scan at once and returns what Run would send next,
+// which then no longer waits to be sent: Sync's answer.
+func (s *runState) scanNow(ctx context.Context) Change {
+	s.take(ctx, s.w.fs.Sync(ctx))
+	var c Change
+	if s.outbox != nil {
+		c, s.outbox = *s.outbox, nil
+	}
+	return c
+}
+
+// listEnded takes the set a listing returned, and judges the change that
+// waited for a listing started after it was found. It reports whether Run
+// stops: a listing fails as ctx ends.
+func (s *runState) listEnded(ctx context.Context, r listed) (stop bool) {
+	s.listing = false
+	if r.err != nil {
+		if ctx.Err() != nil {
+			return true
+		}
+		s.w.tracef("listing the sources failed: %v", r.err)
+		if s.pend != nil && r.gen >= s.pend.after && len(s.pend.dirs) > 0 {
+			// Let the build say what is wrong.
+			s.emit(Change{Real: s.pend.dirs, At: s.pend.at})
+		}
+	} else {
+		added := s.w.Set(r.paths)
+		if s.pend != nil && r.gen >= s.pend.after {
+			switch {
+			case len(added) > 0:
+				s.w.tracef("listed: %d new to the build (%v)", len(added), short(added))
+				s.emit(Change{Real: added, Cosmetic: s.pend.cosmetic, At: s.pend.at})
+			case len(s.pend.cosmetic) > 0:
+				s.emit(Change{Cosmetic: s.pend.cosmetic, At: s.pend.at})
+			default:
+				s.w.tracef("listed: nothing new to the build; nothing to do")
+			}
+			s.pend = nil
+		}
+	}
+	if s.listAgain {
+		s.listAgain = false
+		s.startList(ctx)
+	}
+	return false
 }
 
 // Sync has Run scan now, and returns what it found with whatever was
