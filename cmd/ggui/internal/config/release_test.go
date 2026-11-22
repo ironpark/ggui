@@ -80,3 +80,9 @@ tags = ["gui", "go"]
 		t.Errorf("values not read: %+v", r)
 	}
 }
+
+func TestEmptyPublishListIsAccepted(t *testing.T) {
+	if _, err := Parse("ggui.toml", []byte("[release]\npublish = []\n")); err != nil {
+		t.Fatalf("an empty release.publish was rejected: %v", err)
+	}
+}
