@@ -8,7 +8,7 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/framestats"
+	"github.com/ironpark/ggui/inspect"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -131,7 +131,7 @@ func TestSVGRasterBudgetAndGauge(t *testing.T) {
 	img := ggfx.NewImage(64, 64)
 	defer img.Deallocate()
 	c := &ggui.Canvas{Image: img}
-	base := framestats.ReadTextures().Icons
+	base := inspect.ReadTextureBytes().Icons
 	svgs := make([]*SVG, 4)
 	for i := range svgs {
 		s, err := Parse([]byte(squareSVG))
@@ -142,7 +142,7 @@ func TestSVGRasterBudgetAndGauge(t *testing.T) {
 	}
 	defer drain(svgs...)
 	draw := func(s *SVG, size float64) { s.Draw(c, ggui.Rct(ggui.Pt(0, 0), ggui.Sz(size, size)), color.White, 0) }
-	gauge := func() int64 { return framestats.ReadTextures().Icons - base }
+	gauge := func() int64 { return inspect.ReadTextureBytes().Icons - base }
 
 	var want int64
 	for size := 10; size < 20; size++ {

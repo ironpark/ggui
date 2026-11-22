@@ -15,8 +15,6 @@ import (
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggfx/svg"
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/framestats"
-	"github.com/ironpark/ggui/internal/render"
 	"github.com/ironpark/ggui/pkg/gem"
 )
 
@@ -44,9 +42,7 @@ type raster struct {
 // alpha-only, a byte a pixel.
 const rasterFormat = ggfx.PixelFormatAlpha
 
-func (r *raster) bytes() int64 { return framestats.ImageBytesOf(r.size, r.size, rasterFormat) }
-
-func (r *raster) bounds() image.Rectangle { return image.Rect(0, 0, r.size, r.size) }
+func (r *raster) bytes() int64 { return ggui.ImageBytes(r.size, r.size, rasterFormat) }
 
 // rasterBudget is the bytes of rasters every SVG together keeps.
 const rasterBudget = 32 << 20
@@ -90,8 +86,9 @@ func (l *rasterList) pushFront(r *raster) {
 // add puts r, new, on the list as drawn now.
 func (l *rasterList) add(r *raster) {
 	l.pushFront(r)
-	l.bytes += r.bytes()
-	framestats.KeptOf(framestats.Icons, r.bounds(), rasterFormat)
+	n := r.bytes()
+	l.bytes += n
+	ggui.AccountTexture(ggui.TextureIcons, n)
 }
 
 // touch marks r drawn now.
@@ -105,14 +102,15 @@ func (l *rasterList) touch(r *raster) {
 // free takes r off the list and its SVG's cache, and deallocates it.
 func (l *rasterList) free(r *raster) {
 	l.unlink(r)
-	l.bytes -= r.bytes()
+	n := r.bytes()
+	l.bytes -= n
 	if s := r.owner.Value(); s != nil {
 		if i := slices.Index(s.cache, r); i >= 0 {
 			s.cache = slices.Delete(s.cache, i, i+1)
 		}
 	}
 	r.image.Deallocate()
-	framestats.FreedOf(framestats.Icons, r.bounds(), rasterFormat)
+	ggui.AccountTexture(ggui.TextureIcons, -n)
 }
 
 // sweepDead frees every raster whose owning SVG has been garbage collected.
@@ -183,7 +181,7 @@ func (s *SVG) upload(size int) *ggfx.Image {
 	img := scratchRGBA(size)
 	defer releaseScratch(img)
 	s.drawCoverage(img)
-	return render.NewTextureOf(img, rasterFormat)
+	return ggui.UploadTexture(img, rasterFormat)
 }
 
 // Parse compiles SVG paths once without creating GPU resources.
