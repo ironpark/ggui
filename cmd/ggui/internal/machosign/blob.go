@@ -152,15 +152,21 @@ func (s *superBlob) encode(code []byte) []byte {
 	slots, blobs := s.blobs()
 	slots = append([]uint32{slotCodeDirectory}, slots...)
 	blobs = append([][]byte{s.cd.encode(code)}, blobs...)
-	b := make([]byte, 12+8*len(slots))
-	be.PutUint32(b[0:], magicSuperBlob)
-	be.PutUint32(b[8:], uint32(len(slots)))
+	header := make([]byte, 12+8*len(slots))
+	be.PutUint32(header[0:], magicSuperBlob)
+	be.PutUint32(header[8:], uint32(len(slots)))
+	offset := len(header)
 	for i, slot := range slots {
-		be.PutUint32(b[12+8*i:], slot)
-		be.PutUint32(b[16+8*i:], uint32(len(b)))
-		b = append(b, blobs[i]...)
+		be.PutUint32(header[12+8*i:], slot)
+		be.PutUint32(header[16+8*i:], uint32(offset))
+		offset += len(blobs[i])
 	}
-	be.PutUint32(b[4:], uint32(len(b)))
+	be.PutUint32(header[4:], uint32(offset))
+	b := make([]byte, 0, offset)
+	b = append(b, header...)
+	for _, blob := range blobs {
+		b = append(b, blob...)
+	}
 	return b
 }
 

@@ -853,8 +853,8 @@ func safeComparableType(t reflect.Type) bool {
 		safe = safeComparableType(t.Elem())
 	case reflect.Struct:
 		safe = true
-		for i := range t.NumField() {
-			if !safeComparableType(t.Field(i).Type) {
+		for field := range t.Fields() {
+			if !safeComparableType(field.Type) {
 				safe = false
 				break
 			}
@@ -899,8 +899,8 @@ func isHashableValue(v reflect.Value) bool {
 		if safeComparableType(t) {
 			return true
 		}
-		for i := range v.NumField() {
-			if !isHashableValue(v.Field(i)) {
+		for _, field := range v.Fields() {
+			if !isHashableValue(field) {
 				return false
 			}
 		}

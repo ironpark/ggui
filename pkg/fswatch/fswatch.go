@@ -451,8 +451,7 @@ func (w *Watcher) Sync(ctx context.Context) Batch {
 			w.state = stateBusy
 			w.stateCh = make(chan struct{})
 			w.runMu.Unlock()
-			defer w.setState(stateIdle)
-			return w.check(false, nil)
+			return w.scanIdle()
 		case stateBusy:
 			ch := w.stateCh
 			w.runMu.Unlock()
@@ -480,6 +479,11 @@ func (w *Watcher) Sync(ctx context.Context) Batch {
 			}
 		}
 	}
+}
+
+func (w *Watcher) scanIdle() Batch {
+	defer w.setState(stateIdle)
+	return w.check(false, nil)
 }
 
 // Run watches until ctx is done and sends each batch of changes on out.
@@ -530,7 +534,8 @@ func (w *Watcher) Run(ctx context.Context, out chan<- Batch) {
 		shape = s
 		if src != nil {
 			if err := src.watch(dirs); err != nil {
-				src = w.fallBack(src, err, tick)
+				w.fallBack(src, err, tick)
+				src = nil
 			}
 		}
 		return true
@@ -586,7 +591,8 @@ func (w *Watcher) Run(ctx context.Context, out chan<- Batch) {
 			}
 			paths, all, err := src.take()
 			if err != nil {
-				src = w.fallBack(src, err, tick)
+				w.fallBack(src, err, tick)
+				src = nil
 				check(true, nil)
 				continue
 			}
@@ -625,7 +631,8 @@ func (w *Watcher) Run(ctx context.Context, out chan<- Batch) {
 				}
 				paths, all, err := src.take()
 				if err != nil {
-					src = w.fallBack(src, err, tick)
+					w.fallBack(src, err, tick)
+					src = nil
 					full = true
 				} else if all {
 					w.tracef("the system lost events: rescanning everything")
@@ -660,11 +667,10 @@ func (w *Watcher) openSource() source {
 }
 
 // fallBack gives up on src after err, for polling.
-func (w *Watcher) fallBack(src source, err error, tick *time.Ticker) source {
+func (w *Watcher) fallBack(src source, err error, tick *time.Ticker) {
 	src.close()
 	w.logf("%v; looking for changes every %s instead", err, w.o.Poll)
 	tick.Reset(w.o.Poll)
-	return nil
 }
 
 // dirs returns the directories whose entries are of interest to a

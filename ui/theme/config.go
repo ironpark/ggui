@@ -321,12 +321,7 @@ func hasConfigFont(font FontFamily) bool {
 		return true
 	}
 	if aliases := fontAliases(font); aliases != nil {
-		for _, alias := range aliases {
-			if hasFontNamed(alias) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(aliases, hasFontNamed)
 	}
 	return hasFontNamed(string(font))
 }

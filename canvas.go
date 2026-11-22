@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"image"
+	"maps"
 	"math"
 	"reflect"
 	"time"
@@ -289,9 +290,7 @@ func (r *retained) endPartial() {
 		if r.keeps == nil {
 			r.keeps = make(map[retainKey]any, len(r.staged))
 		}
-		for k, v := range r.staged {
-			r.keeps[k] = v
-		}
+		maps.Copy(r.keeps, r.staged)
 	}
 	r.abortPartial()
 }
@@ -349,7 +348,7 @@ func (c *Canvas) fs() *frameState {
 	}
 	r := c.root()
 	if r.frameState == nil {
-		r.frameState = &frameState{frameBuffers: frameBuffers{layers: render.LayerPool[*ggfx.Image]{Gauge: gaugeLayers}}}
+		r.frameState = &frameState{layers: render.LayerPool[*ggfx.Image]{Gauge: gaugeLayers}}
 	}
 	c.frameState = r.frameState
 	return c.frameState

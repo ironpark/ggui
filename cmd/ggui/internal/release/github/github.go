@@ -100,6 +100,8 @@ func (c *Client) do(ctx context.Context, method, u string, b body, contentType s
 	if wait <= 0 {
 		wait = time.Second
 	}
+	retry := time.NewTimer(wait)
+	defer retry.Stop()
 	for attempt := 0; ; attempt++ {
 		err := c.once(ctx, method, u, b, contentType, out)
 		if err == nil || attempt >= c.Retries || !transient(err) || ctx.Err() != nil {
@@ -108,10 +110,11 @@ func (c *Client) do(ctx context.Context, method, u string, b body, contentType s
 		if c.Logf != nil {
 			c.Logf("%v; trying again in %v", err, wait)
 		}
+		retry.Reset(wait)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(wait):
+		case <-retry.C:
 		}
 		wait *= 2
 	}

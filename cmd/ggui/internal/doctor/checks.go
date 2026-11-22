@@ -400,7 +400,7 @@ func checkIcon(r *Report, path string) {
 	}
 }
 
-func checkTools(ctx context.Context, r *Report, env map[string]string) {
+func checkTools(ctx context.Context, r *Report) {
 	// wasm-opt only shrinks web builds; without it they ship as linked.
 	if p, err := exec.LookPath("wasm-opt"); err == nil {
 		v := firstLine(run(ctx, p, "--version"))
