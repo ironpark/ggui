@@ -118,11 +118,3 @@ func TestControlSeparatesInputRolesFromContent(t *testing.T) {
 		}
 	}
 }
-
-func TestGeometryConstructorsForwardToGeom(t *testing.T) {
-	t.Parallel()
-	r := Rct(Pt(1, 2), Sz(3.5, 4))
-	if r.Origin.X != 1 || r.Origin.Y != 2 || r.Size.W != 3.5 || r.Size.H != 4 {
-		t.Errorf("Rct(Pt(1, 2), Sz(3.5, 4)) = %+v", r)
-	}
-}

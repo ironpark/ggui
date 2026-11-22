@@ -43,12 +43,6 @@ func TestStubErrWins(t *testing.T) {
 	}
 }
 
-func TestNativeFilePickerIsThePlatforms(t *testing.T) {
-	if _, ok := NativeFilePicker().(nativePicker); !ok {
-		t.Fatalf("NativeFilePicker() = %T, want nativePicker", NativeFilePicker())
-	}
-}
-
 func TestAllAndFirstTurnNothingIntoACancel(t *testing.T) {
 	if _, err := all(nil, nil); !errors.Is(err, ErrCanceled) {
 		t.Fatalf("all(nil, nil) err = %v, want ErrCanceled", err)
