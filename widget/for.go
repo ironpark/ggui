@@ -147,7 +147,8 @@ func each[T any, K comparable](items ggui.Readable[[]T], key func(int, T) K, bui
 // removed, rows on their way out whose keys came back return, every row
 // is told its item and place, and the empty branch follows the list.
 func (f *EachWidget[T, K]) setItems(list []T) {
-	keys, seen := f.keysOf(list)
+	seen := make(map[K]bool, len(list))
+	keys := f.keysOf(list, seen)
 	f.removeGone(seen)
 	f.returnLeaving(seen)
 	for i, k := range keys {
@@ -170,11 +171,10 @@ func (f *EachWidget[T, K]) setItems(list []T) {
 	ggui.Relayout(f.env)
 }
 
-// keysOf returns the key of each item of list, and the set of them. It
+// keysOf returns the key of each item of list, adding each to seen. It
 // validates before any row changes, so duplicate keys cannot partially
 // apply.
-func (f *EachWidget[T, K]) keysOf(list []T) ([]K, map[K]bool) {
-	seen := make(map[K]bool, len(list))
+func (f *EachWidget[T, K]) keysOf(list []T, seen map[K]bool) []K {
 	keys := make([]K, len(list))
 	for i, value := range list {
 		k := f.key(i, value)
@@ -183,7 +183,7 @@ func (f *EachWidget[T, K]) keysOf(list []T) ([]K, map[K]bool) {
 		}
 		seen[k], keys[i] = true, k
 	}
-	return keys, seen
+	return keys
 }
 
 // removeGone removes the rows whose keys are not in seen. Where each
