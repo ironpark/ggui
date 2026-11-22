@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// DefaultPatterns are the names [DefaultIgnore] leaves out: version
+// DefaultPatterns are the names an [Ignore] leaves out: version
 // control directories, node_modules, Finder's .DS_Store, and the
 // temporary and backup files editors write beside the file they save:
 // Emacs's backups, lock files and auto-saves, Vim's swap files and the
@@ -78,11 +78,6 @@ func NewIgnore(c IgnoreConfig) *Ignore {
 		ig.git, _ = exec.LookPath("git")
 	}
 	return ig
-}
-
-// DefaultIgnore returns rules that leave out [DefaultPatterns].
-func DefaultIgnore() *Ignore {
-	return NewIgnore(IgnoreConfig{Patterns: DefaultPatterns})
 }
 
 // Reset forgets git's answers, for when a .gitignore changed.
