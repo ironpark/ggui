@@ -38,5 +38,5 @@ text = "^G118: "
 
 # n is a Duration quotient, a count, so n * period is a Duration.
 [[exclude]]
-paths = ["^widget/textinput\\.go$"]
+paths = ["^widget/textinput_paint\\.go$"]
 rules = ["durationcheck"]
