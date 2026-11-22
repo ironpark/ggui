@@ -1,6 +1,7 @@
 package fswatch
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -24,15 +25,6 @@ const rdcwMask = syscall.FILE_NOTIFY_CHANGE_FILE_NAME | syscall.FILE_NOTIFY_CHAN
 // rdcwBufSize is the size of a read's buffer, at most 64 KiB, the most a
 // network share takes.
 const rdcwBufSize = 64 << 10
-
-// fileNotifyInformation is FILE_NOTIFY_INFORMATION, followed by the rest
-// of its name.
-type fileNotifyInformation struct {
-	NextEntryOffset uint32
-	Action          uint32
-	FileNameLength  uint32
-	FileName        [1]uint16
-}
 
 // rdcwDir is one root being read. The kernel writes into buf and ov while
 // a read is pending, so a dir stays referenced, in rdcw.dirs, until its
@@ -194,7 +186,6 @@ func (s *rdcw) drop(d *rdcwDir) {
 
 func (s *rdcw) loop() {
 	defer close(s.done)
-	defer syscall.CloseHandle(s.port)
 	wait := uint32(syscall.INFINITE)
 	for {
 		var n uint32
@@ -262,16 +253,28 @@ func (s *rdcw) loop() {
 // parseNotify returns the paths named by the FILE_NOTIFY_INFORMATION
 // records in buf, below root.
 func parseNotify(root string, buf []byte) []string {
+	const headerSize = 12 // NextEntryOffset (4) + Action (4) + FileNameLength (4)
 	var out []string
-	for off := 0; off+int(unsafe.Offsetof(fileNotifyInformation{}.FileName)) <= len(buf); {
-		fi := (*fileNotifyInformation)(unsafe.Pointer(&buf[off]))
-		size := int(fi.FileNameLength / 2)
-		name := unsafe.Slice(&fi.FileName[0], size)
-		out = append(out, filepath.Join(root, syscall.UTF16ToString(name)))
-		if fi.NextEntryOffset == 0 {
+	for off := 0; off+headerSize <= len(buf); {
+		next := binary.LittleEndian.Uint32(buf[off:])
+		nameLen := binary.LittleEndian.Uint32(buf[off+8:])
+		avail := len(buf) - (off + headerSize)
+		if uint64(nameLen) > uint64(avail) || nameLen%2 != 0 {
 			break
 		}
-		off += int(fi.NextEntryOffset)
+		nameBytes := buf[off+headerSize : off+headerSize+int(nameLen)]
+		u16 := make([]uint16, len(nameBytes)/2)
+		for i := range u16 {
+			u16[i] = binary.LittleEndian.Uint16(nameBytes[2*i:])
+		}
+		out = append(out, filepath.Join(root, syscall.UTF16ToString(u16)))
+		if next == 0 {
+			break
+		}
+		if uint64(next) < uint64(headerSize)+uint64(nameLen) || uint64(next) > uint64(len(buf)-off) {
+			break
+		}
+		off += int(next)
 	}
 	return out
 }
@@ -290,6 +293,7 @@ func (s *rdcw) close() {
 	s.mu.Unlock()
 	postQueuedCompletionStatus(s.port, 0, 0, nil)
 	<-s.done
+	syscall.CloseHandle(s.port)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.dirs) > 0 {

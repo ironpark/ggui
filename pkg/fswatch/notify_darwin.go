@@ -206,7 +206,7 @@ func (s *fsevents) given(path string) string {
 	defer s.rmu.Unlock()
 	for _, r := range s.real {
 		if within(r[0], path) {
-			return r[1] + path[len(r[0]):]
+			return filepath.Join(r[1], path[len(r[0]):])
 		}
 	}
 	return path
@@ -239,22 +239,40 @@ func (s *fsevents) watch(dirs []string) error {
 		}
 		strs = append(strs, c)
 	}
+	slices.SortFunc(real, func(a, b [2]string) int {
+		if d := len(b[0]) - len(a[0]); d != 0 {
+			return d
+		}
+		return strings.Compare(a[0], b[0])
+	})
+	s.rmu.Lock()
+	prevReal := s.real
+	s.real = real
+	s.rmu.Unlock()
+	restoreReal := func() {
+		s.rmu.Lock()
+		s.real = prevReal
+		s.rmu.Unlock()
+	}
 	var stream uintptr
 	if len(strs) > 0 {
 		arr := fse.cfArray(0, &strs[0], len(strs), fse.arrayCallbacks)
 		if arr == 0 {
+			restoreReal()
 			return fmt.Errorf("FSEvents: cannot make an array")
 		}
 		ctx := fsContext{info: s.key}
 		stream = fse.create(0, fse.callback, &ctx, arr, eventIDSinceNow, latency, createNoDefer|createWatchRoot|createFileEvents)
 		fse.cfRelease(arr)
 		if stream == 0 {
+			restoreReal()
 			return fmt.Errorf("FSEvents: FSEventStreamCreate failed")
 		}
 		fse.setQueue(stream, fse.queue)
 		if !fse.start(stream) {
 			fse.invalidate(stream)
 			fse.release(stream)
+			restoreReal()
 			return fmt.Errorf("FSEvents: FSEventStreamStart failed")
 		}
 	}
@@ -264,9 +282,6 @@ func (s *fsevents) watch(dirs []string) error {
 		stopStream(s.stream)
 	}
 	s.stream, s.roots = stream, rs
-	s.rmu.Lock()
-	s.real = real
-	s.rmu.Unlock()
 	return nil
 }
 

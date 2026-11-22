@@ -142,3 +142,17 @@ func TestIgnoreNil(t *testing.T) {
 	}
 	ig.Reset()
 }
+
+func TestIgnoreResetClearsTops(t *testing.T) {
+	ig := NewIgnore(IgnoreConfig{Git: true})
+	ig.mu.Lock()
+	ig.tops["/a/b"] = "/a"
+	ig.mu.Unlock()
+	ig.Reset()
+	ig.mu.Lock()
+	n := len(ig.tops)
+	ig.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("tops after Reset has %d entries, want 0", n)
+	}
+}

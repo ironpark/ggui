@@ -245,6 +245,10 @@ type Watcher struct {
 	rescans chan struct{}   // Rescan's
 	changed chan struct{}   // the set changed shape: Add, Remove, Set
 	run     sync.Mutex      // held while Run runs
+	runMu   sync.Mutex      // guards state and stateCh
+	state   runState        // idle, busy (Sync / Run setup-teardown), or running
+	stateCh chan struct{}   // closed on any state transition out of non-idle
+	bgMu    sync.Mutex      // serializes bg.Add against bg.Wait
 	bg      sync.WaitGroup  // fingerprinting
 
 	mu    sync.Mutex
@@ -405,28 +409,76 @@ func (w *Watcher) Rescan() {
 	}
 }
 
+type runState uint8
+
+const (
+	stateIdle runState = iota
+	stateBusy
+	stateRunning
+)
+
+func (w *Watcher) setState(st runState) {
+	w.runMu.Lock()
+	old := w.stateCh
+	w.state = st
+	if st == stateIdle {
+		w.stateCh = nil
+	} else {
+		w.stateCh = make(chan struct{})
+	}
+	w.runMu.Unlock()
+	if old != nil {
+		close(old)
+	}
+}
+
+func (w *Watcher) waitBG() {
+	w.bgMu.Lock()
+	w.bg.Wait()
+	w.bgMu.Unlock()
+}
+
 // Sync scans now and returns what it found with whatever was waiting to
 // be sent: what Run would send next. It is for the moment before acting
 // on the files, to make sure nothing changed that a notification has not
 // told of yet. While Run runs, Run does the scan, and Sync returns an
-// empty batch if ctx is done first; otherwise Sync scans itself, and
-// must not be called from two goroutines at once.
+// empty batch if ctx is done first; otherwise Sync scans itself.
 func (w *Watcher) Sync(ctx context.Context) Batch {
-	if w.run.TryLock() {
-		defer w.run.Unlock()
-		return w.check(false, nil)
-	}
-	reply := make(chan Batch, 1)
-	select {
-	case w.syncs <- reply:
-	case <-ctx.Done():
-		return Batch{}
-	}
-	select {
-	case b := <-reply:
-		return b
-	case <-ctx.Done():
-		return Batch{}
+	for {
+		w.runMu.Lock()
+		switch w.state {
+		case stateIdle:
+			w.state = stateBusy
+			w.stateCh = make(chan struct{})
+			w.runMu.Unlock()
+			defer w.setState(stateIdle)
+			return w.check(false, nil)
+		case stateBusy:
+			ch := w.stateCh
+			w.runMu.Unlock()
+			select {
+			case <-ch:
+			case <-ctx.Done():
+				return Batch{}
+			}
+		case stateRunning:
+			ch := w.stateCh
+			w.runMu.Unlock()
+			reply := make(chan Batch, 1)
+			select {
+			case w.syncs <- reply:
+			case <-ch:
+				continue
+			case <-ctx.Done():
+				return Batch{}
+			}
+			select {
+			case b := <-reply:
+				return b
+			case <-ctx.Done():
+				return Batch{}
+			}
+		}
 	}
 }
 
@@ -437,7 +489,20 @@ func (w *Watcher) Sync(ctx context.Context) Batch {
 func (w *Watcher) Run(ctx context.Context, out chan<- Batch) {
 	w.run.Lock()
 	defer w.run.Unlock()
-	defer w.bg.Wait()
+	for {
+		w.runMu.Lock()
+		if w.state == stateIdle {
+			w.state = stateBusy
+			w.stateCh = make(chan struct{})
+			w.runMu.Unlock()
+			break
+		}
+		ch := w.stateCh
+		w.runMu.Unlock()
+		<-ch
+	}
+	defer w.setState(stateIdle)
+	defer w.waitBG()
 
 	tick := time.NewTicker(w.o.Poll)
 	defer tick.Stop()
@@ -492,6 +557,8 @@ func (w *Watcher) Run(ctx context.Context, out chan<- Batch) {
 		}
 		rewatch()
 	}
+	w.setState(stateRunning)
+	defer w.setState(stateBusy)
 	for {
 		var send chan<- Batch
 		var b Batch
@@ -541,7 +608,29 @@ func (w *Watcher) Run(ctx context.Context, out chan<- Batch) {
 		case <-w.changed:
 			rewatch()
 		case reply := <-w.syncs:
-			check(false, nil)
+			if timer != nil {
+				timer.Stop()
+				settle, timer = nil, nil
+			}
+			var full bool
+			var relist map[string]bool
+			if src != nil {
+				select {
+				case <-src.wake():
+				default:
+				}
+				paths, all, err := src.take()
+				if err != nil {
+					src = w.fallBack(src, err, tick)
+					full = true
+				} else if all {
+					w.tracef("the system lost events: rescanning everything")
+					full = true
+				} else if len(paths) > 0 {
+					_, relist = w.relevant(paths)
+				}
+			}
+			check(full, relist)
 			var b Batch
 			if outbox != nil {
 				b, outbox = *outbox, nil
