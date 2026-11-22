@@ -117,8 +117,20 @@ func (ig *Ignore) filter(paths []string, siblings bool) []bool {
 		return out
 	}
 	clean := make([]string, len(paths))
-	ask := map[string][]int{} // work tree → indexes into paths
-	var needTop []int
+	ask, needTop := ig.classify(paths, clean, out)
+	ig.resolveTops(needTop, clean, out, ask)
+	ig.askGit(ask, clean, out, siblings)
+	return out
+}
+
+// classify answers what it can without asking git: a path already
+// answered by the patterns, the directories, the cache, or a work tree
+// named in tops. It fills clean with the paths cleaned and out with
+// those answers, and returns, per work tree, the indexes of the paths
+// left to ask git about, and the indexes of those whose work tree is
+// not known yet. ig.mu is held while the caches are read.
+func (ig *Ignore) classify(paths, clean []string, out []bool) (ask map[string][]int, needTop []int) {
+	ask = map[string][]int{}
 	ig.mu.Lock()
 	for i, p := range paths {
 		p = filepath.Clean(p)
@@ -146,7 +158,13 @@ func (ig *Ignore) filter(paths []string, siblings bool) []bool {
 		needTop = append(needTop, i)
 	}
 	ig.mu.Unlock()
+	return ask, needTop
+}
 
+// resolveTops finds the work tree of each path classify could not name
+// one for, and queues it for git too; a path in no work tree is
+// answered by the fallback patterns.
+func (ig *Ignore) resolveTops(needTop []int, clean []string, out []bool, ask map[string][]int) {
 	for _, i := range needTop {
 		top := ig.top(filepath.Dir(clean[i]))
 		if top == "" {
@@ -155,7 +173,12 @@ func (ig *Ignore) filter(paths []string, siblings bool) []bool {
 		}
 		ask[top] = append(ask[top], i)
 	}
+}
 
+// askGit asks git check-ignore once per work tree, caches its answers,
+// and records for each queued path whether it is left out; where git
+// cannot say, the fallback patterns answer.
+func (ig *Ignore) askGit(ask map[string][]int, clean []string, out []bool, siblings bool) {
 	for top, idx := range ask {
 		names := make([]string, 0, len(idx))
 		for _, i := range idx {
@@ -183,7 +206,6 @@ func (ig *Ignore) filter(paths []string, siblings bool) []bool {
 		}
 		ig.mu.Unlock()
 	}
-	return out
 }
 
 // fixed reports whether the patterns or the directories leave out p.
