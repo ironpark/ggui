@@ -185,55 +185,15 @@ func (n *Native) Run(ctx context.Context) error {
 		}
 	}
 
-	// The viewer starts, which may take a build of it, while the app
-	// builds.
-	var viewerReady chan startResult
-	if n.Display != nil {
-		n.Tags = append(slices.Clone(n.Tags), RemoteTag)
-		viewerReady = make(chan startResult, 1)
-		go func() {
-			v, err := n.Display.Start(ctx)
-			viewerReady <- startResult{v, err}
-		}()
-	}
+	viewerReady := n.startViewer(ctx)
 	n.list = gotool.ListOptions{Dir: n.Dir, Tags: n.Tags}
 
 	var changes chan watch.Change
 	if n.Watch {
-		ignoreDirs := []string{n.OutDir}
-		if n.Bundle != nil {
-			if d := n.Bundle.Dir(); d != "" && d != n.OutDir {
-				ignoreDirs = append(ignoreDirs, d)
-			}
-		}
-		ig := watch.NewIgnore(ignoreDirs...)
-		list := func(ctx context.Context) ([]string, error) {
-			n.set.Lock()
-			lo, extra := n.list, n.Extra
-			n.set.Unlock()
-			return WatchSet(ctx, lo, n.Package, extra, ig)
-		}
-		// go list may have modules to download first.
-		s := n.say().Step("finding the files to watch", ui.QuietStart())
-		set, err := list(ctx)
-		s.Stop()
-		if err != nil {
-			if viewerReady != nil {
-				n.useViewer(<-viewerReady)
-			}
+		if changes, err = n.watchSources(ctx); err != nil {
+			n.awaitViewer(viewerReady)
 			return err
 		}
-		n.w = watch.New(set, watch.Options{
-			List: list, Ignore: ig,
-			Settle: settleTime, Poll: pollInterval, SafetyNet: safetyNetInterval,
-			Logf: n.warnf, Tracef: n.Tracef,
-		})
-		changes = make(chan watch.Change)
-		n.bg.Go(func() {
-			n.w.Run(ctx, changes)
-		})
-		n.logf("watching %d files", n.w.Len())
-
 		n.goVer = make(chan string, 1)
 		n.bg.Go(func() {
 			env, _ := gotool.Env(ctx, n.Dir, nil, "GOVERSION")
@@ -244,84 +204,188 @@ func (n *Native) Run(ctx context.Context) error {
 	id, _, _ := n.plan.start()
 	n.changed, n.cause = time.Now(), "ggui dev started"
 	n.launch(ctx, id, nil)
-	if viewerReady != nil {
-		n.useViewer(<-viewerReady)
+	n.awaitViewer(viewerReady)
+	return n.loop(ctx, changes)
+}
+
+// startViewer starts the viewer, which may take a build of it, while the
+// app builds, and returns where the viewer comes once it started; nil
+// without a Display. The app is built to show in it.
+func (n *Native) startViewer(ctx context.Context) <-chan startResult {
+	if n.Display == nil {
+		return nil
 	}
+	n.Tags = append(slices.Clone(n.Tags), RemoteTag)
+	ready := make(chan startResult, 1)
+	go func() {
+		v, err := n.Display.Start(ctx)
+		ready <- startResult{v, err}
+	}()
+	return ready
+}
+
+// awaitViewer waits for the viewer startViewer started, when it started
+// one, and takes it up.
+func (n *Native) awaitViewer(ready <-chan startResult) {
+	if ready != nil {
+		n.useViewer(<-ready)
+	}
+}
+
+// watchSources lists the files the app is built from and starts the
+// watcher on them, which sends what it finds on the channel returned.
+func (n *Native) watchSources(ctx context.Context) (chan watch.Change, error) {
+	ignoreDirs := []string{n.OutDir}
+	if n.Bundle != nil {
+		if d := n.Bundle.Dir(); d != "" && d != n.OutDir {
+			ignoreDirs = append(ignoreDirs, d)
+		}
+	}
+	ig := watch.NewIgnore(ignoreDirs...)
+	list := func(ctx context.Context) ([]string, error) {
+		n.set.Lock()
+		lo, extra := n.list, n.Extra
+		n.set.Unlock()
+		return WatchSet(ctx, lo, n.Package, extra, ig)
+	}
+	// go list may have modules to download first.
+	s := n.say().Step("finding the files to watch", ui.QuietStart())
+	set, err := list(ctx)
+	s.Stop()
+	if err != nil {
+		return nil, err
+	}
+	n.w = watch.New(set, watch.Options{
+		List: list, Ignore: ig,
+		Settle: settleTime, Poll: pollInterval, SafetyNet: safetyNetInterval,
+		Logf: n.warnf, Tracef: n.Tracef,
+	})
+	changes := make(chan watch.Change)
+	n.bg.Go(func() {
+		n.w.Run(ctx, changes)
+	})
+	n.logf("watching %d files", n.w.Len())
+	return changes, nil
+}
+
+// loop takes what comes, one at a time, until Run ends: a change found,
+// the build it calls for falling due, a build that ended, the app's end
+// and what the viewer says.
+func (n *Native) loop(ctx context.Context, changes <-chan watch.Change) error {
 	due := time.NewTimer(time.Hour)
 	defer due.Stop()
-	for {
-		var exited <-chan struct{}
-		if n.app != nil {
-			exited = n.app.Done()
-		}
-		var events <-chan viewer.Event
-		if n.viewer != nil {
-			events = n.viewer.Events()
-		}
-		var dueC <-chan time.Time
-		if t, ok := n.plan.due(); ok {
-			due.Reset(time.Until(t))
-			dueC = due.C
-		}
+	var (
+		end bool
+		err error
+	)
+	for !end && err == nil {
+		on := n.arm(due)
 		select {
 		case <-ctx.Done():
 			return nil
 		case c := <-changes:
 			n.change(c)
-		case <-dueC:
-			id, batch, since := n.plan.start()
-			n.changed, n.cause = since, "the change"
-			n.logf("%s changed, rebuilding", n.say().Cyan(describe(n.Dir, batch)))
-			if n.Config != "" && slices.Contains(batch, n.Config) {
-				n.reload()
-			}
-			n.send(viewer.Command{Type: viewer.Building})
-			n.launch(ctx, id, batch)
+		case <-on.due:
+			n.rebuild(ctx)
 		case r := <-n.results:
-			if err := n.finish(ctx, r); err != nil {
-				return err
-			}
-		case <-exited:
-			msg := n.app.Exited()
-			err := n.app.Err()
-			n.app.Stop(0) // releases the group
-			n.app = nil
-			if err == nil && n.windowClosing() {
-				n.logf("the window was closed")
-				return nil
-			}
-			if !n.Watch {
-				if err != nil {
-					return fmt.Errorf("the app %s", msg)
-				}
-				return nil
-			}
-			if err != nil {
-				n.say().Error("the app %s; waiting for a change to start it again", msg)
+			err = n.finish(ctx, r)
+		case <-on.exited:
+			end, err = n.appExited()
+		case ev, ok := <-on.events:
+			if ok {
+				end = n.viewerEvent(ev)
 			} else {
-				n.warnf("the app %s; waiting for a change to start it again", msg)
-			}
-			n.send(viewer.Command{Type: viewer.AppExited, Status: msg, Output: n.tail.String()})
-		case ev, ok := <-events:
-			if !ok {
 				n.viewerLost(ctx)
-				continue
-			}
-			switch ev.Type {
-			case viewer.FirstFrame:
-				if n.app != nil && ev.PID == n.app.Pid() && !n.shown {
-					n.shown = true
-					now := time.Now()
-					n.logf("on screen %s after %s (build %s, start to first frame %s)",
-						now.Sub(n.changed).Round(time.Millisecond), n.cause, n.built.Round(time.Millisecond),
-						now.Sub(n.started).Round(time.Millisecond))
-				}
-			case viewer.WindowClosed:
-				n.logf("the window was closed")
-				return nil
 			}
 		}
 	}
+	return err
+}
+
+// waits are the channels of the loop that are there only at times: the
+// running app's end, the viewer's events and the build due; nil when
+// there is none.
+type waits struct {
+	exited <-chan struct{}
+	events <-chan viewer.Event
+	due    <-chan time.Time
+}
+
+// arm returns what the loop waits on now, with due set to fire when the
+// plan's next build is due.
+func (n *Native) arm(due *time.Timer) waits {
+	var on waits
+	if n.app != nil {
+		on.exited = n.app.Done()
+	}
+	if n.viewer != nil {
+		on.events = n.viewer.Events()
+	}
+	if t, ok := n.plan.due(); ok {
+		due.Reset(time.Until(t))
+		on.due = due.C
+	}
+	return on
+}
+
+// rebuild starts the build that fell due, of the changes the plan
+// gathered, after taking ggui.toml up again when it is among them.
+func (n *Native) rebuild(ctx context.Context) {
+	id, batch, since := n.plan.start()
+	n.changed, n.cause = since, "the change"
+	n.logf("%s changed, rebuilding", n.say().Cyan(describe(n.Dir, batch)))
+	if n.Config != "" && slices.Contains(batch, n.Config) {
+		n.reload()
+	}
+	n.send(viewer.Command{Type: viewer.Building})
+	n.launch(ctx, id, batch)
+}
+
+// appExited takes the running app's end, and reports whether Run ends
+// with it, and with what error: it does when the window was closed, and
+// without Watch, where an app that failed is the error. With Watch the
+// next change that builds starts the app again.
+func (n *Native) appExited() (bool, error) {
+	msg := n.app.Exited()
+	err := n.app.Err()
+	n.app.Stop(0) // releases the group
+	n.app = nil
+	if err == nil && n.windowClosing() {
+		n.logf("the window was closed")
+		return true, nil
+	}
+	if !n.Watch {
+		if err != nil {
+			return true, fmt.Errorf("the app %s", msg)
+		}
+		return true, nil
+	}
+	if err != nil {
+		n.say().Error("the app %s; waiting for a change to start it again", msg)
+	} else {
+		n.warnf("the app %s; waiting for a change to start it again", msg)
+	}
+	n.send(viewer.Command{Type: viewer.AppExited, Status: msg, Output: n.tail.String()})
+	return false, nil
+}
+
+// viewerEvent takes what the viewer says, and reports whether its window
+// was closed, which ends Run.
+func (n *Native) viewerEvent(ev viewer.Event) bool {
+	switch ev.Type {
+	case viewer.FirstFrame:
+		if n.app != nil && ev.PID == n.app.Pid() && !n.shown {
+			n.shown = true
+			now := time.Now()
+			n.logf("on screen %s after %s (build %s, start to first frame %s)",
+				now.Sub(n.changed).Round(time.Millisecond), n.cause, n.built.Round(time.Millisecond),
+				now.Sub(n.started).Round(time.Millisecond))
+		}
+	case viewer.WindowClosed:
+		n.logf("the window was closed")
+		return true
+	}
+	return false
 }
 
 // reload takes ggui.toml's settings up again after it changed: the build
@@ -463,23 +527,7 @@ func (n *Native) finish(ctx context.Context, r buildResult) error {
 	default:
 	}
 	if r.err != nil {
-		what := "build failed"
-		if r.syntax {
-			what = "syntax error"
-		}
-		if n.app != nil {
-			n.step.Fail(what + "; the app keeps running the last build that succeeded:")
-		} else {
-			n.step.Fail(what + ":")
-		}
-		// As the compiler wrote it, in the file:line:col form terminals
-		// and editors make links of; indenting would break them.
-		fmt.Fprintln(n.say(), r.err.Error())
-		n.send(viewer.Command{Type: viewer.BuildFailed, Output: r.err.Error()})
-		if !n.Watch {
-			return r.err
-		}
-		return nil
+		return n.buildFailed(r)
 	}
 	n.built = r.took
 	n.step.Done(fmt.Sprintf("built in %s", n.built.Round(time.Millisecond)))
@@ -492,6 +540,28 @@ func (n *Native) finish(ctx context.Context, r buildResult) error {
 		n.useViewer(startResult{v, err})
 	}
 	n.restart(ctx, r.exe)
+	return nil
+}
+
+// buildFailed shows why a build failed, in the terminal and in the
+// viewer. Without Watch the failure is Run's error.
+func (n *Native) buildFailed(r buildResult) error {
+	what := "build failed"
+	if r.syntax {
+		what = "syntax error"
+	}
+	if n.app != nil {
+		n.step.Fail(what + "; the app keeps running the last build that succeeded:")
+	} else {
+		n.step.Fail(what + ":")
+	}
+	// As the compiler wrote it, in the file:line:col form terminals
+	// and editors make links of; indenting would break them.
+	fmt.Fprintln(n.say(), r.err.Error())
+	n.send(viewer.Command{Type: viewer.BuildFailed, Output: r.err.Error()})
+	if !n.Watch {
+		return r.err
+	}
 	return nil
 }
 
