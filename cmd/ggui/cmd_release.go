@@ -324,12 +324,12 @@ func (p *releasePlan) checkGit(ctx context.Context, o releaseOptions) error {
 	if p.repo == "" && needGitHub {
 		origin, err := g.Origin(ctx)
 		if err != nil {
-			if err := soft(fmt.Errorf("no repository to release to: set release.github, or add an origin remote (%v)", err)); err != nil {
+			if err := soft(fmt.Errorf("no repository to release to: set release.github, or add an origin remote (%w)", err)); err != nil {
 				return err
 			}
 			p.repo = "OWNER/REPO"
 		} else if _, repo, err := release.ParseRepo(origin); err != nil {
-			if err := soft(fmt.Errorf("%v: set release.github", err)); err != nil {
+			if err := soft(fmt.Errorf("%w: set release.github", err)); err != nil {
 				return err
 			}
 			p.repo = "OWNER/REPO"
@@ -366,7 +366,7 @@ func (p *releasePlan) checkGit(ctx context.Context, o releaseOptions) error {
 	sha, err := g.RemoteTag(ctx, p.tag)
 	switch {
 	case err != nil:
-		return soft(fmt.Errorf("checking origin for the tag %s: %v", p.tag, err))
+		return soft(fmt.Errorf("checking origin for the tag %s: %w", p.tag, err))
 	case sha != "" && sha != head:
 		return soft(fmt.Errorf("the tag %s is at %s on origin, not at this commit %s: release from that commit, or bump the version", p.tag, short(sha), short(head)))
 	}

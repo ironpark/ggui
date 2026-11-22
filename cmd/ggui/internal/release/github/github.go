@@ -176,7 +176,7 @@ func (c *Client) once(ctx context.Context, method, u string, b body, contentType
 	}
 	if out != nil && len(data) > 0 {
 		if err := json.Unmarshal(data, out); err != nil {
-			return fmt.Errorf("%s %s: reading the reply: %v", method, redact(u), err)
+			return fmt.Errorf("%s %s: reading the reply: %w", method, redact(u), err)
 		}
 	}
 	return nil

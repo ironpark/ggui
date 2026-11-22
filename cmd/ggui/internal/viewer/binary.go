@@ -222,7 +222,7 @@ func (b *Binary) Ensure(ctx context.Context) (built bool, err error) {
 		os.Remove(tmp.Name())
 		os.Remove(dir) // if no other session builds there
 		if be, ok := errors.AsType[*gotool.BuildError](err); ok {
-			return false, fmt.Errorf("building the viewer failed:\n%s", be.Error())
+			return false, fmt.Errorf("building the viewer failed:\n%w", be)
 		}
 		return false, err
 	}
