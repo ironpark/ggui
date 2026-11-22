@@ -64,11 +64,10 @@ type inotify struct {
 	closing   atomic.Bool
 	done      chan struct{} // closed when the reader returns
 
-	mu      sync.Mutex
-	wds     map[int32]wdInfo // a watch's directory and identity
-	dirs    map[string]int32 // a directory's watch
-	asked   map[string]bool  // the directories watch named
-	maxDirs int              // if > 0, upper bound on watched directories
+	mu    sync.Mutex
+	wds   map[int32]wdInfo // a watch's directory and identity
+	dirs  map[string]int32 // a directory's watch
+	asked map[string]bool  // the directories watch named
 }
 
 func newSource(recursive bool, skip func(string) bool) (source, error) {
@@ -144,39 +143,6 @@ func (s *inotify) watch(dirs []string) error {
 	return nil
 }
 
-// errTooManyDirs is a tree with more directories than a Tree may watch.
-var errTooManyDirs = errors.New("more directories than are watched")
-
-// watchTrees watches every directory below roots, but those skip leaves
-// out with all below them, as a Tree asks: inotify follows a directory,
-// not a tree. It fails past maxDirs directories, before watching any.
-func (s *inotify) watchTrees(roots []string, maxDirs int) error {
-	var dirs []string
-	for _, r := range roots {
-		err := filepath.WalkDir(r, func(p string, d fs.DirEntry, err error) error {
-			switch {
-			case err != nil:
-				return nil // gone, or not to be read: not watched
-			case !d.IsDir():
-				return nil
-			case p != r && s.skip != nil && s.skip(p):
-				return filepath.SkipDir
-			}
-			if dirs = append(dirs, p); len(dirs) > maxDirs {
-				return errTooManyDirs
-			}
-			return nil
-		})
-		if err != nil {
-			return fmt.Errorf("%s: %w (%d)", r, err, maxDirs)
-		}
-	}
-	s.mu.Lock()
-	s.maxDirs = maxDirs
-	s.mu.Unlock()
-	return s.watch(dirs)
-}
-
 // below reports whether dir is below one of dirs.
 func (s *inotify) below(dirs map[string]bool, dir string) bool {
 	for d := filepath.Dir(dir); ; d = filepath.Dir(d) {
@@ -197,9 +163,6 @@ func (s *inotify) add(dir string) error {
 	}
 	if _, ok := s.dirs[dir]; ok {
 		return nil
-	}
-	if s.maxDirs > 0 && len(s.dirs) >= s.maxDirs {
-		return errTooManyDirs
 	}
 	wd, err := s.addWatch(dir)
 	switch {
@@ -249,7 +212,7 @@ func (s *inotify) addTree(dir string) {
 		s.mu.Lock()
 		err = s.add(p)
 		s.mu.Unlock()
-		if errors.Is(err, errWatchLimit) || errors.Is(err, errTooManyDirs) {
+		if errors.Is(err, errWatchLimit) {
 			s.fail(err)
 			return filepath.SkipAll
 		}
@@ -343,7 +306,7 @@ func (s *inotify) event(wd int32, mask uint32, name string) {
 			s.mu.Lock()
 			err := s.add(dir)
 			s.mu.Unlock()
-			if errors.Is(err, errWatchLimit) || errors.Is(err, errTooManyDirs) {
+			if errors.Is(err, errWatchLimit) {
 				s.fail(err)
 			} else if err != nil && !s.closing.Load() && !errors.Is(err, os.ErrClosed) {
 				s.lost()
