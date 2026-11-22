@@ -233,56 +233,11 @@ func calendarNights(start, end time.Time) int {
 }
 func (c *CalendarWidget) chooseRange(day time.Time) {
 	current := c.normalizedRange(ggui.Untrack(c.rangeValue.Get))
-	next := current
-	startNew := func() DateRange {
-		r := DateRange{Start: day}
-		if c.minNights == 0 {
-			r.End = day
-		}
-		return r
+	next, ok := c.pickRange(current, day)
+	if !ok {
+		return
 	}
-	switch {
-	case current.Start.IsZero():
-		next = startNew()
-	case current.Start.Equal(day) && current.End.Equal(day):
-		if c.required {
-			return
-		}
-		next = DateRange{}
-	case c.resetOnSelect && !current.End.IsZero():
-		next = startNew()
-	case current.End.IsZero():
-		if day.Equal(current.Start) {
-			if c.minNights == 0 {
-				next.End = day
-			} else if !c.required {
-				next = DateRange{}
-			}
-		} else if day.Before(current.Start) {
-			next = DateRange{Start: day, End: current.Start}
-		} else {
-			next.End = day
-		}
-	case day.Equal(current.Start) || day.Equal(current.End):
-		next = startNew()
-	case day.Before(current.Start):
-		next.Start = day
-	default:
-		next.End = day
-	}
-	if !next.Start.IsZero() && !next.End.IsZero() {
-		nights := calendarNights(next.Start, next.End)
-		if nights < c.minNights || (c.maxNights > 0 && nights > c.maxNights) {
-			next = DateRange{Start: day}
-		} else if c.excludeDisabled {
-			for at := next.Start; !at.After(next.End); at = at.AddDate(0, 0, 1) {
-				if !c.enabled(at) {
-					next = DateRange{Start: day}
-					break
-				}
-			}
-		}
-	}
+	next = c.limitRange(next, day)
 	if next.Start.Equal(current.Start) && next.End.Equal(current.End) {
 		return
 	}
@@ -290,4 +245,81 @@ func (c *CalendarWidget) chooseRange(day time.Time) {
 	if c.onRangeChange != nil {
 		c.onRangeChange(next)
 	}
+}
+
+// rangeFrom is a new range that starts at day: a single day where a range
+// may be no nights long, else open until its end is chosen.
+func (c *CalendarWidget) rangeFrom(day time.Time) DateRange {
+	r := DateRange{Start: day}
+	if c.minNights == 0 {
+		r.End = day
+	}
+	return r
+}
+
+// pickRange is the range choosing day makes of current; false keeps a
+// required single-day range that choosing its day again would clear.
+func (c *CalendarWidget) pickRange(current DateRange, day time.Time) (DateRange, bool) {
+	next := current
+	switch {
+	case current.Start.IsZero():
+		next = c.rangeFrom(day)
+	case current.Start.Equal(day) && current.End.Equal(day):
+		if c.required {
+			return current, false
+		}
+		next = DateRange{}
+	case c.resetOnSelect && !current.End.IsZero():
+		next = c.rangeFrom(day)
+	case current.End.IsZero():
+		next = c.closeRange(current, day)
+	case day.Equal(current.Start) || day.Equal(current.End):
+		next = c.rangeFrom(day)
+	case day.Before(current.Start):
+		next.Start = day
+	default:
+		next.End = day
+	}
+	return next, true
+}
+
+// closeRange ends the open range current at day: at its start a single
+// day where a range may be no nights long, else nothing unless one is
+// required; before its start the range from day to there.
+func (c *CalendarWidget) closeRange(current DateRange, day time.Time) DateRange {
+	next := current
+	if day.Equal(current.Start) {
+		if c.minNights == 0 {
+			next.End = day
+		} else if !c.required {
+			next = DateRange{}
+		}
+	} else if day.Before(current.Start) {
+		next = DateRange{Start: day, End: current.Start}
+	} else {
+		next.End = day
+	}
+	return next
+}
+
+// limitRange is next, or the range open from day where next spans fewer
+// nights than the least or more than the most, or with excludeDisabled a
+// day that cannot be chosen.
+func (c *CalendarWidget) limitRange(next DateRange, day time.Time) DateRange {
+	if next.Start.IsZero() || next.End.IsZero() {
+		return next
+	}
+	nights := calendarNights(next.Start, next.End)
+	if nights < c.minNights || (c.maxNights > 0 && nights > c.maxNights) {
+		return DateRange{Start: day}
+	}
+	if !c.excludeDisabled {
+		return next
+	}
+	for at := next.Start; !at.After(next.End); at = at.AddDate(0, 0, 1) {
+		if !c.enabled(at) {
+			return DateRange{Start: day}
+		}
+	}
+	return next
 }

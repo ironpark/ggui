@@ -497,7 +497,35 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 
 	m := &c.metrics
 	m.pad, m.cell, m.rowGap, m.monthGap, m.captionGap = t.Space, 3.5*t.Space, t.Space, 2*t.Space, 2*t.Space
-	loose := ggui.Loose(ggui.Sz(cs.MaxW, cs.MaxH))
+	captionW := c.layoutCaptions(ggui.Loose(ggui.Sz(cs.MaxW, cs.MaxH)), env)
+	w := c.fitMonths(cs, captionW)
+
+	cell := ggui.Loose(ggui.Sz(m.column, m.cell))
+	disabled := fade(t.MutedFg, .5)
+	c.hover = pick[color.Color](controlkit.IsDark(t.Bg), fade(t.Muted, .5), t.Muted)
+	c.motion = env.Motion(t.MotionFast)
+	m.weekday = 0
+	end := c.first.AddDate(0, c.count, 0)
+	weekdays := c.weekdays
+	if weekdays == ([7]string{}) {
+		weekdays = c.words.Weekdays
+	}
+	for i, p := range c.panes {
+		for j, label := range p.weekdayText {
+			p.weekdaySize[j] = label.Content(weekdays[(j+int(c.weekStart))%7]).Color(t.MutedFg).Size(12.8).Layout(cell, env)
+			m.weekday = max(m.weekday, p.weekdaySize[j].H)
+		}
+		c.layoutDays(p, c.first.AddDate(0, i, 0), end, cell, disabled)
+	}
+	m.monthH = m.caption + m.captionGap + m.weekday + 6*(m.rowGap+m.cell)
+	rows := float64((c.count + m.perRow - 1) / m.perRow)
+	return cs.Constrain(ggui.Sz(w, 2*m.pad+rows*m.monthH+(rows-1)*m.monthGap))
+}
+
+// layoutCaptions lays out the two buttons and each pane's caption, its
+// title or its month and year selects, and is the widest caption.
+func (c *CalendarWidget) layoutCaptions(loose ggui.Constraints, env ggui.Env) float64 {
+	t, m := c.theme, &c.metrics
 	m.nav = c.previous.Layout(loose, env)
 	c.next.Layout(loose, env)
 	if c.dropdown {
@@ -517,9 +545,15 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		}
 		captionW, m.caption = max(captionW, size.W), max(m.caption, size.H)
 	}
+	return captionW
+}
 
-	// A month is seven cells wide, or as wide as its caption between the
-	// two buttons; as many months share a row as the width holds.
+// fitMonths sets how many months share a row and how wide each month and
+// its columns are, and is the calendar's width. A month is seven cells
+// wide, or as wide as its caption between the two buttons; as many months
+// share a row as the width holds.
+func (c *CalendarWidget) fitMonths(cs ggui.Constraints, captionW float64) float64 {
+	t, m := c.theme, &c.metrics
 	monthW := max(7*m.cell, captionW+2*(m.nav.W+t.Space/2))
 	m.perRow = c.count
 	if avail := cs.MaxW - 2*m.pad; !math.IsInf(avail, 1) {
@@ -530,52 +564,46 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	m.monthW = max(0, (w-2*m.pad-gaps)/float64(m.perRow))
 	m.column = m.monthW / 7
 	m.cell = min(m.cell, m.column)
+	return w
+}
 
-	cell := ggui.Loose(ggui.Sz(m.column, m.cell))
-	disabled := fade(t.MutedFg, .5)
-	c.hover = pick[color.Color](controlkit.IsDark(t.Bg), fade(t.Muted, .5), t.Muted)
-	c.motion = env.Motion(t.MotionFast)
-	end := c.first.AddDate(0, c.count, 0)
-	m.weekday = 0
-	weekdays := c.weekdays
-	if weekdays == ([7]string{}) {
-		weekdays = c.words.Weekdays
-	}
-	for i, p := range c.panes {
-		for j, label := range p.weekdayText {
-			p.weekdaySize[j] = label.Content(weekdays[(j+int(c.weekStart))%7]).Color(t.MutedFg).Size(12.8).Layout(cell, env)
-			m.weekday = max(m.weekday, p.weekdaySize[j].H)
+// layoutDays dates the days of the pane p showing month, of the months
+// shown before end, marks each by the selection, today and the bounds,
+// and lays out its number in cell.
+func (c *CalendarWidget) layoutDays(p *calendarPane, month, end time.Time, cell ggui.Constraints, disabled color.Color) {
+	start := month.AddDate(0, 0, -(int(month.Weekday())-int(c.weekStart)+7)%7)
+	for j, d := range p.days {
+		if date := start.AddDate(0, 0, j); !date.Equal(d.date) {
+			d.date = date
+			d.SetName(date.Format("2006-01-02"))
 		}
-		month := c.first.AddDate(0, i, 0)
-		start := month.AddDate(0, 0, -(int(month.Weekday())-int(c.weekStart)+7)%7)
-		for j, d := range p.days {
-			if date := start.AddDate(0, 0, j); !date.Equal(d.date) {
-				d.date = date
-				d.SetName(date.Format("2006-01-02"))
-			}
-			d.outside = d.date.Month() != month.Month()
-			// With several months a day outside its month may be another
-			// pane's own day; only that one is described.
-			d.repeat = d.outside && c.count > 1 && !d.date.Before(c.first) && d.date.Before(end)
-			d.mark = c.selection.mark(d.date)
-			d.today = d.date.Equal(c.today)
-			d.SetInert(!c.enabled(d.date))
-			col := t.Fg
-			switch {
-			case d.mark == calendarSingle || d.mark == calendarStart || d.mark == calendarEnd:
-				col = t.PrimaryFg
-			case d.IsInert():
-				col = disabled
-			case d.mark == calendarMiddle || d.today:
-			case d.outside:
-				col = t.MutedFg
-			}
-			d.size = d.text.Content(strconv.Itoa(d.date.Day())).Color(col).Layout(cell, env)
-		}
+		d.outside = d.date.Month() != month.Month()
+		// With several months a day outside its month may be another
+		// pane's own day; only that one is described.
+		d.repeat = d.outside && c.count > 1 && !d.date.Before(c.first) && d.date.Before(end)
+		d.mark = c.selection.mark(d.date)
+		d.today = d.date.Equal(c.today)
+		d.SetInert(!c.enabled(d.date))
+		d.size = d.text.Content(strconv.Itoa(d.date.Day())).Color(c.dayColor(d, disabled)).Layout(cell, c.env)
 	}
-	m.monthH = m.caption + m.captionGap + m.weekday + 6*(m.rowGap+m.cell)
-	rows := float64((c.count + m.perRow - 1) / m.perRow)
-	return cs.Constrain(ggui.Sz(w, 2*m.pad+rows*m.monthH+(rows-1)*m.monthGap))
+}
+
+// dayColor is the color of a day's number: on the primary fill where the
+// day is chosen or ends a range, disabled where it cannot be chosen, and
+// muted outside its month unless the range runs through it or it is today.
+func (c *CalendarWidget) dayColor(d *calendarDay, disabled color.Color) color.Color {
+	t := c.theme
+	switch {
+	case d.mark == calendarSingle || d.mark == calendarStart || d.mark == calendarEnd:
+		return t.PrimaryFg
+	case d.IsInert():
+		return disabled
+	case d.mark == calendarMiddle || d.today:
+		return t.Fg
+	case d.outside:
+		return t.MutedFg
+	}
+	return t.Fg
 }
 
 // localize takes the words of the Strings under env: the buttons' names,
@@ -703,46 +731,12 @@ func (c *CalendarWidget) HandleKey(e ggui.KeyEvent) {
 	}
 	c.syncDate()
 	e = controlkit.DirectionalKey(e, c.env.Direction() == ggui.DirRTL)
-	days := func(n int) func(time.Time) time.Time {
-		return func(d time.Time) time.Time { return d.AddDate(0, 0, n) }
-	}
-	weekday := func(d time.Time) int { return (int(d.Weekday()) - int(c.weekStart) + 7) % 7 }
-	slide := false
-	var move func(time.Time) time.Time
-	months := func(n int) {
-		slide, move = true, func(d time.Time) time.Time { return c.addMonths(d, n) }
-	}
-	switch {
-	case e.Mods.Shift && e.Key == ggui.KeyArrowLeft:
-		months(-1)
-	case e.Mods.Shift && e.Key == ggui.KeyArrowRight:
-		months(1)
-	case e.Mods.Shift && e.Key == ggui.KeyArrowUp:
-		months(-12)
-	case e.Mods.Shift && e.Key == ggui.KeyArrowDown:
-		months(12)
-	}
-	if move != nil {
+	if n, ok := calendarMonthStep(e); ok {
 		c.FocusVisible = true
-		c.step(slide, move)
+		c.step(true, func(d time.Time) time.Time { return c.addMonths(d, n) })
 		return
 	}
-	switch e.Key {
-	case ggui.KeyArrowLeft:
-		move = days(-1)
-	case ggui.KeyArrowRight:
-		move = days(1)
-	case ggui.KeyArrowUp:
-		move = days(-7)
-	case ggui.KeyArrowDown:
-		move = days(7)
-	case ggui.KeyHome:
-		move = func(d time.Time) time.Time { return d.AddDate(0, 0, -weekday(d)) }
-	case ggui.KeyEnd:
-		move = func(d time.Time) time.Time { return d.AddDate(0, 0, 6-weekday(d)) }
-	case ggui.KeyPageUp, ggui.KeyPageDown:
-		months(pick(e.Key == ggui.KeyPageUp, -1, 1) * pick(e.Mods.Shift, 12, 1))
-	default:
+	if _, ok := c.dayStep(e.Key, c.active); !ok {
 		if ggui.Activates(e) {
 			c.choose(c.active)
 		}
@@ -750,7 +744,49 @@ func (c *CalendarWidget) HandleKey(e ggui.KeyEvent) {
 	}
 	// A grid focused by a click shows no ring until the keys browse it.
 	c.FocusVisible = true
-	c.step(slide, move)
+	c.step(false, func(d time.Time) time.Time {
+		n, _ := c.dayStep(e.Key, d)
+		return d.AddDate(0, 0, n)
+	})
+}
+
+// calendarMonthStep is how many months e browses by: Shift and Left or
+// Right one, Shift and Up or Down a year, PageUp or PageDown one, and a
+// year with Shift.
+func calendarMonthStep(e ggui.KeyEvent) (int, bool) {
+	switch {
+	case e.Mods.Shift && e.Key == ggui.KeyArrowLeft:
+		return -1, true
+	case e.Mods.Shift && e.Key == ggui.KeyArrowRight:
+		return 1, true
+	case e.Mods.Shift && e.Key == ggui.KeyArrowUp:
+		return -12, true
+	case e.Mods.Shift && e.Key == ggui.KeyArrowDown:
+		return 12, true
+	case e.Key == ggui.KeyPageUp || e.Key == ggui.KeyPageDown:
+		return pick(e.Key == ggui.KeyPageUp, -1, 1) * pick(e.Mods.Shift, 12, 1), true
+	}
+	return 0, false
+}
+
+// dayStep is how many days key moves the day d by: one or a week with the
+// arrows, and to the start or the end of its week with Home and End;
+// false for any other key.
+func (c *CalendarWidget) dayStep(key ggui.KeyboardKey, d time.Time) (int, bool) {
+	switch key {
+	case ggui.KeyArrowLeft:
+		return -1, true
+	case ggui.KeyArrowRight:
+		return 1, true
+	case ggui.KeyArrowUp:
+		return -7, true
+	case ggui.KeyArrowDown:
+		return 7, true
+	case ggui.KeyHome, ggui.KeyEnd:
+		weekday := (int(d.Weekday()) - int(c.weekStart) + 7) % 7
+		return pick(key == ggui.KeyHome, -weekday, 6-weekday), true
+	}
+	return 0, false
 }
 
 // Adopt preserves the browsed month across rebuilds; binding changes still win.
@@ -803,7 +839,6 @@ var calendarDayHoverSlot = ggui.NewSlot[*ggui.Motion]("calendar day hover")
 // pointer eases in, and a pressed day sits a pixel lower.
 func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	c := d.owner
-	t, m := c.theme, &c.metrics
 	if !d.repeat {
 		dst.Describe(r, d)
 	}
@@ -815,7 +850,17 @@ func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if d.Pressed && d.Hovered && !d.IsInert() {
 		r.Origin.Y++
 	}
-	fill := m.fill(r)
+	fill := c.metrics.fill(r)
+	d.paintMark(dst, r, fill, hover)
+	dst.Paint(d.text, ggui.Rct(ggui.Pt(fill.Origin.X+(fill.Size.W-d.size.W)/2, fill.Origin.Y+(fill.Size.H-d.size.H)/2), d.size))
+}
+
+// paintMark fills the day's square fill, and the halves of its column r
+// that a range runs through, by the day's part in the selection; a day
+// outside it is filled while it is today or eased in under the pointer.
+func (d *calendarDay) paintMark(dst *ggui.Canvas, r, fill ggui.Rect, hover float64) {
+	c := d.owner
+	t := c.theme
 	center := fill.Origin.X + fill.Size.W/2
 	// The halves of the column on the side of earlier and of later dates.
 	before := ggui.Rct(ggui.Pt(r.Origin.X, fill.Origin.Y), ggui.Sz(center-r.Origin.X, fill.Size.H))
@@ -824,8 +869,8 @@ func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		before, after = after, before
 	}
 	weekStart, weekEnd := d.column == 0, d.column == 6
-	switch d.mark {
-	case calendarMiddle:
+	switch {
+	case d.mark == calendarMiddle:
 		if weekStart || weekEnd {
 			dst.FillRoundRect(fill, t.RadiusSm, t.Muted)
 		}
@@ -835,26 +880,23 @@ func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		if !weekEnd {
 			dst.FillRect(after, t.Muted)
 		}
-	case calendarStart:
+	case d.mark == calendarStart:
 		if !weekEnd {
 			dst.FillRect(after, t.Muted)
 		}
 		dst.FillRoundRect(fill, t.RadiusSm, t.Primary)
-	case calendarEnd:
+	case d.mark == calendarEnd:
 		if !weekStart {
 			dst.FillRect(before, t.Muted)
 		}
 		dst.FillRoundRect(fill, t.RadiusSm, t.Primary)
-	case calendarSingle:
+	case d.mark == calendarSingle:
 		dst.FillRoundRect(fill, t.RadiusSm, t.Primary)
-	default:
-		if d.today {
-			dst.FillRoundRect(fill, t.RadiusSm, t.Muted)
-		} else if hover > 0 {
-			dst.FillRoundRect(fill, t.RadiusSm, fade(c.hover, hover))
-		}
+	case d.today:
+		dst.FillRoundRect(fill, t.RadiusSm, t.Muted)
+	case hover > 0:
+		dst.FillRoundRect(fill, t.RadiusSm, fade(c.hover, hover))
 	}
-	dst.Paint(d.text, ggui.Rct(ggui.Pt(fill.Origin.X+(fill.Size.W-d.size.W)/2, fill.Origin.Y+(fill.Size.H-d.size.H)/2), d.size))
 }
 
 // BindDisabled follows r for Disabled without rebuilding the control.
