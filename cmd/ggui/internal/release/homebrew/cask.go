@@ -215,9 +215,47 @@ func (c Cask) Ruby() (string, error) {
 		return "", fmt.Errorf("cask %s: no macOS download", c.Token)
 	}
 	var b strings.Builder
-	p := func(format string, args ...any) { fmt.Fprintf(&b, format, args...) }
-	p("cask %s do\n", rubyString(c.Token))
+	fmt.Fprintf(&b, "cask %s do\n", rubyString(c.Token))
+	dl := c.downloadStanza(&b)
 
+	fmt.Fprintf(&b, "  name %s\n", rubyString(c.Name))
+	if d := Desc(c.Desc); d != "" {
+		fmt.Fprintf(&b, "  desc %s\n", rubyString(d))
+	}
+	fmt.Fprintf(&b, "  homepage %s\n\n", rubyString(c.Homepage))
+
+	if strings.Contains(dl.URL, "/releases/download/") {
+		b.WriteString("  livecheck do\n    url :url\n    strategy :github_latest\n  end\n\n")
+	}
+	deps := c.dependsOnLines()
+	if len(deps) > 0 {
+		b.WriteString(strings.Join(deps, ""))
+		b.WriteString("\n")
+	}
+
+	fmt.Fprintf(&b, "  app %s\n", rubyString(c.Name+".app"))
+	if c.ID != "" {
+		fmt.Fprintf(&b, "\n  zap trash: [\n")
+		for _, path := range []string{
+			"~/Library/Application Support/" + c.ID,
+			"~/Library/Preferences/" + c.ID + ".plist",
+			"~/Library/Saved Application State/" + c.ID + ".savedState",
+		} {
+			fmt.Fprintf(&b, "    %s,\n", rubyString(path))
+		}
+		b.WriteString("  ]\n")
+	}
+	b.WriteString("end\n")
+	return b.String(), nil
+}
+
+// downloadStanza writes the version, sha256 and url lines for the
+// download shape the cask has: one universal file, one file per
+// architecture when their URLs share a template, or a block per
+// architecture otherwise. It returns the file the livecheck stanza
+// would name.
+func (c Cask) downloadStanza(b *strings.Builder) *File {
+	p := func(format string, args ...any) { fmt.Fprintf(b, format, args...) }
 	var dl *File
 	switch {
 	case c.Universal != nil:
@@ -235,17 +273,7 @@ func (c Cask) Ruby() (string, error) {
 			p("         intel: %s\n\n", rubyString(c.Intel.SHA256))
 			p("  url %s%s\n", versionedArch(c.Arm.URL, c.Version, ai, len("arm64")), verified(c.Arm.URL, c.Homepage, "      "))
 		} else {
-			p("  version %s\n\n", rubyString(c.Version))
-			for _, a := range []struct {
-				block string
-				f     *File
-			}{{"on_arm", c.Arm}, {"on_intel", c.Intel}} {
-				p("  %s do\n", a.block)
-				p("    sha256 %s\n\n", rubyString(a.f.SHA256))
-				p("    url %s%s\n", versioned(a.f.URL, c.Version), verified(a.f.URL, c.Homepage, "        "))
-				p("  end\n")
-			}
-			b.WriteString("\n")
+			c.onArchStanza(b)
 		}
 		dl = c.Arm
 	default:
@@ -257,16 +285,30 @@ func (c Cask) Ruby() (string, error) {
 		p("  sha256 %s\n\n", rubyString(dl.SHA256))
 		p("  url %s%s\n", versioned(dl.URL, c.Version), verified(dl.URL, c.Homepage, "      "))
 	}
-	p("  name %s\n", rubyString(c.Name))
-	if d := Desc(c.Desc); d != "" {
-		p("  desc %s\n", rubyString(d))
-	}
-	p("  homepage %s\n\n", rubyString(c.Homepage))
+	return dl
+}
 
-	if strings.Contains(dl.URL, "/releases/download/") {
-		p("  livecheck do\n    url :url\n    strategy :github_latest\n  end\n\n")
+// onArchStanza writes a version line and an on_arm and on_intel block
+// each, for downloads whose URLs share no template.
+func (c Cask) onArchStanza(b *strings.Builder) {
+	p := func(format string, args ...any) { fmt.Fprintf(b, format, args...) }
+	p("  version %s\n\n", rubyString(c.Version))
+	for _, a := range []struct {
+		block string
+		f     *File
+	}{{"on_arm", c.Arm}, {"on_intel", c.Intel}} {
+		p("  %s do\n", a.block)
+		p("    sha256 %s\n\n", rubyString(a.f.SHA256))
+		p("    url %s%s\n", versioned(a.f.URL, c.Version), verified(a.f.URL, c.Homepage, "        "))
+		p("  end\n")
 	}
+	b.WriteString("\n")
+}
 
+// dependsOnLines returns the cask's depends_on lines: an architecture
+// constraint when only one architecture has a download, and the minimum
+// macOS version when Homebrew has a name for it.
+func (c Cask) dependsOnLines() []string {
 	var deps []string
 	if c.Universal == nil && (c.Arm == nil) != (c.Intel == nil) {
 		if c.Arm != nil {
@@ -278,25 +320,7 @@ func (c Cask) Ruby() (string, error) {
 	if name := MacOSName(c.MinMacOS); name != "" {
 		deps = append(deps, fmt.Sprintf("  depends_on macos: \">= :%s\"\n", name))
 	}
-	if len(deps) > 0 {
-		b.WriteString(strings.Join(deps, ""))
-		b.WriteString("\n")
-	}
-
-	p("  app %s\n", rubyString(c.Name+".app"))
-	if c.ID != "" {
-		p("\n  zap trash: [\n")
-		for _, path := range []string{
-			"~/Library/Application Support/" + c.ID,
-			"~/Library/Preferences/" + c.ID + ".plist",
-			"~/Library/Saved Application State/" + c.ID + ".savedState",
-		} {
-			p("    %s,\n", rubyString(path))
-		}
-		p("  ]\n")
-	}
-	p("end\n")
-	return b.String(), nil
+	return deps
 }
 
 // verified returns the url stanza's verified parameter when the download
