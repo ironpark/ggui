@@ -95,9 +95,9 @@ func (t *TextWidget) paintBidi(dst *ggui.Canvas, i int, r ggui.Rect, align float
 	x := r.Origin.X + (r.Size.W-paragraph.Width(ps)/bidiScale)*align
 	y := t.lineY(r, i)
 	baseline := t.faceAt(scale).Metrics().HAscent
-	paragraph.Draw(dst.Image, &t.bidi.pieceOp, line, ps, t.bidi.styles[i], scale/bidiScale, baseline,
-		func(int) color.Color { return col },
-		func(op *text.DrawOptions) { place(op, x, y) })
+	paragraph.Draw(dst.Image, &t.bidi.pieceOp, paragraph.DrawSpec{
+		S: line, Pieces: ps, Styles: t.bidi.styles[i], Scale: scale / bidiScale, Baseline: baseline,
+	}, func(int) color.Color { return col }, func(op *text.DrawOptions) { place(op, x, y) })
 	return true
 }
 
