@@ -277,6 +277,12 @@ func (f *Frame) semantic(i int) []Field {
 	}
 	n := &f.Sem.Ref(found).Node
 	out := []Field{{Key: "Node"}, {"role", string(n.Role), false}}
+	out = nodeFields(out, n)
+	return f.pathFields(out, found)
+}
+
+// nodeFields appends the node's attributes to out.
+func nodeFields(out []Field, n *a11y.Node) []Field {
 	add := func(k, v string) {
 		if v != "" {
 			out = append(out, Field{k, v, false})
@@ -308,11 +314,19 @@ func (f *Frame) semantic(i int) []Field {
 	if n.Min != 0 || n.Max != 0 || n.Now != 0 {
 		out = append(out, Field{"range", Num(n.Min) + " – " + Num(n.Max), true}, Field{"now", Num(n.Now), true})
 	}
-	if chain := f.SemanticChain(found); len(chain) > 1 {
-		out = append(out, Field{Key: "Path"})
-		for _, c := range chain[:len(chain)-1] {
-			out = append(out, Field{"", strings.TrimLeft(c, " "), false})
-		}
+	return out
+}
+
+// pathFields appends the node's position in the accessibility tree to
+// out, when it is not the only one.
+func (f *Frame) pathFields(out []Field, found int) []Field {
+	chain := f.SemanticChain(found)
+	if len(chain) <= 1 {
+		return out
+	}
+	out = append(out, Field{Key: "Path"})
+	for _, c := range chain[:len(chain)-1] {
+		out = append(out, Field{"", strings.TrimLeft(c, " "), false})
 	}
 	return out
 }
