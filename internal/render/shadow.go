@@ -35,6 +35,6 @@ type Shadow struct {
 
 // DrawShadow draws s onto dst in tint, a premultiplied colour.
 func DrawShadow(dst *ggfx.Image, s Shadow, tint [4]float32) {
-	vs := quad(s.Bounds, s.Centre, layout.Pt(1, 0), s.Half, s.Radius, s.Feather, tint)
+	vs := quad(s.Bounds, quadShape{centre: s.Centre, axis: layout.Pt(1, 0), half: s.Half, s0: s.Radius, s1: s.Feather, tint: tint})
 	dst.DrawTrianglesShader(vs[:], quadIndices[:], sharedShadow(), nil)
 }
