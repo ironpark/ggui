@@ -291,6 +291,18 @@ func (in *inputState) updateFocusWithin(focused *hitRegion) {
 		}
 	}
 	in.focusAt = path
+	left := in.tellLeft(last, path)
+	joined := in.tellJoined(last, path)
+	if left || joined {
+		RepaintAll()
+	}
+	last.set(in, path)
+}
+
+// tellLeft tells the FocusWithinHandlers on last that path no longer
+// holds, the innermost first, that focus is no longer inside them, and
+// reports whether it told any.
+func (in *inputState) tellLeft(last *withinPath, path []int32) bool {
 	told := false
 	for j := range last.at {
 		if in.onWithinPath(&last.at[j], last.h[j], path) {
@@ -309,8 +321,15 @@ func (in *inputState) updateFocusWithin(focused *hitRegion) {
 			told = true
 		}
 	}
-	for _, i := range slices.Backward(path) {
+	return told
+}
 
+// tellJoined tells the FocusWithinHandlers on path that last did not
+// hold, and those rebuilt since, the outermost first, that focus is inside
+// them, and reports whether it told any.
+func (in *inputState) tellJoined(last *withinPath, path []int32) bool {
+	told := false
+	for _, i := range slices.Backward(path) {
 		h := in.withinOf(i)
 		if prev := in.withinMatch(i, last); prev >= 0 && gem.Same(h, last.h[prev]) {
 			continue
@@ -318,10 +337,7 @@ func (in *inputState) updateFocusWithin(focused *hitRegion) {
 		h.(FocusWithinHandler).HandleFocusWithin(true)
 		told = true
 	}
-	if told {
-		RepaintAll()
-	}
-	last.set(in, path)
+	return told
 }
 
 // onWithinPath reports whether prev, with the handler h, is one of the
@@ -450,10 +466,8 @@ func (in *inputState) latchedOn(a int) *hitRegion {
 		return nil
 	}
 	cur := in.findPointer(l)
-	if cur != nil {
-		if scope := in.activeScope(); scope != nil && (cur.scope == nil || !gem.Same(scope.owner, cur.scope.owner)) {
-			cur = nil
-		}
+	if cur != nil && !cur.inScope(in.activeScope()) {
+		cur = nil
 	}
 	if cur == nil {
 		in.latched[a] = in.latch[a].keep(nil)

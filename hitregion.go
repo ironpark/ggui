@@ -39,12 +39,7 @@ type hitRegion struct {
 
 // merge folds o into r when they share a Rect and o only adds what r lacks.
 func (r *hitRegion) merge(o hitRegion) bool {
-	if r.rect != o.rect || r.reach != o.reach || r.space != o.space || (o.id != nil && r.id != nil && !gem.Same(o.id, r.id)) ||
-		o.drag != nil || r.drag != nil ||
-		(o.pointer != nil && r.pointer != nil) ||
-		(o.key != nil && r.key != nil) ||
-		(o.shaped && r.shaped) ||
-		(o.within && r.within) {
+	if !r.samePlace(&o) || r.clashes(&o) {
 		return false
 	}
 	if o.pointer != nil {
@@ -64,6 +59,29 @@ func (r *hitRegion) merge(o hitRegion) bool {
 		r.role, r.label = o.role, o.label
 	}
 	return true
+}
+
+// samePlace reports whether o was registered for r's Rect, reach and
+// space, and for r's identity when both have one.
+func (r *hitRegion) samePlace(o *hitRegion) bool {
+	return r.rect == o.rect && r.reach == o.reach && r.space == o.space &&
+		(o.id == nil || r.id == nil || gem.Same(o.id, r.id))
+}
+
+// clashes reports whether r and o both hold what a region holds one of,
+// or either holds a drag source.
+func (r *hitRegion) clashes(o *hitRegion) bool {
+	return o.drag != nil || r.drag != nil ||
+		(o.pointer != nil && r.pointer != nil) ||
+		(o.key != nil && r.key != nil) ||
+		(o.shaped && r.shaped) ||
+		(o.within && r.within)
+}
+
+// inScope reports whether r takes part while scope, the focus trap
+// showing or nil, is: always without one, else when painted inside it.
+func (r *hitRegion) inScope(scope *focusScope) bool {
+	return scope == nil || r.scope != nil && gem.Same(r.scope.owner, scope.owner)
 }
 
 // contains reports whether the window point p lands on r: in its Rect, or

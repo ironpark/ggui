@@ -437,6 +437,19 @@ func (in *inputState) updateCursor(pos Point) {
 // region that took a press keeps the drag and the release wherever the
 // cursor goes, and gets a tap only if the release landed back inside it.
 func (in *inputState) dispatchPointer(f frameInput) {
+	in.dispatchPresses(f)
+	if in.pressed != nil && len(f.down) == 0 && len(f.up) == 0 {
+		if cur := in.findPointer(in.pressed); cur != nil {
+			in.deliver(cur, PointerEvent{Kind: PointerDrag, Pos: f.pos, Button: in.pressedBtn, Mods: f.mods})
+		}
+	}
+	in.dispatchReleases(f)
+	in.dispatchWheel(f)
+}
+
+// dispatchPresses sends this frame's presses: the first region to take one
+// holds the press, and a press with the left button may pick up a drag.
+func (in *inputState) dispatchPresses(f frameInput) {
 	if len(f.down) > 0 {
 		in.unlatch() // a press ends a gesture
 	}
@@ -451,11 +464,12 @@ func (in *inputState) dispatchPointer(f frameInput) {
 		}
 		in.setFocus(in.findKey(f.pos))
 	}
-	if in.pressed != nil && len(f.down) == 0 && len(f.up) == 0 {
-		if cur := in.findPointer(in.pressed); cur != nil {
-			in.deliver(cur, PointerEvent{Kind: PointerDrag, Pos: f.pos, Button: in.pressedBtn, Mods: f.mods})
-		}
-	}
+}
+
+// dispatchReleases sends this frame's releases: the release of the button
+// pressed to the region holding the press, with a tap when it landed back
+// inside it, and any other to the region under the pointer.
+func (in *inputState) dispatchReleases(f frameInput) {
 	for _, b := range f.up {
 		ev := PointerEvent{Kind: PointerUp, Pos: f.pos, Button: b, Mods: f.mods}
 		p := in.pressed
@@ -471,8 +485,12 @@ func (in *inputState) dispatchPointer(f frameInput) {
 		}
 		in.pressed = nil
 	}
-	// A wheel's notches and a trackpad's pixels go as scrolls of their own;
-	// a gesture's lift, which moves nothing, goes as the trackpad's.
+}
+
+// dispatchWheel sends this frame's wheel and trackpad scrolls. A wheel's
+// notches and a trackpad's pixels go as scrolls of their own; a gesture's
+// lift, which moves nothing, goes as the trackpad's.
+func (in *inputState) dispatchWheel(f frameInput) {
 	lifted := f.phase == ScrollPhaseEnded || f.phase == ScrollPhaseMomentumEnded
 	momentum := f.phase == ScrollPhaseMomentum || f.phase == ScrollPhaseMomentumEnded
 	in.gesture(f.phase)

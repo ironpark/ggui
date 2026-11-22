@@ -124,7 +124,7 @@ func (in *inputState) moveFocus(dir int) {
 	}
 	for i := range in.regions {
 		r := &in.regions[i]
-		if r.key == nil || (scope != nil && (r.scope == nil || !gem.Same(r.scope.owner, scope.owner))) {
+		if r.key == nil || !r.inScope(scope) {
 			continue
 		}
 		if r == focused || focused != nil && gem.Same(r.key, focused.key) {
