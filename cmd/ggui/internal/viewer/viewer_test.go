@@ -40,6 +40,10 @@ func fakeViewer() {
 		}
 		enc.Encode(Event{Type: "got-" + c.Type, PID: len(c.Output)})
 	}
+	if err := sc.Err(); err != nil {
+		fmt.Fprintln(os.Stderr, "fake viewer:", err)
+		os.Exit(1)
+	}
 }
 
 func startFake(t *testing.T) *Process {

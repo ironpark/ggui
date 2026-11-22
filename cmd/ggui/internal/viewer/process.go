@@ -187,6 +187,7 @@ func (v *Process) read(r io.ReadCloser, ready chan<- Event) {
 		case <-v.stopped:
 		}
 	}
+	_ = sc.Err() // the viewer exiting ends the stream
 	<-v.p.Done()
 	if first {
 		close(ready)

@@ -165,6 +165,9 @@ func TestServer(t *testing.T) {
 				evs <- e
 			}
 		}
+		if err := sc.Err(); err != nil && ctx.Err() == nil {
+			t.Errorf("event stream: %v", err)
+		}
 	}()
 	next := func(state string) event {
 		t.Helper()
