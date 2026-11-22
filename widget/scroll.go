@@ -547,52 +547,77 @@ func (s *ScrollWidget) Reveal(target ggui.Rect) {
 }
 
 // HandlePointer implements PointerHandler: wheel movement along the scroll
-// axis moves the window.
+// axis moves the window, and a drag of the thumb does.
 func (s *ScrollWidget) HandlePointer(ev ggui.PointerEvent) bool {
-	axis := gem.Pick(s.horizontal, ev.Pos.X, ev.Pos.Y)
 	switch ev.Kind {
 	case ggui.PointerDown:
-		if ev.Button != ggui.MouseButtonLeft || !s.thumbHit.Contains(ev.Pos) || s.extent(s.rect.Size) <= s.thumbLength() {
-			return false
-		}
-		s.dragging, s.dragStart, s.dragOffset = true, axis, s.position()
-		return true
+		return s.thumbGrab(ev)
 	case ggui.PointerDrag:
-		if !s.dragging {
-			return false
-		}
-		travel := s.extent(s.rect.Size) - s.thumbLength()
-		s.phys.input(s)
-		if travel > 0 {
-			before := s.position()
-			s.scrollTo(s.dragOffset + (axis-s.dragStart)*s.maxOffset()/travel)
-			if moved := s.position() - before; moved != 0 {
-				s.phys.dir = math.Copysign(1, moved)
-			}
-		}
-		return true
+		return s.thumbDrag(ev)
 	case ggui.PointerUp:
-		if !s.dragging || ev.Button != ggui.MouseButtonLeft {
-			return false
-		}
-		s.dragging = false
-		return true
-	case ggui.PointerMove, ggui.PointerEnter:
-		return s.thumbHit.Contains(ev.Pos)
-	case ggui.PointerTap:
+		return s.thumbRelease(ev)
+	case ggui.PointerMove, ggui.PointerEnter, ggui.PointerTap:
 		return s.thumbHit.Contains(ev.Pos)
 	}
-
 	if ev.Kind != ggui.PointerScroll {
 		return false
 	}
+	return s.scrollWheel(ev)
+}
+
+// thumbGrab takes a left press on the thumb as the start of a drag, when
+// the content is long enough to scroll. It reports whether the press was
+// taken.
+func (s *ScrollWidget) thumbGrab(ev ggui.PointerEvent) bool {
+	if ev.Button != ggui.MouseButtonLeft || !s.thumbHit.Contains(ev.Pos) || s.extent(s.rect.Size) <= s.thumbLength() {
+		return false
+	}
+	axis := gem.Pick(s.horizontal, ev.Pos.X, ev.Pos.Y)
+	s.dragging, s.dragStart, s.dragOffset = true, axis, s.position()
+	return true
+}
+
+// thumbDrag follows a pressed pointer with the thumb, mapping its travel
+// along the axis onto the offset. It reports the event used while a drag
+// is on, whether or not the thumb moved.
+func (s *ScrollWidget) thumbDrag(ev ggui.PointerEvent) bool {
+	if !s.dragging {
+		return false
+	}
+	axis := gem.Pick(s.horizontal, ev.Pos.X, ev.Pos.Y)
+	travel := s.extent(s.rect.Size) - s.thumbLength()
+	s.phys.input(s)
+	if travel > 0 {
+		before := s.position()
+		s.scrollTo(s.dragOffset + (axis-s.dragStart)*s.maxOffset()/travel)
+		if moved := s.position() - before; moved != 0 {
+			s.phys.dir = math.Copysign(1, moved)
+		}
+	}
+	return true
+}
+
+// thumbRelease ends a thumb drag when its left button goes up. It reports
+// whether a drag was on.
+func (s *ScrollWidget) thumbRelease(ev ggui.PointerEvent) bool {
+	if !s.dragging || ev.Button != ggui.MouseButtonLeft {
+		return false
+	}
+	s.dragging = false
+	return true
+}
+
+// scrollWheel moves the window by a wheel or trackpad scroll along the
+// axis, and reports whether the event was used: one at the end of the
+// content, or that moves nothing, is left to the scroll around. A lift,
+// the fingers lifting or their momentum stopping, settles the gesture;
+// it comes with no movement, or with the frame's last.
+func (s *ScrollWidget) scrollWheel(ev ggui.PointerEvent) bool {
 	by := ev.ScrollBy()
 	if s.speed > 0 && !ev.ScrollPixels {
 		by = ggui.Pt(ev.Scroll.X*s.speed, ev.Scroll.Y*s.speed)
 	}
 	delta := gem.Pick(s.horizontal, by.X, by.Y)
-	// The fingers lifting, or their momentum stopping, comes with no
-	// movement, or with the frame's last.
 	lift := ev.ScrollPixels && (ev.ScrollPhase == ggui.ScrollPhaseEnded || ev.ScrollPhase == ggui.ScrollPhaseMomentumEnded)
 	if delta == 0 && lift {
 		return s.lift(ev.ScrollPhase == ggui.ScrollPhaseMomentumEnded)
