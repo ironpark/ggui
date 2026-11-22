@@ -55,14 +55,22 @@ var spans = []struct {
 func (l *Localizer) since(tag string, t time.Time) string {
 	d := now().Sub(t)
 	future := d < 0
+	var abs uint64
 	if future {
-		d = -d
+		if d == math.MinInt64 {
+			abs = 1 << 63
+		} else {
+			abs = uint64(-d)
+		}
+	} else {
+		abs = uint64(d)
 	}
 	for _, s := range spans {
-		if d < s.d {
+		sd := uint64(s.d)
+		if abs < sd {
 			continue
 		}
-		n := int(d / s.d)
+		n := int(abs / sd)
 		if future {
 			return l.plural(tag, n, s.in, s.inN, "", nil)
 		}

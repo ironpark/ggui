@@ -16,6 +16,11 @@ import (
 // variable, for tests.
 var connectTimeout = 2 * time.Second
 
+// dispatchTimeout bounds how long onUI waits for a snapshot posted to the
+// UI thread when the app or window shuts down before running it. A
+// variable, for tests.
+var dispatchTimeout = 2 * time.Second
+
 // stream is a connection to ggui dev: a unix socket's, or a named pipe's
 // file on Go's poller.
 type stream interface {
@@ -73,7 +78,10 @@ func connect() *session {
 // serve answers ggui dev's requests until it closes the channel, as it
 // does when it hands this app's state to another instance.
 func (s *session) serve(c stream, enc *json.Encoder, dec *json.Decoder) {
-	defer c.Close()
+	defer func() {
+		s.close()
+		c.Close()
+	}()
 	for {
 		var m message
 		if err := dec.Decode(&m); err != nil {
@@ -82,20 +90,34 @@ func (s *session) serve(c stream, enc *json.Encoder, dec *json.Decoder) {
 		if m.Type != "save" {
 			continue
 		}
-		if enc.Encode(message{Type: "saved", State: s.onUI()}) != nil {
+		st, ok := s.onUI()
+		if !ok {
+			return
+		}
+		if enc.Encode(message{Type: "saved", State: st}) != nil {
 			return
 		}
 	}
 }
 
 // onUI takes the snapshot on the UI thread. Before the app runs there is
-// no UI thread to post to and the snapshot is taken here; ggui dev waits
-// for it a short while, so an app whose UI thread is stuck is not waited
-// for.
-func (s *session) onUI() State {
+// no UI thread to post to and the snapshot is taken here; if a posted
+// callback never runs because the app shut down or the UI thread is stuck,
+// onUI stops waiting once the session closes or dispatchTimeout elapses.
+func (s *session) onUI() (State, bool) {
 	done := make(chan State, 1)
-	if Dispatch == nil || !Dispatch(func() { done <- s.snapshot() }) {
-		return s.snapshot()
+	d := Dispatch
+	if d == nil || !d(func() { done <- s.snapshot() }) {
+		return s.snapshot(), true
 	}
-	return <-done
+	timer := time.NewTimer(dispatchTimeout)
+	defer timer.Stop()
+	select {
+	case st := <-done:
+		return st, true
+	case <-s.closed:
+		return nil, false
+	case <-timer.C:
+		return nil, false
+	}
 }

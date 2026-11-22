@@ -11,10 +11,11 @@ import (
 // Context is the route-scoped handle a page, layout or not-found factory
 // receives. It is valid only while its route instance is mounted.
 type Context struct {
-	r       *Router
-	inst    instance
-	owner   *reactive.Computation
-	queries map[string]*ggui.DerivedValue[string]
+	r        *Router
+	inst     instance
+	owner    *reactive.Computation
+	disposed bool
+	queries  map[string]*ggui.DerivedValue[string]
 }
 
 // Param returns a path parameter matched through this route node, or "".
@@ -26,18 +27,24 @@ func (c *Context) Param(name string) string { return c.inst.params[name] }
 // tracked read that notifies only when this name's value changes.
 func (c *Context) Query(name string) string { return c.query(name).Get() }
 
-// query is the derived value behind Query, made on first use.
-func (c *Context) query(name string) *ggui.DerivedValue[string] {
-	d := c.queries[name]
-	if d == nil {
-		reactive.WithOwner(c.owner, func() {
-			d = c.r.loc.Map(func(l Location) string { return l.Query(name) })
-		})
-		if c.queries == nil {
-			c.queries = map[string]*ggui.DerivedValue[string]{}
-		}
-		c.queries[name] = d
+// query is the derived value behind Query, made on first use while the
+// Context is mounted. After disposal it falls back to a stateless reader so
+// no derived computation is attached to a dead owner.
+func (c *Context) query(name string) ggui.Readable[string] {
+	if d := c.queries[name]; d != nil {
+		return d
 	}
+	if c.disposed || c.owner == nil {
+		return reader[string](func() string { return c.r.loc.Get().Query(name) })
+	}
+	var d *ggui.DerivedValue[string]
+	reactive.WithOwner(c.owner, func() {
+		d = c.r.loc.Map(func(l Location) string { return l.Query(name) })
+	})
+	if c.queries == nil {
+		c.queries = map[string]*ggui.DerivedValue[string]{}
+	}
+	c.queries[name] = d
 	return d
 }
 
@@ -104,23 +111,39 @@ type Location struct {
 	RawQuery string
 	Fragment string
 	Entry    uint64 // history entry ID
+
+	parsed *parsedQuery // cached parse of RawQuery; pointer keeps Location comparable
+}
+
+type parsedQuery struct {
+	raw    string
+	values url.Values
+}
+
+func (l Location) queryValues() url.Values {
+	if l.RawQuery == "" {
+		return nil
+	}
+	if l.parsed != nil && l.parsed.raw == l.RawQuery {
+		return l.parsed.values
+	}
+	v, _ := url.ParseQuery(l.RawQuery)
+	return v
 }
 
 // Query returns the first value of name, or "".
 func (l Location) Query(name string) string {
-	v, _ := url.ParseQuery(l.RawQuery)
-	return v.Get(name)
+	return l.queryValues().Get(name)
 }
 
 // HasQuery reports whether name is present, even with an empty value.
 func (l Location) HasQuery(name string) bool {
-	v, _ := url.ParseQuery(l.RawQuery)
-	return v.Has(name)
+	return l.queryValues().Has(name)
 }
 
 // QueryAll returns a copy of every value of name.
 func (l Location) QueryAll(name string) []string {
-	v, _ := url.ParseQuery(l.RawQuery)
+	v := l.queryValues()
 	return append([]string(nil), v[name]...)
 }
 

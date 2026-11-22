@@ -37,6 +37,8 @@ type session struct {
 	mu      sync.Mutex
 	handed  State             // handed over and not yet claimed by a Keep
 	entries map[string]*entry // kept now, by key
+	closed  chan struct{}
+	once    sync.Once
 }
 
 // entry is one kept value.
@@ -74,7 +76,19 @@ func active() *session {
 func On() bool { return active() != nil }
 
 func newSession(handed State) *session {
-	return &session{handed: handed, entries: map[string]*entry{}}
+	return &session{
+		handed:  handed,
+		entries: map[string]*entry{},
+		closed:  make(chan struct{}),
+	}
+}
+
+func (s *session) close() {
+	s.once.Do(func() {
+		if s.closed != nil {
+			close(s.closed)
+		}
+	})
 }
 
 // Keep keeps a value under key: restore is called at once with the value
@@ -153,7 +167,10 @@ func Begin(handed State) (end func()) {
 	begin.Do(func() {})
 	s := newSession(maps.Clone(handed))
 	cur.Store(s)
-	return func() { cur.CompareAndSwap(s, nil) }
+	return func() {
+		s.close()
+		cur.CompareAndSwap(s, nil)
+	}
 }
 
 // Stderr is where the session's notices go.

@@ -160,9 +160,9 @@ func (in *View) paint(dst *ggui.Canvas, fr *inspect.Frame) {
 			in.cache.image.Clear()
 			cached := *dst
 			cached.Image = in.cache.image
-			before := in.scroll
+			beforeScroll, beforeDetail, beforeLayout := in.scroll, in.detailScroll, in.layoutScroll
 			in.paintPanel(&cached, font, pal, sel, shown)
-			if in.scroll != before || snapshot.state.tree != in.tree || snapshot.state.layout != in.layout {
+			if in.scroll != beforeScroll || in.detailScroll != beforeDetail || in.layoutScroll != beforeLayout || snapshot.state.tree != in.tree || snapshot.state.layout != in.layout {
 				snapshot = in.panelSnapshot(dst, fr, shown, sel, snapshot)
 			}
 			in.cache.spare, in.cache.snapshot = in.cache.snapshot, snapshot
@@ -661,7 +661,7 @@ func (in *View) paintStatus(dst *ggui.Canvas, font *ggui.Font, pal inspectPalett
 		status = fmt.Sprintf("%d matches · Esc clears the filter", in.matches)
 	}
 	if in.copied {
-		status = "ggui.Widget details copied"
+		status = "Widget details copied"
 	}
 	p, ok := dst.Pointer()
 	if ok {

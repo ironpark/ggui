@@ -1,6 +1,8 @@
 package i18n
 
 import (
+	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -344,4 +346,70 @@ func TestMessagesWithoutArgumentsCompareEqual(t *testing.T) {
 		t.Error("a context does not tell messages apart")
 	}
 	var _ ggui.Readable[string] = T("x")
+}
+
+func TestLocalizerRegressions(t *testing.T) {
+	t.Parallel()
+	// Nil *Localizer does not panic.
+	var nilLoc *Localizer
+	if got := nilLoc.S("Hello %s", "world"); got != "Hello world" {
+		t.Errorf("nil.S = %q", got)
+	}
+	if got := nilLoc.N(-1, "%d item", "%d items"); got != "-1 item" {
+		t.Errorf("nil.N(-1) = %q, want %q", got, "-1 item")
+	}
+
+	// Empty plural entry in specific catalog falls back to base catalog,
+	// using the matched catalog's plural rules.
+	basePT := &Catalog{Lang: "pt", Plurals: map[string]Forms{"%d file": {One: "%d arquivo", Other: "%d arquivos"}}}
+	emptyPTPT := &Catalog{Lang: "pt-PT", Plurals: map[string]Forms{"%d file": {Other: ""}}}
+	lang := ggui.State("pt-PT")
+	l := New(lang, basePT, emptyPTPT)
+	// pt-PT entry is empty -> falls back to pt (where 0 is one).
+	if got := l.N(0, "%d file", "%d files"); got != "0 arquivo" {
+		t.Errorf("pt-PT empty plural fallback = %q, want %q", got, "0 arquivo")
+	}
+
+	// base() normalizes case and underscores.
+	if got := base("KO_KR"); got != "ko" {
+		t.Errorf("base(KO_KR) = %q, want ko", got)
+	}
+
+	// Romanian 101..119 is few; 1 is one.
+	if got := pluralOf("ro", 1); got != one {
+		t.Errorf("ro 1 = %v, want one", got)
+	}
+	if got := pluralOf("ro", 101); got != few {
+		t.Errorf("ro 101 = %v, want few", got)
+	}
+	if got := pluralOf("ro", 20); got != other {
+		t.Errorf("ro 20 = %v, want other", got)
+	}
+
+	// math.MinInt does not overflow negative in pluralOf.
+	if got := pluralOf("fr", math.MinInt); got != other {
+		t.Errorf("fr MinInt = %v, want other", got)
+	}
+
+	// with() resets language and direction when lang switches back to "".
+	arEnv := with(ggui.Env{}, l, "ar")
+	if arEnv.Direction() != ggui.DirRTL || arEnv.Language() != "ar" {
+		t.Fatalf("ar env = (%q, %v)", arEnv.Language(), arEnv.Direction())
+	}
+	resetEnv := with(arEnv, l, "")
+	if resetEnv.Direction() != ggui.DirLTR || resetEnv.Language() != "" {
+		t.Errorf("reset env = (%q, %v), want (\"\", DirLTR)", resetEnv.Language(), resetEnv.Direction())
+	}
+}
+
+func TestSinceFarFutureNoOverflow(t *testing.T) {
+	ref := time.Date(2026, time.November, 18, 12, 0, 0, 0, time.UTC)
+	now = func() time.Time { return ref }
+	defer func() { now = time.Now }()
+	l := New(ggui.State("en"))
+	// More than 292 years ahead saturates Sub to math.MinInt64.
+	got := l.message(Since(ref.AddDate(500, 0, 0)))
+	if !strings.HasPrefix(got, "in ") || !strings.HasSuffix(got, " years") {
+		t.Errorf("Since(+500y) = %q, want 'in N years'", got)
+	}
 }

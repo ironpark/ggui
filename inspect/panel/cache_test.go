@@ -230,3 +230,29 @@ func TestPanelResetDropsPanelCache(t *testing.T) {
 	}
 	_ = inspect.Layout
 }
+
+func TestPanelCacheResnapshotsClampedDetailAndLayoutScroll(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, widget.Box(widget.Text("hello")).Pad(4), ggui.Sz(1400, 900))
+	h.rendered(t, 1400, 900)
+	in := New()
+	in.selectEntry(h.fr, 0)
+	in.detailScroll = 1e6
+	in.layoutScroll = 1e6
+	in.paint(h.dst, h.fr)
+	if in.layout.Empty() {
+		t.Fatal("expected wide panel layout column")
+	}
+	if in.detailScroll >= 1e6 || in.layoutScroll >= 1e6 {
+		t.Fatalf("scrolls not clamped: detail=%v layout=%v", in.detailScroll, in.layoutScroll)
+	}
+	if in.cache.snapshot.state.detailScroll != in.detailScroll || in.cache.snapshot.state.layoutScroll != in.layoutScroll {
+		t.Fatalf("cached snapshot kept stale unclamped scroll: snap=(%v,%v) actual=(%v,%v)",
+			in.cache.snapshot.state.detailScroll, in.cache.snapshot.state.layoutScroll, in.detailScroll, in.layoutScroll)
+	}
+	rows := in.cache.snapshot.rows
+	in.paint(h.dst, h.fr)
+	if len(rows) == 0 || &rows[0] != &in.cache.snapshot.rows[0] {
+		t.Fatal("panel redrew on the frame after clamping detail/layout scroll")
+	}
+}

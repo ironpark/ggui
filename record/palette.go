@@ -3,6 +3,7 @@ package record
 import (
 	"image"
 	"image/color"
+	"math"
 	"slices"
 )
 
@@ -240,7 +241,7 @@ func newBox(e []entry) box {
 			sq += x.n * x.c[c] * x.c[c]
 		}
 	}
-	b.err = sq - sqNorm(b.sum)/b.n
+	b.err = max(sq-sqNorm(b.sum)/b.n, 0)
 	b.cut = -1
 	if len(e) < 2 {
 		return b
@@ -271,7 +272,7 @@ func newBox(e []entry) box {
 	// The cut that leaves the least squared error on its two sides.
 	var n float64
 	var sum [3]float64
-	best := -1.0
+	best := math.Inf(1)
 	for i := range len(b.e) - 1 {
 		x := b.e[i]
 		n += x.n
@@ -282,8 +283,8 @@ func newBox(e []entry) box {
 		for c := range 3 {
 			rest[c] = b.sum[c] - sum[c]
 		}
-		e := sq - sqNorm(sum)/n - sqNorm(rest)/(b.n-n)
-		if best < 0 || e < best {
+		e := max(sq-sqNorm(sum)/n-sqNorm(rest)/(b.n-n), 0)
+		if e < best {
 			best, b.cut = e, i+1
 		}
 	}

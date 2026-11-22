@@ -67,6 +67,11 @@ func TestATextFollowsTheLanguageWithoutARebuild(t *testing.T) {
 	if !shown(p, "صندوق جديد") || env.Language() != "ar" || env.Direction() != ggui.DirRTL {
 		t.Errorf("Arabic: language %q direction %v\n%s", env.Language(), env.Direction(), p.Semantics())
 	}
+	lang.Set("")
+	p.Frame()
+	if !shown(p, "New sandbox") || env.Language() != "" || env.Direction() != ggui.DirLTR {
+		t.Errorf("reset to source: language %q direction %v\n%s", env.Language(), env.Direction(), p.Semantics())
+	}
 	preview.Set("ko")
 	p.Frame()
 	if !shown(p, "종료") {

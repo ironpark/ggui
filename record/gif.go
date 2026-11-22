@@ -67,13 +67,13 @@ func changed(a, b *image.RGBA) image.Rectangle {
 	for y := y0; y < y1; y++ {
 		ra, rb := row(y), rowB(y)
 		for x := 0; x < x0; x++ {
-			if ra[x*4] != rb[x*4] || ra[x*4+1] != rb[x*4+1] || ra[x*4+2] != rb[x*4+2] {
+			if ra[x*4] != rb[x*4] || ra[x*4+1] != rb[x*4+1] || ra[x*4+2] != rb[x*4+2] || ra[x*4+3] != rb[x*4+3] {
 				x0 = x
 				break
 			}
 		}
 		for x := w - 1; x >= x1; x-- {
-			if ra[x*4] != rb[x*4] || ra[x*4+1] != rb[x*4+1] || ra[x*4+2] != rb[x*4+2] {
+			if ra[x*4] != rb[x*4] || ra[x*4+1] != rb[x*4+1] || ra[x*4+2] != rb[x*4+2] || ra[x*4+3] != rb[x*4+3] {
 				x1 = x + 1
 				break
 			}

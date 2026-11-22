@@ -413,7 +413,7 @@ func (f *framer) drawBase(ch chrome, text ggui.TextStyle) {
 	centres, r := l.buttons()
 	rim := macRim * s
 	for i, c := range centres {
-		b := image.Rect(int(c.x-r)-1, int(c.y-r)-1, int(c.x+r)+2, int(c.y+r)+2)
+		b := image.Rect(int(c.x-r)-1, int(c.y-r)-1, int(c.x+r)+2, int(c.y+r)+2).Intersect(top.Rect)
 		for y := b.Min.Y; y < b.Max.Y; y++ {
 			for x := b.Min.X; x < b.Max.X; x++ {
 				px, py := float64(x)+0.5, float64(y)+0.5
