@@ -186,7 +186,7 @@ var SystemFonts = sync.OnceValue(func() []*Font {
 		// Every weight of the family, so text asking for one draws it
 		// in these scripts too.
 		if f := loadFamily(files); f != nil {
-			f.noFallback = true
+			f.noFallback.Store(true)
 			fonts = append(fonts, f)
 		}
 	}
@@ -197,7 +197,7 @@ var SystemFonts = sync.OnceValue(func() []*Font {
 	}
 	for _, family := range systemFallbackFamilies() {
 		if f := systemFamily(family); f != nil {
-			f.noFallback = true
+			f.noFallback.Store(true)
 			fonts = append(fonts, f)
 		}
 	}

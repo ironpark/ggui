@@ -255,3 +255,35 @@ func TestPopupTrapsTabAndRestoresFocus(t *testing.T) {
 		t.Fatalf("focused %q after closing, want a", focused)
 	}
 }
+
+func TestPopupFocusContentAdoptPointAndNonmodalScrim(t *testing.T) {
+	t.Parallel()
+	// 1. FocusContent must not reset paintedOpen or drop opener.
+	p := Popup(Box().Size(40, 20), Box().Size(40, 20))
+	p.paintedOpen = true
+	p.FocusContent()
+	if !p.paintedOpen || !p.focusContent {
+		t.Fatalf("FocusContent: paintedOpen=%v focusContent=%v, want true, true", p.paintedOpen, p.focusContent)
+	}
+
+	// 2. Adopt copies point even when BindOpen is set.
+	open := ggui.State(true)
+	pt := ggui.Pt(42, 77)
+	prev := Popup(Box().Size(40, 20), Box().Size(40, 20)).BindOpen(open)
+	prev.ShowAt(pt)
+	next := Popup(Box().Size(40, 20), Box().Size(40, 20)).BindOpen(open)
+	next.Adopt(prev)
+	if next.point == nil || *next.point != pt {
+		t.Fatalf("Adopt lost ShowAt point with BindOpen: %v", next.point)
+	}
+
+	// 3. popupScrim passes through PointerUp/PointerTap when nonmodal, blocks when modal.
+	modal := popupScrim{Popup(Box(), Box())}
+	nonmodal := popupScrim{Popup(Box(), Box()).Modal(false)}
+	if !modal.HandlePointer(ggui.PointerEvent{Kind: ggui.PointerUp}) || !modal.HandlePointer(ggui.PointerEvent{Kind: ggui.PointerTap}) {
+		t.Fatal("modal scrim failed to consume PointerUp/PointerTap")
+	}
+	if nonmodal.HandlePointer(ggui.PointerEvent{Kind: ggui.PointerUp}) || nonmodal.HandlePointer(ggui.PointerEvent{Kind: ggui.PointerTap}) {
+		t.Fatal("nonmodal scrim consumed PointerUp/PointerTap")
+	}
+}

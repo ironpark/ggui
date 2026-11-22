@@ -745,13 +745,14 @@ func (t *TextInputWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		return c.Constrain(ggui.Sz(w, t.height()))
 	}
 	t.width = max(c.MinW, w)
+	shown, _ := t.rendered()
 	var n int
 	if t.noWrap {
 		// Lines break only at newlines, so counting them gives the height
 		// without the line table, which paint makes if it draws.
-		n = strings.Count(t.ed.Text, "\n") + 1
+		n = strings.Count(shown, "\n") + 1
 	} else {
-		n = len(t.spans(t.ed.Text))
+		n = len(t.spans(shown))
 	}
 	n = max(n, t.minLines)
 	return c.Constrain(ggui.Sz(t.width, t.linesHeight(n)))
@@ -864,17 +865,54 @@ func (t *TextInputWidget) paintLines(dst *ggui.Canvas, r ggui.Rect) {
 		return
 	}
 	clip := dst.Clip(r)
-	lineY := func(i int) float64 { return y0 + float64(i)*t.spacing() }
-	// shows reports whether line i is in r: a line scrolled out of it is
-	// neither measured nor drawn.
-	shows := func(i int) bool { return lineY(i)+h >= r.Origin.Y && lineY(i) <= r.Origin.Y+r.Size.H }
+	sp := t.spacing()
+	lineY := func(i int) float64 { return y0 + float64(i)*sp }
+	// visibleRange returns the [first, last) lines of n that intersect r, in O(1),
+	// so lines scrolled out of view are neither measured nor drawn.
+	visibleRange := func(n int) (first, last int) {
+		if n <= 0 || !(sp > 0) {
+			return 0, max(n, 0)
+		}
+		lo := math.Floor((t.scroll - h) / sp)
+		hi := math.Ceil((t.scroll+r.Size.H)/sp) + 1
+		if lo >= float64(n) {
+			return n, n
+		}
+		if lo > 0 {
+			first = int(lo)
+		}
+		if hi <= float64(first) {
+			return first, first
+		}
+		if hi >= float64(n) {
+			last = n
+		} else {
+			last = int(hi)
+		}
+		for first < last && lineY(first)+h < r.Origin.Y {
+			first++
+		}
+		for last > first && lineY(last-1) > r.Origin.Y+r.Size.H {
+			last--
+		}
+		return first, last
+	}
+	first, last := visibleRange(len(spans))
 
 	// eachLine calls fn with the part of [lo, hi) that falls on each line
 	// in view, as x offsets, extending to the line's end when the range
 	// runs on.
 	eachLine := func(lo, hi int, fn func(i int, a, b float64)) {
-		for i, sp := range spans {
-			if hi < sp.Start || lo > sp.End || !shows(i) {
+		if first >= last {
+			return
+		}
+		start := max(first, textlayout.LineOf(spans, lo))
+		for i := start; i < last; i++ {
+			sp := spans[i]
+			if sp.Start > hi {
+				break
+			}
+			if lo > sp.End {
 				continue
 			}
 			// A range that runs on past the line takes a space's width at
@@ -899,20 +937,17 @@ func (t *TextInputWidget) paintLines(dst *ggui.Canvas, r ggui.Rect) {
 		// The text drawer stacks no lines of its own: each line of the
 		// placeholder goes on a line of the field, as typed text would.
 		op.ColorScale.ScaleWithColor(t.muted)
-		for i, line := range placeholderLines(t.placeholder, true) {
-			if !shows(i) {
-				continue
-			}
+		lines := placeholderLines(t.placeholder, true)
+		pFirst, pLast := visibleRange(len(lines))
+		for i := pFirst; i < pLast; i++ {
 			op.GeoM.Reset()
 			op.GeoM.Translate(px(dst, x0), px(dst, lineY(i)))
-			fontsys.DrawText(clip.Image, line, t.face(dst.Scale()), op)
+			fontsys.DrawText(clip.Image, lines[i], t.face(dst.Scale()), op)
 		}
 	} else {
 		colors := t.textColors(shown)
-		for i, sp := range spans {
-			if shows(i) {
-				t.drawText(clip, shown, sp, t.bidiAt(wrapped, i), colors, x0, lineY(i), op)
-			}
+		for i := first; i < last; i++ {
+			t.drawText(clip, shown, spans[i], t.bidiAt(wrapped, i), colors, x0, lineY(i), op)
 		}
 	}
 
@@ -1056,8 +1091,20 @@ func colorPieces(out []TextColor, sp textlayout.Span, colors []TextColor) []Text
 			out = append(out, TextColor{Start: a, End: b, Color: c})
 		}
 	}
+	lo, hi := 0, len(colors)
+	for lo < hi {
+		mid := int(uint(lo+hi) >> 1)
+		if colors[mid].End <= sp.Start {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
 	at := sp.Start
-	for _, c := range colors {
+	for _, c := range colors[lo:] {
+		if c.Start >= sp.End {
+			break
+		}
 		a, b := max(c.Start, sp.Start), min(c.End, sp.End)
 		if b <= a || a < at {
 			continue
@@ -1185,8 +1232,12 @@ func (t *TextInputWidget) imeSession() (caret image.Rectangle, before, after str
 
 // imeComposition shows preedit text at the caret; "" clears it.
 func (t *TextInputWidget) imeComposition(text string, caret int) {
+	changed := t.composition != text
 	t.composition, t.compCaret = text, caret
 	t.blink = ggui.Now()
+	if changed && t.multiline {
+		ggui.Invalidate(t.env)
+	}
 }
 
 // imeCommit inserts committed text in place of the selection.
@@ -1198,8 +1249,13 @@ func (t *TextInputWidget) imeCommit(text string) {
 // imeReplace applies a commit that rewrote the surrounding text the session
 // was given: before + text + after replace that whole range.
 func (t *TextInputWidget) imeReplace(before, text, after string) {
-	t.ed.Text = t.ed.Text[:t.imeStart] + before + text + after + t.ed.Text[t.imeEnd:]
-	t.ed.MoveTo(t.imeStart+len(before)+len(text), false)
+	start, end := t.ed.Snap(t.imeStart), t.ed.Snap(t.imeEnd)
+	if start > end {
+		start, end = end, start
+	}
+	t.ed.Anchor, t.ed.Caret = start, end
+	t.ed.Replace(before + text + after)
+	t.ed.MoveTo(start+len(before)+len(text), false)
 	t.commit()
 }
 
@@ -1255,9 +1311,11 @@ func (t *TextInputWidget) HandleKey(ev ggui.KeyEvent) {
 // the editor does not act on, or one that bailed out (Undo with nothing to
 // undo, an arrow in a single-line field), leaves the value alone.
 func (t *TextInputWidget) key(k ggui.KeyboardKey, m ggui.Mods) {
-	if t.editKey(k, m) || t.moveKey(k, m) || t.clipboardKey(k, m) || t.historyKey(k, m) {
+	if t.editKey(k, m) || t.clipboardKey(k, m) || t.historyKey(k, m) {
 		t.commit()
+		return
 	}
+	t.moveKey(k, m)
 }
 
 // editKey handles the keys that change the text: Enter, Escape and the two
@@ -1278,7 +1336,7 @@ func (t *TextInputWidget) editKey(k ggui.KeyboardKey, m ggui.Mods) bool {
 	case ggui.KeyEscape:
 		t.ime.Cancel()
 		t.ed.MoveTo(t.ed.Caret, false)
-		return true
+		t.blink = ggui.Now()
 	case ggui.KeyBackspace:
 		t.ime.Confirm()
 		t.ed.Backspace(textedit.WordWise(m.Alt, m.Ctrl, m.Meta))
@@ -1294,11 +1352,11 @@ func (t *TextInputWidget) editKey(k ggui.KeyboardKey, m ggui.Mods) bool {
 // moveKey handles the keys that move the caret. Shift extends the selection
 // and Meta jumps to the ends of the text; in a multiline field Up and Down
 // step by line and Home and End stay within one.
-func (t *TextInputWidget) moveKey(k ggui.KeyboardKey, m ggui.Mods) bool {
+func (t *TextInputWidget) moveKey(k ggui.KeyboardKey, m ggui.Mods) {
 	switch k {
 	case ggui.KeyArrowUp, ggui.KeyArrowDown:
 		if !t.multiline {
-			return false
+			return
 		}
 		t.ime.Confirm()
 		if m.Meta {
@@ -1306,7 +1364,7 @@ func (t *TextInputWidget) moveKey(k ggui.KeyboardKey, m ggui.Mods) bool {
 		} else {
 			t.moveLine(gem.Pick(k == ggui.KeyArrowUp, -1, 1), m.Shift)
 		}
-		return true
+		t.blink = ggui.Now()
 	case ggui.KeyArrowLeft, ggui.KeyArrowRight:
 		t.ime.Confirm()
 		dir := gem.Pick(k == ggui.KeyArrowLeft, -1, 1)
@@ -1321,7 +1379,7 @@ func (t *TextInputWidget) moveKey(k ggui.KeyboardKey, m ggui.Mods) bool {
 		} else {
 			t.ed.MoveBy(dir, textedit.WordWise(m.Alt, m.Ctrl, m.Meta), m.Shift)
 		}
-		return true
+		t.blink = ggui.Now()
 	case ggui.KeyHome, ggui.KeyEnd:
 		t.ime.Confirm()
 		lo, hi := 0, len(t.ed.Text)
@@ -1329,52 +1387,50 @@ func (t *TextInputWidget) moveKey(k ggui.KeyboardKey, m ggui.Mods) bool {
 			lo, hi = t.lineBounds()
 		}
 		t.ed.MoveTo(gem.Pick(k == ggui.KeyHome, lo, hi), m.Shift)
-		return true
+		t.blink = ggui.Now()
 	}
-	return false
 }
 
 // clipboardKey handles the Cmd/Ctrl shortcuts that move text in and out of
 // the field: select all, copy, cut and paste. A password field is never
-// copied out of, though cutting still deletes.
+// copied out of, though cutting still deletes. Reports whether the text
+// mutated.
 func (t *TextInputWidget) clipboardKey(k ggui.KeyboardKey, m ggui.Mods) bool {
+	if !m.Cmd() {
+		return false
+	}
 	switch k {
 	case ggui.KeyA:
-		if m.Cmd() {
-			t.ime.Confirm()
-			t.ed.SelectAll()
-		}
-		return true
+		t.ime.Confirm()
+		t.ed.SelectAll()
+		t.blink = ggui.Now()
 	case ggui.KeyC:
-		if m.Cmd() && t.ed.HasSelection() && !t.password {
+		if t.ed.HasSelection() && !t.password {
 			ggui.CurrentClipboard().Write(t.ed.Selected())
 		}
-		return true
 	case ggui.KeyX:
-		if m.Cmd() && t.ed.HasSelection() {
+		if t.ed.HasSelection() {
 			t.ime.Confirm()
 			if !t.password {
 				ggui.CurrentClipboard().Write(t.ed.Selected())
 			}
 			t.ed.Replace("")
+			return true
 		}
-		return true
 	case ggui.KeyV:
-		if m.Cmd() {
-			t.ime.Confirm()
-			clip := ggui.CurrentClipboard().Read()
-			if clip == "" && t.onPasteImage != nil {
-				if png, ok := runtime.ReadImage(ggui.CurrentClipboard()); ok && t.onPasteImage(png) {
-					return false
-				}
+		t.ime.Confirm()
+		clip := ggui.CurrentClipboard().Read()
+		if clip == "" && t.onPasteImage != nil {
+			if png, ok := runtime.ReadImage(ggui.CurrentClipboard()); ok && t.onPasteImage(png) {
+				return false
 			}
-			s := strings.ReplaceAll(clip, "\r\n", "\n")
-			s = strings.ReplaceAll(s, "\r", "\n")
-			if !t.multiline {
-				s = strings.ReplaceAll(s, "\n", " ")
-			}
-			t.ed.Replace(s)
 		}
+		s := strings.ReplaceAll(clip, "\r\n", "\n")
+		s = strings.ReplaceAll(s, "\r", "\n")
+		if !t.multiline {
+			s = strings.ReplaceAll(s, "\n", " ")
+		}
+		t.ed.Replace(s)
 		return true
 	}
 	return false
@@ -1396,11 +1452,11 @@ func (t *TextInputWidget) historyKey(k ggui.KeyboardKey, m ggui.Mods) bool {
 		return t.ed.Undo()
 	case ggui.KeyY:
 		// Ctrl+Y is redo everywhere but macOS, which uses Shift+Cmd+Z.
-		if isDarwin || !t.ed.Redo() {
+		if isDarwin {
 			return false
 		}
 		t.ime.Confirm()
-		return true
+		return t.ed.Redo()
 	}
 	return false
 }
@@ -1421,7 +1477,7 @@ func (t *TextInputWidget) HandlePointer(ev ggui.PointerEvent) bool {
 			return false
 		}
 		t.ime.Confirm()
-		t.clicks.Press(&t.ed, ggui.ClockTime(), ev.Pos, t.indexAt, false)
+		t.clicks.Press(&t.ed, ggui.ClockTime(), ev.Pos, t.indexAt, ev.Mods.Shift)
 		t.blink = ggui.Now()
 		return true
 	case ggui.PointerDrag:

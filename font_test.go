@@ -36,6 +36,31 @@ func TestDefaultMonoFontFollowsItsSetting(t *testing.T) {
 	}
 }
 
+func TestDefaultMonoFontItalicFace(t *testing.T) {
+	t.Parallel()
+	// In a Probe with no mono font set, DefaultMonoFont resolves to builtin, not system mono italic.
+	p1 := NewProbe(labelled("x"), Sz(10, 10))
+	defer p1.Close()
+	var probeItalic *Font
+	p1.Post(func() { probeItalic = DefaultMonoFont().italicFace() })
+	p1.Frame()
+	if probeItalic != builtinFont() {
+		t.Fatalf("Probe DefaultMonoFont().italicFace() = %p, want builtinFont (%p)", probeItalic, builtinFont())
+	}
+
+	// With SetDefaultMonoFont using a custom WithItalic, DefaultMonoFont().italicFace() returns that italic.
+	italic := MustFont(gobold.TTF)
+	mono := MustFont(gomono.TTF).WithItalic(italic)
+	p2 := NewProbe(labelled("x"), Sz(10, 10)).Setup(func() { SetDefaultMonoFont(mono) })
+	defer p2.Close()
+	var got *Font
+	p2.Post(func() { got = DefaultMonoFont().italicFace() })
+	p2.Frame()
+	if got != italic {
+		t.Fatalf("DefaultMonoFont().italicFace() = %p, want custom italic (%p)", got, italic)
+	}
+}
+
 func TestAProbeDrawsInTheBuiltInFont(t *testing.T) {
 	t.Parallel()
 	p := NewProbe(labelled("x"), Sz(10, 10))

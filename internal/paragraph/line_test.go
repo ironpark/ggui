@@ -128,11 +128,96 @@ func TestARightToLeftSegmentDrawsInItsOwnFontAtAnotherSize(t *testing.T) {
 	drawn := newRTLChain(f, 28, 400, 0, nil, tag) // has found no system font yet
 	for _, sg := range segs {
 		seg := arabic[sg.Start:sg.End]
-		face := drawn.faceOf(seg)
+		face, rtl := drawn.faceOf(seg)
+		if !rtl {
+			t.Fatalf("segment %q reported non-RTL face", seg)
+		}
 		font := measured.picker.Font(sg.face).Font
 		j := slices.IndexFunc(drawn.faces, func(f text.Face) bool { return f == face })
 		if j < 0 || drawn.picker.Font(j).Font != font {
 			t.Fatalf("segment %q drawn in another font than it was measured in", seg)
 		}
+	}
+}
+
+func TestRTLChainFaceOfLazyFaceReportsRTL(t *testing.T) {
+	const path = "/System/Library/Fonts/SFHebrew.ttf"
+	if _, err := os.Stat(path); err != nil {
+		t.Skip("no Hebrew system font")
+	}
+	he, err := fontsys.LoadFile(path)
+	if err != nil {
+		t.Skip(err)
+	}
+	he.SetNoFallback()
+	chain := newRTLChain(he, 14, 400, 0, nil, newShapeLang("he", "שלום").tag)
+	face, rtl := chain.faceOf("שלום")
+	if !rtl {
+		t.Fatalf("file-loaded RTL face %T reported rtl=false", face)
+	}
+	if _, ok := face.(*text.LazyFace); !ok {
+		t.Logf("note: face type is %T", face)
+	}
+}
+
+func TestShapeLangsCacheBounded(t *testing.T) {
+	for i := range shapeLangsMin * 5 {
+		newShapeLang("x-test-"+string(rune('a'+i%26))+string(rune('0'+(i/26)%10))+string(rune('0'+(i/260)%10)), "مرحبا")
+	}
+	shapeLangs.Lock()
+	total := len(shapeLangs.cur) + len(shapeLangs.prev)
+	shapeLangs.Unlock()
+	if total > 2*shapeLangsMin {
+		t.Fatalf("shapeLangs grew to %d entries, want <= %d", total, 2*shapeLangsMin)
+	}
+}
+
+func TestParagraphBinarySearchRuns(t *testing.T) {
+	t.Parallel()
+	st := Style{Font: fontsys.Builtin(), Size: 14, Weight: 400, LineHeight: 1.2}
+	p := &Paragraph{
+		Text: "hello world test",
+		Runs: []Run{
+			{Start: 0, End: 0, Style: st, Span: 0},
+			{Start: 0, End: 5, Style: st, Span: 1},
+			{Start: 5, End: 5, Style: st, Span: 2},
+			{Start: 5, End: 11, Style: st, Span: 3},
+			{Start: 11, End: 16, Style: st, Span: 4},
+			{Start: 16, End: 16, Style: st, Span: 5},
+		},
+		Base: st,
+	}
+	for pos, want := range map[int]int{
+		-1: -1, 0: 1, 4: 1, 5: 3, 10: 3, 11: 4, 15: 4, 16: 5, 20: 5,
+	} {
+		if got := p.RunAt(pos); got != want {
+			t.Errorf("RunAt(%d) = %d, want %d", pos, got, want)
+		}
+	}
+	full := p.width(0, len(p.Text))
+	if got := p.width(0, 5) + p.width(5, 11) + p.width(11, 16); math.Abs(got-full) > 1e-6 {
+		t.Fatalf("partitioned width %v != full width %v", got, full)
+	}
+	pref := p.prefix(0, len(p.Text))
+	if math.Abs(pref(len(p.Text))-full) > 1e-6 || math.Abs(pref(5)-p.width(0, 5)) > 1e-6 || pref(0) != 0 {
+		t.Fatalf("prefix widths mismatch: pref(0)=%v pref(5)=%v pref(end)=%v full=%v", pref(0), pref(5), pref(len(p.Text)), full)
+	}
+	p.Layout(50, true, 0, false)
+	if len(p.Lines) < 2 {
+		t.Fatalf("expected wrapped lines, got %d", len(p.Lines))
+	}
+}
+
+func TestRenderEmojiIncludesTracking(t *testing.T) {
+	if fontsys.SystemEmoji() == nil {
+		t.Skip("no system emoji font")
+	}
+	base := Style{Font: fontsys.Builtin(), Size: 20, Weight: 400, LineHeight: 1.2}
+	tracked := base
+	tracked.Tracking = 0.5
+	w0 := Render("😀😀", base, nil, 0).Bounds().Dx()
+	w1 := Render("😀😀", tracked, nil, 0).Bounds().Dx()
+	if w1 <= w0 {
+		t.Fatalf("tracked emoji width %d <= untracked %d", w1, w0)
 	}
 }

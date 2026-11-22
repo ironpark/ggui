@@ -252,7 +252,7 @@ func (t *TextWidget) Style(ts ggui.TextStyle) *TextWidget {
 // is paint-only, so a control can recolor its label as the pointer moves
 // over it without laying it out again.
 func (t *TextWidget) Color(c color.Color) *TextWidget {
-	if (c == nil) != (t.style.Color == nil) || ggui.IsEnvColor(c) || ggui.IsEnvColor(t.style.Color) {
+	if t.rich != nil || (c == nil) != (t.style.Color == nil) || ggui.IsEnvColor(c) || ggui.IsEnvColor(t.style.Color) {
 		defer property.Watch(&t.props, &t.style)()
 	}
 	t.style.Color = c

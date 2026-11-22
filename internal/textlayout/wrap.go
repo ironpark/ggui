@@ -175,7 +175,7 @@ func Lines(s string) iter.Seq2[int, string] {
 // clusters when a word alone is wider than maxW. The spaces before a soft
 // break end no line: they lie between it and the next.
 func wrapParagraph(p string, width func(a, b int) float64, maxW float64) []Span {
-	if maxW <= 0 || width(0, len(p)) <= maxW {
+	if !(maxW > 0) || width(0, len(p)) <= maxW {
 		return []Span{{0, len(p)}}
 	}
 	var lines []Span
@@ -207,6 +207,11 @@ func wrapParagraph(p string, width func(a, b int) float64, maxW float64) []Span 
 		// A word wider than the line, alone on it: break between grapheme clusters.
 		lines, lineStart = breakWord(p, lineStart, wend, width, maxW, lines)
 		lineEnd = wend
+	}
+	if len(lines) == 0 && lineEnd == 0 && len(p) > 0 {
+		// An all-whitespace line wider than maxW: break it by grapheme rather than collapsing to empty.
+		lines, lineStart = breakWord(p, 0, len(p), width, maxW, lines)
+		lineEnd = len(p)
 	}
 	return append(lines, Span{lineStart, lineEnd})
 }

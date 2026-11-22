@@ -53,6 +53,12 @@ func TestWrapSpansCoverTheTextWithinWidth(t *testing.T) {
 	if got := len(WrapSpans("the quick brown fox", face, 1000)); got != 1 {
 		t.Fatalf("wide line split into %d", got)
 	}
+	// All-whitespace line wider than maxW must wrap rather than collapse to {0, 0}.
+	spaces := strings.Repeat(" ", 20)
+	sp := WrapSpans(spaces, face, 20)
+	if len(sp) < 2 || sp[0].End == 0 || sp[len(sp)-1].End != len(spaces) {
+		t.Fatalf("wide spaces wrapped to %+v, want non-empty spans covering %d bytes", sp, len(spaces))
+	}
 }
 
 func TestLineOf(t *testing.T) {

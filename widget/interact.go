@@ -75,6 +75,9 @@ func (p *PointerWidget) OnExit(fn func()) *PointerWidget { p.onExit = fn; return
 // keeps it hovered: a button built from the signal it sets stays while the
 // pointer is over it.
 func (p *PointerWidget) OnHover(fn func(bool)) *PointerWidget {
+	if fn == nil {
+		return p.OnEnter(nil).OnExit(nil)
+	}
 	return p.OnEnter(func() { fn(true) }).OnExit(func() { fn(false) })
 }
 

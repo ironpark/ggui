@@ -19,6 +19,12 @@ func TestFixedReachesTheRowsTheWindowOverlaps(t *testing.T) {
 		{100, 20, -50, 100, 0, 3},     // before the start
 		{0, 20, 0, 100, 0, 0},
 		{10, 0, 0, 100, 0, 10}, // no pitch: every row
+		{100, 20, 0, math.Inf(1), 0, 100},
+		{100, 20, math.Inf(1), 100, 100, 100},
+		{100, 20, math.Inf(-1), math.Inf(1), 0, 100},
+		{100, 20, 1e30, 100, 100, 100},
+		{100, 20, math.NaN(), 100, 0, 0},
+		{100, math.NaN(), 0, 100, 0, 100},
 	} {
 		first, last := Fixed(tt.n, tt.pitch, tt.at, tt.extent)
 		if first != tt.first || last != tt.last {
@@ -115,6 +121,28 @@ func TestKeysChangedForgetsRowsThatLeft(t *testing.T) {
 	}
 	if got := e.Total(); got != 110 {
 		t.Fatalf("row 5 kept its size: Total %v, want 110", got)
+	}
+	// KeysChanged prunes stale keys even when len(measured) <= len(keys).
+	var e2 Estimate[int]
+	e2.Measure(1, 50)
+	e2.Measure(2, 60)
+	e2.KeysChanged([]int{2, 3, 4, 5})
+	if len(e2.measured) != 1 || e2.measured[2] != 60 {
+		t.Fatalf("stale key not pruned when len(measured) <= len(keys): %v", e2.measured)
+	}
+}
+
+func TestAnchorAndMovedBoundsCheckedBeforePlace(t *testing.T) {
+	var e Estimate[int]
+	keys := []int{1, 2, 3}
+	e.Anchor(keys, 0)
+	if got := e.Moved(keys); got != 0 {
+		t.Fatalf("Moved before Place = %v, want 0", got)
+	}
+	e.Place(keys[:1], 20, 0)
+	e.Anchor(keys, 0)
+	if got := e.Moved([]int{10, 20, 1}); got != 0 {
+		t.Fatalf("Moved when anchor moved past placed starts = %v, want 0", got)
 	}
 }
 

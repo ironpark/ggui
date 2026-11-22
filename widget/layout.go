@@ -420,12 +420,12 @@ type flow struct {
 // Result.Baseline is not used: layout only supplies child baselines under
 // AlignBaseline, so it would be missing for every other alignment.
 func (f *flow) Baseline() (float64, bool) {
-	for i, rect := range f.rects { // empty before the first layout
+	for i := range min(len(f.rects), len(f.children)) { // empty before the first layout
 		child := f.children[i]
 		if ggui.IsVacant(child) {
 			continue
 		}
-		if b, ok := baselineAt(child, rect.Origin.Y); ok {
+		if b, ok := baselineAt(child, f.rects[i].Origin.Y); ok {
 			return b, true
 		}
 	}
@@ -509,7 +509,7 @@ func (f *flow) paint(dst *ggui.Canvas, r ggui.Rect) { paintRects(dst, r, f.child
 
 func (f *flow) inspectFields() []inspect.Field {
 	justify := []string{"start", "center", "end", "space-between", "space-around", "space-evenly"}
-	align := []string{"start", "center", "end", "stretch"}
+	align := []string{"start", "center", "end", "stretch", "baseline"}
 	out := []inspect.Field{{Key: "Flex layout"}, {Key: "direction", Value: gem.Pick(f.horizontal, "row", "column")}, {Key: "justify", Value: justify[gem.Clamp(int(f.justify), 0, len(justify)-1)]}, {Key: "align", Value: align[gem.Clamp(int(f.align), 0, len(align)-1)]}}
 	if f.space > 0 {
 		return append(out, inspect.Field{Key: "gap token", Value: inspect.Num(f.space) + " × env.spacing"})
@@ -538,7 +538,8 @@ func Column(children ...ggui.Widget) *ColumnWidget {
 // Gap sets the space between consecutive children.
 func (col *ColumnWidget) Gap(v float64) *ColumnWidget {
 	defer property.Watch(&col.props, &col.gap)()
-	col.gap = v
+	defer property.Watch(&col.props, &col.space)()
+	col.gap, col.space = v, 0
 	return col
 }
 
@@ -599,7 +600,8 @@ func Row(children ...ggui.Widget) *RowWidget {
 // Gap sets the space between consecutive children.
 func (row *RowWidget) Gap(v float64) *RowWidget {
 	defer property.Watch(&row.props, &row.gap)()
-	row.gap = v
+	defer property.Watch(&row.props, &row.space)()
+	row.gap, row.space = v, 0
 	return row
 }
 
@@ -830,7 +832,8 @@ func Wrap(children ...ggui.Widget) *WrapWidget { return &WrapWidget{children: ch
 func (w *WrapWidget) Gap(v float64) *WrapWidget {
 	defer property.Watch(&w.props, &w.gap)()
 	defer property.Watch(&w.props, &w.runGap)()
-	w.gap, w.runGap = v, v
+	defer property.Watch(&w.props, &w.space)()
+	w.gap, w.runGap, w.space = v, v, 0
 	return w
 }
 
@@ -858,11 +861,12 @@ func (w *WrapWidget) Align(a CrossAlign) *WrapWidget {
 // Layout implements Widget.
 func (w *WrapWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer w.props.Layout().EndLayout()
+	gap, runGap := w.gap, w.runGap
 	if w.space > 0 {
-		w.gap = w.space * env.Spacing()
-		w.runGap = w.gap
+		gap = w.space * env.Spacing()
+		runGap = gap
 	}
-	result := w.engine.Wrap(c, layout.WrapStyle{Gap: w.gap, RunGap: w.runGap, Align: w.align}, len(w.children), measureChildren(w.children, env))
+	result := w.engine.Wrap(c, layout.WrapStyle{Gap: gap, RunGap: runGap, Align: w.align}, len(w.children), measureChildren(w.children, env))
 	w.rects = result.Children
 	return result.Size
 }
@@ -906,7 +910,8 @@ func Grid(cols int, children ...ggui.Widget) *GridWidget {
 func (g *GridWidget) Gap(v float64) *GridWidget {
 	defer property.Watch(&g.props, &g.gap)()
 	defer property.Watch(&g.props, &g.rowGap)()
-	g.gap, g.rowGap = v, v
+	defer property.Watch(&g.props, &g.space)()
+	g.gap, g.rowGap, g.space = v, v, 0
 	return g
 }
 
@@ -927,11 +932,12 @@ func (g *GridWidget) Space(n float64) *GridWidget {
 // Layout implements Widget.
 func (g *GridWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer g.props.Layout().EndLayout()
+	gap, rowGap := g.gap, g.rowGap
 	if g.space > 0 {
-		g.gap = g.space * env.Spacing()
-		g.rowGap = g.gap
+		gap = g.space * env.Spacing()
+		rowGap = gap
 	}
-	result := g.engine.Grid(c, layout.GridStyle{Columns: g.cols, Gap: g.gap, RowGap: g.rowGap}, len(g.children), measureChildren(g.children, env))
+	result := g.engine.Grid(c, layout.GridStyle{Columns: g.cols, Gap: gap, RowGap: rowGap}, len(g.children), measureChildren(g.children, env))
 	g.rects, g.cellW = result.Children, result.CellWidth
 	return result.Size
 }

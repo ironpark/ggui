@@ -18,12 +18,27 @@ import (
 // size and the gap after it), that a window of extent starting at at
 // reaches.
 func Fixed(n int, pitch, at, extent float64) (first, last int) {
-	if n <= 0 || pitch <= 0 {
+	if n <= 0 || !(pitch > 0) {
 		return 0, max(n, 0)
 	}
-	first = gem.Clamp(int(math.Floor(at/pitch)), 0, n)
-	last = gem.Clamp(int(math.Ceil((at+extent)/pitch)), first, n)
+	first = clampIndex(math.Floor(at/pitch), 0, n)
+	if math.IsInf(extent, 1) {
+		return first, n
+	}
+	last = clampIndex(math.Ceil((at+extent)/pitch), first, n)
 	return first, last
+}
+
+// clampIndex converts v to an int in [lo, hi] without overflowing on Inf, NaN,
+// or values outside [lo, hi].
+func clampIndex(v float64, lo, hi int) int {
+	if math.IsNaN(v) || v <= float64(lo) {
+		return lo
+	}
+	if v >= float64(hi) {
+		return hi
+	}
+	return gem.Clamp(int(v), lo, hi)
 }
 
 // Estimate places rows of any size: each at the size it had when last
@@ -148,11 +163,14 @@ func (e *Estimate[K]) Moved(keys []K) float64 {
 		return 0
 	}
 	i := e.anchorI
-	if i >= len(keys) || keys[i] != e.anchor {
+	if i < 0 || i >= len(keys) || keys[i] != e.anchor {
 		if i = slices.Index(keys, e.anchor); i < 0 {
 			return 0
 		}
 		e.anchorI = i
+	}
+	if i+1 >= len(e.starts) {
+		return 0
 	}
 	return e.starts[i] - e.anchorAt
 }
@@ -168,7 +186,7 @@ func (e *Estimate[K]) TakeMoved(keys []K) float64 {
 // measures from.
 func (e *Estimate[K]) Anchor(keys []K, v float64) {
 	a := e.RowAt(v)
-	if a >= len(keys) {
+	if a >= len(keys) || a+1 >= len(e.starts) {
 		e.anchored = false
 		return
 	}
@@ -180,10 +198,14 @@ func (e *Estimate[K]) Anchor(keys []K, v float64) {
 // among keys are forgotten.
 func (e *Estimate[K]) KeysChanged(keys []K) {
 	e.from = 0
-	if len(e.measured) <= len(keys) {
+	if len(e.measured) == 0 {
 		return
 	}
-	keep := make(map[K]float64, len(keys))
+	if len(keys) == 0 {
+		clear(e.measured)
+		return
+	}
+	keep := make(map[K]float64, min(len(e.measured), len(keys)))
 	for _, k := range keys {
 		if v, ok := e.measured[k]; ok {
 			keep[k] = v

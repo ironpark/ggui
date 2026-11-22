@@ -812,3 +812,36 @@ func TestBoxClipKeepsTheChildInsideTheBorder(t *testing.T) {
 		t.Fatalf("square clip %v (%v) with %d layers", clip, clipped, p.Layers())
 	}
 }
+
+func TestGapClearsSpaceAndWrapGridLayoutDoesNotMutateGap(t *testing.T) {
+	t.Parallel()
+	col := Column(Box().Size(10, 10), Box().Size(10, 10)).Space(4).Gap(3)
+	if col.space != 0 || col.gap != 3 {
+		t.Fatalf("Column.Space.Gap: space=%v gap=%v", col.space, col.gap)
+	}
+	row := Row(Box().Size(10, 10), Box().Size(10, 10)).Space(4).Gap(3).Align(AlignBaseline)
+	if row.space != 0 || row.gap != 3 {
+		t.Fatalf("Row.Space.Gap: space=%v gap=%v", row.space, row.gap)
+	}
+	if !slices.ContainsFunc(row.InspectFields(), func(f inspect.Field) bool { return f.Key == "align" && f.Value == "baseline" }) {
+		t.Fatalf("Row AlignBaseline InspectFields = %+v, want baseline", row.InspectFields())
+	}
+	wrap := Wrap(Box().Size(10, 10), Box().Size(10, 10)).Gap(2).Space(3)
+	wrap.Layout(ggui.Loose(ggui.Sz(100, 100)), ggui.Env{})
+	if wrap.gap != 2 || wrap.runGap != 2 {
+		t.Fatalf("Wrap.Layout mutated gap/runGap to %v/%v", wrap.gap, wrap.runGap)
+	}
+	wrap.Gap(5)
+	if wrap.space != 0 {
+		t.Fatalf("Wrap.Gap did not clear space=%v", wrap.space)
+	}
+	grid := Grid(2, Box().Size(10, 10), Box().Size(10, 10)).Gap(2).Space(3)
+	grid.Layout(ggui.Loose(ggui.Sz(100, 100)), ggui.Env{})
+	if grid.gap != 2 || grid.rowGap != 2 {
+		t.Fatalf("Grid.Layout mutated gap/rowGap to %v/%v", grid.gap, grid.rowGap)
+	}
+	grid.Gap(5)
+	if grid.space != 0 {
+		t.Fatalf("Grid.Gap did not clear space=%v", grid.space)
+	}
+}

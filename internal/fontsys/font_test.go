@@ -2,6 +2,7 @@ package fontsys
 
 import (
 	"os"
+	"sync"
 	"testing"
 
 	"golang.org/x/image/font/gofont/gobold"
@@ -50,5 +51,38 @@ func TestFontPicksTheNearestWeight(t *testing.T) {
 	}
 	if f.weight != weightRegular || medium.weight != 500 {
 		t.Fatalf("weights %d and %d, want the metadata's and the one WithWeight gave", f.weight, medium.weight)
+	}
+}
+
+func TestFontConcurrentConfigAndRead(t *testing.T) {
+	t.Parallel()
+	f := mustLoad(t, goregular.TTF)
+	bold := mustLoad(t, gobold.TTF)
+	med := mustLoad(t, gomedium.TTF)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		f.WithWeight(500, med)
+		f.WithWeight(700, bold)
+		f.SetNoFallback()
+	})
+	for range 4 {
+		wg.Go(func() {
+			for range 20 {
+				f.ForWeight(700)
+				f.Face(14, 700, nil)
+				f.SpacedFace(14, 400, 1, nil)
+				f.DrawsEmoji()
+				f.Picker(500)
+			}
+		})
+	}
+	wg.Wait()
+}
+
+func TestWeightAxisCachedZeroAllocs(t *testing.T) {
+	f := mustLoad(t, goregular.TTF)
+	f.weightAxis()
+	if n := testing.AllocsPerRun(50, func() { f.weightAxis() }); n != 0 {
+		t.Fatalf("weightAxis allocated %v times after warm-up", n)
 	}
 }

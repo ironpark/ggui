@@ -153,7 +153,7 @@ func (f *EachWidget[T, K]) pinned(r ggui.Rect) (*forEntry[T], int, ggui.Rect) {
 		if pos == start {
 			return nil, 0, ggui.Rect{}
 		}
-		cross := 0.0
+		cross := (f.cross(r.Size) - f.cross(f.pin.size)) * f.align.Fraction()
 		if h >= f.first && h < f.last {
 			cross = f.crossAt(h - f.first)
 		}

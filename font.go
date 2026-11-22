@@ -143,13 +143,19 @@ func (f *Font) italicFace() *Font {
 	if f.italic != nil {
 		return f.italic
 	}
+	if f == defaultMono {
+		if m := monoFont(); m != f {
+			return m.italicFace()
+		}
+		return f
+	}
 	sans, mono := systemUIFonts()
 	switch f {
 	case sans:
 		if i, _ := systemItalicFonts(); i != nil {
 			return i
 		}
-	case mono, defaultMono:
+	case mono:
 		if _, i := systemItalicFonts(); i != nil {
 			return i
 		}

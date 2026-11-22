@@ -1082,3 +1082,62 @@ func TestSemanticsListCountsItems(t *testing.T) {
 		t.Errorf("the item does not hold its row:\n%s", tree)
 	}
 }
+
+func TestEachBaselineVirtualAndEmpty(t *testing.T) {
+	t.Parallel()
+	items := ggui.State([]string{"a", "b", "c"})
+	virt := Each(items, func(it EachItem[string]) ggui.Widget { return TextOf(it.Value) }).ItemExtent(20)
+	p := ggui.NewProbe(Scroll(virt), ggui.Sz(100, 60))
+	defer p.Close()
+	p.Frame()
+	if b, ok := virt.Baseline(); !ok || b <= 0 {
+		t.Fatalf("virtual Each Baseline() = (%v, %v), want positive baseline without panicking", b, ok)
+	}
+
+	empty := ggui.State([]string(nil))
+	withElse := Each(empty, func(it EachItem[string]) ggui.Widget { return TextOf(it.Value) }).
+		Else(func() ggui.Widget { return Text("none") })
+	p2 := ggui.NewProbe(withElse, ggui.Sz(100, 60))
+	defer p2.Close()
+	p2.Frame()
+	if b, ok := withElse.Baseline(); !ok || b <= 0 {
+		t.Fatalf("empty Each with Else Baseline() = (%v, %v), want positive baseline", b, ok)
+	}
+}
+
+func TestEachZeroDurationLeaveCompletesImmediately(t *testing.T) {
+	t.Parallel()
+	items := ggui.State([]int{1, 2})
+	list := EachKeyed(items, func(v int) int { return v }, func(EachItem[int]) ggui.Widget {
+		return Box().Size(50, 10)
+	}).Transition(func(w ggui.Widget) *TransitionWidget {
+		return Transition(w).Fade().Duration(0)
+	})
+	p := ggui.NewProbe(list, ggui.Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	items.Set([]int{1})
+	p.Frame()
+	if len(list.leaving) != 0 {
+		t.Fatalf("Duration(0) leaving row leaked: %d rows still leaving", len(list.leaving))
+	}
+}
+
+func TestEachGapClearsSpaceAndPinnedKeepsCrossAlign(t *testing.T) {
+	t.Parallel()
+	items := ggui.State([]int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
+	list := EachKeyed(items, func(v int) int { return v }, func(it EachItem[int]) ggui.Widget {
+		return Box().Size(40, 20)
+	}).Space(4).Gap(0).ItemExtent(20).Align(AlignCenter).StickyHeaders(func(v int) bool { return v == 0 })
+	if list.space != 0 {
+		t.Fatalf("Each.Gap did not clear space=%v", list.space)
+	}
+	off := ggui.State(60.0) // row 0 scrolled past f.first (row 3)
+	p := ggui.NewProbe(Scroll(list).BindOffset(off), ggui.Sz(100, 40))
+	defer p.Close()
+	p.Frame()
+	_, _, pinRect := list.pinned(ggui.Rct(ggui.Pt(0, -60), ggui.Sz(100, 200)))
+	if pinRect.Origin.X != 30 {
+		t.Fatalf("pinned header cross origin = %v, want centered at 30", pinRect.Origin.X)
+	}
+}

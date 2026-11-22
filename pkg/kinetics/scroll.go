@@ -31,13 +31,13 @@ const rubberGive = 0.55
 // resisted.
 func Rubber(raw, d, lo, hi, extent float64, momentum bool) float64 {
 	next := raw + d
-	if next >= lo && next <= hi || raw < lo && d > 0 || raw > hi && d < 0 {
+	if next >= lo && next <= hi || raw < lo && d > 0 && next <= hi || raw > hi && d < 0 && next >= lo {
 		return next
 	}
 	edge := gem.Pick(next < lo, lo, hi)
-	from := raw
-	if raw >= lo && raw <= hi {
-		from = edge
+	from := edge
+	if next < lo && raw < lo || next > hi && raw > hi {
+		from = raw
 	}
 	reach := max(extent, 1) * RubberReach
 	give := rubberGive

@@ -271,13 +271,16 @@ func (c *rtlChain) face(i int) text.Face {
 	return c.faces[i]
 }
 
-// faceOf is the face c draws seg's text t with. seg's face indexes the
-// chain it was measured with, at scale 1: a chain at another size has a
-// picker of its own, which adds the system fonts in the order its own picks
-// need them, so the same index may name another font there, or none yet.
-// A segment is one face's run, so its first grapheme picks it again.
-func (c *rtlChain) faceOf(t string) text.Face {
-	return c.face(c.pick(t[:textedit.NextGrapheme(t, 0)]))
+// faceOf is the face c draws seg's text t with, and whether it shapes
+// right to left (every face of the chain does; the emoji fallback does
+// not). seg's face indexes the chain it was measured with, at scale 1: a
+// chain at another size has a picker of its own, which adds the system
+// fonts in the order its own picks need them, so the same index may name
+// another font there, or none yet. A segment is one face's run, so its
+// first grapheme picks it again.
+func (c *rtlChain) faceOf(t string) (text.Face, bool) {
+	i := c.pick(t[:textedit.NextGrapheme(t, 0)])
+	return c.face(i), i >= 0
 }
 
 type rtlKey struct {
@@ -364,15 +367,25 @@ func newShapeLang(lang, sample string) shapeLang {
 	k := shapeLangKey{lang: lang, script: rtlScriptOf(sample)}
 	shapeLangs.Lock()
 	defer shapeLangs.Unlock()
-	if l, ok := shapeLangs.m[k]; ok {
+	if l, ok := shapeLangs.cur[k]; ok {
 		return l
 	}
-	tag := shapingLanguage(lang, sample)
-	l := shapeLang{tag, tag.String()}
-	if shapeLangs.m == nil {
-		shapeLangs.m = map[shapeLangKey]shapeLang{}
+	l, ok := shapeLangs.prev[k]
+	if !ok {
+		tag := shapingLanguage(lang, sample)
+		l = shapeLang{tag, tag.String()}
 	}
-	shapeLangs.m[k] = l
+	if shapeLangs.cur == nil {
+		shapeLangs.cur = map[shapeLangKey]shapeLang{}
+	}
+	if len(shapeLangs.cur) >= max(shapeLangsMin, len(shapeLangs.prev)) {
+		shapeLangs.prev, shapeLangs.cur = shapeLangs.cur, shapeLangs.prev
+		if shapeLangs.cur == nil {
+			shapeLangs.cur = map[shapeLangKey]shapeLang{}
+		}
+		clear(shapeLangs.cur)
+	}
+	shapeLangs.cur[k] = l
 	return l
 }
 
@@ -383,9 +396,11 @@ type shapeLangKey struct {
 	script int
 }
 
+const shapeLangsMin = 64
+
 var shapeLangs struct {
 	sync.Mutex
-	m map[shapeLangKey]shapeLang
+	cur, prev map[shapeLangKey]shapeLang
 }
 
 // shapingLanguage is lang as a tag, or, when lang is unset, the
@@ -436,7 +451,8 @@ func (p *Piece) OffsetX(s string, styles []LineStyle, b int) float64 {
 			chain := rtlFaces(st.Style, 1, p.lang)
 			widths := make([]func(int) float64, len(p.segs))
 			for i, sg := range p.segs {
-				widths[i] = textlayout.PrefixWidths(s[sg.Start:sg.End], chain.faceOf(s[sg.Start:sg.End]))
+				face, _ := chain.faceOf(s[sg.Start:sg.End])
+				widths[i] = textlayout.PrefixWidths(s[sg.Start:sg.End], face)
 			}
 			p.pos = func(b int) float64 {
 				x := 0.0
@@ -562,12 +578,12 @@ func Draw(dst *ggfx.Image, op *text.DrawOptions, s string, ps []Piece, styles []
 		right := p.X + p.W
 		for _, sg := range p.segs {
 			right -= sg.W
-			face := chain.faceOf(s[sg.Start:sg.End])
+			face, rtl := chain.faceOf(s[sg.Start:sg.End])
 			op.GeoM.Reset()
 			op.GeoM.Translate(right*scale, baseline-face.Metrics().HAscent)
 			place(op)
 			op.LayoutOptions.PrimaryAlign = text.AlignStart
-			if g, ok := face.(*text.GoTextFace); ok && g.Direction == text.DirectionRightToLeft {
+			if rtl {
 				// A right-to-left face starts at the right; its end is the left.
 				op.LayoutOptions.PrimaryAlign = text.AlignEnd
 			}

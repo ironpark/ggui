@@ -84,16 +84,17 @@ type RichTextWidget struct {
 
 	// Layout keeps the spans it read, the paragraph they made and what it
 	// was laid out for.
-	cur       []TextSpan
-	para      paragraph.Paragraph
-	styles    []ggui.TextStyle   // each of para.Runs' style, resolved, for what the engine does not take
-	base      ggui.TextStyle     // the paragraph's style, resolved
-	dir       ggui.TextDirection // what para was laid out in
-	laid      richKey
-	runKeys   []runKey
-	keyBuf    []runKey // the other of runKeys' two arrays, which layouts take in turn
-	selection color.Color
-	links     []*spanLink
+	cur         []TextSpan
+	backgrounds []color.Color // resolved background per span in cur, kept apart so sameSpan sees unresolved spans
+	para        paragraph.Paragraph
+	styles      []ggui.TextStyle   // each of para.Runs' style, resolved, for what the engine does not take
+	base        ggui.TextStyle     // the paragraph's style, resolved
+	dir         ggui.TextDirection // what para was laid out in
+	laid        richKey
+	runKeys     []runKey
+	keyBuf      []runKey // the other of runKeys' two arrays, which layouts take in turn
+	selection   color.Color
+	links       []*spanLink
 
 	// The selection, for a Selectable paragraph.
 	ed      textedit.Editor
@@ -269,10 +270,13 @@ func (t *RichTextWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	// what it keeps is kept in arrays it reuses. The spans are copied in
 	// either way, for their tap funcs.
 	t.cur = append(t.cur[:0], spans...)
-	// A span's background, resolved here for the paint, which has no Env.
-	for i := range t.cur {
-		if t.cur[i].background != nil {
-			t.cur[i].background = ggui.ResolveColor(t.cur[i].background, env)
+	// Each span's background, resolved here for the paint, which has no Env.
+	t.backgrounds = slices.Grow(t.backgrounds[:0], len(t.cur))[:len(t.cur)]
+	for i, sp := range t.cur {
+		if sp.background != nil {
+			t.backgrounds[i] = ggui.ResolveColor(sp.background, env)
+		} else {
+			t.backgrounds[i] = nil
 		}
 	}
 	base := env.ResolveText(t.style)
@@ -413,14 +417,18 @@ func (t *RichTextWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		x := r.Origin.X + p.LineX(i, r.Size.W, align)
 		for _, pc := range ln.Pieces {
 			st := ln.Styles[pc.Style]
-			if st.Run < 0 || t.cur[p.Runs[st.Run].Span].background == nil {
+			if st.Run < 0 {
+				continue
+			}
+			bgCol := t.backgrounds[p.Runs[st.Run].Span]
+			if bgCol == nil {
 				continue
 			}
 			rs := t.runStyle(st.Run)
 			// The run's own ascent and descent, a little past them.
 			pad := rs.Size * 0.12
 			bg := ggui.Rct(ggui.Pt(x+pc.X-pad, r.Origin.Y+ln.Baseline-rs.Size*0.92), ggui.Sz(pc.W+2*pad, rs.Size*1.18))
-			dst.FillRoundRect(bg, rs.Size*0.2, t.cur[p.Runs[st.Run].Span].background)
+			dst.FillRoundRect(bg, rs.Size*0.2, bgCol)
 		}
 		col := func(style int) color.Color { return t.runStyle(ln.Styles[style].Run).Color }
 		paragraph.Draw(dst.Image, &t.pieceOp, ln.S, ln.Pieces, ln.Styles, scale, ln.Baseline*scale, col, func(op *text.DrawOptions) {
@@ -661,6 +669,16 @@ func (a *SelectionAreaWidget) extend(u *RichTextWidget, at int) {
 	}
 }
 
+// hasSelection reports whether any text in the area currently has a selection.
+func (a *SelectionAreaWidget) hasSelection() bool {
+	for _, t := range a.texts {
+		if t.ed.HasSelection() {
+			return true
+		}
+	}
+	return false
+}
+
 // selectAll selects every text in the area.
 func (a *SelectionAreaWidget) selectAll() {
 	for _, t := range a.texts {
@@ -670,6 +688,7 @@ func (a *SelectionAreaWidget) selectAll() {
 		first, last := a.texts[0], a.texts[len(a.texts)-1]
 		a.anchor, a.anchorAt, a.focus, a.focusAt = first, 0, last, len(last.ed.Text)
 		a.spans = len(a.texts) > 1
+		ggui.RepaintAll()
 	}
 }
 
@@ -744,6 +763,7 @@ func (a *SelectionAreaWidget) Find(needle string, top float64, n int) (at ggui.R
 			t.ed.MoveTo(lo, false)
 			t.ed.MoveTo(hi, true)
 			a.anchor, a.anchorAt, a.focus, a.focusAt = t, lo, t, hi
+			ggui.RepaintAll()
 			first := true
 			t.para.Rects(lo, hi, t.rect.Size.W, t.alignment(), func(b ggui.Rect) {
 				b.Origin = t.rect.Origin.Add(b.Origin)
@@ -837,7 +857,7 @@ func (t *RichTextWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 	}
 	switch ev.Key {
 	case ggui.KeyEscape:
-		return t.ed.HasSelection() || t.area != nil && t.area.spans
+		return t.ed.HasSelection() || t.area != nil && (t.area.spans || t.area.hasSelection())
 	case ggui.KeyArrowLeft, ggui.KeyArrowRight, ggui.KeyHome, ggui.KeyEnd:
 		return ev.Mods.Shift
 	}
@@ -867,10 +887,14 @@ func (t *RichTextWidget) HandleKey(ev ggui.KeyEvent) {
 				t.ed.SelectAll()
 			}
 		case ggui.KeyC:
-			if m.Cmd() && t.area != nil && t.area.spans {
-				ggui.CurrentClipboard().Write(t.area.SelectedText())
-			} else if m.Cmd() && t.ed.HasSelection() {
-				ggui.CurrentClipboard().Write(t.ed.Selected())
+			if m.Cmd() {
+				if t.area != nil {
+					if sel := t.area.SelectedText(); sel != "" {
+						ggui.CurrentClipboard().Write(sel)
+					}
+				} else if t.ed.HasSelection() {
+					ggui.CurrentClipboard().Write(t.ed.Selected())
+				}
 			}
 		case ggui.KeyEscape:
 			if t.area != nil {

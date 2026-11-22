@@ -29,9 +29,11 @@ type DragSourceWidget[T any] struct {
 	onEnd    func(dropped bool)
 	disabled bool
 
-	dragging bool
-	at, grab ggui.Point // the pointer, and where on the child it took hold
-	size     ggui.Size
+	dragging    bool
+	at, grab    ggui.Point // the pointer, and where on the child it took hold
+	size        ggui.Size
+	env         ggui.Env
+	previewLaid bool
 }
 
 // DragSource makes child draggable with value. The child keeps its clicks;
@@ -45,6 +47,7 @@ func DragSource[T any](child ggui.Widget, value T) *DragSourceWidget[T] {
 func (d *DragSourceWidget[T]) Preview(w ggui.Widget) *DragSourceWidget[T] {
 	defer property.Watch(&d.props, &d.preview)()
 	d.preview = w
+	d.previewLaid = false
 	return d
 }
 
@@ -71,10 +74,13 @@ func (d *DragSourceWidget[T]) Dragging() bool { return d.dragging }
 // Layout implements Widget.
 func (d *DragSourceWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer d.props.Layout().EndLayout()
+	d.env = env
 	d.size = d.child.Layout(c, env)
+	d.previewLaid = false
 	// The preview is only painted mid-drag, so only then is it laid out.
 	if d.preview != nil && d.dragging {
 		d.preview.Layout(ggui.Tight(d.size), env)
+		d.previewLaid = true
 	}
 	return d.size
 }
@@ -88,6 +94,10 @@ func (d *DragSourceWidget[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Paint(d.child, r)
 	if !d.dragging {
 		return
+	}
+	if d.preview != nil && !d.previewLaid {
+		d.preview.Layout(ggui.Tight(d.size), d.env)
+		d.previewLaid = true
 	}
 	ghost := gem.Pick(d.preview != nil, d.preview, d.child)
 	at := ggui.Rct(ggui.Pt(d.at.X-d.grab.X, d.at.Y-d.grab.Y), d.size)
@@ -268,14 +278,15 @@ type ReorderableWidget[T any, K comparable] struct {
 	disabled  bool
 	id        any
 
-	st   *reorderState[K]
+	st   *reorderState[T, K]
 	port *ScrollWidget
 	env  ggui.Env
 }
 
 // reorderState is a list's drag and its row animations; a rebuilt list
 // adopts it, so a drag carries on.
-type reorderState[K comparable] struct {
+type reorderState[T any, K comparable] struct {
+	owner    *ReorderableWidget[T, K] // the live mounted instance; updated in Adopt and Paint
 	dragging bool
 	key      K          // the row being dragged
 	at, grab ggui.Point // the pointer, and where on the row it took hold
@@ -306,9 +317,10 @@ type reorderToken struct{ owner any }
 // without ItemExtent.
 func Reorderable[T any, K comparable](items ggui.Binding[[]T], key func(T) K, build func(EachItem[T]) ggui.Widget) *ReorderableWidget[T, K] {
 	property.Require(items, "Reorderable")
-	l := &ReorderableWidget[T, K]{items: items, id: reactive.AutoID(), st: &reorderState[K]{
+	l := &ReorderableWidget[T, K]{items: items, id: reactive.AutoID(), st: &reorderState[T, K]{
 		shift: map[K]*ggui.Motion{}, painted: map[K]float64{},
 	}}
+	l.st.owner = l
 	l.list = EachKeyed(items, key, func(it EachItem[T]) ggui.Widget {
 		return &reorderRow[T, K]{list: l, key: key(it.Item), child: build(it)}
 	}).Unlisted()
@@ -374,6 +386,7 @@ func (l *ReorderableWidget[T, K]) HitID() any { return l.id }
 func (l *ReorderableWidget[T, K]) Adopt(prev any) {
 	if p, ok := prev.(*ReorderableWidget[T, K]); ok && p != l {
 		l.st = p.st
+		l.st.owner = l
 	}
 }
 
@@ -399,8 +412,9 @@ func (l *ReorderableWidget[T, K]) index(k K) int { return slices.Index(l.list.ke
 
 // Paint implements Widget.
 func (l *ReorderableWidget[T, K]) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	f, st := l.list, l.st
 	dst.HitPointer(r, l)
+	f, st := l.list, l.st
+	st.owner = l
 	if len(f.items) == 0 && f.empty != nil {
 		dst.Paint(f.empty, r)
 		return
@@ -676,18 +690,25 @@ func (w *reorderRow[T, K]) DragValue() any { return reorderToken{w.list.st} }
 // DragMoved implements Draggable: the first move lifts the row.
 func (w *reorderRow[T, K]) DragMoved(at, grab ggui.Point) {
 	st := w.list.st
+	l := st.owner
+	if l == nil {
+		l = w.list
+	}
 	if !st.dragging {
 		st.dragging, st.key, st.grab = true, w.key, grab
 		st.last = ggui.FrameTime()
-		st.to = w.list.index(w.key)
+		st.to = l.index(w.key)
 	}
 	st.at = at
 }
 
 // DragEnded implements Draggable: a drop commits the move.
 func (w *reorderRow[T, K]) DragEnded(dropped bool) {
-	l := w.list
-	st := l.st
+	st := w.list.st
+	l := st.owner
+	if l == nil {
+		l = w.list
+	}
 	if !st.dragging {
 		return
 	}

@@ -517,3 +517,46 @@ func TestAClickAfterAFramePaintedInPartClearsTheWholeSelection(t *testing.T) {
 		t.Fatalf("a click left %q selected", got)
 	}
 }
+
+type testEnvBg struct{ c color.Color }
+
+func (t testEnvBg) RGBA() (uint32, uint32, uint32, uint32) { return t.c.RGBA() }
+func (t testEnvBg) ResolveColor(ggui.Env) color.Color      { return t.c }
+
+func TestRichTextEnvColorBackgroundPreservesLinks(t *testing.T) {
+	t.Parallel()
+	bg := testEnvBg{color.NRGBA{R: 200, G: 200, B: 200, A: 255}}
+	rt := RichText(
+		Span("code").Background(bg),
+		Span(" link").OnTap(func() {}),
+	)
+	rt.Layout(ggui.Loose(ggui.Sz(200, 100)), ggui.Env{})
+	if len(rt.links) != 1 {
+		t.Fatalf("links = %d, want 1", len(rt.links))
+	}
+	firstLink := rt.links[0]
+	rt.Layout(ggui.Loose(ggui.Sz(200, 100)), ggui.Env{})
+	if len(rt.links) != 1 || rt.links[0] != firstLink {
+		t.Fatal("EnvColor span background caused sameSpan to fail and recreate links on second layout")
+	}
+}
+
+func TestSelectionAreaCopyAfterFindCopiesMatch(t *testing.T) {
+	t.Parallel()
+	first := Text("alpha one").Selectable()
+	second := Text("beta needle gamma").Selectable()
+	area := SelectionArea(Column(first, second))
+	p := ggui.NewProbe(area, ggui.Sz(300, 100))
+	defer p.Close()
+	p.Frame()
+	// Focus first paragraph, then Find in second paragraph.
+	p.Click(textAt(&first.rich.w, first.rich.w.rect, 1))
+	if _, ok := area.Find("needle", 0, 0); !ok {
+		t.Fatal("Find did not locate needle")
+	}
+	cmdMod := ggui.Mods{Meta: isDarwin, Ctrl: !isDarwin}
+	p.Type(cmdMod, ggui.KeyC)
+	if got := p.Clipboard().Read(); got != "needle" {
+		t.Fatalf("Cmd+C after Find copied %q, want \"needle\"", got)
+	}
+}
