@@ -162,3 +162,10 @@ func TestPendingClicksAreBounded(t *testing.T) {
 		t.Fatalf("the oldest clicks were not the ones dropped: %q", a.notes.pending[0].r.ID)
 	}
 }
+
+func TestRequestNotificationPermissionGuardsNilCallback(t *testing.T) {
+	t.Parallel()
+	a := New(Config{}, func() Widget { return sized(0, 0) })
+	defer a.Close()
+	a.RequestNotificationPermission(nil)
+}

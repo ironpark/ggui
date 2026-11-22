@@ -171,12 +171,21 @@ var (
 	enabled  = map[int]bool{} // states set since a tray was given its menu
 	checked  = map[int]bool{}
 
-	// Main-thread state, or the state of the thread that ends the app.
+	// traysMu guards trays, hwnd, and lastLight* so RemoveTray during
+	// shutdown can safely run off the main thread without racing wndProc.
+	traysMu        sync.Mutex
 	hwnd           windows.HWND
 	taskbarCreated uint32
 	fallbackIcon   windows.Handle
 	trays          = map[int]*trayIcon{} // by the caller's key
+	lastLightKnown bool
+	lastLight      bool
 )
+
+type trayEntry struct {
+	key int
+	s   *trayIcon
+}
 
 // trayIcon is one tray as the shell shows it.
 type trayIcon struct {
@@ -245,13 +254,16 @@ func SetTray(key int, t Tray) {
 		if !ensureWindow() {
 			return
 		}
+		traysMu.Lock()
 		s := trays[key]
 		if s == nil {
 			s = &trayIcon{}
 			trays[key] = s
 		}
-		forgetStates(s.cfg.Menu)
+		oldMenu := s.cfg.Menu
 		s.cfg = t
+		traysMu.Unlock()
+		forgetStates(oldMenu)
 		install(key, s)
 	})
 }
@@ -273,19 +285,28 @@ func RemoveTray(key int) {
 }
 
 func removeTray(key int) {
+	traysMu.Lock()
 	s := trays[key]
 	if s == nil {
+		traysMu.Unlock()
 		return
 	}
 	delete(trays, key)
-	forgetStates(s.cfg.Menu)
-	if s.added {
-		nid := notifyIconData{wnd: hwnd, id: uint32(key)}
+	oldMenu := s.cfg.Menu
+	wasAdded := s.added
+	oldIcon := s.icon
+	s.added = false
+	s.icon = 0
+	w := hwnd
+	traysMu.Unlock()
+	forgetStates(oldMenu)
+	if wasAdded && w != 0 {
+		nid := notifyIconData{wnd: w, id: uint32(key)}
 		nid.size = uint32(unsafe.Sizeof(nid))
 		notify(nimDelete, &nid)
 	}
-	if s.icon != 0 {
-		procDestroyIcon.Call(uintptr(s.icon))
+	if oldIcon != 0 {
+		procDestroyIcon.Call(uintptr(oldIcon))
 	}
 }
 
@@ -335,8 +356,10 @@ func ensureWindow() bool {
 	}
 	name, _ := windows.UTF16PtrFromString("TaskbarCreated")
 	m, _, _ := procRegisterWindowMessageW.Call(uintptr(unsafe.Pointer(name)))
+	traysMu.Lock()
 	hwnd = windows.HWND(h)
 	taskbarCreated = uint32(m)
+	traysMu.Unlock()
 	return true
 }
 
@@ -349,33 +372,66 @@ func install(key int, s *trayIcon) {
 // installAtDPI rebuilds s's icon for dpi (or the tray window's current DPI
 // when dpi is zero) and updates the shell notification icon.
 func installAtDPI(key int, s *trayIcon, dpi uint32) {
-	old := s.icon
-	s.icon = makeIcon(s.cfg.Icon, s.cfg.Template, trayIconSize(dpi))
-	icon := s.icon
+	traysMu.Lock()
+	if trays[key] != s {
+		traysMu.Unlock()
+		return
+	}
+	cfg := s.cfg
+	added := s.added
+	w := hwnd
+	traysMu.Unlock()
+
+	var light bool
+	if cfg.Template && len(cfg.Icon) > 0 {
+		light = lightTaskbar()
+		traysMu.Lock()
+		lastLight, lastLightKnown = light, true
+		traysMu.Unlock()
+	}
+	newIcon := makeIcon(cfg.Icon, cfg.Template, light, trayIconSize(dpi))
+	icon := newIcon
 	if icon == 0 {
 		icon = appIcon()
 	}
 	nid := notifyIconData{
-		wnd:             hwnd,
+		wnd:             w,
 		id:              uint32(key),
 		flags:           nifMessage | nifIcon | nifTip | nifShowTip,
 		callbackMessage: wmTray,
 		icon:            icon,
 	}
 	nid.size = uint32(unsafe.Sizeof(nid))
-	tip := s.cfg.Tooltip
+	tip := cfg.Tooltip
 	if tip == "" {
 		// The notification area shows no text beside an icon.
-		tip = s.cfg.Title
+		tip = cfg.Title
 	}
 	copy(nid.tip[:len(nid.tip)-1], windows.StringToUTF16(tip))
 	nid.tip[len(nid.tip)-1] = 0
-	if !s.added || !notify(nimModify, &nid) {
-		s.added = notify(nimAdd, &nid)
-		if s.added {
+	if !added || !notify(nimModify, &nid) {
+		added = notify(nimAdd, &nid)
+		if added {
 			nid.version = nifVersion4
 			notify(nimSetVersion, &nid)
 		}
+	}
+	var old windows.Handle
+	removed := false
+	traysMu.Lock()
+	if trays[key] == s {
+		old = s.icon
+		s.icon = newIcon
+		s.added = added
+	} else {
+		removed = true
+		old = newIcon
+	}
+	traysMu.Unlock()
+	if removed && added && w != 0 {
+		del := notifyIconData{wnd: w, id: uint32(key)}
+		del.size = uint32(unsafe.Sizeof(del))
+		notify(nimDelete, &del)
 	}
 	if old != 0 {
 		procDestroyIcon.Call(uintptr(old))
@@ -398,25 +454,49 @@ func wndProc(wnd windows.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 		return 0
 	case msg == taskbarCreated && taskbarCreated != 0:
 		// Explorer restarted, and its tray with no icon of ours.
+		traysMu.Lock()
+		entries := make([]trayEntry, 0, len(trays))
 		for key, s := range trays {
 			s.added = false
-			install(key, s)
+			entries = append(entries, trayEntry{key: key, s: s})
+		}
+		traysMu.Unlock()
+		for _, e := range entries {
+			install(e.key, e.s)
 		}
 		return 0
 	case msg == wmSettingChange:
 		// A template icon follows the taskbar between light and dark.
-		for key, s := range trays {
-			if s.cfg.Template && len(s.cfg.Icon) > 0 {
-				install(key, s)
+		// Skip decoding and rescaling unless lightTaskbar() actually changed.
+		light := lightTaskbar()
+		traysMu.Lock()
+		changed := !lastLightKnown || light != lastLight
+		lastLight, lastLightKnown = light, true
+		var entries []trayEntry
+		if changed {
+			for key, s := range trays {
+				if s.cfg.Template && len(s.cfg.Icon) > 0 {
+					entries = append(entries, trayEntry{key: key, s: s})
+				}
 			}
+		}
+		traysMu.Unlock()
+		for _, e := range entries {
+			install(e.key, e.s)
 		}
 	case msg == wmDpiChanged:
 		// Rebuild tray icons at the new DPI so the notification area stays sharp.
 		dpi := dpiFromWParam(wparam)
+		traysMu.Lock()
+		var entries []trayEntry
 		for key, s := range trays {
 			if len(s.cfg.Icon) > 0 {
-				installAtDPI(key, s, dpi)
+				entries = append(entries, trayEntry{key: key, s: s})
 			}
+		}
+		traysMu.Unlock()
+		for _, e := range entries {
+			installAtDPI(e.key, e.s, dpi)
 		}
 		return 0
 	}
@@ -428,20 +508,25 @@ func wndProc(wnd windows.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 // click of either button, as the menu bar's does on macOS; an icon without
 // one runs its action on the primary button or the Enter key.
 func clicked(key int, event uint32, x, y int32) {
+	traysMu.Lock()
 	s := trays[key]
 	if s == nil {
+		traysMu.Unlock()
 		return
 	}
+	menu := s.cfg.Menu
+	clickID := s.cfg.ClickID
+	traysMu.Unlock()
 	switch event {
 	case ninSelect, ninKeySelect, wmContextMenu:
 	default:
 		return
 	}
 	var id int
-	if len(s.cfg.Menu) > 0 {
-		id = track(s.cfg.Menu, x, y)
+	if len(menu) > 0 {
+		id = track(menu, x, y)
 	} else if event != wmContextMenu {
-		id = s.cfg.ClickID
+		id = clickID
 	}
 	if id == 0 {
 		return
@@ -609,7 +694,7 @@ func resolveTrayIconSize(dpi uint32, getWindowDPI func() uint32, metricsForDpi f
 // square and centred. A template is drawn from its alpha alone, in white on a
 // dark taskbar and black on a light one. It returns zero for no PNG, or one
 // that does not decode.
-func makeIcon(data []byte, template bool, size int) windows.Handle {
+func makeIcon(data []byte, template, light bool, size int) windows.Handle {
 	if len(data) == 0 {
 		return 0
 	}
@@ -635,7 +720,7 @@ func makeIcon(data []byte, template bool, size int) windows.Handle {
 	draw.CatmullRom.Scale(dst, at, src, sb, draw.Src, nil)
 	if template {
 		var ink uint8 = 0xFF
-		if lightTaskbar() {
+		if light {
 			ink = 0
 		}
 		for i := 0; i < len(dst.Pix); i += 4 {

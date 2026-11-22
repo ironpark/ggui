@@ -1,4 +1,4 @@
-//go:build windows && !amd64 && !arm64
+//go:build windows && !amd64 && !arm64 && !386
 
 package a11ybridge
 

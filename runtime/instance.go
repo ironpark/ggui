@@ -7,13 +7,19 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
 	"strconv"
+	"syscall"
 	"time"
 )
+
+// maxLaunchBytes caps the size of a launch message decoded from a peer so a
+// runaway or hostile local client cannot exhaust memory.
+const maxLaunchBytes = 1 << 20
 
 // Launch is what a second launch of an app hands the instance already
 // running: its command-line arguments, without the program name, and the
@@ -40,14 +46,18 @@ var ErrRunning = errors.New("runtime: the app is already running")
 // leave behind and the next claim replaces.
 func ClaimInstance(id string, launched func(Launch)) (release func(), err error) {
 	addr := instanceAddr(id)
-	ln, err := net.Listen("unix", addr)
+	ln, err := listenInstance(addr)
 	if err != nil {
-		if handOver(addr) == nil {
+		stale, herr := handOver(addr)
+		if herr == nil {
 			return nil, ErrRunning
 		}
-		// Nobody answers: the socket was left by an instance that died.
+		if !stale {
+			return nil, herr
+		}
+		// Nobody is listening at addr: the socket was left by an instance that died.
 		os.Remove(addr)
-		if ln, err = net.Listen("unix", addr); err != nil {
+		if ln, err = listenInstance(addr); err != nil {
 			return nil, err
 		}
 	}
@@ -55,8 +65,21 @@ func ClaimInstance(id string, launched func(Launch)) (release func(), err error)
 	return func() { ln.Close() }, nil
 }
 
+// listenInstance binds addr and restricts file permissions to the current user
+// on filesystem-backed Unix sockets.
+func listenInstance(addr string) (net.Listener, error) {
+	ln, err := net.Listen("unix", addr)
+	if err != nil {
+		return nil, err
+	}
+	if goruntime.GOOS != "linux" && goruntime.GOOS != "windows" {
+		_ = os.Chmod(addr, 0o600)
+	}
+	return ln, nil
+}
+
 // instanceAddr is where the instances of the app named id meet. The id is
-// hashed so that any string makes a short, valid name.
+// hashed so that any string makes a short, valid name, scoped by UID on Unix.
 func instanceAddr(id string) string {
 	sum := sha256.Sum256([]byte(id))
 	name := "ggui-" + hex.EncodeToString(sum[:8])
@@ -64,29 +87,47 @@ func instanceAddr(id string) string {
 		// Abstract, so nothing is left on disk; per user, as a claim is.
 		return "@" + name + "-" + strconv.Itoa(os.Getuid())
 	}
-	return filepath.Join(os.TempDir(), name+".sock")
+	if goruntime.GOOS == "windows" {
+		return filepath.Join(os.TempDir(), name+".sock")
+	}
+	return filepath.Join(os.TempDir(), name+"-"+strconv.Itoa(os.Getuid())+".sock")
 }
 
-// handOver sends this process's launch to the instance at addr.
-func handOver(addr string) error {
+// isStaleDialErr reports whether a dial failure indicates that no live server
+// is listening at addr (rather than a timeout on a busy live instance or a
+// permission error).
+func isStaleDialErr(err error) bool {
+	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOTSOCK) {
+		return true
+	}
+	if goruntime.GOOS == "windows" {
+		// WSAECONNREFUSED (10061), WSAENOTSOCK (10038), WSAEINVAL (10022).
+		return errors.Is(err, syscall.Errno(10061)) || errors.Is(err, syscall.Errno(10038)) || errors.Is(err, syscall.Errno(10022))
+	}
+	return false
+}
+
+// handOver sends this process's launch to the instance at addr. stale is true
+// only when connecting failed because nothing is listening at addr.
+func handOver(addr string) (stale bool, err error) {
 	conn, err := net.DialTimeout("unix", addr, time.Second)
 	if err != nil {
-		return err
+		return isStaleDialErr(err), err
 	}
 	defer conn.Close()
 	if !samePeer(conn) {
-		return errors.New("runtime: the instance socket belongs to another user")
+		return false, errors.New("runtime: the instance socket belongs to another user")
 	}
 	conn.SetDeadline(time.Now().Add(2 * time.Second))
 	dir, _ := os.Getwd()
 	if err := json.NewEncoder(conn).Encode(Launch{Args: os.Args[1:], Dir: dir}); err != nil {
-		return err
+		return false, err
 	}
 	// Wait for the instance to take it, so that this process does not
 	// exit before the launch is read.
 	var ack [1]byte
 	_, err = conn.Read(ack[:])
-	return err
+	return false, err
 }
 
 // serveInstance hands every launch that arrives at ln to launched, until
@@ -104,11 +145,13 @@ func serveInstance(ln net.Listener, launched func(Launch)) {
 			}
 			conn.SetDeadline(time.Now().Add(2 * time.Second))
 			var l Launch
-			if json.NewDecoder(conn).Decode(&l) != nil {
+			if json.NewDecoder(io.LimitReader(conn, maxLaunchBytes)).Decode(&l) != nil {
 				return
 			}
 			conn.Write([]byte{1})
-			launched(l)
+			if launched != nil {
+				launched(l)
+			}
 		}()
 	}
 }

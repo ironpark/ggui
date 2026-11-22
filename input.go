@@ -422,7 +422,7 @@ type hitRegion struct {
 
 // merge folds o into r when they share a Rect and o only adds what r lacks.
 func (r *hitRegion) merge(o hitRegion) bool {
-	if r.rect != o.rect || r.reach != o.reach || r.space != o.space || (o.id != nil && r.id != nil && o.id != r.id) ||
+	if r.rect != o.rect || r.reach != o.reach || r.space != o.space || (o.id != nil && r.id != nil && !gem.Same(o.id, r.id)) ||
 		o.drag != nil || r.drag != nil ||
 		(o.pointer != nil && r.pointer != nil) ||
 		(o.key != nil && r.key != nil) ||
@@ -637,9 +637,10 @@ func (in *inputState) dispatch(f frameInput) {
 }
 
 // dispatchOver offers f to the overlay before the widgets, unless a widget
-// holds a press, so that a drag that began in the app finishes there.
+// holds a press or an in-app drag is active, so that a drag that began in the
+// app finishes there.
 func (in *inputState) dispatchOver(o Overlay, f frameInput) {
-	if o == nil || in.pressed != nil || !o.Input(overlayInput(f)) {
+	if o == nil || in.pressed != nil || in.drag != nil || !o.Input(overlayInput(f)) {
 		in.dispatch(f)
 	}
 }
@@ -729,15 +730,17 @@ func (in *inputState) dispatchPointer(f frameInput) {
 	for _, b := range f.down {
 		ev := PointerEvent{Kind: PointerDown, Pos: f.pos, Button: b, Mods: f.mods}
 		pressed := in.send(ev)
-		if b == MouseButtonLeft {
-			in.pressDrag(f.pos, pressed)
+		if in.pressed == nil {
+			if b == MouseButtonLeft {
+				in.pressDrag(f.pos, pressed)
+			}
+			in.pressed, in.pressedBtn = keep(pressed), b
 		}
-		in.pressed, in.pressedBtn = keep(pressed), b
 		in.setFocus(in.findKey(f.pos))
 	}
 	if in.pressed != nil && len(f.down) == 0 && len(f.up) == 0 {
 		if cur := in.findPointer(in.pressed); cur != nil {
-			in.deliver(cur, PointerEvent{Kind: PointerDrag, Pos: f.pos, Button: in.pressedBtn})
+			in.deliver(cur, PointerEvent{Kind: PointerDrag, Pos: f.pos, Button: in.pressedBtn, Mods: f.mods})
 		}
 	}
 	for _, b := range f.up {
@@ -858,7 +861,7 @@ func (in *inputState) updateTrap() {
 	if s := in.activeScope(); s != nil {
 		owner = s.owner
 	}
-	if owner == in.trap {
+	if gem.Same(owner, in.trap) {
 		return
 	}
 	if owner == nil {
@@ -875,7 +878,7 @@ func (in *inputState) updateTrap() {
 		in.trapReturn = keep(in.focused)
 	}
 	in.trap = owner
-	inside := func(r *hitRegion) bool { return r.scope != nil && r.scope.owner == owner }
+	inside := func(r *hitRegion) bool { return r.scope != nil && gem.Same(r.scope.owner, owner) }
 	if in.focused != nil {
 		if cur := in.findKeyRegion(in.focused); cur != nil && inside(cur) {
 			return
@@ -1028,7 +1031,7 @@ func handlerOf(r *hitRegion, key bool) any {
 // after the pointer moved can have changed.
 func (in *inputState) deliver(r *hitRegion, ev PointerEvent) bool {
 	took := r.handle(ev)
-	if ev.Kind == PointerMove && (!took || !in.moved) {
+	if (ev.Kind == PointerMove || ev.Kind == PointerDrag) && (!took || !in.moved) {
 		return took
 	}
 	in.touch(r)
@@ -1088,7 +1091,7 @@ func (in *inputState) continuing(p *hitRegion, key bool) *hitRegion {
 		return r
 	}
 	if p.id != nil {
-		return in.topmost(func(r *hitRegion) bool { return r.handles(key) && r.id == p.id })
+		return in.topmost(func(r *hitRegion) bool { return r.handles(key) && gem.Same(r.id, p.id) })
 	}
 	return in.topmost(func(r *hitRegion) bool { return r.handles(key) && r.id == nil && r.rect == p.rect })
 }
@@ -1139,6 +1142,7 @@ func (in *inputState) focus(r *hitRegion, keyboard bool) {
 		in.focused.key.HandleKey(KeyEvent{Kind: KeyBlur})
 	}
 	if r != nil && r.key != nil {
+		RepaintAll()
 		ev := KeyEvent{Kind: KeyFocus}
 		if keyboard {
 			ev.Key = KeyTab
@@ -1176,7 +1180,7 @@ func (in *inputState) moveFocus(dir int) {
 	}
 	for i := range in.regions {
 		r := &in.regions[i]
-		if r.key == nil || (scope != nil && (r.scope == nil || r.scope.owner != scope.owner)) {
+		if r.key == nil || (scope != nil && (r.scope == nil || !gem.Same(r.scope.owner, scope.owner))) {
 			continue
 		}
 		if r == focused || focused != nil && gem.Same(r.key, focused.key) {
@@ -1343,7 +1347,7 @@ func (in *inputState) panTouch(f *frameInput) {
 	ev := PointerEvent{Kind: PointerScroll, Pos: in.touchPan.Start, Scroll: delta, ScrollPixels: true}
 	if in.touchPan.Panning {
 		if cur := in.findPointer(in.touchScroll); cur != nil && delta != (Point{}) {
-			cur.pointer.HandlePointer(ev)
+			in.deliver(cur, ev)
 		}
 	} else if delta != (Point{}) {
 		if target := in.send(ev); target != nil {
@@ -1405,7 +1409,7 @@ func (in *inputState) stepTouchMomentum(now time.Time) {
 	travel, next, finished := kinetics.Fling(m.Velocity, dt)
 	ev := PointerEvent{Kind: PointerScroll, Pos: m.origin, Scroll: travel, ScrollPixels: true, ScrollMomentum: true}
 	m.Last, m.Velocity = now, next
-	if moved := cur.pointer.HandlePointer(ev); !moved || finished {
+	if moved := in.deliver(cur, ev); !moved || finished {
 		m.stop()
 	}
 }

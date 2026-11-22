@@ -3,6 +3,8 @@
 package runtime
 
 import (
+	"unsafe"
+
 	"github.com/ebitengine/purego/objc"
 	"github.com/ironpark/ggui/internal/platform/cocoa"
 	"github.com/ironpark/ggwd"
@@ -59,8 +61,9 @@ func runAlert(m Message, win objc.ID) (int, error) {
 	if win == 0 {
 		resp = objc.Send[int](alert, selRunModal)
 	} else {
-		alert.Send(selBeginSheetModal, win, sheetDone().Ptr())
-		resp = objc.Send[int](cocoa.App(), selRunModalForWindow, alert.Send(selWindow))
+		resp = runSheetModal(alert.Send(selWindow), func(handler unsafe.Pointer) {
+			alert.Send(selBeginSheetModal, win, handler)
+		})
 	}
 	i := resp - nsAlertFirstButtonCode
 	if i < 0 || i >= len(buttons) {

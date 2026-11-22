@@ -516,10 +516,12 @@ func TestSessionMenuAndRequestsRoundTrip(t *testing.T) {
 	}
 
 	// Replacing app 1 with app 2 queues a reset and drops stale app 1 updates.
-	v.request(&remote.UpdateMenuItem{ID: 7, SetEnabled: true, Enabled: true})
+	v.request(a1, &remote.UpdateMenuItem{ID: 7, SetEnabled: true, Enabled: true})
 	c2Viewer, c2App := unixPair(t)
 	a2 := &app{pid: 202, conn: remote.NewConn(c2Viewer), opts: appOptions(func(o *remote.OpenWindow) {})}
 	v.attach(a2, true)
+	// A late request from the superseded app 1 must be ignored once app 2 is active.
+	v.request(a1, &remote.SetTitle{Title: "stale"})
 
 	v.mu.Lock()
 	r2 := v.req
@@ -530,6 +532,9 @@ func TestSessionMenuAndRequestsRoundTrip(t *testing.T) {
 	}
 	if len(r2.menuUpdates) != 0 {
 		t.Fatalf("replacing app kept stale menuUpdates: %+v", r2.menuUpdates)
+	}
+	if r2.title != nil {
+		t.Fatalf("stale app poisoned active requests with title %q", *r2.title)
 	}
 
 	// Closing app 2 detaches it and queues a reset.
@@ -648,5 +653,154 @@ func TestCleanAndWrapText(t *testing.T) {
 	}
 	if got := wrapText("", 3); got != nil {
 		t.Errorf("wrapText of nothing: %q", got)
+	}
+}
+
+func TestSessionAppsMapCleansUpOnDetach(t *testing.T) {
+	v := newSession(options{}, &events{w: &bytes.Buffer{}})
+	for i := range 5 {
+		cViewer, cApp := unixPair(t)
+		a := &app{pid: 1000 + i, conn: remote.NewConn(cViewer), opts: placeholder}
+		v.attach(a, false)
+		_ = cApp.Close()
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		v.mu.Lock()
+		n := len(v.apps)
+		v.mu.Unlock()
+		if n == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("v.apps still has %d leaked entries after all apps detached", n)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestAcceptHandshakesConcurrently(t *testing.T) {
+	v := newSession(options{}, &events{w: &bytes.Buffer{}})
+	v.conns = make(chan *net.UnixConn, 2)
+	go v.accept()
+	t.Cleanup(func() {
+		close(v.conns)
+		v.detachAll()
+	})
+
+	// First connection stalls without sending Hello.
+	stalledViewer, stalledApp := unixPair(t)
+	defer stalledApp.Close()
+	v.conns <- stalledViewer
+
+	// Second connection completes the handshake immediately and must attach
+	// without waiting for handshakeTimeout on the first.
+	goodViewer, goodApp := unixPair(t)
+	v.conns <- goodViewer
+
+	conn := remote.NewConn(goodApp)
+	if _, err := conn.Receive(); err != nil { // Welcome
+		t.Fatalf("receiving Welcome: %v", err)
+	}
+	if err := conn.Send(&remote.Hello{Version: remote.Version, PID: 4242}); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.Send(&placeholder); err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		v.mu.Lock()
+		cur := v.cur
+		v.mu.Unlock()
+		if cur != nil && cur.pid == 4242 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("stalled connection blocked subsequent app handshake")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestPendingBatchCapturesShmSnapshot(t *testing.T) {
+	v := newSession(options{}, &events{w: &bytes.Buffer{}})
+	cViewer, cApp := unixPair(t)
+	a := &app{pid: 555, conn: remote.NewConn(cViewer), opts: placeholder}
+	shm1 := []byte("first-shm")
+	shm2 := []byte("second-shm")
+	a.shm = shm1
+	v.attach(a, false)
+
+	appConn := remote.NewConn(cApp)
+	if err := appConn.Send(&remote.Batch{Seq: 1, Offset: 0, Length: 5}); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		a.mu.Lock()
+		n := len(a.pending)
+		a.mu.Unlock()
+		if n == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for batch 1")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// Simulate shm replacement before replay drains pending.
+	a.mu.Lock()
+	a.oldShm = append(a.oldShm, a.shm)
+	a.shm = shm2
+	a.mu.Unlock()
+
+	if err := appConn.Send(&remote.Batch{Seq: 2, Offset: 0, Length: 6}); err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.Now().Add(2 * time.Second)
+	for {
+		a.mu.Lock()
+		n := len(a.pending)
+		a.mu.Unlock()
+		if n == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for batch 2")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	a.mu.Lock()
+	p0, p1 := a.pending[0], a.pending[1]
+	a.mu.Unlock()
+	if string(p0.shm) != "first-shm" || string(p1.shm) != "second-shm" {
+		t.Fatalf("pending shm snapshots = (%q, %q), want (first-shm, second-shm)", p0.shm, p1.shm)
+	}
+	_ = cApp.Close()
+}
+
+func TestRememberDebouncesStateSaves(t *testing.T) {
+	dir := t.TempDir()
+	v := newSession(options{project: "/proj"}, &events{w: &bytes.Buffer{}})
+	v.statePath = statePath(dir, "/proj")
+	v.saveDelay = 30 * time.Millisecond
+	defer v.quit()
+
+	v.remember(func(g *geometry) { *g = geometry{X: 1, Y: 2, Width: 300, Height: 200} })
+	v.remember(func(g *geometry) { *g = geometry{X: 10, Y: 20, Width: 640, Height: 480} })
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if got, ok := loadState(v.statePath, "/proj"); ok && got == (geometry{X: 10, Y: 20, Width: 640, Height: 480}) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("debounced remember did not persist final geometry")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

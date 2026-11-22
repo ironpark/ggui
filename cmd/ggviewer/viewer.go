@@ -34,6 +34,14 @@ var placeholder = remote.OpenWindow{Title: "ggviewer", Width: 800, Height: 600, 
 
 var background = color.RGBA{0x1f, 0x1f, 0x23, 0xff}
 
+// pendingBatch pairs a received batch with the shared memory mapping that was
+// active when it arrived, so replacing shm does not corrupt or unmap memory
+// still needed by queued batches.
+type pendingBatch struct {
+	batch *remote.Batch
+	shm   []byte
+}
+
 // app is an app process attached to the viewer.
 type app struct {
 	id   int
@@ -43,8 +51,8 @@ type app struct {
 
 	mu      sync.Mutex
 	shm     []byte
-	oldShm  [][]byte // replaced, to unmap on the main thread
-	pending []*remote.Batch
+	oldShm  [][]byte // replaced, to unmap on the main thread after replay
+	pending []pendingBatch
 
 	// shown reports that a frame of the app's was shown. Main thread only.
 	shown bool
@@ -106,7 +114,7 @@ type session struct {
 	// that the app's Closed closes the window too; an app that closes on
 	// its own, as App.Quit does, leaves the window to the next app.
 	closeAsked bool
-	apps       []*app // attached, for detachAll
+	apps       map[*app]struct{} // attached, for detachAll
 	nextID     int
 	gone       []*app
 	req        requests
@@ -116,6 +124,8 @@ type session struct {
 	haveCfg    bool
 	geom       geometry
 	geomSet    bool
+	saveTimer  *time.Timer
+	saveDelay  time.Duration // zero uses saveDebounce
 
 	// The main thread's.
 	menu      menuBar
@@ -148,6 +158,7 @@ func newSession(o options, ev *events) *session {
 		events:     ev,
 		needWindow: make(chan struct{}),
 		quitting:   make(chan struct{}),
+		apps:       map[*app]struct{}{},
 		menu:       nativeMenuBar{},
 		trayKeys:   map[int]struct{}{},
 		replayers:  map[*app]*ggfxremote.Replayer{},
@@ -162,6 +173,9 @@ func (v *session) quit() {
 	v.quitOnce.Do(func() { close(v.quitting) })
 	v.mu.Lock()
 	v.req.close = true
+	if v.saveTimer != nil {
+		v.saveTimer.Stop()
+	}
 	v.mu.Unlock()
 	v.wake()
 }
@@ -255,7 +269,7 @@ func (v *session) attach(a *app, applyOpts bool) {
 	a.id = v.nextID
 	old := v.cur
 	v.cur, v.closeAsked = a, false
-	v.apps = append(v.apps, a)
+	v.apps[a] = struct{}{}
 	// What the app before asked of the window is not this one's.
 	v.resetRequests(old != nil)
 	if applyOpts {
@@ -289,24 +303,36 @@ func (v *session) resetRequests(reset bool) {
 }
 
 // accept attaches the apps that connect after the first, until the
-// listener closes.
+// listener closes. Each connection handshakes in its own goroutine so a
+// stalled peer cannot block subsequent reconnects.
 func (v *session) accept() {
 	for c := range v.conns {
-		a, err := v.handshake(c)
-		if err != nil {
-			log.Print(err)
-			_ = c.Close()
-			continue
-		}
-		v.attach(a, true)
-		v.wake()
+		go func(c *net.UnixConn) {
+			a, err := v.handshake(c)
+			if err != nil {
+				log.Print(err)
+				_ = c.Close()
+				return
+			}
+			select {
+			case <-v.quitting:
+				_ = a.conn.Close()
+				return
+			default:
+			}
+			v.attach(a, true)
+			v.wake()
+		}(c)
 	}
 }
 
 // detachAll closes every app's connection, which ends the apps.
 func (v *session) detachAll() {
 	v.mu.Lock()
-	apps := v.apps
+	apps := make([]*app, 0, len(v.apps))
+	for a := range v.apps {
+		apps = append(apps, a)
+	}
 	v.mu.Unlock()
 	for _, a := range apps {
 		_ = a.conn.Close()
@@ -319,6 +345,7 @@ func (v *session) read(a *app) {
 		m, err := a.conn.Receive()
 		if err != nil {
 			v.mu.Lock()
+			delete(v.apps, a)
 			if v.cur == a {
 				v.cur = nil
 				v.resetRequests(true)
@@ -330,9 +357,6 @@ func (v *session) read(a *app) {
 			v.kick()
 			return
 		}
-		v.mu.Lock()
-		current := v.cur == a
-		v.mu.Unlock()
 		switch m := m.(type) {
 		case *remote.SharedMemory:
 			b, err := m.Map()
@@ -349,7 +373,7 @@ func (v *session) read(a *app) {
 			a.mu.Unlock()
 		case *remote.Batch:
 			a.mu.Lock()
-			a.pending = append(a.pending, m)
+			a.pending = append(a.pending, pendingBatch{batch: m, shm: a.shm})
 			a.mu.Unlock()
 			v.kick()
 			continue
@@ -370,24 +394,26 @@ func (v *session) read(a *app) {
 			}
 			continue
 		case *remote.Closed:
-			if current {
-				v.mu.Lock()
+			v.mu.Lock()
+			if v.cur == a {
 				v.req.close = v.req.close || v.closeAsked
-				v.mu.Unlock()
 			}
+			v.mu.Unlock()
 		default:
-			if current {
-				v.request(m)
-			}
+			v.request(a, m)
 		}
 		v.wake()
 	}
 }
 
-// request queues an app's request of the window for the main thread.
-func (v *session) request(m remote.Message) {
+// request queues an app's request of the window for the main thread if a is
+// still the active app.
+func (v *session) request(a *app, m remote.Message) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
+	if v.cur != a {
+		return
+	}
 	switch m := m.(type) {
 	case *remote.OpenWindow:
 		v.req.options = m
@@ -555,6 +581,14 @@ func (v *session) HandleEvent(ev ggwd.Event) error {
 
 // start opens the window, with the first app's options if one came.
 func (v *session) start() error {
+	first := v.first
+	v.first = nil
+	attached := false
+	defer func() {
+		if !attached && first != nil {
+			_ = first.Close()
+		}
+	}()
 	info, err := ggfxremote.LocalInfo()
 	if err != nil {
 		return err
@@ -569,12 +603,12 @@ func (v *session) start() error {
 	default:
 	}
 	var a *app
-	if v.first != nil {
-		if a, err = v.handshake(v.first); err != nil {
+	if first != nil {
+		if a, err = v.handshake(first); err != nil {
 			log.Print(err)
-			_ = v.first.Close()
+			_ = first.Close()
+			first = nil
 		}
-		v.first = nil
 	}
 	o := placeholder
 	if a != nil {
@@ -601,6 +635,7 @@ func (v *session) start() error {
 		v.lastOpts = &last
 		v.appHid = a.opts.Hidden
 		v.attach(a, false)
+		attached = true
 	}
 	go v.accept()
 	return nil
@@ -841,21 +876,21 @@ func (v *session) service(windowFrame bool) {
 	}
 	if a != nil && (windowFrame || !v.opts.windowFramesOnly) {
 		a.mu.Lock()
-		pending, shm, old := a.pending, a.shm, a.oldShm
+		pending, old := a.pending, a.oldShm
 		a.pending, a.oldShm = nil, nil
 		a.mu.Unlock()
-		for _, b := range old {
-			_ = remote.Unmap(b)
-		}
 		r := v.replayers[a]
 		if r == nil && len(pending) > 0 {
 			r = ggfxremote.NewReplayer()
 			v.replayers[a] = r
 		}
-		for _, b := range pending {
-			if !v.replay(a, r, shm, b) {
+		for _, p := range pending {
+			if !v.replay(a, r, p.shm, p.batch) {
 				break
 			}
+		}
+		for _, b := range old {
+			_ = remote.Unmap(b)
 		}
 	}
 	for _, p := range v.dumps {
@@ -884,7 +919,7 @@ func (v *session) replay(a *app, r *ggfxremote.Replayer, shm []byte, b *remote.B
 		return drop(err)
 	}
 	var screen *ggfx.Image
-	if w > 0 {
+	if w > 0 && h > 0 {
 		if v.screen == nil || v.screen.Bounds().Size() != image.Pt(w, h) {
 			if v.screen != nil {
 				v.screen.Deallocate()
@@ -1029,31 +1064,34 @@ func (v *session) dump(path string) error {
 	return f.Close()
 }
 
+const saveDebounce = time.Second
+
 // remember notes the window's geometry, and keeps it a moment later, once
-// the window stopped moving.
+// the window stops moving.
 func (v *session) remember(f func(*geometry)) {
 	if v.statePath == "" {
 		return
 	}
 	v.mu.Lock()
 	f(&v.geom)
-	first := !v.geomSet
 	v.geomSet = true
-	v.mu.Unlock()
-	if first {
-		go func() {
-			tick := time.NewTicker(time.Second)
-			defer tick.Stop()
-			for {
-				select {
-				case <-v.quitting:
-					return
-				case <-tick.C:
-					v.saveState()
-				}
-			}
-		}()
+	delay := v.saveDelay
+	if delay <= 0 {
+		delay = saveDebounce
 	}
+	if v.saveTimer != nil {
+		v.saveTimer.Reset(delay)
+	} else {
+		v.saveTimer = time.AfterFunc(delay, func() {
+			select {
+			case <-v.quitting:
+				return
+			default:
+			}
+			v.saveState()
+		})
+	}
+	v.mu.Unlock()
 }
 
 var saveMu sync.Mutex

@@ -21,9 +21,14 @@ type shown struct {
 	released         sync.Once
 }
 
+// keepUntagged caps how many untagged Notification handles stay retained when
+// the browser never fires onclose, preventing unbounded js.Func leaks.
+const keepUntagged = 32
+
 var (
-	shownMu sync.Mutex
-	byID    = map[string]*shown{}
+	shownMu  sync.Mutex
+	byID     = map[string]*shown{}
+	untagged []*shown
 )
 
 func setup() {}
@@ -93,8 +98,17 @@ func post(n Notification) error {
 	})
 	s.onclose = js.FuncOf(func(js.Value, []js.Value) any {
 		shownMu.Lock()
-		if byID[id] == s {
-			delete(byID, id)
+		if id != "" {
+			if byID[id] == s {
+				delete(byID, id)
+			}
+		} else {
+			for i, u := range untagged {
+				if u == s {
+					untagged = append(untagged[:i], untagged[i+1:]...)
+					break
+				}
+			}
 		}
 		shownMu.Unlock()
 		s.release()
@@ -111,6 +125,19 @@ func post(n Notification) error {
 			// A tag's replacement closes the old one without a close
 			// event in some browsers.
 			old.release()
+		}
+	} else {
+		var evicted *shown
+		shownMu.Lock()
+		untagged = append(untagged, s)
+		if len(untagged) > keepUntagged {
+			evicted = untagged[0]
+			untagged[0] = nil
+			untagged = untagged[1:]
+		}
+		shownMu.Unlock()
+		if evicted != nil {
+			evicted.release()
 		}
 	}
 	return nil
@@ -135,4 +162,9 @@ func remove(id string) {
 	}
 }
 
-func permission(fn func(bool)) { go fn(check() == nil && allowed()) }
+func permission(fn func(bool)) {
+	ok := check() == nil && allowed()
+	if fn != nil {
+		go fn(ok)
+	}
+}

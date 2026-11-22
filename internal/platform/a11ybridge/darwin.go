@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"structs"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/ebitengine/purego"
@@ -46,6 +47,8 @@ type nsRect struct {
 var (
 	axSelAlloc               = objc.RegisterName("alloc")
 	axSelInit                = objc.RegisterName("init")
+	axSelRetain              = objc.RegisterName("retain")
+	axSelAutorelease         = objc.RegisterName("autorelease")
 	axSelRelease             = objc.RegisterName("release")
 	axSelBounds              = objc.RegisterName("bounds")
 	axSelWindow              = objc.RegisterName("window")
@@ -57,10 +60,11 @@ var (
 	axSelSharedWorkspace     = objc.RegisterName("sharedWorkspace")
 	axSelVoiceOverEnabled    = objc.RegisterName("isVoiceOverEnabled")
 
-	axClassNSString = objc.GetClass("NSString")
-	axClassNSNumber = objc.GetClass("NSNumber")
+	axClassNSString     objc.Class
+	axClassNSNumber     objc.Class
+	axClassNSDictionary objc.Class
 
-	axIDNSWorkspace = objc.ID(objc.GetClass("NSWorkspace"))
+	axIDNSWorkspace objc.ID
 )
 
 // axRoleDescription is AppKit's own NSAccessibilityRoleDescription, which
@@ -77,7 +81,7 @@ func nsNumber(v float64) objc.ID {
 // darwinAX is the platform half of the bridge: the container view, and the
 // three things the portable half asks of it.
 type darwinAX struct {
-	container objc.ID
+	container atomic.Uintptr
 	bridge    *Bridge
 	window    *ggwd.Window
 }
@@ -100,7 +104,7 @@ func (d *darwinAX) active() bool {
 // setWindow uses the container owned by ggfx; ggui never inserts a view.
 func (d *darwinAX) setWindow(b *Bridge, w *ggwd.Window) {
 	d.bridge, d.window = b, w
-	d.container = objc.ID(native.AccessibilityView(w))
+	d.container.Store(native.AccessibilityView(w))
 	native.SetAccessibilityHandlers(w, func() uintptr {
 		f := b.frame()
 		if f == nil {
@@ -114,7 +118,8 @@ func (d *darwinAX) close() {
 	if d.window != nil {
 		native.SetAccessibilityHandlers(d.window, nil, nil)
 	}
-	d.container, d.window = 0, nil
+	d.container.Store(0)
+	d.window = nil
 }
 
 // element makes the accessibility object for one node, carrying its handle.
@@ -125,15 +130,34 @@ func (d *darwinAX) element(handle int64) uintptr {
 	return uintptr(e)
 }
 
-// release drops the bridge's reference to retired elements. It is sent from
-// the frame goroutine rather than hopped onto the main thread: release is
-// atomic, and an element owns nothing but an integer, so there is nothing
-// in its teardown that wants a particular thread. Hopping would put a
-// main-thread round trip into any frame that removed a widget.
+// retain takes a caller reference while b.mu is held and registers it in the
+// current autorelease pool so a concurrent sweep cannot free the element
+// before Cocoa or post finishes using it.
+func (d *darwinAX) retain(e uintptr) {
+	objc.ID(e).Send(axSelRetain).Send(axSelAutorelease)
+}
+
+// release drops the bridge's reference to retired elements on the main thread
+// so Objective-C teardown never races with AppKit queries.
 func (d *darwinAX) release(elems []uintptr) {
 	for _, e := range elems {
 		axElementBridges.Delete(objc.ID(e))
-		objc.ID(e).Send(axSelRelease)
+	}
+	if len(elems) == 0 {
+		return
+	}
+	released := false
+	ggwd.RunOnMainThread(func() {
+		released = true
+		for _, e := range elems {
+			objc.ID(e).Send(axSelRelease)
+		}
+	})
+	if !released {
+		// ggwd.Run is not active (e.g. unit tests or post-shutdown); release directly.
+		for _, e := range elems {
+			objc.ID(e).Send(axSelRelease)
+		}
 	}
 }
 
@@ -149,6 +173,10 @@ func init() {
 	if err != nil {
 		panic("ggui: " + err.Error())
 	}
+	axClassNSString = objc.GetClass("NSString")
+	axClassNSNumber = objc.GetClass("NSNumber")
+	axClassNSDictionary = objc.GetClass("NSDictionary")
+	axIDNSWorkspace = objc.ID(objc.GetClass("NSWorkspace"))
 	purego.RegisterLibFunc(&axRoleDescription, appkit, "NSAccessibilityRoleDescription")
 	purego.RegisterLibFunc(&axPost, appkit, "NSAccessibilityPostNotification")
 	purego.RegisterLibFunc(&axPostWithUserInfo, appkit, "NSAccessibilityPostNotificationWithUserInfo")
@@ -346,11 +374,15 @@ func axElementFrame(self objc.ID, _ objc.SEL) nsRect {
 		return nsRect{}
 	}
 	d, is := b.plat.(*darwinAX)
-	if !is || d.container == 0 {
+	if !is {
 		return nsRect{}
 	}
-	x, y, w, h := axBounds(n, objc.Send[nsRect](d.container, axSelBounds).size.height)
-	return axToScreen(d.container, nsRect{origin: nsPoint{x: x, y: y}, size: nsSize{width: w, height: h}})
+	container := objc.ID(d.container.Load())
+	if container == 0 {
+		return nsRect{}
+	}
+	x, y, w, h := axBounds(n, objc.Send[nsRect](container, axSelBounds).size.height)
+	return axToScreen(container, nsRect{origin: nsPoint{x: x, y: y}, size: nsSize{width: w, height: h}})
 }
 
 // axToScreen converts a rectangle in the container view's coordinates to
@@ -387,9 +419,9 @@ func axElementParent(self objc.ID, _ objc.SEL) objc.ID {
 		if !is {
 			return 0
 		}
-		return d.container
+		return objc.ID(d.container.Load())
 	}
-	return objc.ID(b.element(axKeyOf(f.tree.At(n.Parent).ID)))
+	return objc.ID(b.element(axKeyOf(f.tree.Ref(n.Parent).ID)))
 }
 
 func axElementChildren(self objc.ID, _ objc.SEL) objc.ID {
@@ -405,7 +437,7 @@ func axElementChildren(self objc.ID, _ objc.SEL) objc.ID {
 func axElements(b *Bridge, f *axFrame, idx []int) []objc.ID {
 	out := make([]objc.ID, 0, len(idx))
 	for _, i := range idx {
-		if e := b.element(axKeyOf(f.tree.At(i).ID)); e != 0 {
+		if e := b.element(axKeyOf(f.tree.Ref(i).ID)); e != 0 {
 			out = append(out, objc.ID(e))
 		}
 	}
@@ -449,16 +481,20 @@ func axElementHitTest(self objc.ID, _ objc.SEL, p nsPoint) objc.ID {
 func axHitTestAt(b *Bridge, p nsPoint) objc.ID {
 	f := b.frame()
 	d, is := b.plat.(*darwinAX)
-	if f == nil || !is || d.container == 0 {
+	if f == nil || !is {
 		return 0
 	}
-	local := axFromScreen(d.container, nsRect{origin: p})
-	h := objc.Send[nsRect](d.container, axSelBounds).size.height
+	container := objc.ID(d.container.Load())
+	if container == 0 {
+		return 0
+	}
+	local := axFromScreen(container, nsRect{origin: p})
+	h := objc.Send[nsRect](container, axSelBounds).size.height
 	i := axHitTest(f.tree, a11y.Pt(local.origin.x, h-local.origin.y))
 	if i < 0 {
 		return 0
 	}
-	return objc.ID(b.element(axKeyOf(f.tree.At(i).ID)))
+	return objc.ID(b.element(axKeyOf(f.tree.Ref(i).ID)))
 }
 
 // Notifications are how an assistive technology hears about a change it did
@@ -519,20 +555,29 @@ func axPriority(loud bool) int32 {
 // is the only thread they may be posted from. Elements are resolved here
 // rather than in the diff, because making one is also main-thread work.
 func (d *darwinAX) notify(notes []axNote) {
+	b := d.bridge
+	if b == nil || d.container.Load() == 0 {
+		return
+	}
 	ggwd.RunOnMainThread(func() {
-		b := d.bridge
-		if b == nil || d.container == 0 {
-			return
-		}
-		for _, n := range notes {
-			d.post(b, n)
-		}
+		cocoa.WithAutoreleasePool(func() {
+			container := objc.ID(d.container.Load())
+			if container == 0 {
+				return
+			}
+			container.Send(axSelRetain).Send(axSelAutorelease)
+			for _, n := range notes {
+				d.post(b, container, n)
+			}
+		})
 	})
 }
 
-// post delivers one notification. It runs on the main thread.
-func (d *darwinAX) post(b *Bridge, n axNote) {
-	target := d.container
+// post delivers one notification. It runs on the main thread inside an
+// autorelease pool so target stays retained for the full AppKit call even if
+// the element is concurrently swept.
+func (d *darwinAX) post(b *Bridge, container objc.ID, n axNote) {
+	target := container
 	if !n.root {
 		e := b.element(n.key)
 		if e == 0 {
@@ -547,13 +592,13 @@ func (d *darwinAX) post(b *Bridge, n axNote) {
 	// An announcement is addressed to the window rather than to an element:
 	// it is not about anything on screen, which is the whole reason a live
 	// region needs one.
-	window := d.container.Send(axSelWindow)
+	window := container.Send(axSelWindow)
 	if window == 0 {
 		window = target
 	}
 	values := []objc.ID{cocoa.String(n.text), objc.ID(axClassNSNumber).Send(axSelNumberWithInt, axPriority(n.loud))}
 	keys := []objc.ID{cocoa.String("AXAnnouncementKey"), cocoa.String("AXPriorityKey")}
-	info := objc.ID(objc.GetClass("NSDictionary")).Send(axSelDictionary,
+	info := objc.ID(axClassNSDictionary).Send(axSelDictionary,
 		unsafe.Pointer(&values[0]), unsafe.Pointer(&keys[0]), 2)
 	runtime.KeepAlive(values)
 	runtime.KeepAlive(keys)
@@ -606,10 +651,13 @@ func axElementSetValue(self objc.ID, _ objc.SEL, v objc.ID) {
 		return
 	}
 	var act a11y.Action
-	if v.Send(axSelIsKindOfClass, axClassNSString) != 0 {
+	switch {
+	case v.Send(axSelIsKindOfClass, axClassNSString) != 0:
 		act.Text = cstrings.NSStringToString(v)
-	} else {
+	case v.Send(axSelIsKindOfClass, axClassNSNumber) != 0:
 		act.Num = objc.Send[float64](v, axSelDoubleValue)
+	default:
+		return
 	}
 	axPerform(self, axSetValue, act)
 }
@@ -805,12 +853,16 @@ func axElementFrameForRange(self objc.ID, _ objc.SEL, r nsRange) nsRect {
 		return nsRect{}
 	}
 	d, is := b.plat.(*darwinAX)
-	if !is || d.container == 0 {
+	if !is {
+		return nsRect{}
+	}
+	container := objc.ID(d.container.Load())
+	if container == 0 {
 		return nsRect{}
 	}
 	box := a11y.RectForRange(n, int(r.location), int(r.length))
-	h := objc.Send[nsRect](d.container, axSelBounds).size.height
-	return axToScreen(d.container, nsRect{
+	h := objc.Send[nsRect](container, axSelBounds).size.height
+	return axToScreen(container, nsRect{
 		origin: nsPoint{x: box.Origin.X, y: h - (box.Origin.Y + box.Size.H)},
 		size:   nsSize{width: box.Size.W, height: box.Size.H},
 	})

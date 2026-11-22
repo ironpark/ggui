@@ -28,6 +28,7 @@ var (
 	procSHBrowseForFolderW   = dllShell32.NewProc("SHBrowseForFolderW")
 	procSHGetPathFromIDListW = dllShell32.NewProc("SHGetPathFromIDListW")
 	procCoInitializeEx       = dllOle32.NewProc("CoInitializeEx")
+	procCoUninitialize       = dllOle32.NewProc("CoUninitialize")
 	procCoTaskMemFree        = dllOle32.NewProc("CoTaskMemFree")
 )
 
@@ -49,7 +50,11 @@ const (
 
 // coinitApartmentThreaded is the threading model the new-style folder
 // browser needs on its thread.
-const coinitApartmentThreaded = 0x2
+const (
+	coinitApartmentThreaded = 0x2
+	comSOK                  = 0
+	comSFalse               = 1
+)
 
 // maxPath is the longest path the folder browser hands back.
 const maxPath = 260
@@ -177,10 +182,12 @@ func fileDialog(k dialogKind, d FileDialog, owner uintptr) ([]string, error) {
 // SHGetPathFromIDListW turns into a path and CoTaskMemFree releases.
 func browseFolder(d FileDialog, owner uintptr) ([]string, error) {
 	// The new-style browser, the one with a tree that can be typed into,
-	// wants COM initialised on its thread. A second initialisation is a
-	// harmless S_FALSE, and a mismatch with an earlier one is also harmless
-	// here: the browser falls back to the old style.
-	procCoInitializeEx.Call(0, coinitApartmentThreaded)
+	// wants COM initialised on its thread. Every S_OK or S_FALSE return
+	// must be balanced with CoUninitialize; a mode mismatch (RPC_E_CHANGED_MODE)
+	// must not be uninitialised and simply falls back to the old style.
+	if hr, _, _ := procCoInitializeEx.Call(0, coinitApartmentThreaded); hr == comSOK || hr == comSFalse {
+		defer procCoUninitialize.Call()
+	}
 	display := make([]uint16, maxPath)
 	bi := browseInfo{
 		owner:       owner,

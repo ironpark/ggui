@@ -73,7 +73,7 @@ type axFrame struct {
 func newAXFrame(t *a11y.SemTree) *axFrame {
 	f := &axFrame{tree: t, index: make(map[axKey]int32, t.Len())}
 	for i := range t.Len() {
-		k := axKeyOf(t.At(i).ID)
+		k := axKeyOf(t.Ref(i).ID)
 		if _, dup := f.index[k]; !dup {
 			f.index[k] = int32(i)
 		}
@@ -103,10 +103,14 @@ type axPlatform interface {
 	// call the bridge makes while nothing is listening.
 	active() bool
 	// element makes a fresh accessibility object standing for handle, and
-	// returns it retained. It is only ever called from the platform's own
-	// thread, in the middle of answering a query, so that no object is
-	// created off it.
+	// returns it retained by the bridge cache. It is only ever called from the
+	// platform's own thread, in the middle of answering a query, so that no
+	// object is created off it.
 	element(handle int64) uintptr
+	// retain takes a caller-owned (or platform-autoreleased) reference to elem
+	// while the bridge holds b.mu, preventing a concurrent sweep+release on the
+	// frame goroutine from freeing elem before the caller uses it.
+	retain(elem uintptr)
 	// release drops the bridge's reference to elements whose nodes are
 	// gone. It may be called from the frame goroutine and must marshal
 	// itself to wherever the platform requires.
@@ -129,10 +133,11 @@ const axPollFrames = 60
 // wait for a frame; the cache goes behind a mutex because both sides change
 // it, and the critical sections are short and call nothing that could block.
 type Bridge struct {
-	plat axPlatform
-	mode a11y.Mode
-	on   bool
-	poll int
+	plat   axPlatform
+	mode   a11y.Mode
+	on     bool
+	polled bool
+	poll   int
 
 	cur atomic.Pointer[axFrame]
 
@@ -174,6 +179,7 @@ func (b *Bridge) SetWindow(w *ggwd.Window) {
 
 // Close detaches native callbacks and retires the tree before its window closes.
 func (b *Bridge) Close() {
+	b.setOn(false)
 	b.clear()
 	if b.plat != nil {
 		b.plat.close()
@@ -217,11 +223,27 @@ func (b *Bridge) Publish(t *a11y.SemTree, notices []a11y.Announcement) {
 }
 
 // Listening reports whether the next Publish will use its tree: an
-// assistive technology is attached, or the bridge asks the platform again
-// this frame whether one has. A frame may skip building the tree when it
-// is false.
+// assistive technology is attached, or mode is Always. In Auto mode while
+// quiet, it checks active() every axPollFrames frames directly rather than
+// forcing a full SemTree build when nothing is listening.
 func (b *Bridge) Listening() bool {
-	return b.plat != nil && b.mode != a11y.Off && (b.on || b.poll == 0)
+	if b.plat == nil || b.mode == a11y.Off {
+		return false
+	}
+	if b.mode == a11y.Always {
+		return true
+	}
+	if b.on {
+		return true
+	}
+	b.polled = true
+	if b.poll > 0 {
+		b.poll--
+		return false
+	}
+	b.poll = axPollFrames
+	b.setOn(b.plat.active())
+	return b.on
 }
 
 // enabled reports whether the bridge should do the frame's work, asking the
@@ -232,6 +254,10 @@ func (b *Bridge) enabled() bool {
 	if b.mode == a11y.Off {
 		return false
 	}
+	if b.polled {
+		b.polled = false
+		return b.on
+	}
 	if b.poll > 0 {
 		b.poll--
 		return b.on
@@ -241,13 +267,23 @@ func (b *Bridge) enabled() bool {
 	// attach itself to the window, which it can only do from the thread
 	// that owns one.
 	b.poll = axPollFrames
-	was := b.on
-	b.on = b.plat.active() || b.mode == a11y.Always
-	a11y.SetWantsDetail(b.on)
-	if was && !b.on {
+	b.setOn(b.plat.active() || b.mode == a11y.Always)
+	return b.on
+}
+
+// setOn transitions b.on, keeping the process-wide text detail reference count
+// balanced across multiple windows and clearing retired elements on detach.
+func (b *Bridge) setOn(on bool) {
+	if on == b.on {
+		return
+	}
+	b.on = on
+	if on {
+		a11y.AcquireDetail()
+	} else {
+		a11y.ReleaseDetail()
 		b.clear()
 	}
-	return b.on
 }
 
 // clear retires every element and forgets the tree, for when the bridge
@@ -269,8 +305,10 @@ func (b *Bridge) frame() *axFrame { return b.cur.Load() }
 
 // element returns the platform object standing for the node key names,
 // making it on the spot if this is the first time it has been asked for,
-// and 0 when the node is no longer in the tree. It is called from the
-// platform's thread, which is where an object may be made.
+// and 0 when the node is no longer in the tree. The platform retains the
+// object while b.mu is held so a concurrent sweep cannot free it before the
+// caller uses it. It is called from the platform's thread, which is where
+// an object may be made.
 func (b *Bridge) element(k axKey) uintptr {
 	f := b.frame()
 	if f == nil || b.plat == nil {
@@ -280,8 +318,12 @@ func (b *Bridge) element(k axKey) uintptr {
 		return 0
 	}
 	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.elems.intern(k, b.plat.element)
+	e := b.elems.intern(k, b.plat.element)
+	if e != 0 {
+		b.plat.retain(e)
+	}
+	b.mu.Unlock()
+	return e
 }
 
 // node returns the node an element handle stands for, as the tree last
@@ -451,7 +493,7 @@ func axHitTest(t *a11y.SemTree, p a11y.Point) int {
 	found := -1
 	var walk func(i int)
 	walk = func(i int) {
-		n := t.At(i)
+		n := t.Ref(i)
 		if n.Offscreen || !n.Full.Contains(p) {
 			return
 		}
@@ -510,7 +552,7 @@ func axDiff(prev, next *axFrame) []axNote {
 	var layout bool
 	var values, selections []axNote
 	for i := range next.tree.Len() {
-		n := next.tree.At(i)
+		n := next.tree.Ref(i)
 		k := axKeyOf(n.ID)
 		j, was := prev.index[k]
 		if !was || next.index[k] != int32(i) {
@@ -520,7 +562,7 @@ func axDiff(prev, next *axFrame) []axNote {
 			layout = layout || !was
 			continue
 		}
-		o := prev.tree.At(int(j))
+		o := prev.tree.Ref(int(j))
 		if axSpeaks(o.Node, n.Node) {
 			values = append(values, axNote{kind: axValueChanged, key: k})
 		}
@@ -558,11 +600,11 @@ func axSpeaks(before, after a11y.Node) bool {
 // axParentNote is the selection note for a node: it goes to whatever
 // contains it, since the notification says which of a container's children
 // is now the chosen one, and to the container itself for a root.
-func axParentNote(f *axFrame, n a11y.SemNode) axNote {
+func axParentNote(f *axFrame, n *a11y.SemNode) axNote {
 	if n.Parent < 0 {
 		return axNote{kind: axSelectionChanged, root: true}
 	}
-	return axNote{kind: axSelectionChanged, key: axKeyOf(f.tree.At(n.Parent).ID)}
+	return axNote{kind: axSelectionChanged, key: axKeyOf(f.tree.Ref(n.Parent).ID)}
 }
 
 // axFocusKey is the key of the focused node, or the zero key when nothing

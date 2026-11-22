@@ -3,12 +3,14 @@
 package runtime
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
 	"strings"
+	"time"
 )
 
 // OpenURL hands url to the desktop: a web address opens in the default
@@ -59,14 +61,19 @@ func Reveal(path string) error {
 	case "windows":
 		cmd = explorerSelect(abs)
 	case "linux", "freebsd", "openbsd", "netbsd", "dragonfly":
-		uri := (&url.URL{Scheme: "file", Path: abs}).String()
-		err := exec.Command("dbus-send", "--session", "--print-reply", "--dest=org.freedesktop.FileManager1",
-			"/org/freedesktop/FileManager1", "org.freedesktop.FileManager1.ShowItems",
-			"array:string:"+uri, "string:").Run()
-		if err == nil {
-			return nil
-		}
-		return OpenURL(filepath.Dir(abs))
+		uri := revealFileURI(abs)
+		dir := filepath.Dir(abs)
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			err := exec.CommandContext(ctx, "dbus-send", "--session", "--print-reply", "--dest=org.freedesktop.FileManager1",
+				"/org/freedesktop/FileManager1", "org.freedesktop.FileManager1.ShowItems",
+				"array:string:"+uri, "string:").Run()
+			if err != nil {
+				_ = OpenURL(dir)
+			}
+		}()
+		return nil
 	default:
 		return ErrUnsupported
 	}
@@ -75,4 +82,11 @@ func Reveal(path string) error {
 	}
 	go cmd.Wait()
 	return nil
+}
+
+// revealFileURI formats abs as a file:// URI safe for dbus-send's array:string
+// syntax, which splits array elements on literal commas.
+func revealFileURI(abs string) string {
+	uri := (&url.URL{Scheme: "file", Path: abs}).String()
+	return strings.ReplaceAll(uri, ",", "%2C")
 }

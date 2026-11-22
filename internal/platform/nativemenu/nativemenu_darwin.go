@@ -3,6 +3,7 @@
 package nativemenu
 
 import (
+	"math"
 	"sync"
 	"unsafe"
 
@@ -26,6 +27,7 @@ var (
 	selSetSubmenu           = objc.RegisterName("setSubmenu:")
 	selInsertItemAtIndex    = objc.RegisterName("insertItem:atIndex:")
 	selAddItem              = objc.RegisterName("addItem:")
+	selIndexOfItem          = objc.RegisterName("indexOfItem:")
 	selRemoveItem           = objc.RegisterName("removeItem:")
 	selAlloc                = objc.RegisterName("alloc")
 	selInit                 = objc.RegisterName("init")
@@ -76,6 +78,7 @@ const (
 )
 
 const (
+	nsNotFound                 = math.MaxInt
 	nsVariableStatusItemLength = -1
 	nsImageLeft                = 2
 	// trayIconSize is the height of a status item's icon, in points: what
@@ -167,6 +170,12 @@ func install(menus []Item) {
 	app := cocoa.App()
 	bar := app.Send(selMainMenu)
 	if bar == 0 {
+		for _, it := range barMenu {
+			it.Send(selRelease)
+		}
+		barMenu = barMenu[:0]
+		forget(barIDs)
+		barIDs = barIDs[:0]
 		if len(menus) == 0 {
 			return
 		}
@@ -175,7 +184,10 @@ func install(menus []Item) {
 		bar.Send(selRelease)
 	}
 	for _, it := range barMenu {
-		bar.Send(selRemoveItem, it)
+		if idx := objc.Send[int](bar, selIndexOfItem, it); idx >= 0 && idx != nsNotFound {
+			bar.Send(selRemoveItem, it)
+		}
+		it.Send(selRelease)
 	}
 	barMenu = barMenu[:0]
 	forget(barIDs)
@@ -187,7 +199,7 @@ func install(menus []Item) {
 	for _, m := range menus {
 		it := submenuItem(m, &barIDs)
 		bar.Send(selInsertItemAtIndex, it, at)
-		it.Send(selRelease)
+		// Retain ownership of it in barMenu until the next install removes it.
 		barMenu = append(barMenu, it)
 		at++
 	}
