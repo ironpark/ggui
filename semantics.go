@@ -454,22 +454,22 @@ func (p *Probe) Announce(text string, politeness Politeness) {
 	p.announce(Announcement{Text: text, Politeness: politeness})
 }
 
-// Perform asks the node identified by id to carry out act. It returns
+// PerformAction asks the node identified by id to carry out act. It returns
 // immediately: the work is queued onto the UI goroutine and happens before
 // the next frame's input, and the frame after that publishes what came of
 // it. See the note at the top of this file for why it must not wait.
 //
 // The action is found in the accessibility tree, which a window builds only
-// while something reads it. A pending Perform is such a reader: while one
+// while something reads it. A pending PerformAction is such a reader: while one
 // waits, every frame builds the tree, and once it is carried out the window
 // goes back to building it only when asked.
-func (w *Window) Perform(id NodeID, act Action) {
+func (w *Window) PerformAction(id NodeID, act Action) {
 	w.performs.Add(1)
 	var run func()
 	run = func() {
 		if w.canvas.fs().semOff {
 			// The last frame built no tree. The one about to run does,
-			// since this Perform is pending, so try again after it.
+			// since this PerformAction is pending, so try again after it.
 			w.markDirty(dirtyOther)
 			w.Post(run)
 			return
@@ -482,10 +482,10 @@ func (w *Window) Perform(id NodeID, act Action) {
 	w.Post(run)
 }
 
-// Perform queues act as App.Perform does and then runs a frame, so that a
+// PerformAction queues act as App.PerformAction does and then runs a frame, so that a
 // test sees what came of it without having to drive the loop by hand. The
 // queueing is the same, so the path under test is the real one.
-func (p *Probe) Perform(id NodeID, act Action) {
+func (p *Probe) PerformAction(id NodeID, act Action) {
 	p.Post(func() { perform(&p.canvas, &p.input, id, act) })
 	p.Frame()
 }

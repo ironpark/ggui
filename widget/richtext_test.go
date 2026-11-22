@@ -165,7 +165,7 @@ func TestRichTextLinkTapsWithPointerCursorAndA11y(t *testing.T) {
 	if node.Parent < 0 || tree.At(node.Parent).Role != ggui.RoleText {
 		t.Fatal("the link is not a child of its paragraph")
 	}
-	p.Perform(node.ID, ggui.Action{Kind: ggui.ActionPress})
+	p.PerformAction(node.ID, ggui.Action{Kind: ggui.ActionPress})
 	if taps != 2 {
 		t.Fatalf("%d taps after ActionPress, want 2", taps)
 	}
@@ -453,7 +453,7 @@ func TestSelectableTextDescribesItsSelection(t *testing.T) {
 	if !ok || node.Actions&ggui.ActionSetSelection == 0 {
 		t.Fatalf("node %+v, want text that takes a selection", node)
 	}
-	p.Perform(node.ID, ggui.Action{Kind: ggui.ActionSetSelection, SelStart: 4, SelEnd: 7})
+	p.PerformAction(node.ID, ggui.Action{Kind: ggui.ActionSetSelection, SelStart: 4, SelEnd: 7})
 	if got := w.SelectedText(); got != "def" {
 		t.Fatalf("ActionSetSelection selected %q", got)
 	}

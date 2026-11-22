@@ -30,23 +30,23 @@ func TestTraceNestedDisclosuresAndAccessibleActions(t *testing.T) {
 	if run.Expanded != ggui.ExpandClosed {
 		t.Fatal(run)
 	}
-	p.Perform(run.ID, ggui.Action{Kind: ggui.ActionExpand})
+	p.PerformAction(run.ID, ggui.Action{Kind: ggui.ActionExpand})
 	p.Advance(300 * time.Millisecond)
 	node(t, p.Semantics(), ggui.RoleText, "Run details")
 	child := node(t, p.Semantics(), ggui.RoleDisclosure, "Fetch")
-	p.Perform(child.ID, ggui.Action{Kind: ggui.ActionExpand})
+	p.PerformAction(child.ID, ggui.Action{Kind: ggui.ActionExpand})
 	p.Advance(300 * time.Millisecond)
 	node(t, p.Semantics(), ggui.RoleText, "Fetched two files")
 	if _, ok := p.Semantics().Find(ggui.RoleDisclosure, "Save"); ok {
 		t.Fatal("leaf without details is an empty disclosure")
 	}
-	p.Perform(run.ID, ggui.Action{Kind: ggui.ActionCollapse})
+	p.PerformAction(run.ID, ggui.Action{Kind: ggui.ActionCollapse})
 	// Closing content becomes inert immediately, including during its animation.
 	if _, ok := p.Semantics().Find(ggui.RoleText, "Fetched two files"); ok {
 		t.Fatal("closing details still exposed")
 	}
 	p.Advance(300 * time.Millisecond)
-	p.Perform(node(t, p.Semantics(), ggui.RoleDisclosure, "Run").ID, ggui.Action{Kind: ggui.ActionExpand})
+	p.PerformAction(node(t, p.Semantics(), ggui.RoleDisclosure, "Run").ID, ggui.Action{Kind: ggui.ActionExpand})
 	p.Advance(300 * time.Millisecond)
 	if node(t, p.Semantics(), ggui.RoleDisclosure, "Fetch").Expanded != ggui.ExpandOpen {
 		t.Fatal("nested expansion was lost")

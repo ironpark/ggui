@@ -513,7 +513,7 @@ func TestInputGroupPreservesEditorBindingAndAddon(t *testing.T) {
 	}
 	p.Click(ggui.Pt(2, 20))
 	p.Type(ggui.Mods{}, ggui.KeyDelete)
-	p.Perform(n.ID, ggui.Action{Kind: ggui.ActionSetValue, Text: "changed"})
+	p.PerformAction(n.ID, ggui.Action{Kind: ggui.ActionSetValue, Text: "changed"})
 	if ggui.Untrack(value.Get) != "abc" {
 		t.Fatal("disabled editor accepted input")
 	}

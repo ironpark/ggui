@@ -89,7 +89,7 @@ func TestCreatePreviewPayoutPreferencesAndNotifications(t *testing.T) {
 	if slider.Min != 50 || slider.Max != 10000 || slider.Now != 3000 {
 		t.Fatal("payout range does not match sample", slider)
 	}
-	p.Perform(slider.ID, ggui.Action{Kind: ggui.ActionFocus})
+	p.PerformAction(slider.ID, ggui.Action{Kind: ggui.ActionFocus})
 	p.Type(ggui.Mods{}, ggui.KeyArrowRight)
 	p.Tap("Payout notes")
 	p.Text("Quarterly transfer")
@@ -175,7 +175,7 @@ func TestCreatePreviewSavingsCalendarAndTransactions(t *testing.T) {
 	}
 	p.Tap("Close release")
 	chart := previewTestNode(t, p, ggui.RoleGroup, "Monthly contributions")
-	p.Perform(chart.ID, ggui.Action{Kind: ggui.ActionFocus})
+	p.PerformAction(chart.ID, ggui.Action{Kind: ggui.ActionFocus})
 	p.Type(ggui.Mods{}, ggui.KeyHome, ggui.KeyEnter)
 	if !strings.Contains(ggui.Peek(m.chartFeedback), "contribution:") {
 		t.Fatal("chart selection did not produce feedback")

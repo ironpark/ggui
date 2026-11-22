@@ -139,7 +139,7 @@ func TestTableOnSelectAloneMakesRowsSelectable(t *testing.T) {
 	p.Tap("Grace")
 	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	row, _ := p.Semantics().Find(ggui.RoleRow, "Linus")
-	p.Perform(row.ID, ggui.Action{Kind: ggui.ActionSelect})
+	p.PerformAction(row.ID, ggui.Action{Kind: ggui.ActionSelect})
 	if want := []string{"Grace", "Grace", "Linus"}; !slices.Equal(picked, want) {
 		t.Fatalf("OnSelect saw %q, want %q", picked, want)
 	}

@@ -477,7 +477,7 @@ func TestReorderableOffersMoveActions(t *testing.T) {
 	if len(listItems) != 3 || listItems[0].Now != 1 || listItems[0].Max != 3 || listItems[0].Actions&ggui.ActionIncrement == 0 {
 		t.Fatalf("list items %+v; want three that know their place and can move", listItems)
 	}
-	p.Perform(listItems[0].ID, ggui.Action{Kind: ggui.ActionIncrement})
+	p.PerformAction(listItems[0].ID, ggui.Action{Kind: ggui.ActionIncrement})
 	if got := ggui.Peek(items); !slices.Equal(got, []string{"b", "a", "c"}) {
 		t.Fatalf("increment on the first row: %v, want [b a c]", got)
 	}
@@ -485,7 +485,7 @@ func TestReorderableOffersMoveActions(t *testing.T) {
 	if !ok || handle.Actions&ggui.ActionDecrement == 0 {
 		t.Fatalf("handle %+v ok %v", handle, ok)
 	}
-	p.Perform(handle.ID, ggui.Action{Kind: ggui.ActionDecrement})
+	p.PerformAction(handle.ID, ggui.Action{Kind: ggui.ActionDecrement})
 	if got := ggui.Peek(items); !slices.Equal(got, []string{"b", "c", "a"}) {
 		t.Fatalf("decrement on c's handle: %v, want [b c a]", got)
 	}

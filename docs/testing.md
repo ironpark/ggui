@@ -44,7 +44,7 @@ func TestCheckbox(t *testing.T) {
 | --- | --- |
 | `NewProbe(widget, size)` | Testing a widget constructed in advance. |
 | `ProbeBuilder(build, size)` | Testing app-style setup: the root builder runs once; use explicit reactive blocks for updates. |
-| `Host` | The surface `App`, `Window`, and `Probe` share (`Post`, `OnFrame`, `OnKey`, `Shortcut`, `OnDrop`, `Dialogs`, `OnCloseRequest`, `Clipboard`, `Perform`, `Announce`, `Semantics`, `Notify`, `RemoveNotification`, `OnNotification`, `Close`), so the same setup function drives both app and tests. |
+| `Host` | The surface `App`, `Window`, and `Probe` share (`Post`, `OnFrame`, `OnKey`, `Shortcut`, `OnDrop`, `Dialogs`, `OnCloseRequest`, `Clipboard`, `PerformAction`, `Announce`, `Semantics`, `Notify`, `RemoveNotification`, `OnNotification`, `Close`), so the same setup function drives both app and tests. |
 | `Tap(label)`, `Find(label)`, `FindRole(role, label)` | Locating controls by semantics. |
 | `Click`, `Press`, `Move`, `Release`, `Scroll` | Pointer interaction. `Move` hovers the region under the pointer and the regions it is painted inside, as a window does. |
 | `Key("cmd+v")`, `Type`, `Text` | Shortcuts, written as `ParseChord` reads them so `cmd` is ⌘ on macOS and Ctrl elsewhere; other key events; text entry. |
@@ -83,7 +83,7 @@ node, ok := p.Semantics().Find(ggui.RoleCheckbox, "Enable alerts")
 if !ok {
     t.Fatal("checkbox is missing from the semantic tree")
 }
-p.Perform(node.ID, ggui.Action{Kind: ggui.ActionPress})
+p.PerformAction(node.ID, ggui.Action{Kind: ggui.ActionPress})
 ```
 
 A `WindowProbe` drives a real window's frames, damage and all, and reads
@@ -91,7 +91,7 @@ the platform's events as a window does: `Wheel` turns a wheel by notches,
 `Trackpad` scrolls by pixels, and `TrackpadGesture` scrolls in a phase of a
 trackpad's gesture, which stays with the view that took it.
 
-`Perform` queues the action and runs a frame. Test the resulting binding or
+`PerformAction` queues the action and runs a frame. Test the resulting binding or
 semantic state.
 
 ## Writes from the wrong goroutine

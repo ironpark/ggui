@@ -477,7 +477,7 @@ func TestPartialAbortPreservesRetainedAndSemanticsNotSkipped(t *testing.T) {
 		t.Fatal("f.partial remained true after drawPartial abort")
 	}
 
-	// Semantics() and Perform() must not be skipped when semOff is true on an idle window.
+	// Semantics() and PerformAction() must not be skipped when semOff is true on an idle window.
 	btn := &target{size: Sz(20, 20)}
 	p := NewWindowProbe(func() Widget {
 		return stack(FromFuncs(btn.Layout, func(dst *Canvas, r Rect) {
@@ -499,7 +499,7 @@ func TestPartialAbortPreservesRetainedAndSemanticsNotSkipped(t *testing.T) {
 		t.Fatal("Semantics() did not build tree on next frame")
 	}
 
-	// Perform() while semOff is true builds tree and executes action without skipping.
+	// PerformAction() while semOff is true builds tree and executes action without skipping.
 	btn2 := &target{size: Sz(20, 20)}
 	p2 := NewWindowProbe(func() Widget {
 		return stack(FromFuncs(btn2.Layout, func(dst *Canvas, r Rect) {
@@ -509,14 +509,14 @@ func TestPartialAbortPreservesRetainedAndSemanticsNotSkipped(t *testing.T) {
 	}, Sz(60, 60))
 	defer p2.Close()
 	p2.Step(0) // initial frame with semOff=true
-	p2.w.Perform(NodeID{Role: RoleButton, Rect: Rct(Pt(0, 0), Sz(20, 20))}, Action{Kind: ActionPress})
+	p2.w.PerformAction(NodeID{Role: RoleButton, Rect: Rct(Pt(0, 0), Sz(20, 20))}, Action{Kind: ActionPress})
 	f1 := p2.Step(0)
 	if f1.Painted == FrameSkipped {
-		t.Fatal("first frame after Perform() with semOff=true was skipped")
+		t.Fatal("first frame after PerformAction() with semOff=true was skipped")
 	}
 	p2.Step(0)
 	if len(btn2.taps()) != 1 {
-		t.Fatalf("Perform() taps = %d, want 1", len(btn2.taps()))
+		t.Fatalf("PerformAction() taps = %d, want 1", len(btn2.taps()))
 	}
 
 	// wantsFrame sets dirtyCallback even when timeRead() is true.

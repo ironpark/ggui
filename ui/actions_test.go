@@ -15,7 +15,7 @@ func act(t *testing.T, p *ggui.Probe, role ggui.Role, name string, a ggui.Action
 	if !ok {
 		t.Fatalf("no %s named %q", role, name)
 	}
-	p.Perform(n.ID, a)
+	p.PerformAction(n.ID, a)
 }
 
 func TestActPressesThroughTheKeyPath(t *testing.T) {

@@ -699,7 +699,7 @@ func TestPerformFocusTellsFocusWithin(t *testing.T) {
 	if !ok {
 		t.Fatal("no button")
 	}
-	p.Perform(node.ID, Action{Kind: ActionFocus})
+	p.PerformAction(node.ID, Action{Kind: ActionFocus})
 	wantLog(t, &log, "focus performed", "pane:focus+")
 }
 

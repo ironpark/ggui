@@ -455,7 +455,7 @@ func TestCarouselStandaloneNavigationButtons(t *testing.T) {
 	if !ok || next.Disabled {
 		t.Fatalf("Next slide missing or disabled:\n%s", p.Semantics())
 	}
-	p.Perform(next.ID, ggui.Action{Kind: ggui.ActionPress})
+	p.PerformAction(next.ID, ggui.Action{Kind: ggui.ActionPress})
 	if ggui.Untrack(value.Get) != 1 {
 		t.Fatalf("pressing Next slide selected %d, want 1", ggui.Untrack(value.Get))
 	}

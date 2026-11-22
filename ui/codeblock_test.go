@@ -103,7 +103,7 @@ func TestCodeBlockSelectionExcludesLineNumbers(t *testing.T) {
 		t.Fatal("decorative gutter is announced")
 	}
 	text := node(t, p.Semantics(), ggui.RoleText, code)
-	p.Perform(text.ID, ggui.Action{Kind: ggui.ActionFocus})
+	p.PerformAction(text.ID, ggui.Action{Kind: ggui.ActionFocus})
 	p.Key("cmd+a", "cmd+c")
 	if got := p.Clipboard().Read(); got != code {
 		t.Fatalf("selection copied %q, want source %q", got, code)

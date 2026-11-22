@@ -265,7 +265,7 @@ chord such as `"cmd+shift+z"` is written the platform's way, other text as
 it is.
 
 `Shortcut`, `OnKey`, `OnDrop`, `OnFrame`, `Post`, `Dialogs`, `Clipboard`,
-`OnCloseRequest`, `Perform`, `Announce`, `Semantics`, `Notify`,
+`OnCloseRequest`, `PerformAction`, `Announce`, `Semantics`, `Notify`,
 `RemoveNotification`, `OnNotification` and `Close` are the same on `App`,
 `Window` and `Probe`, and the `Host` interface names that set, so a function
 that registers shortcuts takes a `ggui.Host` and serves both `main` and its

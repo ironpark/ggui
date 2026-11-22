@@ -261,21 +261,21 @@ func TestAWindowBuildsTheTreeOnlyOnceSomethingReadsIt(t *testing.T) {
 		t.Fatal("a frame with the tree off recorded a node")
 	}
 	a.canvas.fs().semOff = true
-	a.Perform(NodeID{Role: RoleButton}, Action{Kind: ActionPress})
+	a.PerformAction(NodeID{Role: RoleButton}, Action{Kind: ActionPress})
 	if a.performs.Load() != 1 {
-		t.Fatal("a pending Perform does not keep the tree on")
+		t.Fatal("a pending PerformAction does not keep the tree on")
 	}
 	a.runPosted()
 	if !a.hasPosted() {
-		t.Fatal("Perform ran against a frame that built no tree instead of waiting for one")
+		t.Fatal("PerformAction ran against a frame that built no tree instead of waiting for one")
 	}
-	a.canvas.fs().semOff = false // the frame the pending Perform asked for
+	a.canvas.fs().semOff = false // the frame the pending PerformAction asked for
 	a.runPosted()
 	if a.hasPosted() || a.performs.Load() != 0 {
-		t.Fatal("Perform kept waiting once a frame built the tree")
+		t.Fatal("PerformAction kept waiting once a frame built the tree")
 	}
 	if a.semWanted.Load() {
-		t.Fatal("a Perform left the tree on after it ran")
+		t.Fatal("a PerformAction left the tree on after it ran")
 	}
 	b := New(Config{}, func() Widget { return sized(0, 0) })
 	defer b.Close()
