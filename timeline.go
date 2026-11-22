@@ -178,29 +178,38 @@ func (tl *TimelineValue) step(now time.Time) bool {
 			// stands: that new run takes its start from the next step.
 			return tl.running
 		}
-		if tl.alternate {
-			tl.from, tl.dir = end, -tl.dir
-		} else {
-			tl.from = 1 - end
-		}
-		// Fast-forward full cycles modulo duration when no OnDone callbacks
-		// need to fire per cycle, preventing UI freezes after a long pause.
-		if len(tl.done) == 0 && tl.left != 0 {
-			if rem := now.Sub(tl.start); rem >= tl.duration {
-				cycles := int64(rem / tl.duration)
-				if tl.left > 0 && cycles > int64(tl.left) {
-					cycles = int64(tl.left)
-				}
-				tl.start = tl.start.Add(time.Duration(cycles) * tl.duration)
-				if tl.left > 0 {
-					tl.left -= int(cycles)
-				}
-				if tl.alternate && cycles%2 == 1 {
-					end2 := tl.end()
-					tl.from, tl.dir = end2, -tl.dir
-				}
-			}
-		}
+		tl.nextCycle(end, now)
+	}
+}
+
+// nextCycle sets the run up for the cycle after the one that ended at end:
+// back from end when it alternates, else from the start again. When no
+// OnDone callback needs to fire for each cycle, it fast-forwards over the
+// full cycles that now is past, preventing UI freezes after a long pause.
+func (tl *TimelineValue) nextCycle(end float64, now time.Time) {
+	if tl.alternate {
+		tl.from, tl.dir = end, -tl.dir
+	} else {
+		tl.from = 1 - end
+	}
+	if len(tl.done) != 0 || tl.left == 0 {
+		return
+	}
+	rem := now.Sub(tl.start)
+	if rem < tl.duration {
+		return
+	}
+	cycles := int64(rem / tl.duration)
+	if tl.left > 0 && cycles > int64(tl.left) {
+		cycles = int64(tl.left)
+	}
+	tl.start = tl.start.Add(time.Duration(cycles) * tl.duration)
+	if tl.left > 0 {
+		tl.left -= int(cycles)
+	}
+	if tl.alternate && cycles%2 == 1 {
+		end2 := tl.end()
+		tl.from, tl.dir = end2, -tl.dir
 	}
 }
 

@@ -236,6 +236,20 @@ func windowsArg(s string) string {
 	if space {
 		b.WriteByte('"')
 	}
+	slashes := writeEscapedArg(&b, s)
+	if space {
+		for ; slashes > 0; slashes-- {
+			b.WriteByte('\\')
+		}
+		b.WriteByte('"')
+	}
+	return b.String()
+}
+
+// writeEscapedArg writes s to b with each quote escaped with a backslash
+// and the backslashes before it doubled, and returns how many backslashes
+// s ends with, which a closing quote doubles too.
+func writeEscapedArg(b *strings.Builder, s string) int {
 	slashes := 0
 	for i := 0; i < len(s); i++ {
 		c := s[i]
@@ -252,13 +266,7 @@ func windowsArg(s string) string {
 		}
 		b.WriteByte(c)
 	}
-	if space {
-		for ; slashes > 0; slashes-- {
-			b.WriteByte('\\')
-		}
-		b.WriteByte('"')
-	}
-	return b.String()
+	return slashes
 }
 
 // setLoginFile writes data to path when enabled, or removes path when not,
