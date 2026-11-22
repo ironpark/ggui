@@ -332,7 +332,7 @@ func checkWindows(r *Report) {
 	}
 	sys := filepath.Join(root, "System32")
 	has := func(name string) bool {
-		_, err := os.Stat(filepath.Join(sys, name))
+		_, err := os.Stat(filepath.Join(sys, name)) //nolint:gosec // G703: the path is the CLI user's own argument or build output
 		return err == nil
 	}
 	compiler := ""

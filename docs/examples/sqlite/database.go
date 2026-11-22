@@ -401,7 +401,7 @@ func insertRow(ctx context.Context, db *sql.DB, t tableData, inputs []inputValue
 		marks = append(marks, "?")
 		args = append(args, v)
 	}
-	statement := "INSERT INTO " + quote(t.Object.Name) + " DEFAULT VALUES"
+	statement := "INSERT INTO " + quote(t.Object.Name) + " DEFAULT VALUES" //nolint:gosec // G202: identifiers pass quote(); every value is a bound parameter
 	if len(names) > 0 {
 		statement = "INSERT INTO " + quote(t.Object.Name) + " (" + strings.Join(names, ",") + ") VALUES (" + strings.Join(marks, ",") + ")"
 	}

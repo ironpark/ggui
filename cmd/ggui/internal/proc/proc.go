@@ -75,7 +75,7 @@ func (p *Process) closeGroup() {
 // nothing from the terminal, and a process outside the terminal's
 // foreground group that tried would be stopped.
 func Start(name string, args []string, o Options) (*Process, error) {
-	cmd := exec.Command(name, args...)
+	cmd := exec.Command(name, args...) //nolint:gosec // G702: Start exists to run the program its caller names
 	cmd.Dir = o.Dir
 	cmd.Env = o.Env
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = o.Stdin, o.Stdout, o.Stderr

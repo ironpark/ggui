@@ -295,7 +295,7 @@ func (b *DevBundle) ensureIconLocked(ctx context.Context, resDir string) (hasIco
 		cachePath = filepath.Join(b.spec.IconCacheDir, key+".icns")
 		if cached, err := os.ReadFile(cachePath); err == nil && len(cached) > 0 {
 			if cur, err := os.ReadFile(dst); err != nil || !bytes.Equal(cur, cached) {
-				if err := os.WriteFile(dst, cached, 0o644); err != nil {
+				if err := os.WriteFile(dst, cached, 0o644); err != nil { //nolint:gosec // G703: the path is the CLI user's own argument or build output
 					return false, "", []string{fmt.Sprintf("writing %s: %v; continuing without a bundle icon", dst, err)}
 				}
 			}
@@ -332,7 +332,7 @@ func (b *DevBundle) ensureIconLocked(ctx context.Context, resDir string) (hasIco
 	if cachePath != "" {
 		if data, err := os.ReadFile(dst); err == nil {
 			_ = os.MkdirAll(filepath.Dir(cachePath), 0o755)
-			_ = os.WriteFile(cachePath, data, 0o644)
+			_ = os.WriteFile(cachePath, data, 0o644) //nolint:gosec // G703: the path is the CLI user's own argument or build output
 		}
 	}
 	return true, key, warnings
