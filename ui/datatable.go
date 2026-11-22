@@ -9,6 +9,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -77,13 +78,13 @@ func (m *sortMark) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (m *sortMark) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t, center := m.theme, r.Center()
 	if m.state.Column == m.id {
-		paintIconAt(dst, m.env, pick(m.state.Descending, icons.ChevronDown, icons.ChevronUp), center, t.IconSize, t.Fg, 0)
+		controlkit.PaintIconAt(dst, m.env, controlkit.IconMark{Role: pick(m.state.Descending, icons.ChevronDown, icons.ChevronUp), Center: center, Size: t.IconSize, Color: t.Fg})
 		return
 	}
 	// The two chevrons of an up-down icon, drawn from the roles there are.
 	size, shift := t.IconSize*5/6, t.IconSize*.23
-	paintIconAt(dst, m.env, icons.ChevronUp, center.Add(ggui.Pt(0, -shift)), size, t.MutedFg, 0)
-	paintIconAt(dst, m.env, icons.ChevronDown, center.Add(ggui.Pt(0, shift)), size, t.MutedFg, 0)
+	controlkit.PaintIconAt(dst, m.env, controlkit.IconMark{Role: icons.ChevronUp, Center: center.Add(ggui.Pt(0, -shift)), Size: size, Color: t.MutedFg})
+	controlkit.PaintIconAt(dst, m.env, controlkit.IconMark{Role: icons.ChevronDown, Center: center.Add(ggui.Pt(0, shift)), Size: size, Color: t.MutedFg})
 }
 
 // withMutedText draws the text widgets under child in the theme's muted
@@ -267,7 +268,7 @@ func (m *TableModel[T, K]) SetColumnVisible(id string, visible bool) {
 	if !found || (!visible && m.ColumnVisible(id) && count <= 1) {
 		return
 	}
-	m.hidden.Set(withKey(m.hidden.Get(), id, !visible))
+	m.hidden.Set(controlkit.WithKey(m.hidden.Get(), id, !visible))
 }
 
 // IsSelected reports selection by row key.
@@ -275,7 +276,7 @@ func (m *TableModel[T, K]) IsSelected(key K) bool { return m.selected.Get()[key]
 
 // Select updates one key without disturbing other pages.
 func (m *TableModel[T, K]) Select(key K, selected bool) {
-	m.selected.Set(withKey(m.selected.Get(), key, selected))
+	m.selected.Set(controlkit.WithKey(m.selected.Get(), key, selected))
 }
 
 // SelectPage selects or clears only rows on the current filtered page.

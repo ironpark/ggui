@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -230,7 +231,7 @@ func (c *CardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	} else if !c.pad {
 		c.box.Padding(spacing)
 	}
-	fill := colorOr(c.fill, t.Card)
+	fill := controlkit.ColorOr(c.fill, t.Card)
 	c.theme, c.shownRadius = t, radius
 	if c.onTap != nil {
 		// Paint tints the fill, which it can only do to a color: an
@@ -241,7 +242,7 @@ func (c *CardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		c.motion = env.Motion(t.MotionFast * 2 / 3)
 	}
 	c.box.Fill(fill).
-		Border(border, colorOr(c.border, fade(t.Fg, .1))).
+		Border(border, controlkit.ColorOr(c.border, fade(t.Fg, .1))).
 		Radius(radius)
 	return c.box.Layout(cs, env)
 }
@@ -255,7 +256,7 @@ func (c *CardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		return
 	}
 	t := c.theme
-	c.hover = ease(dst, t, c.Anchor(r), cardHoverSlot, pick(c.Hovered && !c.IsInert(), 1.0, 0.0), c.motion)
+	c.hover = controlkit.Ease(dst, t, c.Anchor(r), cardHoverSlot, pick(c.Hovered && !c.IsInert(), 1.0, 0.0), c.motion)
 	c.box.Fill(pick(c.hover > 0, mix(c.rest, t.Muted, c.hover), c.rest))
 	dst.DescribeNode(r, c, func(dst *ggui.Canvas) {
 		// Registered before the content, which is painted over it and so
@@ -505,12 +506,12 @@ var (
 		return BadgeStyle{Label: t.Fg, Border: t.Border, LinkFill: t.Muted, LinkLabel: t.MutedFg}
 	})
 	BadgeDestructive = NewVariant("destructive", func(t *uitheme.Theme) BadgeStyle {
-		return BadgeStyle{Fill: fade(t.Destructive, pick(isDark(t.Bg), .2, .1)), Label: t.Destructive, LinkFill: fade(t.Destructive, .2)}
+		return BadgeStyle{Fill: fade(t.Destructive, pick(controlkit.IsDark(t.Bg), .2, .1)), Label: t.Destructive, LinkFill: fade(t.Destructive, .2)}
 	})
 	// BadgeGhost is a bare label in the page's text color, on the Muted
 	// surface under the pointer.
 	BadgeGhost = NewVariant("ghost", func(t *uitheme.Theme) BadgeStyle {
-		return BadgeStyle{Label: t.Fg, HoverFill: fade(t.Muted, pick(isDark(t.Bg), .5, 1)), HoverLabel: t.MutedFg}
+		return BadgeStyle{Label: t.Fg, HoverFill: fade(t.Muted, pick(controlkit.IsDark(t.Bg), .5, 1)), HoverLabel: t.MutedFg}
 	})
 	// BadgeLink is a bare label in the Primary color, underlined under
 	// the pointer.
@@ -662,7 +663,7 @@ func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	hovered := false
 	if b.action != nil {
 		b.Hit(dst, r, b, ggui.CursorShapePointer)
-		overFill, overLabel = colorOr(st.LinkFill, overFill), colorOr(st.LinkLabel, overLabel)
+		overFill, overLabel = controlkit.ColorOr(st.LinkFill, overFill), controlkit.ColorOr(st.LinkLabel, overLabel)
 		hovered = b.Hovered && !b.IsInert()
 	} else if overFill != nil || overLabel != nil || st.Underline {
 		// Read rather than claimed: the pointer stays with whatever the
@@ -671,10 +672,10 @@ func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		hovered = ok && r.Contains(p) && dst.TakesInput()
 	}
 	fill, label := st.Fill, st.Label
-	b.hover = ease(dst, b.theme, b.Anchor(r), badgeHoverSlot, pick(hovered, 1.0, 0.0), b.motion)
+	b.hover = controlkit.Ease(dst, b.theme, b.Anchor(r), badgeHoverSlot, pick(hovered, 1.0, 0.0), b.motion)
 	if k := b.hover; k > 0 {
 		if overFill != nil {
-			fill = pick(fill == nil, fade(overFill, k), mix(colorOr(fill, overFill), overFill, k))
+			fill = pick(fill == nil, fade(overFill, k), mix(controlkit.ColorOr(fill, overFill), overFill, k))
 		}
 		if overLabel != nil {
 			label = mix(label, overLabel, k)
@@ -860,7 +861,7 @@ func (p *ProgressWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if p.head <= 0 {
 		bar = r
 	}
-	v := ease(dst, p.theme, ggui.Anchor{Rect: bar}, progressSlot, target, p.motion)
+	v := controlkit.Ease(dst, p.theme, ggui.Anchor{Rect: bar}, progressSlot, target, p.motion)
 	// Assistive technology reports the data, independently of visual easing.
 	node := ggui.Node{Role: ggui.RoleProgress, Name: p.name, Min: 0, Max: 1, Now: target}
 	rtl := p.env.Direction() == ggui.DirRTL
@@ -951,7 +952,7 @@ func (p *ProgressRingWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size 
 // Paint implements Widget.
 func (p *ProgressRingWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	target := clamp(p.value.Get(), 0, 1)
-	v := ease(dst, p.theme, ggui.Anchor{Rect: r}, progressSlot, target, p.motion)
+	v := controlkit.Ease(dst, p.theme, ggui.Anchor{Rect: r}, progressSlot, target, p.motion)
 	// Assistive technology reports the data, independently of visual easing.
 	dst.Leaf(r, ggui.Node{Role: ggui.RoleProgress, Min: 0, Max: 1, Now: target})
 	d := min(r.Size.W, r.Size.H) - p.stroke

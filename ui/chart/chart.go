@@ -15,6 +15,7 @@ import (
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -140,7 +141,7 @@ type PointContext struct {
 type Widget struct {
 	props       property.Owner
 	words       *ui.Strings // the Strings of the last layout
-	pointer     pointerMotion
+	pointer     controlkit.PointerMotion
 	tickPaint   func(*ggui.Canvas, PointContext)
 	activeRing  bool
 	radialTrack bool
@@ -469,13 +470,13 @@ func (c *Widget) seriesColor(j int) color.Color {
 	if s.ColorIndex > 0 {
 		index = s.ColorIndex - 1
 	}
-	return colorOr(s.Color, c.chartToken(index))
+	return controlkit.ColorOr(s.Color, c.chartToken(index))
 }
 
 // chartToken picks the i'th palette token, wrapping, and falls back to the
 // primary color when the theme leaves the slot unset.
 func (c *Widget) chartToken(i int) color.Color {
-	return colorOr(c.theme.Chart[i%len(c.theme.Chart)], c.theme.Primary)
+	return controlkit.ColorOr(c.theme.Chart[i%len(c.theme.Chart)], c.theme.Primary)
 }
 func (c *Widget) pointColor(i, j int) color.Color {
 	d := c.data[i]
@@ -573,9 +574,9 @@ func (c *Widget) Act(a ggui.Action) bool {
 	}
 	switch a.Kind {
 	case ggui.ActionIncrement:
-		c.active = stepIndex(c.active, 1, len(c.data))
+		c.active = controlkit.StepIndex(c.active, 1, len(c.data), nil)
 	case ggui.ActionDecrement:
-		c.active = stepIndex(c.active, -1, len(c.data))
+		c.active = controlkit.StepIndex(c.active, -1, len(c.data), nil)
 	case ggui.ActionSetValue:
 		if !finite(a.Num) {
 			return false
@@ -600,9 +601,9 @@ func (c *Widget) HandleKey(ev ggui.KeyEvent) {
 	}
 	switch ev.Key {
 	case ggui.KeyArrowLeft, ggui.KeyArrowDown:
-		c.active = stepIndex(c.active, -1, len(c.data))
+		c.active = controlkit.StepIndex(c.active, -1, len(c.data), nil)
 	case ggui.KeyArrowRight, ggui.KeyArrowUp:
-		c.active = stepIndex(c.active, 1, len(c.data))
+		c.active = controlkit.StepIndex(c.active, 1, len(c.data), nil)
 	case ggui.KeyHome:
 		c.active = 0
 	case ggui.KeyEnd:
@@ -628,7 +629,7 @@ func (c *Widget) HandlePointer(ev ggui.PointerEvent) bool {
 	c.Pointer(ev, nil)
 	switch ev.Kind {
 	case ggui.PointerEnter, ggui.PointerMove, ggui.PointerDown:
-		if c.pointer.moved(ev.Pos) || ev.Kind == ggui.PointerDown {
+		if c.pointer.Moved(ev.Pos) || ev.Kind == ggui.PointerDown {
 			index := c.hitIndex(ev.Pos)
 			if index >= 0 || !c.Focused {
 				c.active = index

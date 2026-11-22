@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -251,7 +252,7 @@ func (t *TreeWidget[T, K]) setOpen(item T, k K, open bool) {
 	if cur[k] == stored {
 		return
 	}
-	b.Set(withKey(cur, k, stored))
+	b.Set(controlkit.WithKey(cur, k, stored))
 	if t.onToggle != nil {
 		t.onToggle(item, open)
 	}
@@ -363,13 +364,13 @@ func (r *treeRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 	} else if r.Hovered && !r.IsInert() {
 		target = .5
 	}
-	if amount := ease(dst, r.theme, r.Anchor(rc), treeRowFillSlot, target, r.motion); amount > 0 {
+	if amount := controlkit.Ease(dst, r.theme, r.Anchor(rc), treeRowFillSlot, target, r.motion); amount > 0 {
 		dst.FillRoundRect(rc, th.Radius, fade(th.Muted, amount))
 	}
 	if e.hasChildren && !r.tree.noChevrons {
 		x := rc.Origin.X + r.chevronX(e)
-		turn := ease(dst, r.theme, r.Anchor(rc), treeChevronSlot, pick(e.open, 1.0, 0.0), r.motion)
-		paintIconAt(dst, r.env, icons.ChevronRight, ggui.Pt(x+th.IconSize/2, rc.Center().Y), th.IconSize, th.MutedFg, turn*math.Pi/2)
+		turn := controlkit.Ease(dst, r.theme, r.Anchor(rc), treeChevronSlot, pick(e.open, 1.0, 0.0), r.motion)
+		controlkit.PaintIconAt(dst, r.env, controlkit.IconMark{Role: icons.ChevronRight, Center: ggui.Pt(x+th.IconSize/2, rc.Center().Y), Size: th.IconSize, Color: th.MutedFg, Rotation: turn * math.Pi / 2})
 		if !r.IsInert() {
 			dst.HitPointer(ggui.Rct(ggui.Pt(x-th.Space/2, rc.Origin.Y), ggui.Sz(th.IconSize+th.Space, rc.Size.H)), &r.toggle)
 		}

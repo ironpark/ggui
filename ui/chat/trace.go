@@ -11,6 +11,7 @@ import (
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -182,7 +183,7 @@ func (t *TraceWidget) setOpen(id string, open bool) {
 	if now[id] == open {
 		return
 	}
-	t.expanded.Set(withKey(now, id, open))
+	t.expanded.Set(controlkit.WithKey(now, id, open))
 	if t.onToggle != nil {
 		t.onToggle(id, open)
 	}
@@ -334,7 +335,7 @@ func (r *traceRow) HandleKey(ev ggui.KeyEvent) { r.Keyboard(ev, r.activate) }
 // HandlePointer implements PointerHandler. Its details and the steps under
 // it are not its line: a move over a control or a step there passes.
 func (r *traceRow) HandlePointer(ev ggui.PointerEvent) bool {
-	if beyond(ev, r.header) {
+	if controlkit.Beyond(ev, r.header) {
 		return false
 	}
 	return r.Pointer(ev, r.activate)
@@ -398,7 +399,7 @@ func (r *traceRow) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	r.header = header
 	hover := 0.0
 	if actionable {
-		hover = ease(dst, r.theme, r.Anchor(header), traceHoverSlot, pick(r.Hovered, 1.0, 0.0), r.env.Motion(t.MotionFast))
+		hover = controlkit.Ease(dst, r.theme, r.Anchor(header), traceHoverSlot, pick(r.Hovered, 1.0, 0.0), r.env.Motion(t.MotionFast))
 	}
 	// Muted until the pointer is over a line that does something; the run
 	// beside the title stays fainter either way.
@@ -449,13 +450,13 @@ func (r *traceRow) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 			// The chevron turns from pointing right to pointing down with
 			// the body it reveals.
 			center := ggui.Pt(x+r.chevron-t.IconSize/2, header.Origin.Y+r.line.H/2)
-			paintIconAt(dst, r.env, icons.ChevronRight, center, t.IconSize, ink, r.progress*math.Pi/2)
+			controlkit.PaintIconAt(dst, r.env, controlkit.IconMark{Role: icons.ChevronRight, Center: center, Size: t.IconSize, Color: ink, Rotation: r.progress * math.Pi / 2})
 		}
 		if r.Focused && r.FocusVisible {
-			fieldHalo(dst, t, header, t.RadiusSm, t.Ring)
+			controlkit.FieldHalo(dst, t, header, t.RadiusSm, t.Ring)
 		}
 		if expandable {
-			paintDisclosure(dst, &r.body, ggui.Pt(rect.Origin.X, rect.Origin.Y+r.line.H), rect.Size.W, r.bodySize, r.progress, open)
+			controlkit.PaintDisclosure(dst, &r.body, controlkit.Disclosure{At: ggui.Pt(rect.Origin.X, rect.Origin.Y+r.line.H), Width: rect.Size.W, Size: r.bodySize, Progress: r.progress, Open: open})
 		}
 	})
 }

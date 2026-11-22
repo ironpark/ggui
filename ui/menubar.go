@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -20,7 +21,7 @@ type MenubarWidget struct {
 	sizes        []ggui.Size
 	rects        []ggui.Rect
 	theme        *uitheme.Theme
-	motion       pointerMotion
+	motion       controlkit.PointerMotion
 	compact      bool
 	naturalWidth float64
 	env          ggui.Env
@@ -121,7 +122,7 @@ func (b *MenubarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	if len(b.menus) > 0 && (b.active < 0 || b.active >= len(b.menus) || b.menus[b.active].button.IsInert()) {
 		b.hide()
-		b.active = stepIndex(max(b.active, -1), 1, len(b.menus), b.enabled)
+		b.active = controlkit.StepIndex(max(b.active, -1), 1, len(b.menus), b.enabled)
 	}
 	return b.popup.Layout(c, env)
 }
@@ -295,7 +296,7 @@ func (a menubarAnchor) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 		if b.Focused && b.FocusVisible && i == b.active {
 			dst.StrokeRoundRect(rr, radius, b.theme.BorderWidth, b.theme.Ring)
-			fieldHalo(dst, b.theme, rr, radius, b.theme.Ring)
+			controlkit.FieldHalo(dst, b.theme, rr, radius, b.theme.Ring)
 		}
 		x += rr.Size.W + b.gap()
 	}
@@ -361,7 +362,7 @@ func (t menubarTarget) HandlePointer(e ggui.PointerEvent) bool {
 		t.b.menus[t.i].button.Hovered = false
 		return true
 	case ggui.PointerMove:
-		if t.b.motion.drifted(e.Pos) && t.b.popup.IsOpen() && t.b.active != t.i {
+		if t.b.motion.Drifted(e.Pos) && t.b.popup.IsOpen() && t.b.active != t.i {
 			t.b.open(t.i, false)
 		}
 		return true

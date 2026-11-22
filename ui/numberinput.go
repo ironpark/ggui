@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -377,5 +378,5 @@ func (s *numberStepper) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	role := pick(s.dir < 0, icons.Minus, icons.Plus)
 	col := pick(enabled, pick(s.Hovered, t.AccentFg, t.Fg), t.Disabled(t.MutedFg))
-	paintIconAt(dst, s.env, role, r.Center(), t.IconSize*.875, col, 0)
+	controlkit.PaintIconAt(dst, s.env, controlkit.IconMark{Role: role, Center: r.Center(), Size: t.IconSize * .875, Color: col})
 }

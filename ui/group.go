@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -766,10 +767,10 @@ func (g *ToggleGroupWidget[T]) paint(dst *ggui.Canvas, r ggui.Rect) {
 		// A segment is a Toggle: nothing under it until it is chosen or the
 		// pointer is over it, and then the surface eases in.
 		on := g.chosen(i)
-		shown := ease(dst, g.theme, ggui.Anchor{Rect: seg}, toggleSegmentSlot, pick(on || i == hover, 1.0, 0.0), g.motion)
+		shown := controlkit.Ease(dst, g.theme, ggui.Anchor{Rect: seg}, toggleSegmentSlot, pick(on || i == hover, 1.0, 0.0), g.motion)
 		fill := st.Fill
 		if shown > 0 {
-			fill = mix(colorOr(st.Fill, color.Transparent), pick(on, t.Muted, colorOr(st.Hover, t.Muted)), shown)
+			fill = mix(controlkit.ColorOr(st.Fill, color.Transparent), pick(on, t.Muted, controlkit.ColorOr(st.Hover, t.Muted)), shown)
 		}
 		if inert && fill != nil {
 			fill = t.Disabled(fill)
@@ -800,9 +801,9 @@ func (g *ToggleGroupWidget[T]) paint(dst *ggui.Canvas, r ggui.Rect) {
 	// lies over the neighbours rather than under the one painted next.
 	// It eases in and out over the group's motion, as a Toggle's does.
 	focused := cur >= 0 && g.Focused && g.FocusVisible && !inert
-	if k := ease(dst, g.theme, g.Anchor(r), focusRingSlot, pick(focused, 1.0, 0.0), g.motion); k > 0 && cur >= 0 {
-		ring := colorOr(st.Ring, t.Ring)
-		f := joinedFocus{r: g.rects[cur], radius: g.radius, sides: g.sidesAt(cur), width: t.BorderWidth, line: fade(colorOr(st.FocusBorder, ring), k), halo: fade(t.Halo(ring), k)}
+	if k := controlkit.Ease(dst, g.theme, g.Anchor(r), focusRingSlot, pick(focused, 1.0, 0.0), g.motion); k > 0 && cur >= 0 {
+		ring := controlkit.ColorOr(st.Ring, t.Ring)
+		f := joinedFocus{r: g.rects[cur], radius: g.radius, sides: g.sidesAt(cur), width: t.BorderWidth, line: fade(controlkit.ColorOr(st.FocusBorder, ring), k), halo: fade(t.Halo(ring), k)}
 		f.paint(dst)
 	}
 }
@@ -821,7 +822,7 @@ func (g *ToggleGroupWidget[T]) HandleKey(ev ggui.KeyEvent) {
 	if g.IsInert() || ev.Kind != ggui.KeyPress || len(g.options) == 0 {
 		return
 	}
-	if i, ok := navIndex(directionalKey(ev, g.rtl && !g.vertical), g.axis(), g.index(), len(g.options), nil); ok {
+	if i, ok := navIndex(controlkit.DirectionalKey(ev, g.rtl && !g.vertical), g.axis(), g.index(), len(g.options), nil); ok {
 		g.active = i
 		g.focusPending = true
 	}

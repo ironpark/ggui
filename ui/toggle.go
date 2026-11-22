@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -38,7 +39,7 @@ func (g *toggle) invalid() bool { return g.invalidProp.Get() || g.fieldInvalid }
 // invalidAmount is how far the control is into the invalid state, from 0
 // to 1, eased over the control's motion: what its border and halo follow.
 func (g *toggle) invalidAmount(dst *ggui.Canvas, box ggui.Rect) float64 {
-	return ease(dst, g.theme, g.Anchor(box), toggleInvalidSlot, pick(g.invalid(), 1.0, 0.0), g.motion)
+	return controlkit.Ease(dst, g.theme, g.Anchor(box), toggleInvalidSlot, pick(g.invalid(), 1.0, 0.0), g.motion)
 }
 
 // stateRing draws what surrounds the glyph in box, over it: the destructive
@@ -47,7 +48,7 @@ func (g *toggle) invalidAmount(dst *ggui.Canvas, box ggui.Rect) float64 {
 func (g *toggle) stateRing(dst *ggui.Canvas, box ggui.Rect, radius, invalid float64) {
 	t := g.theme
 	if invalid > 0 && !g.IsInert() {
-		haloStroke(dst, box, radius, fade(t.Halo(destructiveRing(t)), invalid))
+		controlkit.HaloStroke(dst, box, radius, fade(t.Halo(destructiveRing(t)), invalid))
 	}
 	// In a FieldCard the ring is the card's, and the glyph keeps its
 	// border: shadcn's group-has-[:focus-visible]/field-label:ring-0.

@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
 	"github.com/ironpark/ggui/ui/icons/lucide"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -481,7 +482,7 @@ func (t *ToasterWidget) paintNotice(dst *ggui.Canvas, e *toastEntry, theme *uith
 		return
 	}
 	radius := theme.RadiusXl * scale
-	paintShadows(dst, shown, radius, theme.OverlayShadow, theme.OverlayContact)
+	controlkit.PaintShadows(dst, shown, radius, theme.OverlayShadow, theme.OverlayContact)
 	dst.FillRoundRect(shown, radius, theme.Popover)
 	dst.StrokeRoundRect(shown, radius, theme.BorderWidth, theme.Border)
 	e.hit = ggui.Rect{}

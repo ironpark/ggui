@@ -10,6 +10,7 @@ import (
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -568,7 +569,7 @@ func (q *QuestionnaireWidget) focusAnswer(direction, from int) {
 		}
 		return q.input != nil
 	}
-	next := stepIndex(from, direction, len(q.choices)+1, enabled)
+	next := controlkit.StepIndex(from, direction, len(q.choices)+1, enabled)
 	if !enabled(next) {
 		return
 	}
@@ -696,7 +697,7 @@ func (b *questionButton) HandleKey(ev ggui.KeyEvent) {
 	if b.q.shortcut(ev) {
 		return
 	}
-	dir := directionalKey(ev, b.q.rtl)
+	dir := controlkit.DirectionalKey(ev, b.q.rtl)
 	if dir.Kind == ggui.KeyPress && dir.Key == ggui.KeyArrowLeft {
 		b.q.Previous()
 		return
@@ -797,12 +798,12 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// the muted surface inside a faint primary border once chosen.
 	// The colors ease from one to the next, as transition-colors has them.
 	var fill color.Color = color.Transparent
-	if isDark(t.Bg) {
+	if controlkit.IsDark(t.Bg) {
 		fill = fade(t.InputBorder, .2)
 	}
 	motion := c.env.Motion(t.MotionFast)
-	hover := ease(dst, c.theme, c.Anchor(r), questionHoverSlot, pick(c.Hovered && !c.IsInert(), 1.0, 0.0), motion)
-	chosen := ease(dst, c.theme, c.Anchor(r), questionChosenSlot, pick(selected, 1.0, 0.0), motion)
+	hover := controlkit.Ease(dst, c.theme, c.Anchor(r), questionHoverSlot, pick(c.Hovered && !c.IsInert(), 1.0, 0.0), motion)
+	chosen := controlkit.Ease(dst, c.theme, c.Anchor(r), questionChosenSlot, pick(selected, 1.0, 0.0), motion)
 	fill = mix(mix(fill, fade(t.Muted, .5), hover), t.Muted, chosen)
 	border := mix(t.InputBorder, fade(t.Primary, .4), chosen)
 	if c.q.errors[c.item.Name] != "" {
@@ -815,7 +816,7 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Paint(c.body, r)
 	// The indicator is a checkbox's 4px-round square, or a radio's circle,
 	// with a 14px check or an 8px dot, as the Checkbox and RadioGroup draw.
-	glyphSize := squareGlyph(t)
+	glyphSize := controlkit.SquareGlyph(t)
 	glyphX := r.Origin.X + tokens.QuestionChoicePadding.Left
 	if c.env.Direction() == ggui.DirRTL {
 		glyphX = r.Origin.X + r.Size.W - tokens.QuestionChoicePadding.Right - glyphSize.W
@@ -825,7 +826,7 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.FillRoundRect(glyph, radius, fade(pick(selected, t.Primary, t.Input), strength))
 	dst.StrokeRoundRect(glyph, radius, t.BorderWidth, fade(pick(selected, t.Primary, t.InputBorder), strength))
 	if selected && c.item.Multiple {
-		paintIconAt(dst, c.env, icons.Check, glyph.Center(), 14, t.PrimaryFg, 0)
+		controlkit.PaintIconAt(dst, c.env, controlkit.IconMark{Role: icons.Check, Center: glyph.Center(), Size: 14, Color: t.PrimaryFg})
 	} else if selected {
 		dst.FillCircle(glyph.Center(), 4, t.PrimaryFg)
 	}
@@ -845,7 +846,7 @@ func (c *questionChoice) HandleKey(ev ggui.KeyEvent) {
 		return
 	}
 	if ev.Kind == ggui.KeyPress {
-		dir := directionalKey(ev, c.env.Direction() == ggui.DirRTL)
+		dir := controlkit.DirectionalKey(ev, c.env.Direction() == ggui.DirRTL)
 		switch dir.Key {
 		case ggui.KeyArrowUp, ggui.KeyArrowDown:
 			c.q.focusAnswer(pick(dir.Key == ggui.KeyArrowUp, -1, 1), c.index)

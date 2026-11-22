@@ -10,6 +10,7 @@ import (
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -132,7 +133,7 @@ type scrollEdgeGlyph struct {
 
 func (g *scrollEdgeGlyph) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	t := uitheme.Of(env)
-	g.env, g.ink = env, colorOr(env.Text().Color, t.Fg)
+	g.env, g.ink = env, controlkit.ColorOr(env.Text().Color, t.Fg)
 	return cs.Constrain(ggui.Sz(t.IconSize, t.IconSize))
 }
 

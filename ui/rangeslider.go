@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -293,7 +294,7 @@ func (s *RangeSliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			f := s.fraction(vs[i])
 			h.HitReach(dst, g.thumb(f), g.knobReach(f, t.Space), h, ggui.CursorShapeDefault)
 			active := !inert && (h.Hovered || h.Pressed || (h.Focused && h.FocusVisible))
-			g.paintThumb(dst, t, f, inert, ease(dst, s.theme, h.Anchor(g.thumb(f)), sliderHaloSlot, pick(active, 1.0, 0.0), s.env.Motion(t.MotionFast)))
+			g.paintThumb(dst, t, f, inert, controlkit.Ease(dst, s.theme, h.Anchor(g.thumb(f)), sliderHaloSlot, pick(active, 1.0, 0.0), s.env.Motion(t.MotionFast)))
 		}
 		if s.focusThumb && s.active >= 0 && s.active < len(s.thumbs) {
 			dst.RequestFocus(s.thumbs[s.active])
@@ -385,7 +386,7 @@ func (h *rangeSliderThumb) HandleKey(ev ggui.KeyEvent) {
 	}
 	v := vs[h.index]
 	lo, hi := s.limits(vs, h.index)
-	ev = directionalKey(ev, s.rtl && !s.vertical)
+	ev = controlkit.DirectionalKey(ev, s.rtl && !s.vertical)
 	switch ev.Key {
 	case ggui.KeyHome:
 		v = lo

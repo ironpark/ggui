@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -438,7 +439,7 @@ func (t *TableWidget[T, K]) selectAt(rows []T, i int, extend, toggle bool) {
 		}
 	case toggle:
 		cur := ggui.Untrack(t.selection.Get)
-		next = withKey(cur, k, !cur[k])
+		next = controlkit.WithKey(cur, k, !cur[k])
 		t.anchor = at(k)
 	default:
 		next[k] = true
@@ -646,7 +647,7 @@ func (r *tableRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 	} else if r.Hovered && !r.IsInert() {
 		target = .5
 	}
-	amount := ease(dst, r.theme, r.Anchor(rc), tableRowFillSlot, target, r.motion)
+	amount := controlkit.Ease(dst, r.theme, r.Anchor(rc), tableRowFillSlot, target, r.motion)
 	if amount > 0 {
 		dst.FillRect(rc, fade(th.Muted, amount))
 	}

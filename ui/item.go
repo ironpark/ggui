@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -242,14 +243,14 @@ func (i *ItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	i.hover = 0
 	if i.onTap != nil {
 		// shadcn's [a]:hover:bg-muted, whatever the row's own surface.
-		i.hover = ease(dst, t, i.Anchor(r), itemHoverSlot, pick(i.Hovered && !i.IsInert(), 1.0, 0.0), i.motion)
+		i.hover = controlkit.Ease(dst, t, i.Anchor(r), itemHoverSlot, pick(i.Hovered && !i.IsInert(), 1.0, 0.0), i.motion)
 	}
 	var fill color.Color
 	if i.look == itemMuted {
 		fill = fade(t.Muted, .5)
 	}
 	if i.hover > 0 {
-		fill = pick(fill == nil, fade(t.Muted, i.hover), mix(colorOr(fill, t.Muted), t.Muted, i.hover))
+		fill = pick(fill == nil, fade(t.Muted, i.hover), mix(controlkit.ColorOr(fill, t.Muted), t.Muted, i.hover))
 	}
 	if fill != nil {
 		dst.FillRoundRect(r, t.Radius, fill)

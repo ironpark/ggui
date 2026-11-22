@@ -11,6 +11,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -322,7 +323,7 @@ func (o *InputOTPWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state widget.TextInputState) ggui.Rect {
 	t := o.theme
 	// The border and the halo of an invalid code ease in and out together.
-	invalid := ease(d, o.theme, o.Anchor(r), fieldInvalidSlot, pick(o.invalid, 1.0, 0.0), o.motion)
+	invalid := controlkit.Ease(d, o.theme, o.Anchor(r), fieldInvalidSlot, pick(o.invalid, 1.0, 0.0), o.motion)
 	fg, border, fill := t.Fg, mix(t.InputBorder, t.Destructive, invalid), t.Input
 	if o.disabled {
 		fg, border, fill = t.Disabled(fg), t.Disabled(border), t.Disabled(fill)
@@ -332,13 +333,13 @@ func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state widget.Te
 		at := translate(group.rect)
 		// An invalid group keeps its destructive halo, focused or not.
 		if invalid > 0 && !o.disabled {
-			haloStroke(d, at, t.Radius, fade(t.Halo(destructiveRing(t)), invalid))
+			controlkit.HaloStroke(d, at, t.Radius, fade(t.Halo(destructiveRing(t)), invalid))
 		}
 		d.FillRoundRect(at, t.Radius, fill)
 		d.StrokeRoundRect(at, t.Radius, t.BorderWidth, border)
 	}
 	for _, sep := range o.separators {
-		paintIconAt(d, o.env, icons.Minus, translate(sep).Center(), o.sepWidth, fg, 0)
+		controlkit.PaintIconAt(d, o.env, controlkit.IconMark{Role: icons.Minus, Center: translate(sep).Center(), Size: o.sepWidth, Color: fg})
 	}
 	runes := []rune(state.Text)
 	active := min(utf8.RuneCountInString(state.Text[:state.Caret]), o.maxLength-1)
@@ -374,7 +375,7 @@ func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state widget.Te
 		// The ring of the slot being typed into eases in and out, as
 		// the slot's transition-all does. An invalid one keeps the
 		// destructive line and takes the halo an invalid field has.
-		if k := ease(d, o.theme, o.anchors[i], focusRingSlot, pick(selected, 1.0, 0.0), o.motion); k > 0 {
+		if k := controlkit.Ease(d, o.theme, o.anchors[i], focusRingSlot, pick(selected, 1.0, 0.0), o.motion); k > 0 {
 			line, halo := t.Ring, t.Halo(t.Ring)
 			if o.invalid {
 				line, halo = t.Destructive, t.Halo(destructiveRing(t))

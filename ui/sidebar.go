@@ -6,6 +6,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -288,7 +289,7 @@ func (s *SidebarWidget) build() {
 		}
 	}
 	if s.active < 0 {
-		s.active = stepIndex(-1, 1, len(s.rows), s.enabled)
+		s.active = controlkit.StepIndex(-1, 1, len(s.rows), s.enabled)
 	}
 }
 

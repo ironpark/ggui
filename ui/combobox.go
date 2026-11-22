@@ -10,6 +10,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -586,7 +587,7 @@ func (a *comboboxAddon) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			// The ghost button's hover, with the cross brought up to the
 			// foreground; the chevron stays muted.
 			var hover color.Color = t.Muted
-			if isDark(t.Bg) {
+			if controlkit.IsDark(t.Bg) {
 				hover = fade(hover, .5)
 			}
 			dst.FillRoundRect(r, max(t.Radius-3, 0), hover)
@@ -596,7 +597,7 @@ func (a *comboboxAddon) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 	}
 	size := pick(a.chevron, t.IconSize, t.IconSize*.875)
-	paintIconAt(dst, a.env, a.icon, r.Center(), size, ink, 0)
+	controlkit.PaintIconAt(dst, a.env, controlkit.IconMark{Role: a.icon, Center: r.Center(), Size: size, Color: ink})
 }
 
 // ComboboxMultipleWidget is a field of removable chips, one per selected
@@ -1045,5 +1046,5 @@ func (ch *comboboxChip) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if inert {
 		ink = t.Disabled(fade(t.Fg, .5))
 	}
-	paintIconAt(dst, ch.env, icons.Close, at.Center(), t.Space*1.5, ink, 0)
+	controlkit.PaintIconAt(dst, ch.env, controlkit.IconMark{Role: icons.Close, Center: at.Center(), Size: t.Space * 1.5, Color: ink})
 }

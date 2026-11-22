@@ -10,6 +10,7 @@ import (
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/runtime"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	"github.com/ironpark/ggui/ui/internal/markdown"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
@@ -707,7 +708,7 @@ func (l *mdList) paintMark(dst *ggui.Canvas, r ggui.Rect, it *mdItem) {
 		radius := side / 4
 		if done {
 			dst.FillRoundRect(box, radius, t.Primary)
-			paintIconAt(dst, l.env, icons.Check, box.Center(), side*.875, t.PrimaryFg, 0)
+			controlkit.PaintIconAt(dst, l.env, controlkit.IconMark{Role: icons.Check, Center: box.Center(), Size: side * .875, Color: t.PrimaryFg})
 		} else {
 			dst.FillRoundRect(box, radius, t.Input)
 			dst.StrokeRoundRect(box, radius, t.BorderWidth, t.InputBorder)

@@ -19,7 +19,6 @@ import (
 	"cmp"
 	"fmt"
 	"image/color"
-	"maps"
 	"slices"
 
 	"github.com/ironpark/ggui"
@@ -30,9 +29,6 @@ import (
 const (
 	defaultStripe = 160 // a slider's width when nothing bounds it
 )
-
-// squareGlyph is the box a checkbox or radio draws itself in.
-func squareGlyph(t *uitheme.Theme) ggui.Size { return ggui.Sz(t.ControlSize, t.ControlSize) }
 
 // sprint is the default option label. A string is its own label, without
 // the allocation fmt makes for it: a Select describes its value every frame.
@@ -69,19 +65,6 @@ func setChanged[T comparable](s ggui.Binding[T], v T, fn func(T)) {
 	}
 }
 
-// withKey returns a copy of the set m with k in it when on and out of it
-// otherwise, leaving m as it was for whoever else holds it.
-func withKey[K comparable](m map[K]bool, k K, on bool) map[K]bool {
-	next := make(map[K]bool, len(m)+1)
-	maps.Copy(next, m)
-	if on {
-		next[k] = true
-	} else {
-		delete(next, k)
-	}
-	return next
-}
-
 // withValue returns a copy of the list s with v appended when on and every
 // v removed when not, the way a multiple selection's binding is written.
 func withValue[T comparable](s []T, v T, on bool) []T {
@@ -89,56 +72,6 @@ func withValue[T comparable](s []T, v T, on bool) []T {
 		return append(slices.Clone(s), v)
 	}
 	return slices.DeleteFunc(slices.Clone(s), func(item T) bool { return item == v })
-}
-
-// stepIndex moves cur by dir through n items, wrapping around and skipping
-// items enabled rejects (nil rejects none); from -1 it starts at the near
-// end. It returns cur when nothing is enabled.
-func stepIndex(cur, dir, n int, enabled func(int) bool) int {
-	i := cur
-	for range n {
-		if i < 0 {
-			i = pick(dir < 0, n-1, 0)
-		} else {
-			i = (i + dir + n) % n
-		}
-		if enabled == nil || enabled(i) {
-			return i
-		}
-	}
-	return cur
-}
-
-// pointerMotion reports whether the pointer actually moved. PointerMove is
-// synthesized every frame, so hover competing with a keyboard highlight has to
-// ignore a pointer that is standing still.
-type pointerMotion struct {
-	last ggui.Point
-	seen bool
-}
-
-// moved reports whether the pointer is somewhere new; a first sighting counts.
-func (m *pointerMotion) moved(p ggui.Point) bool {
-	was, seen := m.last, m.seen
-	m.last, m.seen = p, true
-	return !seen || was != p
-}
-
-// drifted is moved without the first sighting, so a menu opened from the
-// keyboard is not stolen by a pointer that has not actually moved.
-func (m *pointerMotion) drifted(p ggui.Point) bool {
-	seen := m.seen
-	return m.moved(p) && seen
-}
-
-// beyond reports whether ev is a move a header hears only because the
-// pointer is over a region painted inside its own but outside at, the
-// header's Rect: a disclosure's body, painted after the header registered
-// its region and so inside it. A header passes such a move, so that it is
-// hovered over itself and the controls in it, not over the body it
-// reveals.
-func beyond(ev ggui.PointerEvent, at ggui.Rect) bool {
-	return ev.Kind == ggui.PointerMove && ev.Inner && !at.Contains(ev.Pos)
 }
 
 // hoverPick is the pointer body a group's items share: the hovered index

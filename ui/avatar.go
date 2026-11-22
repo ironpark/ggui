@@ -10,6 +10,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -181,10 +182,10 @@ func (a *AvatarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	ring := t.BorderWidth * 2
 	center := ggui.Pt(r.Origin.X+r.Size.W-dot/2, r.Origin.Y+r.Size.H-dot/2)
 	dst.FillCircle(center, dot/2+ring, t.Bg)
-	dst.FillCircle(center, dot/2, colorOr(ggui.ResolveColor(a.badgeColor, a.env), t.Primary))
+	dst.FillCircle(center, dot/2, controlkit.ColorOr(ggui.ResolveColor(a.badgeColor, a.env), t.Primary))
 	if a.badgeIcon != "" && side > avatarSmall {
 		// shadcn's [&>svg]:size-2 in the default dot and the large one alike.
-		paintIconAt(dst, a.env, a.badgeIcon, center, avatarBadgeIcon, t.PrimaryFg, 0)
+		controlkit.PaintIconAt(dst, a.env, controlkit.IconMark{Role: a.badgeIcon, Center: center, Size: avatarBadgeIcon, Color: t.PrimaryFg})
 	}
 }
 

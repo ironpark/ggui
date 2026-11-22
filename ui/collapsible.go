@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -155,11 +156,11 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		c.Hit(dst, header, c, ggui.CursorShapePointer)
 		dst.Paint(c.trigger, header)
 		FocusRing(dst, &c.Interactive, Ring{Theme: t, Rect: header, Radius: t.RadiusSm, Color: t.Ring, Motion: c.env.Motion(t.MotionFast)})
-		paintDisclosure(dst, c.content, ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), r.Size.W, c.bodySize, c.progress, open)
+		controlkit.PaintDisclosure(dst, c.content, controlkit.Disclosure{At: ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), Width: r.Size.W, Size: c.bodySize, Progress: c.progress, Open: open})
 		return
 	}
 	c.Hit(dst, header, c, ggui.CursorShapePointer)
-	hover := ease(dst, c.theme, c.Anchor(header), disclosureHoverSlot, pick(c.Hovered && !c.IsInert(), 1.0, 0.0), c.env.Motion(t.MotionFast))
+	hover := controlkit.Ease(dst, c.theme, c.Anchor(header), disclosureHoverSlot, pick(c.Hovered && !c.IsInert(), 1.0, 0.0), c.env.Motion(t.MotionFast))
 	if hover > 0 {
 		dst.FillRoundRect(header, t.Radius, fade(t.Muted, hover))
 	}
@@ -167,10 +168,10 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// the body it reveals.
 	v := c.progress
 	cx, cy := r.Origin.X+c.pad.Left+t.ControlSize*0.4, r.Origin.Y+c.headerH/2
-	paintIconAt(dst, c.env, icons.ChevronRight, ggui.Pt(cx, cy), t.IconSize, t.MutedFg, v*math.Pi/2)
+	controlkit.PaintIconAt(dst, c.env, controlkit.IconMark{Role: icons.ChevronRight, Center: ggui.Pt(cx, cy), Size: t.IconSize, Color: t.MutedFg, Rotation: v * math.Pi / 2})
 	dst.Paint(c.title, ggui.Rct(ggui.Pt(r.Origin.X+c.pad.Left+t.ControlSize+t.ControlGap, r.Origin.Y+c.pad.Top), c.titleSize))
 	FocusRing(dst, &c.Interactive, Ring{Theme: t, Rect: header, Radius: t.Radius, Color: t.Ring, Motion: c.env.Motion(t.MotionFast)})
-	paintDisclosure(dst, c.content, ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), r.Size.W, c.bodySize, c.progress, open)
+	controlkit.PaintDisclosure(dst, c.content, controlkit.Disclosure{At: ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), Width: r.Size.W, Size: c.bodySize, Progress: c.progress, Open: open})
 }
 
 // HandleKey implements KeyHandler: Space or Enter toggles.
@@ -179,7 +180,7 @@ func (c *CollapsibleWidget) HandleKey(ev ggui.KeyEvent) { c.Keyboard(ev, c.toggl
 // HandlePointer implements PointerHandler. The body is not the header: a
 // move over a control in it passes.
 func (c *CollapsibleWidget) HandlePointer(ev ggui.PointerEvent) bool {
-	if beyond(ev, c.headerAt) {
+	if controlkit.Beyond(ev, c.headerAt) {
 		return false
 	}
 	return c.Pointer(ev, c.toggle)

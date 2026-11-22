@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -57,7 +58,7 @@ func (s *SpinnerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if !s.named {
 		s.name = stringsOf(env).Loading
 	}
-	s.ink = ggui.ResolveColor(colorOr(s.color, colorOr(env.Text().Color, t.Fg)), env)
+	s.ink = ggui.ResolveColor(controlkit.ColorOr(s.color, controlkit.ColorOr(env.Text().Color, t.Fg)), env)
 	side := pick(s.size >= 0, s.size, t.IconSize)
 	return c.Constrain(ggui.Sz(side, side))
 }

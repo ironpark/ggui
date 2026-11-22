@@ -1,6 +1,9 @@
 package ui
 
-import "github.com/ironpark/ggui"
+import (
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
+)
 
 // navAxis is which arrow keys move the keyboard through a list-like
 // widget: Up and Down, Left and Right, or both.
@@ -57,13 +60,13 @@ func navIndex(ev ggui.KeyEvent, axis navAxis, cur, n int, enabled func(int) bool
 	}
 	switch navMoveOf(ev.Key, axis) {
 	case navPrev:
-		return stepIndex(cur, -1, n, enabled), true
+		return controlkit.StepIndex(cur, -1, n, enabled), true
 	case navNext:
-		return stepIndex(cur, 1, n, enabled), true
+		return controlkit.StepIndex(cur, 1, n, enabled), true
 	case navFirst:
-		return stepIndex(-1, 1, n, enabled), true
+		return controlkit.StepIndex(-1, 1, n, enabled), true
 	case navLast:
-		return stepIndex(-1, -1, n, enabled), true
+		return controlkit.StepIndex(-1, -1, n, enabled), true
 	}
 	return cur, false
 }
@@ -102,19 +105,6 @@ func navTarget(key ggui.KeyboardKey, axis navAxis, i, n int) (int, bool) {
 		return n - 1, true
 	}
 	return 0, false
-}
-
-// directionalKey maps physical horizontal movement to logical item order.
-func directionalKey(ev ggui.KeyEvent, rtl bool) ggui.KeyEvent {
-	if rtl {
-		switch ev.Key {
-		case ggui.KeyArrowLeft:
-			ev.Key = ggui.KeyArrowRight
-		case ggui.KeyArrowRight:
-			ev.Key = ggui.KeyArrowLeft
-		}
-	}
-	return ev
 }
 
 // mirrorHorizontal mirrors a local rectangle without changing its hit identity.

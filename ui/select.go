@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -468,7 +469,7 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	radius := s.radius(t)
 	// On a dark theme the field lightens under the pointer.
 	fill := t.Input
-	if hover := ease(dst, s.theme, s.Anchor(r), selectHoverSlot, pick(s.Hovered && !inert && isDark(t.Bg), 1.0, 0.0), s.motion); hover > 0 {
+	if hover := controlkit.Ease(dst, s.theme, s.Anchor(r), selectHoverSlot, pick(s.Hovered && !inert && controlkit.IsDark(t.Bg), 1.0, 0.0), s.motion); hover > 0 {
 		fill = mix(fill, fade(t.InputBorder, .5), hover)
 	}
 	// The border keeps the InputBorder while the list is open or the field
@@ -476,7 +477,7 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	// below, as shadcn's focus-visible:border-ring.
 	border := t.InputBorder
 	if s.shownInvalid {
-		border = pick(isDark(t.Bg), fade(t.Destructive, .5), t.Destructive)
+		border = pick(controlkit.IsDark(t.Bg), fade(t.Destructive, .5), t.Destructive)
 	}
 	muted := t.MutedFg
 	if inert {
@@ -506,7 +507,7 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 		}
 	} else {
 		if s.shownInvalid && !inert {
-			fieldHalo(dst, t, r, radius, fieldRing(t, true))
+			controlkit.FieldHalo(dst, t, r, radius, fieldRing(t, true))
 		}
 		s.box.Fill(fill).Border(t.BorderWidth, border)
 	}
@@ -655,7 +656,7 @@ func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
 		if !open && s.highlight < 0 && len(s.options) > 0 {
 			// Opened from the keyboard with nothing chosen, the list
 			// starts on its first option.
-			s.highlight = stepIndex(-1, 1, len(s.options), s.enabled)
+			s.highlight = controlkit.StepIndex(-1, 1, len(s.options), s.enabled)
 		}
 		return
 	}
@@ -805,7 +806,7 @@ func (it *selectItem[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if it.index == it.owner.selectedIndex {
 		// The mark is the row's own color, not the theme's accent.
 		center := ggui.Pt(r.Origin.X+r.Size.W-t.Space-t.IconSize/2, r.Origin.Y+r.Size.H/2)
-		paintIconAt(dst, it.owner.env, icons.Check, center, t.IconSize, ink, 0)
+		controlkit.PaintIconAt(dst, it.owner.env, controlkit.IconMark{Role: icons.Check, Center: center, Size: t.IconSize, Color: ink})
 	}
 }
 
@@ -1000,7 +1001,7 @@ func (a *selectScrollArrow[T]) paint(dst *ggui.Canvas, t *uitheme.Theme, r ggui.
 	dst.HitPointer(strip, a)
 	dst.HitCursor(strip, ggui.CursorShapeDefault)
 	center := ggui.Pt(strip.Origin.X+strip.Size.W/2, pick(a.up, panel.Origin.Y-line+h/2, panel.Origin.Y+panel.Size.H+line-h/2))
-	paintIconAt(dst, a.view.env, pick(a.up, icons.ChevronUp, icons.ChevronDown), center, t.IconSize, t.PopoverFg, 0)
+	controlkit.PaintIconAt(dst, a.view.env, controlkit.IconMark{Role: pick(a.up, icons.ChevronUp, icons.ChevronDown), Center: center, Size: t.IconSize, Color: t.PopoverFg})
 }
 
 // HandlePointer implements ggui.PointerHandler: the pointer moving on the
