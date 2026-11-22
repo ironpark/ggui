@@ -672,48 +672,78 @@ func (c *Canvas) addWithin(h hitRegion, within any) {
 	}
 	h.within = within != nil
 	h.full = h.rect
-	if c.clipped {
-		h.rect = h.rect.Intersect(c.clip)
-		if h.rect.Empty() {
-			if h.key == nil {
-				return
-			}
-			// A key region outside the clip stays registered with no area,
-			// so Tab can reach it and Reveal can scroll it into view.
-			h.rect = Rect{Origin: h.full.Origin}
-		}
-		// A reach is cut as the Rect is, and goes with it: a control
-		// scrolled out of a list is not hit through the list's edge.
-		if h.reach = h.reach.Intersect(c.clip); h.reach.Empty() || h.rect.Empty() {
-			h.reach = Rect{}
-		}
+	if !c.trimToClip(&h) {
+		return
 	}
 	if c.space != nil && !c.space.placeRegion(&h) {
 		return
 	}
 	f := c.fs()
 	f.adopt(&h)
-	if h.key != nil && f.focusKey != nil && gem.Same(h.key, f.focusKey) {
-		f.focusPainted = true
-	}
-	if h.key != nil && f.focusClaim != nil {
-		f.focusRequest, f.focusClaim = h.key, nil
-	}
-	i := len(f.hits)
-	if i > 0 && f.hits[i-1].merge(h) {
-		// One node: what the widget paints next is inside the merged
-		// region, which stays where it was in the tree.
-		i--
-	} else {
-		h.parent = f.parentFor(&h)
-		f.hits = append(f.hits, h)
-	}
+	f.claimKeyFocus(&h)
+	i := f.mergeOrAppend(&h)
 	f.cur.at = int32(i + 1)
 	if within != nil {
 		// In the order of the regions: one merged into is the last.
 		f.withins = append(f.withins, withinEntry{at: int32(i), h: within})
 	}
 	f.note(&f.hits[i], i)
+}
+
+// trimToClip cuts a region's rect and reach to the Canvas's clip. It
+// reports whether the region stays registered: one clipped away entirely
+// is dropped, unless it carries a key, which keeps its origin with no
+// area, so Tab can reach it and Reveal can scroll it into view.
+func (c *Canvas) trimToClip(h *hitRegion) bool {
+	if !c.clipped {
+		return true
+	}
+	h.rect = h.rect.Intersect(c.clip)
+	if h.rect.Empty() {
+		if h.key == nil {
+			return false
+		}
+		h.rect = Rect{Origin: h.full.Origin}
+	}
+	// A reach is cut as the Rect is, and goes with it: a control
+	// scrolled out of a list is not hit through the list's edge.
+	if h.reach = h.reach.Intersect(c.clip); h.reach.Empty() || h.rect.Empty() {
+		h.reach = Rect{}
+	}
+	return true
+}
+
+// claimKeyFocus settles what a key region means for the frame's focus: a
+// region carrying the focused handler marks the focus as painted, and one
+// registered while a Focus waits to claim it turns the wait into the
+// focus request, which moves focus to the region's handler.
+func (f *frameState) claimKeyFocus(h *hitRegion) {
+	if h.key == nil {
+		return
+	}
+	if f.focusKey != nil && gem.Same(h.key, f.focusKey) {
+		f.focusPainted = true
+	}
+	if f.focusClaim != nil {
+		f.focusRequest, f.focusClaim = h.key, nil
+	}
+}
+
+// mergeOrAppend registers h on the frame's hit list: a region at the same
+// Rect as the previous one is merged into it, so a widget that calls
+// HitPointer and HitKey for the same Rect is one region with both
+// handlers; otherwise h becomes a new node parented under what encloses
+// it. It returns the index of the region h landed in.
+func (f *frameState) mergeOrAppend(h *hitRegion) int {
+	i := len(f.hits)
+	if i > 0 && f.hits[i-1].merge(*h) {
+		// One node: what the widget paints next is inside the merged
+		// region, which stays where it was in the tree.
+		return i - 1
+	}
+	h.parent = f.parentFor(h)
+	f.hits = append(f.hits, *h)
+	return i
 }
 
 // adopt hands h's new handlers the ones that held the same region last
