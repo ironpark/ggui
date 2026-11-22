@@ -92,6 +92,7 @@ func (ig *Ignore) Reset() {
 	}
 	ig.mu.Lock()
 	ig.cache = map[string]bool{}
+	ig.tops = map[string]string{}
 	ig.mu.Unlock()
 }
 
@@ -122,6 +123,7 @@ func (ig *Ignore) filter(paths []string, siblings bool) []bool {
 	}
 	clean := make([]string, len(paths))
 	ask := map[string][]int{} // work tree → indexes into paths
+	var needTop []int
 	ig.mu.Lock()
 	for i, p := range paths {
 		p = filepath.Clean(p)
@@ -134,17 +136,30 @@ func (ig *Ignore) filter(paths []string, siblings bool) []bool {
 			out[i] = v
 			continue
 		}
-		top := ""
-		if ig.git != "" {
-			top = ig.top(filepath.Dir(p))
-		}
-		if top == "" {
+		if ig.git == "" {
 			out[i] = matchAny(ig.c.Fallback, p)
+			continue
+		}
+		if top, ok := ig.tops[filepath.Dir(p)]; ok {
+			if top == "" {
+				out[i] = matchAny(ig.c.Fallback, p)
+			} else {
+				ask[top] = append(ask[top], i)
+			}
+			continue
+		}
+		needTop = append(needTop, i)
+	}
+	ig.mu.Unlock()
+
+	for _, i := range needTop {
+		top := ig.top(filepath.Dir(clean[i]))
+		if top == "" {
+			out[i] = matchAny(ig.c.Fallback, clean[i])
 			continue
 		}
 		ask[top] = append(ask[top], i)
 	}
-	ig.mu.Unlock()
 
 	for top, idx := range ask {
 		names := make([]string, 0, len(idx))
@@ -235,12 +250,15 @@ func matchAny(patterns []string, p string) bool {
 	return false
 }
 
-// top returns the git work tree dir is in, or "". ig.mu is held.
+// top returns the git work tree dir is in, or "". ig.mu must not be held.
 func (ig *Ignore) top(dir string) string {
 	var walked []string
 	top := ""
 	for d := dir; ; d = filepath.Dir(d) {
-		if t, ok := ig.tops[d]; ok {
+		ig.mu.Lock()
+		t, ok := ig.tops[d]
+		ig.mu.Unlock()
+		if ok {
 			top = t
 			break
 		}
@@ -254,8 +272,15 @@ func (ig *Ignore) top(dir string) string {
 			break
 		}
 	}
-	for _, d := range walked {
-		ig.tops[d] = top
+	if len(walked) > 0 {
+		ig.mu.Lock()
+		if len(ig.tops) > ignoreCacheMax {
+			ig.tops = map[string]string{}
+		}
+		for _, d := range walked {
+			ig.tops[d] = top
+		}
+		ig.mu.Unlock()
 	}
 	return top
 }

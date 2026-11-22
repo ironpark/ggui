@@ -591,3 +591,126 @@ func TestQuietScanAllocatesLittle(t *testing.T) {
 		t.Errorf("a quiet scan allocated %d bytes a path", per)
 	}
 }
+
+// Concurrent Sync calls without Run, and Sync racing with Run exit, never deadlock.
+func TestSyncConcurrentAndRunExit(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a")
+	touch(t, a, "a")
+	w := New(Options{NoNotify: true, Poll: 20 * time.Millisecond})
+	w.Add(a)
+
+	// Two concurrent Sync calls without Run.
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_ = w.Sync(ctx)
+		}()
+	}
+	wg.Wait()
+
+	// Sync racing with Run starting and exiting repeatedly.
+	for range 20 {
+		ctx, cancel := context.WithCancel(context.Background())
+		out := make(chan Batch, 1)
+		runDone := make(chan struct{})
+		go func() {
+			w.Run(ctx, out)
+			close(runDone)
+		}()
+		syncDone := make(chan struct{})
+		go func() {
+			sctx, scancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer scancel()
+			_ = w.Sync(sctx)
+			close(syncDone)
+		}()
+		cancel()
+		select {
+		case <-syncDone:
+		case <-time.After(3 * time.Second):
+			t.Fatal("Sync deadlocked while Run exited")
+		}
+		<-runDone
+	}
+}
+
+// Sync while Run is active drains pending OS notifications before scanning.
+func TestSyncDrainsPendingNotifications(t *testing.T) {
+	dir := t.TempDir()
+	fi, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := newFakeSource()
+	o := testOptions(t, false)
+	o.Settle = 5 * time.Second // keep settle timer pending when Sync runs
+	w := New(o)
+	withFake(w, src)
+	w.Add(dir)
+	_ = start(t, w)
+	<-src.dirs
+
+	x := filepath.Join(dir, "x")
+	write(t, x, "x")
+	if err := os.Chtimes(dir, fi.ModTime(), fi.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	src.push(x)
+	// Without draining src.take(), dir's unchanged mtime hides x from Sync.
+	got := w.Sync(context.Background()).Changes
+	if !slices.Equal(got, []Event{ev(Create, x)}) {
+		t.Fatalf("Sync got %v, want %v", got, []Event{ev(Create, x)})
+	}
+}
+
+// Concurrent Add/Set with fingerprinting racing with Run exit never panics on WaitGroup.
+func TestFingerprintRunExitNoRace(t *testing.T) {
+	dir := t.TempDir()
+	files := make([]string, 8)
+	for i := range files {
+		files[i] = filepath.Join(dir, fmt.Sprintf("f%d.src", i))
+		touch(t, files[i], "one\n")
+	}
+	w := New(Options{NoNotify: true, Poll: 10 * time.Millisecond, Content: commentBlind})
+	for range 15 {
+		ctx, cancel := context.WithCancel(context.Background())
+		out := make(chan Batch, 4)
+		done := make(chan struct{})
+		go func() {
+			w.Run(ctx, out)
+			close(done)
+		}()
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for _, f := range files {
+				w.Add(f)
+			}
+			w.Set(files)
+		}()
+		cancel()
+		<-done
+		wg.Wait()
+	}
+}
+
+// Duplicate Remove deltas for the same path produce a single Remove event.
+func TestJudgeDeduplicatesRemoves(t *testing.T) {
+	w := New(Options{NoNotify: true, Steady: -1})
+	st := stamp{exist: true, size: 4}
+	evs := w.judge([]delta{
+		{path: "/tmp/a", old: st, new: stamp{}},
+		{path: "/tmp/a", old: st, new: stamp{}},
+		{path: "/tmp/b", old: stamp{}, new: stamp{}}, // create+drop cancelled
+	})
+	want := []Event{{Path: "/tmp/a", Op: Remove}}
+	if !slices.Equal(evs, want) {
+		t.Fatalf("judge = %v, want %v", evs, want)
+	}
+}

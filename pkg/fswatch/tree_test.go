@@ -131,3 +131,25 @@ func TestTreeKeepsNoPath(t *testing.T) {
 		t.Fatalf("roots %v", tree.roots)
 	}
 }
+
+func TestTreeRootOfNestedAndClean(t *testing.T) {
+	p := filepath.FromSlash
+	tree := NewTree(TreeOptions{
+		Ignore: func(path string, isDir bool) bool {
+			return isDir && filepath.Base(path) == "build"
+		},
+	})
+	roots := []string{p("/work"), p("/work/build")}
+
+	// Nested explicitly watched root inside an ignored dir name matches longest root.
+	if r, ok := tree.rootOf(roots, p("/work/build//out.txt")); !ok || r != p("/work/build") {
+		t.Fatalf("rootOf nested = (%q, %v), want (%q, true)", r, ok, p("/work/build"))
+	}
+	// Ignored subdir below /work without its own root is still ignored.
+	if r, ok := tree.rootOf(roots, p("/work/sub/build/out.txt")); ok {
+		t.Fatalf("rootOf ignored = (%q, %v), want false", r, ok)
+	}
+	if _, ok := tree.rootOf(roots, ""); ok {
+		t.Fatal("rootOf empty path matched")
+	}
+}

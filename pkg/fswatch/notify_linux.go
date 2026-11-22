@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"unsafe"
 )
@@ -32,20 +33,42 @@ const inotifyMask = syscall.IN_CREATE | syscall.IN_DELETE | syscall.IN_MODIFY | 
 var errWatchLimit = errors.New("inotify: the watch limit is reached (raise it with sysctl fs.inotify.max_user_watches=524288, " +
 	"or in /etc/sysctl.d)")
 
+type dirID struct {
+	dev uint64
+	ino uint64
+}
+
+type wdInfo struct {
+	dir   string
+	id    dirID
+	hasID bool
+}
+
+func statDirID(dir string) (dirID, bool) {
+	fi, err := os.Stat(dir)
+	if err != nil {
+		return dirID{}, false
+	}
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok {
+		return dirID{}, false
+	}
+	return dirID{dev: uint64(st.Dev), ino: uint64(st.Ino)}, true
+}
+
 type inotify struct {
 	queue
-	// fd is f's descriptor, kept since f.Fd would make f blocking, and
-	// Close would then no longer end a Read.
-	fd        int
 	f         *os.File
 	recursive bool
 	skip      func(path string) bool
+	closing   atomic.Bool
 	done      chan struct{} // closed when the reader returns
 
-	mu    sync.Mutex
-	wds   map[int32]string // a watch's directory
-	dirs  map[string]int32 // a directory's watch
-	asked map[string]bool  // the directories watch named
+	mu      sync.Mutex
+	wds     map[int32]wdInfo // a watch's directory and identity
+	dirs    map[string]int32 // a directory's watch
+	asked   map[string]bool  // the directories watch named
+	maxDirs int              // if > 0, upper bound on watched directories
 }
 
 func newSource(recursive bool, skip func(string) bool) (source, error) {
@@ -55,17 +78,41 @@ func newSource(recursive bool, skip func(string) bool) (source, error) {
 	}
 	s := &inotify{
 		queue:     newQueue(),
-		fd:        fd,
 		f:         os.NewFile(uintptr(fd), "inotify"),
 		recursive: recursive,
 		skip:      skip,
 		done:      make(chan struct{}),
-		wds:       map[int32]string{},
+		wds:       map[int32]wdInfo{},
 		dirs:      map[string]int32{},
 		asked:     map[string]bool{},
 	}
 	go s.read()
 	return s, nil
+}
+
+func (s *inotify) addWatch(dir string) (int, error) {
+	raw, err := s.f.SyscallConn()
+	if err != nil {
+		return 0, err
+	}
+	var wd int
+	var werr error
+	if err := raw.Control(func(fd uintptr) {
+		wd, werr = syscall.InotifyAddWatch(int(fd), dir, inotifyMask)
+	}); err != nil {
+		return 0, err
+	}
+	return wd, werr
+}
+
+func (s *inotify) rmWatch(wd int32) {
+	raw, err := s.f.SyscallConn()
+	if err != nil {
+		return
+	}
+	_ = raw.Control(func(fd uintptr) {
+		syscall.InotifyRmWatch(int(fd), uint32(wd))
+	})
 }
 
 func (s *inotify) watch(dirs []string) error {
@@ -84,7 +131,7 @@ func (s *inotify) watch(dirs []string) error {
 		if !s.asked[d] && s.below(asked, d) {
 			continue
 		}
-		syscall.InotifyRmWatch(s.fd, uint32(wd))
+		s.rmWatch(wd)
 		delete(s.dirs, d)
 		delete(s.wds, wd)
 	}
@@ -124,6 +171,9 @@ func (s *inotify) watchTrees(roots []string, maxDirs int) error {
 			return fmt.Errorf("%s: %w (%d)", r, err, maxDirs)
 		}
 	}
+	s.mu.Lock()
+	s.maxDirs = maxDirs
+	s.mu.Unlock()
 	return s.watch(dirs)
 }
 
@@ -142,24 +192,33 @@ func (s *inotify) below(dirs map[string]bool, dir string) bool {
 // add watches dir; a directory that does not exist is not an error.
 // s.mu is held.
 func (s *inotify) add(dir string) error {
+	if s.closing.Load() {
+		return os.ErrClosed
+	}
 	if _, ok := s.dirs[dir]; ok {
 		return nil
 	}
-	wd, err := syscall.InotifyAddWatch(s.fd, dir, inotifyMask)
+	if s.maxDirs > 0 && len(s.dirs) >= s.maxDirs {
+		return errTooManyDirs
+	}
+	wd, err := s.addWatch(dir)
 	switch {
 	case errors.Is(err, syscall.ENOSPC):
 		return errWatchLimit
 	case errors.Is(err, syscall.ENOENT), errors.Is(err, syscall.ENOTDIR), errors.Is(err, syscall.EACCES):
 		return nil
+	case errors.Is(err, os.ErrClosed):
+		return os.ErrClosed
 	case err != nil:
 		return fmt.Errorf("inotify: %s: %w", dir, err)
 	}
+	id, hasID := statDirID(dir)
 	// The same directory by another name, through a link, has the same
 	// watch.
 	if old, ok := s.wds[int32(wd)]; ok {
-		delete(s.dirs, old)
+		delete(s.dirs, old.dir)
 	}
-	s.wds[int32(wd)] = dir
+	s.wds[int32(wd)] = wdInfo{dir: dir, id: id, hasID: hasID}
 	s.dirs[dir] = int32(wd)
 	return nil
 }
@@ -168,7 +227,13 @@ func (s *inotify) add(dir string) error {
 // reports what is in them already: files made before the watch was in
 // place.
 func (s *inotify) addTree(dir string) {
+	if s.closing.Load() {
+		return
+	}
 	filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if s.closing.Load() {
+			return filepath.SkipAll
+		}
 		if err != nil {
 			return nil
 		}
@@ -184,11 +249,14 @@ func (s *inotify) addTree(dir string) {
 		s.mu.Lock()
 		err = s.add(p)
 		s.mu.Unlock()
-		if errors.Is(err, errWatchLimit) {
+		if errors.Is(err, errWatchLimit) || errors.Is(err, errTooManyDirs) {
 			s.fail(err)
 			return filepath.SkipAll
 		}
 		if err != nil {
+			if s.closing.Load() || errors.Is(err, os.ErrClosed) {
+				return filepath.SkipAll
+			}
 			s.lost() // the scan, and the safety net, still see changes
 			return filepath.SkipAll
 		}
@@ -202,12 +270,21 @@ func (s *inotify) read() {
 	for {
 		n, err := s.f.Read(buf)
 		if err != nil {
-			return // closed
+			if !s.closing.Load() {
+				s.fail(fmt.Errorf("inotify: %w", err))
+			}
+			return
 		}
 		for off := 0; off+syscall.SizeofInotifyEvent <= n; {
 			ev := (*syscall.InotifyEvent)(unsafe.Pointer(&buf[off]))
-			name := buf[off+syscall.SizeofInotifyEvent : off+syscall.SizeofInotifyEvent+int(ev.Len)]
-			off += syscall.SizeofInotifyEvent + int(ev.Len)
+			avail := n - (off + syscall.SizeofInotifyEvent)
+			if uint64(ev.Len) > uint64(avail) {
+				s.lost()
+				break
+			}
+			nameEnd := off + syscall.SizeofInotifyEvent + int(ev.Len)
+			name := buf[off+syscall.SizeofInotifyEvent : nameEnd]
+			off = nameEnd
 			if i := bytes.IndexByte(name, 0); i >= 0 {
 				name = name[:i]
 			}
@@ -222,7 +299,8 @@ func (s *inotify) event(wd int32, mask uint32, name string) {
 		return
 	}
 	s.mu.Lock()
-	dir, ok := s.wds[wd]
+	info, ok := s.wds[wd]
+	dir := info.dir
 	if ok && mask&(syscall.IN_IGNORED|syscall.IN_DELETE_SELF) != 0 {
 		// Gone, and its watch with it.
 		delete(s.wds, wd)
@@ -234,15 +312,19 @@ func (s *inotify) event(wd int32, mask uint32, name string) {
 	// its name. Moved within a watched directory, it was reported there
 	// by its new name, and adding that name found the same watch and
 	// renamed it, before IN_MOVE_SELF, so the name it has is right. Moved
-	// elsewhere, its name is now nothing's, and the watch goes, so that a
-	// directory made under that name is watched afresh.
+	// elsewhere, or replaced by another directory at the same path, its
+	// identity (Dev, Ino) no longer matches, so the stale watch goes and
+	// any replacement directory at dir is watched afresh.
+	readd := false
 	if ok && mask&syscall.IN_MOVE_SELF != 0 {
-		if _, err := os.Lstat(dir); err != nil {
-			syscall.InotifyRmWatch(s.fd, uint32(wd))
+		cur, curOK := statDirID(dir)
+		if !curOK || !info.hasID || cur != info.id {
+			s.rmWatch(wd)
 			delete(s.wds, wd)
 			if s.dirs[dir] == wd {
 				delete(s.dirs, dir)
 			}
+			readd = curOK
 		}
 	}
 	s.mu.Unlock()
@@ -254,6 +336,20 @@ func (s *inotify) event(wd int32, mask uint32, name string) {
 		path = filepath.Join(dir, name)
 	}
 	s.push(path)
+	if readd && !s.closing.Load() {
+		if s.recursive {
+			s.addTree(dir)
+		} else {
+			s.mu.Lock()
+			err := s.add(dir)
+			s.mu.Unlock()
+			if errors.Is(err, errWatchLimit) || errors.Is(err, errTooManyDirs) {
+				s.fail(err)
+			} else if err != nil && !s.closing.Load() && !errors.Is(err, os.ErrClosed) {
+				s.lost()
+			}
+		}
+	}
 	if s.recursive && mask&syscall.IN_ISDIR != 0 && mask&(syscall.IN_CREATE|syscall.IN_MOVED_TO) != 0 && name != "" {
 		if s.skip == nil || !s.skip(path) {
 			s.addTree(path)
@@ -262,6 +358,7 @@ func (s *inotify) event(wd int32, mask uint32, name string) {
 }
 
 func (s *inotify) close() {
+	s.closing.Store(true)
 	s.f.Close()
 	<-s.done
 }

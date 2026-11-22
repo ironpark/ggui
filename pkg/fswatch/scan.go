@@ -229,9 +229,23 @@ func (w *Watcher) check(full bool, relist map[string]bool) Batch {
 				ds = append(ds, delta{p, stamp{}, st})
 			}
 		}
-		for p, st := range dropped {
-			if st.exist {
-				ds = append(ds, delta{p, st, stamp{}})
+		if len(dropped) > 0 {
+			var byPath map[string]int
+			if len(ds) > 0 {
+				byPath = make(map[string]int, len(ds))
+				for i, d := range ds {
+					byPath[d.path] = i
+				}
+			}
+			for p, st := range dropped {
+				if !st.exist {
+					continue
+				}
+				if i, ok := byPath[p]; ok {
+					ds[i].new = stamp{}
+				} else {
+					ds = append(ds, delta{p, st, stamp{}})
+				}
 			}
 		}
 	}
@@ -269,6 +283,8 @@ func (w *Watcher) judge(ds []delta) []Event {
 	for _, d := range ds {
 		ev := Event{Path: d.path}
 		switch {
+		case !d.old.exist && !d.new.exist:
+			continue
 		case !d.old.exist && d.new.exist:
 			ev.Op, ev.Dir = Create, d.new.dir
 		case d.old.exist && !d.new.exist:
@@ -295,6 +311,25 @@ func (w *Watcher) judge(ds []delta) []Event {
 			evs = append(evs, ev)
 		}
 	}
+	sortEvents(evs)
+	if len(evs) > 1 {
+		dedup := evs[:0]
+		for _, e := range evs {
+			if n := len(dedup); n > 0 && dedup[n-1].Path == e.Path {
+				if dedup[n-1].Op == Remove && e.Op == Remove {
+					continue
+				}
+				if m, keep := then(dedup[n-1], e); keep {
+					dedup[n-1] = m
+				} else {
+					dedup = dedup[:n-1]
+				}
+				continue
+			}
+			dedup = append(dedup, e)
+		}
+		evs = dedup
+	}
 	if w.o.Filter != nil {
 		kept := evs[:0]
 		for _, e := range evs {
@@ -304,7 +339,6 @@ func (w *Watcher) judge(ds []delta) []Event {
 		}
 		evs = kept
 	}
-	sortEvents(evs)
 	return evs
 }
 
@@ -412,7 +446,11 @@ func (w *Watcher) fingerprint(paths []string) {
 	if len(files) == 0 {
 		return
 	}
-	w.bg.Go(func() {
+	w.bgMu.Lock()
+	w.bg.Add(1)
+	w.bgMu.Unlock()
+	go func() {
+		defer w.bg.Done()
 		for _, p := range files {
 			before := stat(p)
 			if !before.exist || before.dir {
@@ -430,5 +468,5 @@ func (w *Watcher) fingerprint(paths []string) {
 			}
 			w.mu.Unlock()
 		}
-	})
+	}()
 }

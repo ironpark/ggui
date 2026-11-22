@@ -175,29 +175,36 @@ func (t *Tree) Run(ctx context.Context, out chan<- []string) error {
 // rootOf is the directory of roots path is below, unless it is ignored,
 // or below one ignored, or below none.
 func (t *Tree) rootOf(roots []string, path string) (string, bool) {
+	if path == "" {
+		return "", false
+	}
+	path = filepath.Clean(path)
+	best := ""
 	for _, r := range roots {
-		if !within(r, path) {
-			continue
+		if within(r, path) && len(r) > len(best) {
+			best = r
 		}
-		if path == r {
-			return r, true
-		}
-		// Each directory between the root and the path, as a recursive
-		// Watcher would not have gone into an ignored one.
-		rel, err := filepath.Rel(r, path)
-		if err != nil {
+	}
+	if best == "" {
+		return "", false
+	}
+	if path == best {
+		return best, true
+	}
+	// Each directory between the root and the path, as a recursive
+	// Watcher would not have gone into an ignored one.
+	rel, err := filepath.Rel(best, path)
+	if err != nil {
+		return "", false
+	}
+	p := best
+	for el := range strings.SplitSeq(rel, string(filepath.Separator)) {
+		p = filepath.Join(p, el)
+		if t.ignored(p, p != path) {
 			return "", false
 		}
-		p := r
-		for el := range strings.SplitSeq(rel, string(filepath.Separator)) {
-			p = filepath.Join(p, el)
-			if t.ignored(p, p != path) {
-				return "", false
-			}
-		}
-		return r, true
 	}
-	return "", false
+	return best, true
 }
 
 func (t *Tree) ignored(path string, isDir bool) bool {
