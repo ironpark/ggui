@@ -45,30 +45,23 @@ func (b *Builder) Build(prev *SemTree, src Source, focused int) *SemTree {
 	// an unchanged frame allocates nothing.
 	var pages [][]SemNode
 	for k := range np {
-		lo, hi := k<<pageShift, min(n, (k+1)<<pageShift)
-		if prev != nil && k < len(prev.pages) && len(prev.pages[k]) == hi-lo && b.samePage(prev.pages[k], src, lo) {
+		if b.shareablePage(prev, src, k, n) {
 			if pages != nil {
 				pages[k] = prev.pages[k]
 			}
 			continue
 		}
 		if pages == nil {
-			pages = make([][]SemNode, np)
-			if prev != nil {
-				copy(pages, prev.pages[:k])
-			}
+			pages = b.sharePages(prev, np, k)
 		}
-		pages[k] = b.page(src, k, hi)
+		pages[k] = b.page(src, k, min(n, (k+1)<<pageShift))
 	}
 	sameRoots := prev != nil && slices.Equal(prev.roots, b.roots)
 	if pages == nil {
 		if sameRoots && prev.n == n && prev.focused == focused {
 			return prev
 		}
-		pages = make([][]SemNode, np)
-		if prev != nil {
-			copy(pages, prev.pages[:np])
-		}
+		pages = b.sharePages(prev, np, np)
 	}
 	t := &SemTree{n: n, focused: focused, pages: pages}
 	if sameRoots {
@@ -77,6 +70,26 @@ func (b *Builder) Build(prev *SemTree, src Source, focused int) *SemTree {
 		t.roots = slices.Clone(b.roots)
 	}
 	return t
+}
+
+// shareablePage reports whether page k of prev still holds what src
+// says, so it can be shared rather than copied.
+func (b *Builder) shareablePage(prev *SemTree, src Source, k, n int) bool {
+	if prev == nil || k >= len(prev.pages) {
+		return false
+	}
+	lo, hi := k<<pageShift, min(n, (k+1)<<pageShift)
+	return len(prev.pages[k]) == hi-lo && b.samePage(prev.pages[k], src, lo)
+}
+
+// sharePages makes the page table of np pages, sharing prev's first
+// upto.
+func (b *Builder) sharePages(prev *SemTree, np, upto int) [][]SemNode {
+	pages := make([][]SemNode, np)
+	if prev != nil {
+		copy(pages, prev.pages[:upto])
+	}
+	return pages
 }
 
 // link records every node's parent, counts and lists its children, in
