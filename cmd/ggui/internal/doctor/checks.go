@@ -167,10 +167,17 @@ func checkProject(ctx context.Context, r *Report, o Options, env map[string]stri
 	}
 	p.ggui = g
 	r.ok("ggui", version(g))
+	checkPinnedVersions(ctx, r, g, byPath)
+	return p
+}
 
-	// ggui is developed with exact versions of ggfx and ggwd, so a build
-	// that resolves others, raised by another requirement or a go get, is
-	// a combination nobody has tested.
+// checkPinnedVersions compares the ggfx and ggwd of byPath, the modules
+// of the build, with the versions g, the ggui module, requires.
+//
+// ggui is developed with exact versions of ggfx and ggwd, so a build
+// that resolves others, raised by another requirement or a go get, is
+// a combination nobody has tested.
+func checkPinnedVersions(ctx context.Context, r *Report, g *gotool.Module, byPath map[string]*gotool.Module) {
 	var mf *gotool.ModFile
 	if g.GoMod != "" {
 		mf, _ = gotool.ReadModFile(ctx, g.GoMod)
@@ -196,7 +203,6 @@ func checkProject(ctx context.Context, r *Report, o Options, env map[string]stri
 				fmt.Sprintf("another requirement raised it; to build what ggui is tested with: go get %s@%s", path, want))
 		}
 	}
-	return p
 }
 
 func orUnknown(s string) string {
