@@ -180,15 +180,7 @@ func (b *DevBundle) Stage(ctx context.Context, srcBinary string) (exePath string
 	contents := filepath.Join(app, "Contents")
 	plistPath := filepath.Join(contents, "Info.plist")
 
-	// Never clobber an existing file or non-bundle directory.
-	if fi, err := os.Lstat(app); err == nil {
-		if !fi.IsDir() {
-			return "", nil, fmt.Errorf("%s exists and is not an app bundle; move it away or choose another --bundle-dir", app)
-		}
-		if _, err := os.Stat(plistPath); err != nil {
-			return "", nil, fmt.Errorf("%s exists and is not an app bundle; move it away or choose another --bundle-dir", app)
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
+	if err := refuseClobber(app, plistPath); err != nil {
 		return "", nil, err
 	}
 
@@ -201,11 +193,8 @@ func (b *DevBundle) Stage(ctx context.Context, srcBinary string) (exePath string
 	}
 
 	// PkgInfo: write only when missing or different.
-	pkgInfoPath := filepath.Join(contents, "PkgInfo")
-	if cur, err := os.ReadFile(pkgInfoPath); err != nil || !bytes.Equal(cur, []byte("APPL????")) {
-		if err := os.WriteFile(pkgInfoPath, []byte("APPL????"), 0o644); err != nil {
-			return "", nil, err
-		}
+	if err := writeIfChanged(filepath.Join(contents, "PkgInfo"), []byte("APPL????")); err != nil {
+		return "", nil, err
 	}
 
 	// Icon: build or copy from cache only when missing or source/inset changed.
@@ -217,20 +206,11 @@ func (b *DevBundle) Stage(ctx context.Context, srcBinary string) (exePath string
 	if err != nil {
 		return "", warnings, fmt.Errorf("writing Info.plist: %w", err)
 	}
-	if cur, err := os.ReadFile(plistPath); err != nil || !bytes.Equal(cur, plistData) {
-		if err := os.WriteFile(plistPath, plistData, 0o644); err != nil {
-			return "", warnings, err
-		}
+	if err := writeIfChanged(plistPath, plistData); err != nil {
+		return "", warnings, err
 	}
 
-	// Clean any stray files in Contents/MacOS so codesign only sees the main executable.
-	if entries, err := os.ReadDir(macosDir); err == nil {
-		for _, e := range entries {
-			if e.Name() != b.spec.Executable {
-				_ = os.RemoveAll(filepath.Join(macosDir, e.Name()))
-			}
-		}
-	}
+	removeStrays(macosDir, b.spec.Executable)
 
 	// Atomically place the executable with a fresh inode (temp file + rename).
 	exePath = filepath.Join(macosDir, b.spec.Executable)
@@ -249,6 +229,43 @@ func (b *DevBundle) Stage(ctx context.Context, srcBinary string) (exePath string
 	b.stagedEntitlements = b.signing.Entitlements
 	b.specDirty = false
 	return exePath, warnings, nil
+}
+
+// refuseClobber reports an error when app exists but is not an app
+// bundle holding plistPath, so Stage never clobbers an existing file or
+// non-bundle directory.
+func refuseClobber(app, plistPath string) error {
+	if fi, err := os.Lstat(app); err == nil {
+		if !fi.IsDir() {
+			return fmt.Errorf("%s exists and is not an app bundle; move it away or choose another --bundle-dir", app)
+		}
+		if _, err := os.Stat(plistPath); err != nil {
+			return fmt.Errorf("%s exists and is not an app bundle; move it away or choose another --bundle-dir", app)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+// writeIfChanged writes data to path unless path already holds it.
+func writeIfChanged(path string, data []byte) error {
+	if cur, err := os.ReadFile(path); err == nil && bytes.Equal(cur, data) {
+		return nil
+	}
+	return os.WriteFile(path, data, 0o644) //nolint:gosec // G703: the path is the CLI user's own argument or build output
+}
+
+// removeStrays removes every entry of macosDir but the executable, so
+// codesign only sees the main executable.
+func removeStrays(macosDir, executable string) {
+	if entries, err := os.ReadDir(macosDir); err == nil {
+		for _, e := range entries {
+			if e.Name() != executable {
+				_ = os.RemoveAll(filepath.Join(macosDir, e.Name()))
+			}
+		}
+	}
 }
 
 // SignBinary signs a standalone executable that runs outside <Name>.dev.app
@@ -278,8 +295,7 @@ func (b *DevBundle) ensureIconLocked(ctx context.Context, resDir string) (hasIco
 	}
 	key, err := iconFingerprint(b.spec.Icon, b.spec.IconInset)
 	if err != nil {
-		_ = os.Remove(dst)
-		return false, "", []string{fmt.Sprintf("icon %s: %v; continuing without a bundle icon", name, err)}
+		return withoutIcon(dst, name, err)
 	}
 
 	// Fast path 1: already staged in this session with identical input and file present.
@@ -294,34 +310,47 @@ func (b *DevBundle) ensureIconLocked(ctx context.Context, resDir string) (hasIco
 	if b.spec.IconCacheDir != "" {
 		cachePath = filepath.Join(b.spec.IconCacheDir, key+".icns")
 		if cached, err := os.ReadFile(cachePath); err == nil && len(cached) > 0 {
-			if cur, err := os.ReadFile(dst); err != nil || !bytes.Equal(cur, cached) {
-				if err := os.WriteFile(dst, cached, 0o644); err != nil { //nolint:gosec // G703: the path is the CLI user's own argument or build output
-					return false, "", []string{fmt.Sprintf("writing %s: %v; continuing without a bundle icon", dst, err)}
-				}
+			if err := writeIfChanged(dst, cached); err != nil {
+				return false, "", []string{fmt.Sprintf("writing %s: %v; continuing without a bundle icon", dst, err)}
 			}
 			return true, key, nil
 		}
 	}
 
-	// Slow path: render SVG if needed, encode PNG -> .icns.
+	warnings, err = b.buildIcon(ctx, dst, name, cachePath)
+	if err != nil {
+		return withoutIcon(dst, name, err)
+	}
+	return true, key, warnings
+}
+
+// withoutIcon removes dst, so the bundle goes without an icon, and
+// warns why.
+func withoutIcon(dst, name string, err error) (hasIcon bool, iconKey string, warnings []string) {
+	_ = os.Remove(dst)
+	return false, "", []string{fmt.Sprintf("icon %s: %v; continuing without a bundle icon", name, err)}
+}
+
+// buildIcon is the slow path of ensureIconLocked: it renders the SVG if
+// needed and encodes PNG -> .icns at dst, keeps a copy at cachePath for
+// later sessions when cachePath is set, and warns about how the icon
+// will look.
+func (b *DevBundle) buildIcon(ctx context.Context, dst, name, cachePath string) (warnings []string, err error) {
 	pngPath := b.spec.Icon
 	if b.spec.PrepareIcon != nil {
 		tmpDir, err := os.MkdirTemp("", "ggui-dev-icon-")
 		if err != nil {
-			_ = os.Remove(dst)
-			return false, "", []string{fmt.Sprintf("icon %s: %v; continuing without a bundle icon", name, err)}
+			return nil, err
 		}
 		defer os.RemoveAll(tmpDir)
 		pngPath = filepath.Join(tmpDir, "icon.png")
 		if err := b.spec.PrepareIcon(ctx, pngPath); err != nil {
-			_ = os.Remove(dst)
-			return false, "", []string{fmt.Sprintf("icon %s: %v; continuing without a bundle icon", name, err)}
+			return nil, err
 		}
 	}
 	skipped, fullBleed, err := writeIcon(dst, pngPath, b.spec.IconInset)
 	if err != nil {
-		_ = os.Remove(dst)
-		return false, "", []string{fmt.Sprintf("icon %s: %v; continuing without a bundle icon", name, err)}
+		return nil, err
 	}
 	if len(skipped) > 0 {
 		warnings = append(warnings, fmt.Sprintf("icon %s is smaller than 1024×1024, so the icon has no %v pixel images; macOS scales the largest it has", name, skipped))
@@ -335,7 +364,7 @@ func (b *DevBundle) ensureIconLocked(ctx context.Context, resDir string) (hasIco
 			_ = os.WriteFile(cachePath, data, 0o644) //nolint:gosec // G703: the path is the CLI user's own argument or build output
 		}
 	}
-	return true, key, warnings
+	return warnings, nil
 }
 
 func marshalInfoPlist(in Info, hasIcon bool) ([]byte, error) {
