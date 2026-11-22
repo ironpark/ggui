@@ -25,6 +25,11 @@ func TestBundledSVGsAndRoles(t *testing.T) {
 			t.Fatalf("%s was not cached", name)
 		}
 	}
+	for _, role := range icons.Roles() {
+		if Set().Resolve(role) == nil {
+			t.Fatalf("missing role %s", role)
+		}
+	}
 	for role := range roles {
 		if Set().Resolve(role) == nil {
 			t.Fatalf("missing role %s", role)

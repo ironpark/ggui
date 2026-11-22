@@ -41,6 +41,7 @@ func (library) Resolve(role icons.Role) *icons.SVG {
 	case icons.Search:
 		return Search.SVG()
 	case icons.Alert:
+		// Lucide 1.73 renamed circle-alert to circle-exclamation-point.
 		return CircleExclamationPoint.SVG()
 	case icons.Info:
 		return Info.SVG()
@@ -66,6 +67,12 @@ func (library) Resolve(role icons.Role) *icons.SVG {
 		return Redo2.SVG()
 	case icons.MoreHorizontal:
 		return Ellipsis.SVG()
+	case icons.Copy:
+		return Copy.SVG()
+	case icons.ArrowDown:
+		return ArrowDown.SVG()
+	case icons.PanelLeft:
+		return PanelLeft.SVG()
 	}
 	return nil
 }

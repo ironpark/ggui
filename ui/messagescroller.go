@@ -8,6 +8,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
+	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -135,7 +136,7 @@ func (g *scrollEdgeGlyph) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 }
 
 func (g *scrollEdgeGlyph) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	paintChatIcon(dst, g.env, iconArrowDown, r, g.ink, pick(g.up, math.Pi, 0))
+	paintIcon(dst, g.env, icons.ArrowDown, r, g.ink, pick(g.up, math.Pi, 0))
 }
 
 // Name names the transcript for assistive technology.

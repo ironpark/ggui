@@ -37,11 +37,7 @@ func TestEveryIconParsesAndIsFoundByName(t *testing.T) {
 
 func TestSetHasEveryRole(t *testing.T) {
 	t.Parallel()
-	for _, role := range []icons.Role{
-		icons.Check, icons.Close, icons.ChevronDown, icons.ChevronUp, icons.ChevronLeft, icons.ChevronRight,
-		icons.Search, icons.Alert, icons.Info, icons.Plus, icons.Minus, icons.Download, icons.File, icons.Sun,
-		icons.Moon, icons.Grip, icons.Loader, icons.Undo, icons.Redo, icons.MoreHorizontal,
-	} {
+	for _, role := range icons.Roles() {
 		if tabler.Set().Resolve(role) == nil {
 			t.Fatalf("no icon for %s", role)
 		}

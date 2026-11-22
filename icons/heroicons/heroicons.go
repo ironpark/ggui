@@ -66,6 +66,12 @@ func (library) Resolve(role icons.Role) *icons.SVG {
 		return ArrowUturnRight.SVG()
 	case icons.MoreHorizontal:
 		return EllipsisHorizontal.SVG()
+	case icons.Copy:
+		return DocumentDuplicate.SVG()
+	case icons.ArrowDown:
+		return ArrowDown.SVG()
+	case icons.PanelLeft:
+		return Bars3.SVG()
 	}
 	return nil
 }

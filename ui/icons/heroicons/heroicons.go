@@ -84,4 +84,7 @@ var roles = map[icons.Role]string{
 	icons.Undo:           "arrow-uturn-left",
 	icons.Redo:           "arrow-uturn-right",
 	icons.MoreHorizontal: "ellipsis-horizontal",
+	icons.Copy:           "document-duplicate",
+	icons.ArrowDown:      "arrow-down",
+	icons.PanelLeft:      "bars-3",
 }

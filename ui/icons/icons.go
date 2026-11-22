@@ -35,7 +35,23 @@ const (
 	Redo         Role = "redo"
 	// MoreHorizontal is three dots in a row: steps or pages left out.
 	MoreHorizontal Role = "more-horizontal"
+	Copy           Role = "copy"
+	ArrowDown      Role = "arrow-down"
+	PanelLeft      Role = "panel-left"
 )
+
+// Roles returns a fresh slice of all built-in semantic icon roles.
+func Roles() []Role {
+	return []Role{
+		Check, Close,
+		ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
+		Search, Alert, Info,
+		Plus, Minus, Download, File,
+		Sun, Moon, Grip, Loader,
+		Undo, Redo, MoreHorizontal,
+		Copy, ArrowDown, PanelLeft,
+	}
+}
 
 // Set resolves semantic roles to reusable SVG assets. Return nil for an unknown
 // role so that the theme or fallback set can supply it.
