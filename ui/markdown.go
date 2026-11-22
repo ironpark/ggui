@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/pkg/markdown"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/runtime"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/markdown"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )

@@ -491,7 +491,7 @@ Command matches Korean as it is typed: the query's last syllable, still
 being composed, finds what its keys begin ("셋" finds "세션"), a lone
 consonant finds a syllable it begins, and Hangul typed with the input method
 left on Korean finds what its keys spell on the 2-set layout ("ㄴㄷㅅ샤" finds
-"Settings"). `pkg/hangul` has the same matching for a search of your own.
+"Settings").
 
 Command uses an integrated search header and divider. For a dialog palette,
 `.Borderless().Height(144).StableHeight().Hints()` avoids nested panel borders,
