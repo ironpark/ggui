@@ -3,77 +3,70 @@
 package a11ybridge
 
 import (
-	"runtime"
 	"testing"
 
-	"github.com/ebitengine/purego/cstrings"
 	"github.com/ebitengine/purego/objc"
 	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/platform/cocoa"
 )
 
 func TestAXElementsResolveTheirOwningBridge(t *testing.T) {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-	pool := objc.ID(objc.GetClass("NSAutoreleasePool")).Send(axSelAlloc).Send(axSelInit)
-	defer pool.Send(objc.RegisterName("drain"))
-	var bridges [2]*Bridge
-	var elements [2]objc.ID
-	for i, value := range []string{"first window", "second window"} {
-		d := &darwinAX{}
-		b := &Bridge{plat: d}
-		d.bridge = b
-		bridges[i] = b
-		tree := axRoots(a11y.SemNode{Role: a11y.RoleTextField, Value: value})
-		b.cur.Store(newAXFrame(tree))
-		elements[i] = objc.ID(b.element(axKeyOf(tree.At(0).ID)))
-		t.Cleanup(b.clear)
-	}
-	for i, want := range []string{"first window", "second window"} {
-		got := cstrings.NSStringToString(elements[i].Send(objc.RegisterName("accessibilityValue")))
-		if got != want {
-			t.Fatalf("window %d value = %q, want %q", i, got, want)
+	cocoa.WithAutoreleasePool(func() {
+		var bridges [2]*Bridge
+		var elements [2]objc.ID
+		for i, value := range []string{"first window", "second window"} {
+			d := &darwinAX{}
+			b := &Bridge{plat: d}
+			d.bridge = b
+			bridges[i] = b
+			tree := axRoots(a11y.SemNode{Role: a11y.RoleTextField, Value: value})
+			b.cur.Store(newAXFrame(tree))
+			elements[i] = objc.ID(b.element(axKeyOf(tree.At(0).ID)))
+			t.Cleanup(b.clear)
 		}
-	}
-	bridges[0].clear()
-	if got := cstrings.NSStringToString(elements[1].Send(objc.RegisterName("accessibilityValue"))); got != "second window" {
-		t.Fatalf("closing first bridge changed second: %q", got)
-	}
+		for i, want := range []string{"first window", "second window"} {
+			got := cocoa.GoString(elements[i].Send(objc.RegisterName("accessibilityValue")))
+			if got != want {
+				t.Fatalf("window %d value = %q, want %q", i, got, want)
+			}
+		}
+		bridges[0].clear()
+		if got := cocoa.GoString(elements[1].Send(objc.RegisterName("accessibilityValue"))); got != "second window" {
+			t.Fatalf("closing first bridge changed second: %q", got)
+		}
+	})
 }
 
 // Exercise the actual Objective-C value returned to AppKit. An empty editor
 // must expose AXValue so clients can discover it and write the first text.
 func TestAXEmptyEditorValue(t *testing.T) {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-	pool := objc.ID(objc.GetClass("NSAutoreleasePool")).Send(axSelAlloc).Send(axSelInit)
-	defer pool.Send(objc.RegisterName("drain"))
+	cocoa.WithAutoreleasePool(func() {
+		b := &Bridge{plat: &darwinAX{}}
+		b.plat.(*darwinAX).bridge = b
 
-	b := &Bridge{plat: &darwinAX{}}
-	b.plat.(*darwinAX).bridge = b
-
-	for _, tc := range []struct {
-		name    string
-		role    a11y.Role
-		value   string
-		wantNil bool
-	}{
-		{"empty editor", a11y.RoleTextField, "", false},
-		{"populated editor", a11y.RoleTextField, "hello", false},
-		{"button without value", a11y.RoleButton, "", true},
-	} {
-		tree := axRoots(a11y.SemNode{Role: tc.role, Value: tc.value, Actions: a11y.ActionSetValue})
-		b.cur.Store(newAXFrame(tree))
-		e := objc.ID(b.element(axKeyOf(tree.At(0).ID)))
-		value := e.Send(objc.RegisterName("accessibilityValue"))
-		if (value == 0) != tc.wantNil {
-			t.Fatalf("%s: nil AXValue = %v, want %v", tc.name, value == 0, tc.wantNil)
+		for _, tc := range []struct {
+			name    string
+			role    a11y.Role
+			value   string
+			wantNil bool
+		}{
+			{"empty editor", a11y.RoleTextField, "", false},
+			{"populated editor", a11y.RoleTextField, "hello", false},
+			{"button without value", a11y.RoleButton, "", true},
+		} {
+			tree := axRoots(a11y.SemNode{Role: tc.role, Value: tc.value, Actions: a11y.ActionSetValue})
+			b.cur.Store(newAXFrame(tree))
+			e := objc.ID(b.element(axKeyOf(tree.At(0).ID)))
+			value := e.Send(objc.RegisterName("accessibilityValue"))
+			if (value == 0) != tc.wantNil {
+				t.Fatalf("%s: nil AXValue = %v, want %v", tc.name, value == 0, tc.wantNil)
+			}
+			if value != 0 && cocoa.GoString(value) != tc.value {
+				t.Fatalf("AXValue = %q, want %q", cocoa.GoString(value), tc.value)
+			}
 		}
-		if value != 0 && cstrings.NSStringToString(value) != tc.value {
-			t.Fatalf("AXValue = %q, want %q", cstrings.NSStringToString(value), tc.value)
-		}
-	}
-	b.clear()
+		b.clear()
+	})
 }
 
 func TestAXBoundsFlipTheYAxis(t *testing.T) {

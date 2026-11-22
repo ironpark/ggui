@@ -29,13 +29,8 @@ var (
 	selAddItem              = objc.RegisterName("addItem:")
 	selIndexOfItem          = objc.RegisterName("indexOfItem:")
 	selRemoveItem           = objc.RegisterName("removeItem:")
-	selAlloc                = objc.RegisterName("alloc")
-	selInit                 = objc.RegisterName("init")
 	selInitWithTitle        = objc.RegisterName("initWithTitle:")
 	selInitItem             = objc.RegisterName("initWithTitle:action:keyEquivalent:")
-	selRelease              = objc.RegisterName("release")
-	selRetain               = objc.RegisterName("retain")
-	selAutorelease          = objc.RegisterName("autorelease")
 	selSeparatorItem        = objc.RegisterName("separatorItem")
 	selSetTarget            = objc.RegisterName("setTarget:")
 	selSetAction            = objc.RegisterName("setAction:")
@@ -52,7 +47,6 @@ var (
 	selRemoveStatusItem = objc.RegisterName("removeStatusItem:")
 	selButton           = objc.RegisterName("button")
 	selSetMenu          = objc.RegisterName("setMenu:")
-	selSetTitle         = objc.RegisterName("setTitle:")
 	selSetImage         = objc.RegisterName("setImage:")
 	selSetImagePosition = objc.RegisterName("setImagePosition:")
 	selSetToolTip       = objc.RegisterName("setToolTip:")
@@ -85,8 +79,6 @@ const (
 	// fits the menu bar.
 	trayIconSize = 18.0
 )
-
-type nsSize struct{ W, H float64 }
 
 var (
 	mu              sync.Mutex
@@ -171,7 +163,7 @@ func install(menus []Item) {
 	bar := app.Send(selMainMenu)
 	if bar == 0 {
 		for _, it := range barMenu {
-			it.Send(selRelease)
+			it.Send(cocoa.SelRelease)
 		}
 		barMenu = barMenu[:0]
 		forget(barIDs)
@@ -179,15 +171,15 @@ func install(menus []Item) {
 		if len(menus) == 0 {
 			return
 		}
-		bar = classNSMenu.Send(selAlloc).Send(selInit)
+		bar = classNSMenu.Send(cocoa.SelAlloc).Send(cocoa.SelInit)
 		app.Send(selSetMainMenu, bar)
-		bar.Send(selRelease)
+		bar.Send(cocoa.SelRelease)
 	}
 	for _, it := range barMenu {
 		if idx := objc.Send[int](bar, selIndexOfItem, it); idx >= 0 && idx != nsNotFound {
 			bar.Send(selRemoveItem, it)
 		}
-		it.Send(selRelease)
+		it.Send(cocoa.SelRelease)
 	}
 	barMenu = barMenu[:0]
 	forget(barIDs)
@@ -208,14 +200,14 @@ func install(menus []Item) {
 // menu makes an NSMenu of entries, owned by the caller, recording the ids
 // of its actions in ids.
 func menu(title string, entries []Item, ids *[]int) objc.ID {
-	m := classNSMenu.Send(selAlloc).Send(selInitWithTitle, cocoa.String(title))
+	m := classNSMenu.Send(cocoa.SelAlloc).Send(selInitWithTitle, cocoa.String(title))
 	// The items' enabled state is ggui's to say, not a responder chain's.
 	m.Send(selSetAutoenablesItems, false)
 	for _, e := range entries {
 		child := entry(e, ids)
 		m.Send(selAddItem, child)
 		if !e.Separator {
-			child.Send(selRelease)
+			child.Send(cocoa.SelRelease)
 		}
 	}
 	return m
@@ -223,10 +215,10 @@ func menu(title string, entries []Item, ids *[]int) objc.ID {
 
 // submenuItem makes the menu bar or menu item that opens m's entries.
 func submenuItem(m Item, ids *[]int) objc.ID {
-	it := classNSMenuItem.Send(selAlloc).Send(selInitItem, cocoa.String(m.Title), objc.SEL(0), cocoa.String(""))
+	it := classNSMenuItem.Send(cocoa.SelAlloc).Send(selInitItem, cocoa.String(m.Title), objc.SEL(0), cocoa.String(""))
 	sub := menu(m.Title, m.Items, ids)
 	it.Send(selSetSubmenu, sub)
-	sub.Send(selRelease)
+	sub.Send(cocoa.SelRelease)
 	return it
 }
 
@@ -240,9 +232,9 @@ func entry(e Item, ids *[]int) objc.ID {
 		return submenuItem(e, ids)
 	}
 	if target == 0 {
-		target = objc.ID(targetClass()).Send(selAlloc).Send(selInit)
+		target = objc.ID(targetClass()).Send(cocoa.SelAlloc).Send(cocoa.SelInit)
 	}
-	it := classNSMenuItem.Send(selAlloc).Send(selInitItem, cocoa.String(e.Title), selSelect, cocoa.String(e.Key))
+	it := classNSMenuItem.Send(cocoa.SelAlloc).Send(selInitItem, cocoa.String(e.Title), selSelect, cocoa.String(e.Key))
 	if e.Key != "" {
 		var mask uint
 		if e.Cmd {
@@ -334,17 +326,17 @@ func installTray(key int, t Tray) {
 	s := trays[key]
 	if s == nil {
 		item := classNSStatusBar.Send(selSystemStatusBar).Send(selStatusItem, float64(nsVariableStatusItemLength))
-		item.Send(selRetain)
+		item.Send(cocoa.SelRetain)
 		s = &statusItem{item: item}
 		trays[key] = s
 	}
 	forget(s.ids)
 	s.ids = s.ids[:0]
 	if target == 0 {
-		target = objc.ID(targetClass()).Send(selAlloc).Send(selInit)
+		target = objc.ID(targetClass()).Send(cocoa.SelAlloc).Send(cocoa.SelInit)
 	}
 	button := s.item.Send(selButton)
-	button.Send(selSetTitle, cocoa.String(t.Title))
+	button.Send(cocoa.SelSetTitle, cocoa.String(t.Title))
 	button.Send(selSetToolTip, cocoa.String(t.Tooltip))
 	button.Send(selSetImage, trayImage(t.Icon, t.Template))
 	if len(t.Icon) > 0 && t.Title != "" {
@@ -353,7 +345,7 @@ func installTray(key int, t Tray) {
 	if len(t.Menu) > 0 {
 		m := menu("", t.Menu, &s.ids)
 		s.item.Send(selSetMenu, m)
-		m.Send(selRelease)
+		m.Send(cocoa.SelRelease)
 		return
 	}
 	s.item.Send(selSetMenu, objc.ID(0))
@@ -369,17 +361,17 @@ func trayImage(png []byte, template bool) objc.ID {
 		return 0
 	}
 	data := classNSData.Send(selDataWithBytes, unsafe.Pointer(&png[0]), uint(len(png)))
-	img := classNSImage.Send(selAlloc).Send(selInitWithData, data)
+	img := classNSImage.Send(cocoa.SelAlloc).Send(selInitWithData, data)
 	if img == 0 {
 		return 0
 	}
-	size := objc.Send[nsSize](img, selSize)
+	size := objc.Send[cocoa.Size](img, selSize)
 	if size.H > 0 {
-		img.Send(selSetSize, nsSize{W: size.W * trayIconSize / size.H, H: trayIconSize})
+		img.Send(selSetSize, cocoa.Size{W: size.W * trayIconSize / size.H, H: trayIconSize})
 	}
 	img.Send(selSetTemplate, template)
 	// The button takes its own reference when it is handed the image.
-	return img.Send(selAutorelease)
+	return img.Send(cocoa.SelAutorelease)
 }
 
 // RemoveTray takes the icon named key out of the status area.
@@ -395,7 +387,7 @@ func RemoveTray(key int) {
 		}
 		forget(s.ids)
 		classNSStatusBar.Send(selSystemStatusBar).Send(selRemoveStatusItem, s.item)
-		s.item.Send(selRelease)
+		s.item.Send(cocoa.SelRelease)
 		delete(trays, key)
 	})
 }
@@ -417,7 +409,7 @@ func Popup(owner uintptr, x, y float64, entries []Item) (selected int) {
 		}
 		var ids []int
 		m := menu("", entries, &ids)
-		defer m.Send(selRelease)
+		defer m.Send(cocoa.SelRelease)
 		defer forget(ids)
 		mu.Lock()
 		for _, id := range ids {
@@ -432,10 +424,10 @@ func Popup(owner uintptr, x, y float64, entries []Item) (selected int) {
 			}
 		}()
 		if !objc.Send[bool](view, objc.RegisterName("isFlipped")) {
-			bounds := objc.Send[struct{ X, Y, W, H float64 }](view, objc.RegisterName("bounds"))
-			y = bounds.H - y
+			bounds := objc.Send[cocoa.Rect](view, cocoa.SelBounds)
+			y = bounds.Size.H - y
 		}
-		m.Send(objc.RegisterName("popUpMenuPositioningItem:atLocation:inView:"), objc.ID(0), struct{ X, Y float64 }{x, y}, view)
+		m.Send(objc.RegisterName("popUpMenuPositioningItem:atLocation:inView:"), objc.ID(0), cocoa.Point{X: x, Y: y}, view)
 	})
 	return selected
 }

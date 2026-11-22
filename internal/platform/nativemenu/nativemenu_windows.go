@@ -14,6 +14,7 @@ import (
 	"github.com/ironpark/ggwd"
 
 	"github.com/ironpark/ggui/internal/platform/remotedisplay"
+	"github.com/ironpark/ggui/internal/platform/win32"
 	"golang.org/x/image/draw"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
@@ -27,33 +28,29 @@ import (
 // SetEnabled and SetChecked have set since; there is no menu bar.
 
 var (
-	dllUser32  = windows.NewLazySystemDLL("user32.dll")
-	dllGdi32   = windows.NewLazySystemDLL("gdi32.dll")
-	dllShell32 = windows.NewLazySystemDLL("shell32.dll")
-	dllKernel  = windows.NewLazySystemDLL("kernel32.dll")
+	dllGdi32 = windows.NewLazySystemDLL("gdi32.dll")
 
-	procRegisterClassExW       = dllUser32.NewProc("RegisterClassExW")
-	procCreateWindowExW        = dllUser32.NewProc("CreateWindowExW")
-	procDefWindowProcW         = dllUser32.NewProc("DefWindowProcW")
-	procRegisterWindowMessageW = dllUser32.NewProc("RegisterWindowMessageW")
-	procCreatePopupMenu        = dllUser32.NewProc("CreatePopupMenu")
-	procAppendMenuW            = dllUser32.NewProc("AppendMenuW")
-	procTrackPopupMenuEx       = dllUser32.NewProc("TrackPopupMenuEx")
-	procDestroyMenu            = dllUser32.NewProc("DestroyMenu")
-	procSetForegroundWindow    = dllUser32.NewProc("SetForegroundWindow")
-	procPostMessageW           = dllUser32.NewProc("PostMessageW")
-	procGetSystemMetrics       = dllUser32.NewProc("GetSystemMetrics")
-	procGetSystemMetricsForDpi = dllUser32.NewProc("GetSystemMetricsForDpi")
-	procGetDpiForWindow        = dllUser32.NewProc("GetDpiForWindow")
-	procCreateIconIndirect     = dllUser32.NewProc("CreateIconIndirect")
-	procDestroyIcon            = dllUser32.NewProc("DestroyIcon")
-	procLoadIconW              = dllUser32.NewProc("LoadIconW")
+	procRegisterClassExW       = win32.User32.NewProc("RegisterClassExW")
+	procCreateWindowExW        = win32.User32.NewProc("CreateWindowExW")
+	procDefWindowProcW         = win32.User32.NewProc("DefWindowProcW")
+	procRegisterWindowMessageW = win32.User32.NewProc("RegisterWindowMessageW")
+	procCreatePopupMenu        = win32.User32.NewProc("CreatePopupMenu")
+	procAppendMenuW            = win32.User32.NewProc("AppendMenuW")
+	procTrackPopupMenuEx       = win32.User32.NewProc("TrackPopupMenuEx")
+	procDestroyMenu            = win32.User32.NewProc("DestroyMenu")
+	procSetForegroundWindow    = win32.User32.NewProc("SetForegroundWindow")
+	procPostMessageW           = win32.User32.NewProc("PostMessageW")
+	procGetSystemMetrics       = win32.User32.NewProc("GetSystemMetrics")
+	procGetSystemMetricsForDpi = win32.User32.NewProc("GetSystemMetricsForDpi")
+	procCreateIconIndirect     = win32.User32.NewProc("CreateIconIndirect")
+	procDestroyIcon            = win32.User32.NewProc("DestroyIcon")
+	procLoadIconW              = win32.User32.NewProc("LoadIconW")
 	procCreateDIBSection       = dllGdi32.NewProc("CreateDIBSection")
 	procCreateBitmap           = dllGdi32.NewProc("CreateBitmap")
 	procDeleteObject           = dllGdi32.NewProc("DeleteObject")
-	procShellNotifyIconW       = dllShell32.NewProc("Shell_NotifyIconW")
-	procExtractIconExW         = dllShell32.NewProc("ExtractIconExW")
-	procGetModuleHandleW       = dllKernel.NewProc("GetModuleHandleW")
+	procShellNotifyIconW       = win32.Shell32.NewProc("Shell_NotifyIconW")
+	procExtractIconExW         = win32.Shell32.NewProc("ExtractIconExW")
+	procGetModuleHandleW       = win32.Kernel32.NewProc("GetModuleHandleW")
 )
 
 // Shell_NotifyIconW messages and flags, from shellapi.h.
@@ -641,8 +638,8 @@ func dpiFromWParam(wparam uintptr) uint32 {
 
 // windowDPI returns the DPI of w via GetDpiForWindow, or 0 if unavailable.
 func windowDPI(w windows.HWND) uint32 {
-	if w != 0 && procGetDpiForWindow.Find() == nil {
-		if dpi, _, _ := procGetDpiForWindow.Call(uintptr(w)); dpi > 0 {
+	if w != 0 && win32.GetDpiForWindow.Find() == nil {
+		if dpi, _, _ := win32.GetDpiForWindow.Call(uintptr(w)); dpi > 0 {
 			return uint32(dpi)
 		}
 	}

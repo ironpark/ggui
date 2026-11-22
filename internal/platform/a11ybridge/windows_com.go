@@ -9,6 +9,7 @@ import (
 	"unsafe"
 
 	"github.com/ironpark/ggui/a11y"
+	"github.com/ironpark/ggui/internal/platform/win32"
 	"golang.org/x/sys/windows"
 )
 
@@ -122,10 +123,10 @@ func objOf(this uintptr) (*winObj, int, bool) {
 	if this == 0 {
 		return nil, 0, false
 	}
-	table := *(*uintptr)(unsafe.Pointer(this))
+	table := *win32.Deref[uintptr](this)
 	for k, vt := range vtbls {
 		if vt == table {
-			return (*winObj)(unsafe.Pointer(this - uintptr(k)*unsafe.Sizeof(uintptr(0)))), k, true
+			return win32.Deref[winObj](this - uintptr(k)*unsafe.Sizeof(uintptr(0))), k, true
 		}
 	}
 	return nil, 0, false
@@ -163,7 +164,7 @@ func newWinObj(b *Bridge, handle int64) uintptr {
 	if p == 0 {
 		return 0
 	}
-	o := (*winObj)(unsafe.Pointer(p))
+	o := win32.Deref[winObj](p)
 	o.vtbl = vtbls
 	o.refs = 1
 	o.handle = handle
@@ -174,7 +175,7 @@ func newWinObj(b *Bridge, handle int64) uintptr {
 // winAlloc takes a block of fixed, zeroed memory outside the Go heap.
 func winAlloc(size uintptr) uintptr {
 	// GMEM_FIXED | GMEM_ZEROINIT.
-	p, _, _ := procGlobalAlloc.Call(0x0040, size)
+	p, _, _ := win32.GlobalAlloc.Call(0x0040, size)
 	return p
 }
 
@@ -198,7 +199,7 @@ func comRelease(this uintptr) uintptr {
 	n := atomic.AddInt32(&o.refs, -1)
 	if n <= 0 {
 		winObjectBridges.Delete(uintptr(unsafe.Pointer(o)))
-		procGlobalFree.Call(uintptr(unsafe.Pointer(o)))
+		win32.GlobalFree.Call(uintptr(unsafe.Pointer(o)))
 		return 0
 	}
 	return uintptr(n)
@@ -218,12 +219,12 @@ func comQueryInterface(this, riid, ppv uintptr) uintptr {
 	if ppv == 0 {
 		return ePointer
 	}
-	*(*uintptr)(unsafe.Pointer(ppv)) = 0
+	*win32.Deref[uintptr](ppv) = 0
 	o, _, ok := objOf(this)
 	if !ok {
 		return eNoInterface
 	}
-	id := (*winGUID)(unsafe.Pointer(riid))
+	id := win32.Deref[winGUID](riid)
 	k := -1
 	switch {
 	case *id == iidUnknown || *id == iidRawElementProviderSimple:
@@ -250,7 +251,7 @@ func comQueryInterface(this, riid, ppv uintptr) uintptr {
 	}
 	slot := uintptr(unsafe.Pointer(o)) + uintptr(k)*unsafe.Sizeof(uintptr(0))
 	comAddRef(slot)
-	*(*uintptr)(unsafe.Pointer(ppv)) = slot
+	*win32.Deref[uintptr](ppv) = slot
 	return sOK
 }
 
@@ -368,7 +369,7 @@ func buildVtables() {
 	table := func(methods ...uintptr) uintptr {
 		all := append(append([]uintptr{}, unk...), methods...)
 		p := winAlloc(uintptr(len(all)) * unsafe.Sizeof(uintptr(0)))
-		copy(unsafe.Slice((*uintptr)(unsafe.Pointer(p)), len(all)), all)
+		copy(unsafe.Slice(win32.Deref[uintptr](p), len(all)), all)
 		return p
 	}
 	vtbls[ifSimple] = table(
@@ -428,22 +429,15 @@ func buildVtables() {
 // of the system directory rather than out of whatever is beside the
 // executable, and nothing is loaded until the first call.
 var (
-	dllUser32   = windows.NewLazySystemDLL("user32.dll")
-	dllKernel32 = windows.NewLazySystemDLL("kernel32.dll")
-	dllOleAut32 = windows.NewLazySystemDLL("oleaut32.dll")
-	dllUIA      = windows.NewLazySystemDLL("uiautomationcore.dll")
+	dllUIA = windows.NewLazySystemDLL("uiautomationcore.dll")
 
-	procGlobalAlloc = dllKernel32.NewProc("GlobalAlloc")
-	procGlobalFree  = dllKernel32.NewProc("GlobalFree")
+	procClientToScreen = win32.User32.NewProc("ClientToScreen")
+	procGetClientRect  = win32.User32.NewProc("GetClientRect")
 
-	procClientToScreen  = dllUser32.NewProc("ClientToScreen")
-	procGetDpiForWindow = dllUser32.NewProc("GetDpiForWindow")
-	procGetClientRect   = dllUser32.NewProc("GetClientRect")
-
-	procSysAllocString        = dllOleAut32.NewProc("SysAllocString")
-	procSysFreeString         = dllOleAut32.NewProc("SysFreeString")
-	procSafeArrayCreateVector = dllOleAut32.NewProc("SafeArrayCreateVector")
-	procSafeArrayPutElement   = dllOleAut32.NewProc("SafeArrayPutElement")
+	procSysAllocString        = win32.OleAut32.NewProc("SysAllocString")
+	procSysFreeString         = win32.OleAut32.NewProc("SysFreeString")
+	procSafeArrayCreateVector = win32.OleAut32.NewProc("SafeArrayCreateVector")
+	procSafeArrayPutElement   = win32.OleAut32.NewProc("SafeArrayPutElement")
 
 	procUiaReturnRawElementProvider = dllUIA.NewProc("UiaReturnRawElementProvider")
 	procUiaHostProviderFromHwnd     = dllUIA.NewProc("UiaHostProviderFromHwnd")

@@ -5,13 +5,14 @@ package runtime
 import (
 	"unsafe"
 
+	"github.com/ironpark/ggui/internal/platform/win32"
 	"github.com/ironpark/ggwd"
 )
 
 // A message is user32's MessageBoxW, whose buttons are fixed sets; see
 // Message.Buttons for how a message's buttons map onto them.
 
-var procMessageBoxW = dllUser32.NewProc("MessageBoxW")
+var procMessageBoxW = win32.User32.NewProc("MessageBoxW")
 
 // MessageBoxW styles and results, from winuser.h.
 const (
