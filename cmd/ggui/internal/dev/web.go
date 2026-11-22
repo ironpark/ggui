@@ -142,32 +142,10 @@ func (w *Web) Run(ctx context.Context) error {
 	w.out.Success("serving %s at %s", w.Target, w.out.Cyan(url(ln.Addr(), w.Addr, srv.Base())))
 
 	if w.Watch {
-		lo := gotool.ListOptions{Dir: w.Dir, Tags: w.Tags, GOOS: "js", GOARCH: "wasm"}
-		ig := watch.NewIgnore(w.OutDir)
-		list := func(ctx context.Context) ([]string, error) {
-			return WatchSet(ctx, lo, w.Package, w.Extra, ig)
-		}
-		set, err := list(ctx)
-		if err != nil {
+		if err := w.rebuildOnChange(ctx, &bg, srv); err != nil {
 			hs.Close()
 			return err
 		}
-		wt := watch.New(set, watch.Options{
-			List: list, Ignore: ig,
-			Settle: settleTime, Poll: pollInterval, SafetyNet: safetyNetInterval,
-			Logf: w.out.Warn, Tracef: w.Tracef,
-		})
-		changes := make(chan watch.Change)
-		bg.Add(2)
-		go func() {
-			defer bg.Done()
-			wt.Run(ctx, changes)
-		}()
-		w.logf("watching %d files; the page reloads itself after each build", wt.Len())
-		go func() {
-			defer bg.Done()
-			w.loop(ctx, changes, srv)
-		}()
 	} else {
 		w.logf("not watching: request %s_rebuild, or reload the page after a failed build, to build again", srv.Base())
 	}
@@ -182,6 +160,37 @@ func (w *Web) Run(ctx context.Context) error {
 		}
 		return err
 	}
+}
+
+// rebuildOnChange lists the files the app is built from, and starts on bg
+// the watcher on them and the loop that rebuilds on what it finds.
+func (w *Web) rebuildOnChange(ctx context.Context, bg *sync.WaitGroup, srv *web.Server) error {
+	lo := gotool.ListOptions{Dir: w.Dir, Tags: w.Tags, GOOS: "js", GOARCH: "wasm"}
+	ig := watch.NewIgnore(w.OutDir)
+	list := func(ctx context.Context) ([]string, error) {
+		return WatchSet(ctx, lo, w.Package, w.Extra, ig)
+	}
+	set, err := list(ctx)
+	if err != nil {
+		return err
+	}
+	wt := watch.New(set, watch.Options{
+		List: list, Ignore: ig,
+		Settle: settleTime, Poll: pollInterval, SafetyNet: safetyNetInterval,
+		Logf: w.out.Warn, Tracef: w.Tracef,
+	})
+	changes := make(chan watch.Change)
+	bg.Add(2)
+	go func() {
+		defer bg.Done()
+		wt.Run(ctx, changes)
+	}()
+	w.logf("watching %d files; the page reloads itself after each build", wt.Len())
+	go func() {
+		defer bg.Done()
+		w.loop(ctx, changes, srv)
+	}()
+	return nil
 }
 
 // loop rebuilds on each real change, after the same wait for quiet as
@@ -208,17 +217,23 @@ func (w *Web) loop(ctx context.Context, changes <-chan watch.Change, srv *web.Se
 				w.out.Info("%s: comments only; not rebuilt — line numbers in traces now lag the source", describe(w.Dir, c.Cosmetic))
 			}
 		case <-dueC:
-			id, batch, _ := p.start()
-			p.done(id)
-			w.out.Info("%s changed, rebuilding", w.out.Cyan(describe(w.Dir, batch)))
-			if w.Config != "" && slices.Contains(batch, w.Config) {
-				// The server was made with the file's settings; the
-				// desktop loop takes them up again, this one does not.
-				w.out.Warn("%s changed: start ggui dev --web again for its settings to take effect", displayPath(w.Config))
-			}
-			srv.Rebuild()
+			w.rebuild(&p, srv)
 		}
 	}
+}
+
+// rebuild has the server build again for the changes p gathered, which
+// fell due.
+func (w *Web) rebuild(p *plan, srv *web.Server) {
+	id, batch, _ := p.start()
+	p.done(id)
+	w.out.Info("%s changed, rebuilding", w.out.Cyan(describe(w.Dir, batch)))
+	if w.Config != "" && slices.Contains(batch, w.Config) {
+		// The server was made with the file's settings; the
+		// desktop loop takes them up again, this one does not.
+		w.out.Warn("%s changed: start ggui dev --web again for its settings to take effect", displayPath(w.Config))
+	}
+	srv.Rebuild()
 }
 
 // url is the address to open, with localhost for an unspecified host.

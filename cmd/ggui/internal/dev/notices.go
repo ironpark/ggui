@@ -84,26 +84,33 @@ func (n *notices) Write(p []byte) (int, error) {
 			n.mid = end < 0
 			continue
 		}
-		// Held: a whole line to judge, or a part that has stopped
-		// looking like a notice.
-		whole := n.held[len(n.held)-1] == '\n'
-		if !whole && couldBeNotice(n.held) && len(n.held) < maxHeld {
-			continue
-		}
-		n.holding, n.mid = false, !whole
-		if whole {
-			if m := remoteNoticeLine.FindSubmatch(n.held); m != nil {
-				if n.seen.first(string(m[1])) {
-					n.say(string(m[1]))
-				}
-				continue
-			}
-		}
-		if _, err := n.out.Write(n.held); err != nil {
+		if err := n.judge(); err != nil {
 			return written - len(p), err
 		}
 	}
 	return written, nil
+}
+
+// judge decides on what is held once it is a whole line, or a part that
+// has stopped looking like a notice: a notice is said, each distinct one
+// once in the life of seen, and anything else passed on to out. A part
+// that may still be a notice stays held.
+func (n *notices) judge() error {
+	whole := n.held[len(n.held)-1] == '\n'
+	if !whole && couldBeNotice(n.held) && len(n.held) < maxHeld {
+		return nil
+	}
+	n.holding, n.mid = false, !whole
+	if whole {
+		if m := remoteNoticeLine.FindSubmatch(n.held); m != nil {
+			if n.seen.first(string(m[1])) {
+				n.say(string(m[1]))
+			}
+			return nil
+		}
+	}
+	_, err := n.out.Write(n.held)
+	return err
 }
 
 // couldBeNotice reports whether a line beginning with b may be a notice.
