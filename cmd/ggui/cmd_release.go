@@ -137,71 +137,23 @@ type releasePlan struct {
 	caskToken string
 	nupkg     string // the .nupkg's path, when one was made
 	chocoID   string
+	notesFile string // the release's description, from --notes or release.notes
 }
 
 func (p *releasePlan) publishes(ch string) bool { return slices.Contains(p.publish, ch) }
 
 func runRelease(ctx context.Context, o releaseOptions, stdout io.Writer, getenv func(string) string) error {
-	log := ui.Stderr
 	proj, err := project.Open(".", o.dir, o.configPath)
 	if err != nil {
 		return err
 	}
-	cfg := &proj.Config
-	r := cfg.Release
-	p := &releasePlan{proj: proj, arg: o.dir, version: cfg.App.Version, targets: r.Targets, arches: r.Arches, publish: r.Publish}
-	if o.version != "" {
-		p.version = strings.TrimPrefix(o.version, "v")
-	}
-	if !versionRE.MatchString(p.version) {
-		return fmt.Errorf("version %q must be one to three numbers separated by dots, such as 1.2.0, as app.version is", p.version)
-	}
-	// The builds stamp the version in: Info.plist, the Windows version
-	// information, the Linux packages.
-	cfg.App.Version = p.version
-	p.tag = r.TagPrefix + p.version
-	if o.targetsSet {
-		if p.targets, err = list("targets", o.targetsFlag, config.ReleaseTargets); err != nil {
-			return err
-		}
-	}
-	if o.archesSet {
-		if p.arches, err = list("arches", o.archesFlag, config.ReleaseArches); err != nil {
-			return err
-		}
-	}
-	if o.publishSet {
-		if strings.TrimSpace(o.publishFlag) == "none" {
-			p.publish = nil
-		} else if p.publish, err = list("publish", o.publishFlag, config.ReleaseChannels); err != nil {
-			return err
-		}
-	}
-	if len(p.targets) == 0 || len(p.arches) == 0 {
-		return errors.New("nothing to build: name at least one target and one architecture")
-	}
-	if o.notes == "" && r.Notes != "" {
-		o.notes = proj.Path(r.Notes)
-	}
-	if err := p.checkChannels(o); err != nil {
+	p, err := newReleasePlan(proj, o)
+	if err != nil {
 		return err
 	}
-
-	// What can be checked before the build is, since a build takes
-	// minutes and a notarized one longer.
-	p.api = strings.TrimRight(r.GitHubAPI, "/")
-	p.web = github.WebURL(p.api)
-	if err := p.checkGit(ctx, o); err != nil {
+	gh, err := p.checkRelease(ctx, o, getenv)
+	if err != nil {
 		return err
-	}
-	var gh *github.Client
-	if !o.dryRun && (p.publishes("github") || p.publishes("homebrew")) {
-		if gh, err = p.preflight(ctx, o, getenv); err != nil {
-			return err
-		}
-	}
-	if !o.dryRun && p.publishes("choco") && getenv("CHOCOLATEY_API_KEY") == "" {
-		return errors.New("publishing to Chocolatey needs $CHOCOLATEY_API_KEY, your chocolatey.org account's API key")
 	}
 
 	out, err := proj.OutDir(o.out)
@@ -224,42 +176,124 @@ func runRelease(ctx context.Context, o releaseOptions, stdout io.Writer, getenv 
 	if err := p.build(ctx, work); err != nil {
 		return err
 	}
-	if len(p.assets) == 0 {
-		return errors.New("the builds made nothing to release")
-	}
-	for i := range p.assets {
-		if err := p.assets[i].Hash(); err != nil {
-			return err
-		}
-	}
-	if p.sums, err = release.WriteSums(p.dir, p.assets); err != nil {
-		return err
-	}
-	all := append(slices.Clone(p.assets), p.sums)
-	log.Success("%s %s: %d files in %s", p.main.Name, p.version, len(all), log.Cyan(shortPath(p.dir)))
-	release.Summary(stdout, all)
-
-	if err := p.writeCask(); err != nil {
-		return err
-	}
-	if err := p.writeChoco(); err != nil {
-		return err
-	}
-
-	body, err := p.notes(o.notes, all)
+	all, body, err := p.collect(stdout)
 	if err != nil {
 		return err
 	}
 	pub := github.Publish{
 		Repo: p.repo, Tag: p.tag, Commitish: p.head, Name: p.main.Name + " " + p.version, Body: body,
 		Draft: o.draft, Prerelease: o.prerelease, ReplaceAssets: o.replaceAssets, Assets: all,
-		Progress: func(format string, args ...any) { log.Info(format, args...) },
+		Progress: func(format string, args ...any) { logf(format, args...) },
 	}
 	if o.dryRun {
 		p.printPlan(stdout, pub)
 		return nil
 	}
 	return p.publishAll(ctx, gh, pub, getenv)
+}
+
+// newReleasePlan works out the release from the configuration and the
+// flags: the version, the tag, the targets, architectures and channels
+// to build and publish.
+func newReleasePlan(proj *project.Project, o releaseOptions) (*releasePlan, error) {
+	cfg := &proj.Config
+	r := cfg.Release
+	p := &releasePlan{proj: proj, arg: o.dir, version: cfg.App.Version, targets: r.Targets, arches: r.Arches, publish: r.Publish}
+	var err error
+	if o.version != "" {
+		p.version = strings.TrimPrefix(o.version, "v")
+	}
+	if !versionRE.MatchString(p.version) {
+		return nil, fmt.Errorf("version %q must be one to three numbers separated by dots, such as 1.2.0, as app.version is", p.version)
+	}
+	// The builds stamp the version in: Info.plist, the Windows version
+	// information, the Linux packages.
+	cfg.App.Version = p.version
+	p.tag = r.TagPrefix + p.version
+	if o.targetsSet {
+		if p.targets, err = list("targets", o.targetsFlag, config.ReleaseTargets); err != nil {
+			return nil, err
+		}
+	}
+	if o.archesSet {
+		if p.arches, err = list("arches", o.archesFlag, config.ReleaseArches); err != nil {
+			return nil, err
+		}
+	}
+	if o.publishSet {
+		if strings.TrimSpace(o.publishFlag) == "none" {
+			p.publish = nil
+		} else if p.publish, err = list("publish", o.publishFlag, config.ReleaseChannels); err != nil {
+			return nil, err
+		}
+	}
+	if len(p.targets) == 0 || len(p.arches) == 0 {
+		return nil, errors.New("nothing to build: name at least one target and one architecture")
+	}
+	p.notesFile = o.notes
+	if p.notesFile == "" && r.Notes != "" {
+		p.notesFile = proj.Path(r.Notes)
+	}
+	if err := p.checkChannels(o); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+// checkRelease checks what can be checked before the build is, since a
+// build takes minutes and a notarized one longer: the repository, the
+// commit and the tag, the GitHub token, the Chocolatey key.
+func (p *releasePlan) checkRelease(ctx context.Context, o releaseOptions, getenv func(string) string) (*github.Client, error) {
+	p.api = strings.TrimRight(p.proj.Config.Release.GitHubAPI, "/")
+	p.web = github.WebURL(p.api)
+	if err := p.checkGit(ctx, o); err != nil {
+		return nil, err
+	}
+	var gh *github.Client
+	var err error
+	if !o.dryRun && (p.publishes("github") || p.publishes("homebrew")) {
+		if gh, err = p.preflight(ctx, o, getenv); err != nil {
+			return nil, err
+		}
+	}
+	if !o.dryRun && p.publishes("choco") && getenv("CHOCOLATEY_API_KEY") == "" {
+		return nil, errors.New("publishing to Chocolatey needs $CHOCOLATEY_API_KEY, your chocolatey.org account's API key")
+	}
+	return gh, nil
+}
+
+// collect checks the builds made something, hashes and lists the files,
+// writes the cask and the Chocolatey package when asked, and returns the
+// assets and the release's description.
+func (p *releasePlan) collect(stdout io.Writer) ([]release.Asset, string, error) {
+	log := ui.Stderr
+	if len(p.assets) == 0 {
+		return nil, "", errors.New("the builds made nothing to release")
+	}
+	for i := range p.assets {
+		if err := p.assets[i].Hash(); err != nil {
+			return nil, "", err
+		}
+	}
+	var err error
+	if p.sums, err = release.WriteSums(p.dir, p.assets); err != nil {
+		return nil, "", err
+	}
+	all := append(slices.Clone(p.assets), p.sums)
+	log.Success("%s %s: %d files in %s", p.main.Name, p.version, len(all), log.Cyan(shortPath(p.dir)))
+	release.Summary(stdout, all)
+
+	if err := p.writeCask(); err != nil {
+		return nil, "", err
+	}
+	if err := p.writeChoco(); err != nil {
+		return nil, "", err
+	}
+	body, err := p.notes(p.notesFile, all)
+	if err != nil {
+		return nil, "", err
+	}
+	return all, body, nil
 }
 
 // checkChannels checks the channels can be published to with what is
@@ -304,6 +338,30 @@ func (p *releasePlan) checkGit(ctx context.Context, o releaseOptions) error {
 	needGitHub := p.publishes("github") || p.publishes("homebrew") || p.publishes("choco")
 
 	p.repo = p.proj.Config.Release.GitHub
+	if err := p.gitHead(ctx, g, needGitHub, soft); err != nil {
+		return err
+	}
+	if p.head == "" {
+		return nil
+	}
+	if err := p.gitRepo(ctx, g, needGitHub, soft); err != nil {
+		return err
+	}
+	if err := p.gitDirty(ctx, g, o, soft); err != nil {
+		return err
+	}
+	if err := p.gitLocalTag(ctx, g, soft); err != nil {
+		return err
+	}
+	if !needGitHub {
+		return nil
+	}
+	return p.gitRemoteTag(ctx, g, soft)
+}
+
+// gitHead finds the commit released, or says why there is none; p.head
+// stays "" outside a repository.
+func (p *releasePlan) gitHead(ctx context.Context, g release.Git, needGitHub bool, soft func(error) error) error {
 	head, err := g.Head(ctx)
 	if errors.Is(err, release.ErrNotRepo) {
 		if p.repo == "" && needGitHub {
@@ -320,55 +378,72 @@ func (p *releasePlan) checkGit(ctx context.Context, o releaseOptions) error {
 		return err
 	}
 	p.head = head
+	return nil
+}
 
-	if p.repo == "" && needGitHub {
-		origin, err := g.Origin(ctx)
-		if err != nil {
-			if err := soft(fmt.Errorf("no repository to release to: set release.github, or add an origin remote (%w)", err)); err != nil {
-				return err
-			}
-			p.repo = "OWNER/REPO"
-		} else if _, repo, err := release.ParseRepo(origin); err != nil {
-			if err := soft(fmt.Errorf("%w: set release.github", err)); err != nil {
-				return err
-			}
-			p.repo = "OWNER/REPO"
-		} else {
-			p.repo = repo
-		}
+// gitRepo finds the repository released to when none is configured.
+func (p *releasePlan) gitRepo(ctx context.Context, g release.Git, needGitHub bool, soft func(error) error) error {
+	if p.repo != "" || !needGitHub {
+		return nil
 	}
+	origin, err := g.Origin(ctx)
+	if err != nil {
+		if err := soft(fmt.Errorf("no repository to release to: set release.github, or add an origin remote (%w)", err)); err != nil {
+			return err
+		}
+		p.repo = "OWNER/REPO"
+		return nil
+	}
+	_, repo, err := release.ParseRepo(origin)
+	if err != nil {
+		if err := soft(fmt.Errorf("%w: set release.github", err)); err != nil {
+			return err
+		}
+		p.repo = "OWNER/REPO"
+		return nil
+	}
+	p.repo = repo
+	return nil
+}
 
+// gitDirty checks the work tree is clean, or says what is not committed.
+func (p *releasePlan) gitDirty(ctx context.Context, g release.Git, o releaseOptions, soft func(error) error) error {
 	dirty, err := g.Dirty(ctx)
 	if err != nil {
 		return err
 	}
-	if len(dirty) > 0 && !o.allowDirty {
-		shown := dirty[:min(len(dirty), 5)]
-		more := ""
-		if len(dirty) > len(shown) {
-			more = fmt.Sprintf("\n  and %d more", len(dirty)-len(shown))
-		}
-		if err := soft(fmt.Errorf("the work tree has changes not committed, which the release would not be the commit of; commit them, or give --allow-dirty:\n  %s%s", strings.Join(shown, "\n  "), more)); err != nil {
-			return err
-		}
-	}
-
-	if sha, err := g.LocalTag(ctx, p.tag); err != nil {
-		return err
-	} else if sha != "" && sha != head {
-		if err := soft(fmt.Errorf("the tag %s is at %s here, not at this commit %s: release from that commit, or bump the version", p.tag, short(sha), short(head))); err != nil {
-			return err
-		}
-	}
-	if !needGitHub {
+	if len(dirty) == 0 || o.allowDirty {
 		return nil
 	}
+	shown := dirty[:min(len(dirty), 5)]
+	more := ""
+	if len(dirty) > len(shown) {
+		more = fmt.Sprintf("\n  and %d more", len(dirty)-len(shown))
+	}
+	return soft(fmt.Errorf("the work tree has changes not committed, which the release would not be the commit of; commit them, or give --allow-dirty:\n  %s%s", strings.Join(shown, "\n  "), more))
+}
+
+// gitLocalTag checks a tag already made here is at the commit released.
+func (p *releasePlan) gitLocalTag(ctx context.Context, g release.Git, soft func(error) error) error {
+	sha, err := g.LocalTag(ctx, p.tag)
+	if err != nil {
+		return err
+	}
+	if sha == "" || sha == p.head {
+		return nil
+	}
+	return soft(fmt.Errorf("the tag %s is at %s here, not at this commit %s: release from that commit, or bump the version", p.tag, short(sha), short(p.head)))
+}
+
+// gitRemoteTag checks the tag on origin is at the commit released, when
+// the release publishes.
+func (p *releasePlan) gitRemoteTag(ctx context.Context, g release.Git, soft func(error) error) error {
 	sha, err := g.RemoteTag(ctx, p.tag)
 	switch {
 	case err != nil:
 		return soft(fmt.Errorf("checking origin for the tag %s: %w", p.tag, err))
-	case sha != "" && sha != head:
-		return soft(fmt.Errorf("the tag %s is at %s on origin, not at this commit %s: release from that commit, or bump the version", p.tag, short(sha), short(head)))
+	case sha != "" && sha != p.head:
+		return soft(fmt.Errorf("the tag %s is at %s on origin, not at this commit %s: release from that commit, or bump the version", p.tag, short(sha), short(p.head)))
 	}
 	return nil
 }
@@ -452,56 +527,60 @@ func (p *releasePlan) build(ctx context.Context, work string) error {
 	reportOut = io.Discard
 	defer func() { reportOut = saved }()
 
-	cfg := p.proj.Config
 	for _, ra := range p.builds() {
-		log := ui.Stderr
-		log.Info("%s", log.Bold("Building "+ra.target+" "+ra.arch))
-		dir := filepath.Join(work, ra.target+"-"+ra.arch)
-		b := &builder{
-			proj: p.proj, out: dir, tags: cfg.Build.Tags, ldflags: cfg.Build.LDFlags,
-			console: cfg.Windows.Console, formats: cfg.Linux.Formats,
-			mac: macFlags{isSet: func(string) bool { return false }},
-		}
-		lo := gotool.ListOptions{Tags: b.tags}
-		switch ra.target {
-		case "macos":
-			lo.GOOS = "darwin"
-			b.universal = ra.arch == "universal"
-		case "windows":
-			lo.GOOS, lo.GOARCH, b.arch = "windows", ra.arch, ra.arch
-		case "linux":
-			lo.GOOS, lo.GOARCH, b.arch = "linux", ra.arch, ra.arch
-		}
-		var err error
-		if b.main, err = resolveMain(ctx, log, p.proj, p.arg, lo); err != nil {
-			return err
-		}
-		if p.main == nil {
-			p.main = b.main
-			p.slug = release.Slug(b.main.Name)
-			if p.slug == "" {
-				p.slug = linuxPackage(b.main)
-			}
-		}
-		build := func() error {
-			switch ra.target {
-			case "macos":
-				return p.buildMac(ctx, b, ra.arch, dir)
-			case "windows":
-				return p.buildWindows(ctx, b, ra.arch, dir)
-			}
-			return p.buildLinux(ctx, b, ra.arch, dir)
-		}
-		if ra.arch == "universal" {
-			err = build()
-		} else {
-			err = withGOARCH(ra.arch, build)
-		}
-		if err != nil {
+		if err := p.buildArch(ctx, work, ra); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// buildArch makes one build of the release in its own directory under
+// work and moves what it publishes to p.dir under its release name.
+func (p *releasePlan) buildArch(ctx context.Context, work string, ra releaseArch) error {
+	log := ui.Stderr
+	log.Info("%s", log.Bold("Building "+ra.target+" "+ra.arch))
+	cfg := p.proj.Config
+	dir := filepath.Join(work, ra.target+"-"+ra.arch)
+	b := &builder{
+		proj: p.proj, out: dir, tags: cfg.Build.Tags, ldflags: cfg.Build.LDFlags,
+		console: cfg.Windows.Console, formats: cfg.Linux.Formats,
+		mac: macFlags{isSet: func(string) bool { return false }},
+	}
+	lo := gotool.ListOptions{Tags: b.tags}
+	switch ra.target {
+	case "macos":
+		lo.GOOS = "darwin"
+		b.universal = ra.arch == "universal"
+	case "windows":
+		lo.GOOS, lo.GOARCH, b.arch = "windows", ra.arch, ra.arch
+	case "linux":
+		lo.GOOS, lo.GOARCH, b.arch = "linux", ra.arch, ra.arch
+	}
+	var err error
+	if b.main, err = resolveMain(ctx, log, p.proj, p.arg, lo); err != nil {
+		return err
+	}
+	if p.main == nil {
+		p.main = b.main
+		p.slug = release.Slug(b.main.Name)
+		if p.slug == "" {
+			p.slug = linuxPackage(b.main)
+		}
+	}
+	build := func() error {
+		switch ra.target {
+		case "macos":
+			return p.buildMac(ctx, b, ra.arch, dir)
+		case "windows":
+			return p.buildWindows(ctx, b, ra.arch, dir)
+		}
+		return p.buildLinux(ctx, b, ra.arch, dir)
+	}
+	if ra.arch == "universal" {
+		return build()
+	}
+	return withGOARCH(ra.arch, build)
 }
 
 // withGOARCH runs fn with $GOARCH set to arch: the macOS build takes the

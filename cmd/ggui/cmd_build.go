@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ironpark/ggui/cmd/ggui/internal/config"
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
 	"github.com/ironpark/ggui/cmd/ggui/internal/i18n"
 	"github.com/ironpark/ggui/cmd/ggui/internal/linux"
@@ -73,128 +72,172 @@ zapp's rcodesign library, as the release binaries are, signs with a
 certificate and notarizes with an API key; elsewhere signing with an
 identity takes a Mac. docs/cli.md has the details.`,
 	flags: func(fs *flag.FlagSet) func(context.Context, []string, []string) error {
-		cfgPath := fs.String("config", "", "read `file` instead of the ggui.toml found from the current directory")
-		tgt := fs.String("target", defaultTarget(), "what to build: `macos`, windows, linux, web or native")
-		out := fs.String("out", "", "the output `directory`, replacing build.output")
-		universal := fs.Bool("universal", false, "with --target macos, build for Apple silicon and Intel and join them into one universal program")
-		console := fs.Bool("console", false, "with --target windows, link for the console, which Windows opens a window of, replacing windows.console")
-		format := fs.String("format", "", "with --target linux, what to make of the install tree: `formats` from tar, deb and rpm, comma-separated, replacing linux.formats")
-		tags := fs.String("tags", "", "build `tags`, comma-separated, replacing build.tags")
-		ldflags := fs.String("ldflags", "", "linker `flags` after -s -w, replacing build.ldflags")
-		mf := macFlags{
-			identity:     fs.String("identity", "", "sign the macOS bundle as `identity`, replacing macos.signing_identity; - signs ad hoc"),
-			p12File:      fs.String("p12-file", "", "sign with the PKCS#12 certificate in `file`, replacing macos.p12_file"),
-			p12Password:  fs.String("p12-password-file", "", "read the certificate's password from `file`, replacing macos.p12_password_file"),
-			notarize:     fs.Bool("notarize", false, "notarize and staple what --target macos makes, replacing macos.notarize"),
-			notaryProf:   fs.String("notary-profile", "", "notarize with the notarytool keychain `profile`, replacing macos.notary.profile"),
-			apiKeyFile:   fs.String("api-key-file", "", "notarize with the App Store Connect API key in `file`, replacing macos.notary.api_key_file"),
-			appleID:      fs.String("apple-id", "", "notarize as the Apple `ID`, replacing macos.notary.apple_id"),
-			teamID:       fs.String("team-id", "", "the Apple ID's `team`, replacing macos.notary.team_id"),
-			dmg:          fs.Bool("dmg", false, "also make Name.dmg; --dmg=false skips the one [macos.dmg] asks for"),
-			pkg:          fs.Bool("pkg", false, "also make the installer Name.pkg; --pkg=false skips the one [macos.pkg] asks for"),
-			isSet:        func(name string) bool { return isSet(fs, name) },
-			macOnlyFlags: []string{"identity", "p12-file", "p12-password-file", "notarize", "notary-profile", "api-key-file", "apple-id", "team-id", "dmg", "pkg"},
-		}
-		return func(ctx context.Context, pos, rest []string) error {
-			if len(pos) > 1 || len(rest) > 0 {
-				fmt.Fprintln(os.Stderr, "ggui build: takes one package")
-				return errUsage
-			}
-			arg := ""
-			if len(pos) == 1 {
-				arg = pos[0]
-			}
-			proj, err := project.Open(".", arg, *cfgPath)
-			if err != nil {
-				return err
-			}
-			cfg := proj.Config
-			b := &builder{proj: proj, out: *out, tags: cfg.Build.Tags, ldflags: cfg.Build.LDFlags}
-			if isSet(fs, "tags") {
-				b.tags = splitTags(*tags)
-			}
-			if isSet(fs, "ldflags") {
-				b.ldflags = *ldflags
-			}
-			b.universal = cfg.MacOS.Universal || *universal
-			b.console = cfg.Windows.Console
-			if isSet(fs, "console") {
-				b.console = *console
-			}
-
-			lo := gotool.ListOptions{Tags: b.tags}
-			switch *tgt {
-			case "macos":
-				lo.GOOS = "darwin"
-			case "windows":
-				// The architecture is resolved first, as the files the
-				// package is built from, its .syso files among them,
-				// depend on it.
-				env, err := gotool.Env(ctx, proj.Root, []string{"GOOS=windows"}, "GOARCH")
-				if err != nil {
-					return err
-				}
-				b.arch = env["GOARCH"]
-				if !slices.Contains(windows.Arches, b.arch) {
-					return fmt.Errorf("GOARCH=%s: ggui builds Windows programs for %s; set GOARCH to one of them", b.arch, strings.Join(windows.Arches, ", "))
-				}
-				lo.GOOS, lo.GOARCH = "windows", b.arch
-			case "linux":
-				env, err := gotool.Env(ctx, proj.Root, []string{"GOOS=linux"}, "GOARCH")
-				if err != nil {
-					return err
-				}
-				b.arch = env["GOARCH"]
-				if !slices.Contains(linux.Arches, b.arch) {
-					return fmt.Errorf("GOARCH=%s: ggui packages Linux programs for %s; set GOARCH to one of them", b.arch, strings.Join(linux.Arches, ", "))
-				}
-				lo.GOOS, lo.GOARCH = "linux", b.arch
-			case "web":
-				lo.GOOS, lo.GOARCH = "js", "wasm"
-			case "native":
-			default:
-				return fmt.Errorf("unknown --target %q: use macos, windows, linux, web or native", *tgt)
-			}
-			if *universal && *tgt != "macos" {
-				return errors.New("--universal makes a macOS bundle: add --target macos")
-			}
-			if *tgt != "macos" {
-				for _, name := range mf.macOnlyFlags {
-					if isSet(fs, name) {
-						return fmt.Errorf("--%s is for a macOS build: add --target macos", name)
-					}
-				}
-			}
-			if *tgt != "windows" && isSet(fs, "console") {
-				return errors.New("--console is for a Windows build: add --target windows")
-			}
-			b.formats = cfg.Linux.Formats
-			if isSet(fs, "format") {
-				if *tgt != "linux" {
-					return errors.New("--format is for a Linux build: add --target linux")
-				}
-				if b.formats, err = parseFormats(*format); err != nil {
-					return err
-				}
-			}
-			b.mac = mf
-			if b.main, err = resolveMain(ctx, ui.Stderr, proj, arg, lo); err != nil {
-				return err
-			}
-			switch *tgt {
-			case "macos":
-				return b.macos(ctx)
-			case "windows":
-				return b.windows(ctx)
-			case "linux":
-				return b.linux(ctx)
-			case "web":
-				return b.web(ctx)
-			default:
-				return b.native(ctx)
-			}
-		}
+		f := newBuildFlags(fs)
+		return f.run
 	},
+}
+
+// buildFlags are the flags of ggui build: the ones that pick the target
+// and the ones macFlags gathers for signing a macOS build.
+type buildFlags struct {
+	cfgPath, tgt, out     *string
+	universal, console    *bool
+	format, tags, ldflags *string
+	mac                   macFlags
+	isSet                 func(string) bool
+}
+
+func newBuildFlags(fs *flag.FlagSet) *buildFlags {
+	f := &buildFlags{isSet: func(name string) bool { return isSet(fs, name) }}
+	f.cfgPath = fs.String("config", "", "read `file` instead of the ggui.toml found from the current directory")
+	f.tgt = fs.String("target", defaultTarget(), "what to build: `macos`, windows, linux, web or native")
+	f.out = fs.String("out", "", "the output `directory`, replacing build.output")
+	f.universal = fs.Bool("universal", false, "with --target macos, build for Apple silicon and Intel and join them into one universal program")
+	f.console = fs.Bool("console", false, "with --target windows, link for the console, which Windows opens a window of, replacing windows.console")
+	f.format = fs.String("format", "", "with --target linux, what to make of the install tree: `formats` from tar, deb and rpm, comma-separated, replacing linux.formats")
+	f.tags = fs.String("tags", "", "build `tags`, comma-separated, replacing build.tags")
+	f.ldflags = fs.String("ldflags", "", "linker `flags` after -s -w, replacing build.ldflags")
+	f.mac = macFlags{
+		identity:     fs.String("identity", "", "sign the macOS bundle as `identity`, replacing macos.signing_identity; - signs ad hoc"),
+		p12File:      fs.String("p12-file", "", "sign with the PKCS#12 certificate in `file`, replacing macos.p12_file"),
+		p12Password:  fs.String("p12-password-file", "", "read the certificate's password from `file`, replacing macos.p12_password_file"),
+		notarize:     fs.Bool("notarize", false, "notarize and staple what --target macos makes, replacing macos.notarize"),
+		notaryProf:   fs.String("notary-profile", "", "notarize with the notarytool keychain `profile`, replacing macos.notary.profile"),
+		apiKeyFile:   fs.String("api-key-file", "", "notarize with the App Store Connect API key in `file`, replacing macos.notary.api_key_file"),
+		appleID:      fs.String("apple-id", "", "notarize as the Apple `ID`, replacing macos.notary.apple_id"),
+		teamID:       fs.String("team-id", "", "the Apple ID's `team`, replacing macos.notary.team_id"),
+		dmg:          fs.Bool("dmg", false, "also make Name.dmg; --dmg=false skips the one [macos.dmg] asks for"),
+		pkg:          fs.Bool("pkg", false, "also make the installer Name.pkg; --pkg=false skips the one [macos.pkg] asks for"),
+		isSet:        f.isSet,
+		macOnlyFlags: []string{"identity", "p12-file", "p12-password-file", "notarize", "notary-profile", "api-key-file", "apple-id", "team-id", "dmg", "pkg"},
+	}
+	return f
+}
+
+// run is the build command once its flags are parsed.
+func (f *buildFlags) run(ctx context.Context, pos, rest []string) error {
+	if len(pos) > 1 || len(rest) > 0 {
+		fmt.Fprintln(os.Stderr, "ggui build: takes one package")
+		return errUsage
+	}
+	arg := ""
+	if len(pos) == 1 {
+		arg = pos[0]
+	}
+	proj, err := project.Open(".", arg, *f.cfgPath)
+	if err != nil {
+		return err
+	}
+	cfg := proj.Config
+	b := &builder{proj: proj, out: *f.out, tags: cfg.Build.Tags, ldflags: cfg.Build.LDFlags}
+	if f.isSet("tags") {
+		b.tags = splitTags(*f.tags)
+	}
+	if f.isSet("ldflags") {
+		b.ldflags = *f.ldflags
+	}
+	b.universal = cfg.MacOS.Universal || *f.universal
+	b.console = cfg.Windows.Console
+	if f.isSet("console") {
+		b.console = *f.console
+	}
+	lo, err := b.planTarget(ctx, *f.tgt)
+	if err != nil {
+		return err
+	}
+	if err := f.checkTarget(b, *f.tgt); err != nil {
+		return err
+	}
+	b.mac = f.mac
+	if b.main, err = resolveMain(ctx, ui.Stderr, proj, arg, lo); err != nil {
+		return err
+	}
+	return b.produce(ctx, *f.tgt)
+}
+
+// produce runs the build for the target.
+func (b *builder) produce(ctx context.Context, tgt string) error {
+	switch tgt {
+	case "macos":
+		return b.macos(ctx)
+	case "windows":
+		return b.windows(ctx)
+	case "linux":
+		return b.linux(ctx)
+	case "web":
+		return b.web(ctx)
+	default:
+		return b.native(ctx)
+	}
+}
+
+// planTarget works out the go command's environment for the target, and
+// the architecture a Windows or Linux build is for.
+func (b *builder) planTarget(ctx context.Context, tgt string) (gotool.ListOptions, error) {
+	lo := gotool.ListOptions{Tags: b.tags}
+	switch tgt {
+	case "macos":
+		lo.GOOS = "darwin"
+	case "windows":
+		// The architecture is resolved first, as the files the
+		// package is built from, its .syso files among them,
+		// depend on it.
+		env, err := gotool.Env(ctx, b.proj.Root, []string{"GOOS=windows"}, "GOARCH")
+		if err != nil {
+			return lo, err
+		}
+		b.arch = env["GOARCH"]
+		if !slices.Contains(windows.Arches, b.arch) {
+			return lo, fmt.Errorf("GOARCH=%s: ggui builds Windows programs for %s; set GOARCH to one of them", b.arch, strings.Join(windows.Arches, ", "))
+		}
+		lo.GOOS, lo.GOARCH = "windows", b.arch
+	case "linux":
+		env, err := gotool.Env(ctx, b.proj.Root, []string{"GOOS=linux"}, "GOARCH")
+		if err != nil {
+			return lo, err
+		}
+		b.arch = env["GOARCH"]
+		if !slices.Contains(linux.Arches, b.arch) {
+			return lo, fmt.Errorf("GOARCH=%s: ggui packages Linux programs for %s; set GOARCH to one of them", b.arch, strings.Join(linux.Arches, ", "))
+		}
+		lo.GOOS, lo.GOARCH = "linux", b.arch
+	case "web":
+		lo.GOOS, lo.GOARCH = "js", "wasm"
+	case "native":
+	default:
+		return lo, fmt.Errorf("unknown --target %q: use macos, windows, linux, web or native", tgt)
+	}
+	return lo, nil
+}
+
+// checkTarget refuses the flags that do not go with the target, and
+// plans what a Linux build makes of its install tree.
+func (f *buildFlags) checkTarget(b *builder, tgt string) error {
+	if *f.universal && tgt != "macos" {
+		return errors.New("--universal makes a macOS bundle: add --target macos")
+	}
+	if tgt != "macos" {
+		for _, name := range f.mac.macOnlyFlags {
+			if f.mac.isSet(name) {
+				return fmt.Errorf("--%s is for a macOS build: add --target macos", name)
+			}
+		}
+	}
+	if tgt != "windows" && f.isSet("console") {
+		return errors.New("--console is for a Windows build: add --target windows")
+	}
+	b.formats = b.proj.Config.Linux.Formats
+	if f.isSet("format") {
+		if tgt != "linux" {
+			return errors.New("--format is for a Linux build: add --target linux")
+		}
+		formats, err := parseFormats(*f.format)
+		if err != nil {
+			return err
+		}
+		b.formats = formats
+	}
+	return nil
 }
 
 // defaultTarget is the bundle the host makes most use of: on macOS and
@@ -221,23 +264,6 @@ type builder struct {
 	console   bool     // link a Windows program for the console
 	arch      string   // the GOARCH of a Windows or Linux build
 	formats   []string // what a Linux build makes of its tree
-}
-
-// parseFormats reads --format: Linux formats, comma-separated, each once.
-// An empty value makes the install tree alone.
-func parseFormats(s string) ([]string, error) {
-	var out []string
-	for f := range strings.SplitSeq(s, ",") {
-		f = strings.ToLower(strings.TrimSpace(f))
-		switch {
-		case f == "":
-		case !slices.Contains(config.LinuxFormats, f):
-			return nil, fmt.Errorf("--format %q: the formats are %s", f, strings.Join(config.LinuxFormats, ", "))
-		case !slices.Contains(out, f):
-			out = append(out, f)
-		}
-	}
-	return out, nil
 }
 
 // macFlags are the flags that sign, notarize and package a macOS build.
@@ -426,9 +452,7 @@ func (b *builder) macos(ctx context.Context) error {
 	if !sg.AdHoc() {
 		logf("Signing as %s, from %s", sg.Identity, s.Describe())
 	}
-	makeDMG := b.mac.boolean("dmg", b.mac.dmg, cfg.MacOS.DMG.Make)
-	makePKG := b.mac.boolean("pkg", b.mac.pkg, cfg.MacOS.PKG.Make)
-	if makePKG {
+	if b.mac.boolean("pkg", b.mac.pkg, cfg.MacOS.PKG.Make) {
 		if err := sg.CheckInstaller(ctx); err != nil {
 			return err
 		}
@@ -443,16 +467,33 @@ func (b *builder) macos(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	bin, arch, err := b.macosBinary(ctx, tmp)
+	if err != nil {
+		return err
+	}
+	app, err := b.assembleBundle(dir, icon, bin)
+	if err != nil {
+		return err
+	}
+	artifacts, err := b.macosArtifacts(ctx, sg, app, dir, notarize)
+	if err != nil {
+		return err
+	}
+	return b.reportMacOS(ctx, sg, app, artifacts, notarize, arch)
+}
 
-	bin := filepath.Join(tmp, b.main.Executable)
-	arch := ""
+// macosBinary builds the program the bundle holds: for arm64 and amd64
+// joined by lipo when the build is universal, else for the go command's
+// GOARCH. It returns the program's path and the architecture built for.
+func (b *builder) macosBinary(ctx context.Context, tmp string) (bin, arch string, err error) {
+	bin = filepath.Join(tmp, b.main.Executable)
 	if b.universal {
 		var halves []string
 		for _, a := range []string{"arm64", "amd64"} {
 			o := b.release(bin + "-" + a)
 			o.GOOS, o.GOARCH = "darwin", a
 			if err := b.build(ctx, o, "darwin/"+a); err != nil {
-				return err
+				return "", "", err
 			}
 			halves = append(halves, o.Output)
 		}
@@ -460,22 +501,28 @@ func (b *builder) macos(ctx context.Context) error {
 			return macos.Lipo(bin, halves...)
 		})
 		if err != nil {
-			return err
+			return "", "", err
 		}
-		arch = "arm64 + amd64"
-	} else {
-		env, err := gotool.Env(ctx, b.proj.Root, []string{"GOOS=darwin"}, "GOARCH")
-		if err != nil {
-			return err
-		}
-		arch = env["GOARCH"]
-		o := b.release(bin)
-		o.GOOS = "darwin"
-		if err := b.build(ctx, o, "darwin/"+arch); err != nil {
-			return err
-		}
+		return bin, "arm64 + amd64", nil
 	}
+	env, err := gotool.Env(ctx, b.proj.Root, []string{"GOOS=darwin"}, "GOARCH")
+	if err != nil {
+		return "", "", err
+	}
+	arch = env["GOARCH"]
+	o := b.release(bin)
+	o.GOOS = "darwin"
+	if err := b.build(ctx, o, "darwin/"+arch); err != nil {
+		return "", "", err
+	}
+	return bin, arch, nil
+}
 
+// assembleBundle puts the program in Name.app in dir, with the icon and
+// the Info.plist keys [macos.plist] and the translation catalogs give,
+// and returns the bundle's path.
+func (b *builder) assembleBundle(dir, icon, bin string) (string, error) {
+	cfg := b.proj.Config
 	appName := b.main.Name + ".app"
 	extra, langs := plistExtra(b.proj.Root, cfg.MacOS.Plist)
 	if langs != nil {
@@ -496,7 +543,7 @@ func (b *builder) macos(ctx context.Context) error {
 	})
 	if err != nil {
 		assemble.Fail("Assembling " + appName + " failed")
-		return err
+		return "", err
 	}
 	assemble.Done("Assembled " + appName)
 	for _, w := range warnings {
@@ -505,9 +552,16 @@ func (b *builder) macos(ctx context.Context) error {
 	if b.main.ID != cfg.App.ID {
 		ui.Stderr.Warn("app.id is not set, so the bundle is %s; set it in ggui.toml before shipping, since macOS keys settings and permissions to it", b.main.ID)
 	}
+	return app, nil
+}
 
+// macosArtifacts signs the bundle, notarizes it when asked, and makes
+// the disk image and the installer package when their flags or the
+// configuration ask for them. It returns the bundle and what was made
+// beside it, in order.
+func (b *builder) macosArtifacts(ctx context.Context, sg *macos.Signer, app, dir string, notarize bool) ([]string, error) {
 	if _, err := sign(ctx, sg, app); err != nil {
-		return err
+		return nil, err
 	}
 	if sg.AdHoc() {
 		ui.Stderr.Note("%s", ui.Stderr.Dim("which macOS runs as it is, but opens once downloaded only after Open Anyway in System Settings; set macos.signing_identity and notarize to ship it to others"))
@@ -515,72 +569,99 @@ func (b *builder) macos(ctx context.Context) error {
 	artifacts := []string{app}
 	if notarize {
 		if err := b.notarize(ctx, sg, app); err != nil {
-			return err
+			return nil, err
 		}
 	}
-
-	m := cfg.MacOS
-	if makeDMG {
-		d := m.DMG
-		out := filepath.Join(dir, b.main.Name+".dmg")
-		title := d.Title
-		if title == "" {
-			title = b.main.Name
-		}
-		err := step(ctx, "Making "+filepath.Base(out), "Made "+filepath.Base(out), func() error {
-			return macos.MakeDMG(ctx, macos.DMG{
-				App: app, Out: out, Title: title,
-				Icon: b.proj.Path(d.Icon), Background: b.proj.Path(d.Background),
-				Width: d.Window.Width, Height: d.Window.Height,
-				IconSize: d.IconSize, LabelSize: d.LabelSize,
-				AppPosition: d.AppPosition, ApplicationsPosition: d.ApplicationsPosition,
-				FS: d.FS, Format: d.Format,
-			})
-		})
+	cfg := b.proj.Config
+	if b.mac.boolean("dmg", b.mac.dmg, cfg.MacOS.DMG.Make) {
+		out, err := b.macosDMG(ctx, sg, app, dir, notarize)
 		if err != nil {
-			return err
-		}
-		// An ad hoc signature on a disk image means nothing to another
-		// Mac, and the app inside is signed already.
-		if !sg.AdHoc() {
-			if _, err := sign(ctx, sg, out); err != nil {
-				return err
-			}
-			if notarize {
-				if err := b.notarize(ctx, sg, out); err != nil {
-					return err
-				}
-			}
+			return nil, err
 		}
 		artifacts = append(artifacts, out)
 	}
-	if makePKG {
-		p := m.PKG
-		out := filepath.Join(dir, b.main.Name+".pkg")
-		err := step(ctx, "Making "+filepath.Base(out), "Made "+filepath.Base(out), func() error {
-			return macos.MakePKG(ctx, macos.PKG{
-				App: app, Out: out, ID: b.main.ID, Version: cfg.App.Version,
-				MinOS: m.MinimumSystemVersion, InstallLocation: p.InstallLocation,
-				Scripts: b.proj.Path(p.Scripts), License: b.proj.Path(p.License),
-			})
+	if b.mac.boolean("pkg", b.mac.pkg, cfg.MacOS.PKG.Make) {
+		out, err := b.macosPKG(ctx, sg, app, dir, notarize)
+		if err != nil {
+			return nil, err
+		}
+		artifacts = append(artifacts, out)
+	}
+	return artifacts, nil
+}
+
+// macosDMG makes Name.dmg holding the bundle, signed and notarized as
+// the bundle was unless the signature is ad hoc.
+func (b *builder) macosDMG(ctx context.Context, sg *macos.Signer, app, dir string, notarize bool) (string, error) {
+	d := b.proj.Config.MacOS.DMG
+	out := filepath.Join(dir, b.main.Name+".dmg")
+	title := d.Title
+	if title == "" {
+		title = b.main.Name
+	}
+	err := step(ctx, "Making "+filepath.Base(out), "Made "+filepath.Base(out), func() error {
+		return macos.MakeDMG(ctx, macos.DMG{
+			App: app, Out: out, Title: title,
+			Icon: b.proj.Path(d.Icon), Background: b.proj.Path(d.Background),
+			Width: d.Window.Width, Height: d.Window.Height,
+			IconSize: d.IconSize, LabelSize: d.LabelSize,
+			AppPosition: d.AppPosition, ApplicationsPosition: d.ApplicationsPosition,
+			FS: d.FS, Format: d.Format,
 		})
-		if err != nil {
-			return err
+	})
+	if err != nil {
+		return "", err
+	}
+	// An ad hoc signature on a disk image means nothing to another
+	// Mac, and the app inside is signed already.
+	if !sg.AdHoc() {
+		if _, err := sign(ctx, sg, out); err != nil {
+			return "", err
 		}
-		signed, err := sign(ctx, sg, out)
-		if err != nil {
-			return err
-		}
-		if !signed {
-			ui.Stderr.Warn("The installer is not signed, since the app is signed ad hoc; macOS opens an unsigned installer only after a warning")
-		} else if notarize {
+		if notarize {
 			if err := b.notarize(ctx, sg, out); err != nil {
-				return err
+				return "", err
 			}
 		}
-		artifacts = append(artifacts, out)
 	}
+	return out, nil
+}
 
+// macosPKG makes the installer Name.pkg, signed and notarized as the
+// bundle was; an ad hoc app leaves it unsigned, which macOS opens only
+// after a warning.
+func (b *builder) macosPKG(ctx context.Context, sg *macos.Signer, app, dir string, notarize bool) (string, error) {
+	cfg := b.proj.Config
+	p := cfg.MacOS.PKG
+	m := cfg.MacOS
+	out := filepath.Join(dir, b.main.Name+".pkg")
+	err := step(ctx, "Making "+filepath.Base(out), "Made "+filepath.Base(out), func() error {
+		return macos.MakePKG(ctx, macos.PKG{
+			App: app, Out: out, ID: b.main.ID, Version: cfg.App.Version,
+			MinOS: m.MinimumSystemVersion, InstallLocation: p.InstallLocation,
+			Scripts: b.proj.Path(p.Scripts), License: b.proj.Path(p.License),
+		})
+	})
+	if err != nil {
+		return "", err
+	}
+	signed, err := sign(ctx, sg, out)
+	if err != nil {
+		return "", err
+	}
+	if !signed {
+		ui.Stderr.Warn("The installer is not signed, since the app is signed ad hoc; macOS opens an unsigned installer only after a warning")
+	} else if notarize {
+		if err := b.notarize(ctx, sg, out); err != nil {
+			return "", err
+		}
+	}
+	return out, nil
+}
+
+// reportMacOS verifies what was built when the signature is not ad hoc,
+// and prints the bundle and what was made beside it.
+func (b *builder) reportMacOS(ctx context.Context, sg *macos.Signer, app string, artifacts []string, notarize bool, arch string) error {
 	if !sg.AdHoc() {
 		if err := verifyAll(ctx, artifacts, notarize); err != nil {
 			return err
@@ -731,7 +812,6 @@ func (b *builder) windows(ctx context.Context) error {
 	if err := b.proj.CheckIcon(); err != nil {
 		return err
 	}
-	cfg := b.proj.Config
 	if err := windows.CheckFileName(b.main.Name); err != nil {
 		return err
 	}
@@ -741,73 +821,11 @@ func (b *builder) windows(ctx context.Context) error {
 	}
 	exe := b.main.Name + ".exe"
 	log := ui.Stderr
-
-	// The linker takes one resource section per program, so a package
-	// that links resources of its own is built with them.
-	var theirs []string
-	for _, f := range b.main.SysoFiles {
-		if f != windows.SysoName(b.arch) && windows.HasResources(filepath.Join(b.main.Dir, f)) {
-			theirs = append(theirs, f)
-		}
+	cleanup, err := b.windowsResources(ctx, exe)
+	if err != nil {
+		return err
 	}
-	if len(theirs) > 0 {
-		log.Info("%s links resources of its own from %s, so %s has those rather than ggui's icon, version information and manifest",
-			target(b.main), strings.Join(theirs, ", "), exe)
-	} else {
-		tmp, err := os.MkdirTemp("", "ggui-build-")
-		if err != nil {
-			return err
-		}
-		defer os.RemoveAll(tmp)
-		icon, err := b.icon(ctx, tmp)
-		if err != nil {
-			return err
-		}
-		w := cfg.Windows
-		r := windows.Resources{
-			Arch: b.arch, Name: b.main.Name, Executable: b.main.Executable, ID: b.main.ID,
-			Version:     cfg.App.Version,
-			Description: w.Description, Company: w.Company, Copyright: w.Copyright,
-			Icon:     icon,
-			Manifest: b.proj.Path(w.Manifest),
-		}
-		what := "version and manifest"
-		if r.Icon != "" {
-			what = "icon, " + what
-		}
-		var (
-			path     string
-			leftover bool
-			remove   func() error
-			warnings []string
-		)
-		err = step(ctx, "Writing the "+what+" of "+exe, "Wrote the "+what+" of "+exe, func() error {
-			obj, ws, err := windows.Object(r)
-			if err != nil {
-				return err
-			}
-			warnings = ws
-			path, leftover, remove, err = windows.Place(b.main.Dir, b.arch, obj)
-			return err
-		})
-		if err != nil {
-			return err
-		}
-		// Removed however the build ends, failed or interrupted too: the
-		// file belongs to this build, not to the sources.
-		defer func() {
-			if err := remove(); err != nil {
-				log.Warn("removing %s: %v; delete it before building for another target", path, err)
-			}
-		}()
-		for _, w := range warnings {
-			log.Warn("%s", w)
-		}
-		if leftover {
-			log.Note("%s", log.Dim("replacing the "+filepath.Base(path)+" a build that was stopped left behind"))
-		}
-		log.Note("%s", log.Dim("linked from "+shortPath(path)+", which is removed after the build"))
-	}
+	defer cleanup()
 
 	o := b.release(filepath.Join(dir, exe))
 	o.GOOS, o.GOARCH = "windows", b.arch
@@ -825,141 +843,80 @@ func (b *builder) windows(ctx context.Context) error {
 	return report(o.Output, "windows/"+b.arch)
 }
 
-// linuxApp is what the Linux files say about the app.
-func (b *builder) linuxApp() linux.App {
+// windowsResources writes the .syso the go command links the program's
+// icon, version information and manifest from, in the main package's
+// directory, for the build only; a package that links resources of its
+// own keeps them.
+func (b *builder) windowsResources(ctx context.Context, exe string) (func(), error) {
 	cfg := b.proj.Config
-	l := cfg.Linux
-	return linux.App{
-		Name:        b.main.Name,
-		GenericName: l.GenericName,
-		Summary:     l.Description,
-		ID:          b.main.ID,
-		Package:     linuxPackage(b.main),
-		Version:     cfg.App.Version,
-		Arch:        b.arch,
-		Categories:  l.Categories,
-		MIMETypes:   l.MIMETypes,
-		Homepage:    l.Homepage,
-		License:     l.License,
-		Maintainer:  l.Maintainer,
-	}
-}
-
-// depends returns what a package in format, deb or rpm, depends on.
-func (b *builder) depends(format string) []string {
-	if format == "deb" {
-		return b.proj.Config.Linux.DependsDeb
-	}
-	return b.proj.Config.Linux.DependsRPM
-}
-
-// linux builds the install tree Package-linux-Arch: the program for
-// linux/arch without cgo, as ggwd and ggfx load the system's libraries
-// at run time, with its desktop entry, icons and AppStream metadata; and
-// from the tree the archives asked for.
-func (b *builder) linux(ctx context.Context) error {
-	if err := b.proj.CheckIcon(); err != nil {
-		return err
-	}
-	cfg := b.proj.Config
-	dir, err := b.proj.OutDir(b.out)
-	if err != nil {
-		return err
-	}
 	log := ui.Stderr
-	app := b.linuxApp()
 
+	// The linker takes one resource section per program, so a package
+	// that links resources of its own is built with them.
+	var theirs []string
+	for _, f := range b.main.SysoFiles {
+		if f != windows.SysoName(b.arch) && windows.HasResources(filepath.Join(b.main.Dir, f)) {
+			theirs = append(theirs, f)
+		}
+	}
+	if len(theirs) > 0 {
+		log.Info("%s links resources of its own from %s, so %s has those rather than ggui's icon, version information and manifest",
+			target(b.main), strings.Join(theirs, ", "), exe)
+		return func() {}, nil
+	}
 	tmp, err := os.MkdirTemp("", "ggui-build-")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer os.RemoveAll(tmp)
 	icon, err := b.icon(ctx, tmp)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	svg := ""
-	if p := b.proj.Path(cfg.App.Icon); p != "" && svgicon.Is(p) {
-		svg = p
+	w := cfg.Windows
+	r := windows.Resources{
+		Arch: b.arch, Name: b.main.Name, Executable: b.main.Executable, ID: b.main.ID,
+		Version:     cfg.App.Version,
+		Description: w.Description, Company: w.Company, Copyright: w.Copyright,
+		Icon:     icon,
+		Manifest: b.proj.Path(w.Manifest),
 	}
-
-	bin := filepath.Join(tmp, app.Package)
-	o := b.release(bin)
-	o.GOOS, o.GOARCH = "linux", b.arch
-	o.Env = append(o.Env, "CGO_ENABLED=0")
-	if err := b.build(ctx, o, "linux/"+b.arch); err != nil {
-		return err
+	what := "version and manifest"
+	if r.Icon != "" {
+		what = "icon, " + what
 	}
-
-	name := linux.TreeName(app)
 	var (
-		tree     string
+		path     string
+		leftover bool
+		remove   func() error
 		warnings []string
 	)
-	err = step(ctx, "Assembling "+name, "Assembled "+name, func() error {
-		tree, warnings, err = linux.Assemble(linux.Tree{
-			App:      app,
-			Binary:   bin,
-			Icon:     icon,
-			IconName: b.proj.Path(cfg.App.Icon),
-			SVG:      svg,
-			OutDir:   dir,
-		})
+	err = step(ctx, "Writing the "+what+" of "+exe, "Wrote the "+what+" of "+exe, func() error {
+		obj, ws, err := windows.Object(r)
+		if err != nil {
+			return err
+		}
+		warnings = ws
+		path, leftover, remove, err = windows.Place(b.main.Dir, b.arch, obj)
 		return err
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, w := range warnings {
 		log.Warn("%s", w)
 	}
-	if icon == "" {
-		log.Warn("app.icon is not set, so the desktop entry has no icon and desktops show a generic one")
+	if leftover {
+		log.Note("%s", log.Dim("replacing the "+filepath.Base(path)+" a build that was stopped left behind"))
 	}
-	if b.main.ID != cfg.App.ID {
-		log.Warn("app.id is not set, so the desktop entry is %s.desktop; set it in ggui.toml before shipping, since desktops match windows to entries by it", b.main.ID)
-	}
-	if cfg.Linux.Maintainer == "" && slices.Contains(b.formats, "deb") {
-		log.Warn("linux.maintainer is not set, so the Debian package names a placeholder; set it to \"Name <email>\" before shipping")
-	}
-	artifacts := []string{tree}
-
-	for _, f := range b.formats {
-		var (
-			out   string
-			write func() error
-		)
-		switch f {
-		case "tar":
-			out = filepath.Join(dir, linux.TarName(app))
-			write = func() error { return linux.Tar(tree, out) }
-		default:
-			p := linux.Package{App: app, Tree: tree, Depends: b.depends(f), OutDir: dir}
-			name, err := p.FileName(f)
-			if err != nil {
-				return err
-			}
-			out = filepath.Join(dir, name)
-			write = func() error {
-				_, err := p.Make(f)
-				return err
-			}
+	log.Note("%s", log.Dim("linked from "+shortPath(path)+", which is removed after the build"))
+	// Removed however the build ends, failed or interrupted too: the
+	// file belongs to this build, not to the sources.
+	return func() {
+		if err := remove(); err != nil {
+			log.Warn("removing %s: %v; delete it before building for another target", path, err)
 		}
-		if err := step(ctx, "Making "+filepath.Base(out), "Made "+filepath.Base(out), write); err != nil {
-			return err
-		}
-		artifacts = append(artifacts, out)
-	}
-
-	if runtime.GOOS != "linux" && b.arch == runtime.GOARCH && b.arch != "amd64" && os.Getenv("GOARCH") == "" {
-		log.Note("%s", log.Dim("for "+b.arch+", this machine's architecture; most PCs need GOARCH=amd64"))
-	}
-	for _, a := range artifacts {
-		if err := report(a, "linux/"+b.arch); err != nil {
-			return err
-		}
-	}
-	return nil
+	}, nil
 }
 
 func (b *builder) web(ctx context.Context) error {
