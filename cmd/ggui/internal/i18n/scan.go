@@ -223,36 +223,58 @@ func rel(root, path string) string {
 }
 
 func (s *Sources) scanFile(p *parsed, funcs []Func) {
-	f, fset := p.file, p.fset
-	name, imported := importName(f)
+	name, imported := importName(p.file)
 	if !imported && len(funcs) == 0 {
 		return
 	}
-	fi := newFileInfo(f)
-	// pkg reports whether x names the package: its import's name, or
-	// nothing at all for a dot import.
-	pkg := func(x ast.Expr, sel string) (string, bool) {
-		if !imported {
-			return "", false
-		}
-		switch x := x.(type) {
-		case *ast.SelectorExpr:
-			if id, ok := x.X.(*ast.Ident); ok && name != "." && id.Name == name && x.Sel.Name == sel {
-				return name + "." + sel, true
-			}
-		case *ast.Ident:
-			if name == "." && x.Name == sel {
-				return sel, true
-			}
-		}
+	sc := &fileScan{
+		s: s, p: p, funcs: funcs, name: name, imported: imported,
+		contexts: map[*ast.CallExpr]ast.Expr{}, litNames: map[*ast.FuncLit]string{},
+		scopes: map[ast.Node]*scope{},
+	}
+	sc.collectContexts()
+	ast.PreorderStack(p.file, nil, sc.visit)
+}
+
+// fileScan is the state of one file's scan: the sources it fills, the
+// parsed file, the app's functions, and what the file's calls need.
+type fileScan struct {
+	s        *Sources
+	p        *parsed
+	funcs    []Func
+	name     string // the name the file gives i18n, "." for a dot import
+	imported bool
+	fi       *fileInfo
+
+	contexts map[*ast.CallExpr]ast.Expr
+	litNames map[*ast.FuncLit]string
+	scopes   map[ast.Node]*scope
+}
+
+// pkg reports whether x names the i18n package: its import's name, or
+// nothing at all for a dot import.
+func (sc *fileScan) pkg(x ast.Expr, sel string) (string, bool) {
+	if !sc.imported {
 		return "", false
 	}
+	switch x := x.(type) {
+	case *ast.SelectorExpr:
+		if id, ok := x.X.(*ast.Ident); ok && sc.name != "." && id.Name == sc.name && x.Sel.Name == sel {
+			return sc.name + "." + sel, true
+		}
+	case *ast.Ident:
+		if sc.name == "." && x.Name == sel {
+			return sel, true
+		}
+	}
+	return "", false
+}
 
-	// A call's context is the argument of the .Context(...) it is
-	// followed by; a function literal's name, that of the variable it is
-	// assigned to.
-	contexts := map[*ast.CallExpr]ast.Expr{}
-	litNames := map[*ast.FuncLit]string{}
+// collectContexts records, for each call, the argument of the
+// .Context(...) it is followed by, and the name of each function
+// literal assigned to a variable.
+func (sc *fileScan) collectContexts() {
+	sc.fi = newFileInfo(sc.p.file)
 	named := func(lhs, rhs []ast.Expr) {
 		if len(lhs) != len(rhs) {
 			return
@@ -261,16 +283,16 @@ func (s *Sources) scanFile(p *parsed, funcs []Func) {
 			lit, ok := ast.Unparen(r).(*ast.FuncLit)
 			id, isID := lhs[i].(*ast.Ident)
 			if ok && isID {
-				litNames[lit] = id.Name
+				sc.litNames[lit] = id.Name
 			}
 		}
 	}
-	ast.Inspect(f, func(n ast.Node) bool {
+	ast.Inspect(sc.p.file, func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *ast.CallExpr:
 			if sel, ok := n.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Context" && len(n.Args) == 1 {
 				if inner, ok := ast.Unparen(sel.X).(*ast.CallExpr); ok {
-					contexts[inner] = n.Args[0]
+					sc.contexts[inner] = n.Args[0]
 				}
 			}
 		case *ast.AssignStmt:
@@ -284,111 +306,139 @@ func (s *Sources) scanFile(p *parsed, funcs []Func) {
 		}
 		return true
 	})
+}
 
-	scopes := map[ast.Node]*scope{}
-	// scopeAt returns the scope of the constants a call within stack
-	// sees: its package's, and those of the outermost function around
-	// it, but for the names that function declares otherwise.
-	scopeAt := func(stack []ast.Node) *scope {
-		for _, n := range stack {
-			switch n.(type) {
-			case *ast.FuncDecl, *ast.FuncLit:
-				sc := scopes[n]
-				if sc == nil {
-					sc = localScope(p.consts, n)
-					scopes[n] = sc
-				}
-				return sc
-			}
+// visit is the PreorderStack callback: a catalog literal is read, a call
+// is a message.
+func (sc *fileScan) visit(n ast.Node, stack []ast.Node) bool {
+	switch n := n.(type) {
+	case *ast.CompositeLit:
+		if _, ok := sc.pkg(n.Type, "Catalog"); ok {
+			sc.s.Catalogs = append(sc.s.Catalogs, goCatalog(sc.p.fset, sc.p.path, rel(sc.s.Root, sc.p.path), n))
 		}
-		return &scope{pkg: p.consts}
+	case *ast.CallExpr:
+		sc.visitCall(n, stack)
 	}
-	// passedOn reports whether each of args that is not a constant string
-	// is a parameter of a function around the call that is one of funcs:
-	// the body of a wrapper, passing its message on.
-	passedOn := func(stack []ast.Node, sc *scope, args ...ast.Expr) bool {
-		for _, a := range args {
-			if _, ok := sc.str(a); ok {
-				continue
-			}
-			id, ok := ast.Unparen(a).(*ast.Ident)
-			if !ok || !paramOfWrapper(fi, funcs, litNames, stack, id.Name) {
-				return false
-			}
-		}
-		return true
-	}
+	return true
+}
 
-	ast.PreorderStack(f, nil, func(n ast.Node, stack []ast.Node) bool {
-		switch n := n.(type) {
-		case *ast.CompositeLit:
-			if _, ok := pkg(n.Type, "Catalog"); ok {
-				s.Catalogs = append(s.Catalogs, goCatalog(fset, p.path, rel(s.Root, p.path), n))
+// scopeAt returns the scope of the constants a call within stack sees:
+// its package's, and those of the outermost function around it, but for
+// the names that function declares otherwise.
+func (sc *fileScan) scopeAt(stack []ast.Node) *scope {
+	for _, n := range stack {
+		switch n.(type) {
+		case *ast.FuncDecl, *ast.FuncLit:
+			sc2 := sc.scopes[n]
+			if sc2 == nil {
+				sc2 = localScope(sc.p.consts, n)
+				sc.scopes[n] = sc2
 			}
-		case *ast.CallExpr:
-			// key is the index of the message's argument; other, that
-			// of a plural message's plural form.
-			call, key, other, plural, method := "", -1, -1, false, false
-			if c, ok := pkg(n.Fun, "T"); ok {
-				call, key = c, 0
-			} else if c, ok := pkg(n.Fun, "N"); ok {
-				call, key, other, plural = c, 1, 2, true
-			} else if w, ok := wrapperOf(fi, funcs, n.Fun); ok {
-				call, key, other, plural = w.Call(), w.Key, w.Other, w.Plural
-			} else if sel, ok := n.Fun.(*ast.SelectorExpr); ok && imported {
-				if id, isPkg := sel.X.(*ast.Ident); !isPkg || id.Name != name {
-					switch sel.Sel.Name {
-					case "S":
-						call, key, method = "."+sel.Sel.Name, 0, true
-					case "N":
-						call, key, other, plural, method = "."+sel.Sel.Name, 1, 2, true, true
-					}
-				}
-			}
-			if key < 0 || len(n.Args) <= max(key, other) {
-				return true
-			}
-			pos := fset.Position(n.Pos())
-			sc := scopeAt(stack)
-			args := []ast.Expr{n.Args[key]}
-			if plural {
-				args = append(args, n.Args[other])
-			}
-			text, ok := sc.str(args[0])
-			otherText := ""
-			if ok && plural {
-				otherText, ok = sc.str(args[1])
-			}
-			if !ok {
-				// A method is a localizer's only by its literal.
-				if !method && !passedOn(stack, sc, args...) {
-					s.Skipped = append(s.Skipped, Skipped{Pos: pos, Call: call})
-				}
-				return true
-			}
-			ctx := ""
-			if arg, has := contexts[n]; has {
-				c, ok := sc.str(arg)
-				if !ok {
-					s.Skipped = append(s.Skipped, Skipped{Pos: pos, Call: call + "(…).Context"})
-					return true
-				}
-				ctx = c
-			}
-			m := s.Messages
-			if plural {
-				m = s.Plurals
-			}
-			k := Key(text, ctx)
-			msg := m[k]
-			if msg == nil {
-				msg = &Message{Key: k, Source: text, Other: otherText, Plural: plural}
-				m[k] = msg
-			}
-			msg.Uses = append(msg.Uses, pos)
+			return sc2
 		}
-		return true
-	})
+	}
+	return &scope{pkg: sc.p.consts}
+}
+
+// passedOn reports whether each of args that is not a constant string is
+// a parameter of a function around the call that is one of funcs: the
+// body of a wrapper, passing its message on.
+func (sc *fileScan) passedOn(stack []ast.Node, s *scope, args ...ast.Expr) bool {
+	for _, a := range args {
+		if _, ok := s.str(a); ok {
+			continue
+		}
+		id, ok := ast.Unparen(a).(*ast.Ident)
+		if !ok || !paramOfWrapper(sc.fi, sc.funcs, sc.litNames, stack, id.Name) {
+			return false
+		}
+	}
+	return true
+}
+
+// callName returns the call as a message: which function was called, the
+// argument indexes of its message and plural form, and whether it is a
+// method, which is a localizer's only when its message is a literal.
+func (sc *fileScan) callName(n *ast.CallExpr) (call string, key, other int, plural, method bool) {
+	if c, ok := sc.pkg(n.Fun, "T"); ok {
+		return c, 0, -1, false, false
+	}
+	if c, ok := sc.pkg(n.Fun, "N"); ok {
+		return c, 1, 2, true, false
+	}
+	if w, ok := wrapperOf(sc.fi, sc.funcs, n.Fun); ok {
+		return w.Call(), w.Key, w.Other, w.Plural, false
+	}
+	sel, ok := n.Fun.(*ast.SelectorExpr)
+	if !ok || !sc.imported {
+		return "", -1, -1, false, false
+	}
+	if id, isPkg := sel.X.(*ast.Ident); isPkg && id.Name == sc.name {
+		return "", -1, -1, false, false
+	}
+	switch sel.Sel.Name {
+	case "S":
+		return "." + sel.Sel.Name, 0, -1, false, true
+	case "N":
+		return "." + sel.Sel.Name, 1, 2, true, true
+	}
+	return "", -1, -1, false, false
+}
+
+// visitCall reads a call as a message when it is one.
+func (sc *fileScan) visitCall(n *ast.CallExpr, stack []ast.Node) {
+	call, key, other, plural, method := sc.callName(n)
+	if key < 0 || len(n.Args) <= max(key, other) {
+		return
+	}
+	pos := sc.p.fset.Position(n.Pos())
+	s := sc.scopeAt(stack)
+	args := []ast.Expr{n.Args[key]}
+	if plural {
+		args = append(args, n.Args[other])
+	}
+	text, ok := s.str(args[0])
+	otherText := ""
+	if ok && plural {
+		otherText, ok = s.str(args[1])
+	}
+	if !ok {
+		// A method is a localizer's only by its literal.
+		if !method && !sc.passedOn(stack, s, args...) {
+			sc.s.Skipped = append(sc.s.Skipped, Skipped{Pos: pos, Call: call})
+		}
+		return
+	}
+	ctx, ok := sc.callContext(n, s, pos, call)
+	if !ok {
+		return
+	}
+	m := sc.s.Messages
+	if plural {
+		m = sc.s.Plurals
+	}
+	k := Key(text, ctx)
+	msg := m[k]
+	if msg == nil {
+		msg = &Message{Key: k, Source: text, Other: otherText, Plural: plural}
+		m[k] = msg
+	}
+	msg.Uses = append(msg.Uses, pos)
+}
+
+// callContext returns the context a call's .Context(...) gives its
+// message, and whether it could be read.
+func (sc *fileScan) callContext(n *ast.CallExpr, s *scope, pos token.Position, call string) (string, bool) {
+	arg, has := sc.contexts[n]
+	if !has {
+		return "", true
+	}
+	c, ok := s.str(arg)
+	if !ok {
+		sc.s.Skipped = append(sc.s.Skipped, Skipped{Pos: pos, Call: call + "(…).Context"})
+		return "", false
+	}
+	return c, true
 }
 
 // wrapperOf returns the one of funcs that fun calls.
@@ -459,58 +509,71 @@ type scope struct {
 // so that a name is never taken for a constant it might not be.
 func localScope(pkg map[string]ast.Expr, fn ast.Node) *scope {
 	sc := &scope{pkg: pkg, local: map[string]ast.Expr{}, shadow: map[string]bool{}}
-	idents := func(es ...ast.Expr) {
-		for _, e := range es {
-			if id, ok := e.(*ast.Ident); ok {
-				sc.shadow[id.Name] = true
-			}
-		}
-	}
-	fields := func(fl *ast.FieldList) {
-		if fl == nil {
-			return
-		}
-		for _, f := range fl.List {
-			for _, n := range f.Names {
-				sc.shadow[n.Name] = true
-			}
-		}
-	}
 	ast.Inspect(fn, func(n ast.Node) bool {
-		switch n := n.(type) {
-		case *ast.FuncDecl:
-			fields(n.Recv)
-		case *ast.FuncType:
-			fields(n.TypeParams)
-			fields(n.Params)
-			fields(n.Results)
-		case *ast.AssignStmt:
-			if n.Tok == token.DEFINE {
-				idents(n.Lhs...)
-			}
-		case *ast.RangeStmt:
-			if n.Tok == token.DEFINE {
-				idents(n.Key, n.Value)
-			}
-		case *ast.GenDecl:
-			if n.Tok == token.CONST {
-				addConsts(sc.local, n)
-				return false
-			}
-			for _, spec := range n.Specs {
-				switch spec := spec.(type) {
-				case *ast.ValueSpec:
-					for _, id := range spec.Names {
-						sc.shadow[id.Name] = true
-					}
-				case *ast.TypeSpec:
-					sc.shadow[spec.Name.Name] = true
-				}
-			}
-		}
-		return true
+		return sc.localDecl(n)
 	})
 	return sc
+}
+
+// localDecl records what n declares inside its function: parameters and
+// variables shadow package constants, and a const declaration adds to
+// the local constants.
+func (sc *scope) localDecl(n ast.Node) bool {
+	switch n := n.(type) {
+	case *ast.FuncDecl:
+		sc.fields(n.Recv)
+	case *ast.FuncType:
+		sc.fields(n.TypeParams)
+		sc.fields(n.Params)
+		sc.fields(n.Results)
+	case *ast.AssignStmt:
+		if n.Tok == token.DEFINE {
+			sc.idents(n.Lhs...)
+		}
+	case *ast.RangeStmt:
+		if n.Tok == token.DEFINE {
+			sc.idents(n.Key, n.Value)
+		}
+	case *ast.GenDecl:
+		if n.Tok == token.CONST {
+			addConsts(sc.local, n)
+			return false
+		}
+		sc.shadowSpec(n)
+	}
+	return true
+}
+
+func (sc *scope) idents(es ...ast.Expr) {
+	for _, e := range es {
+		if id, ok := e.(*ast.Ident); ok {
+			sc.shadow[id.Name] = true
+		}
+	}
+}
+
+func (sc *scope) fields(fl *ast.FieldList) {
+	if fl == nil {
+		return
+	}
+	for _, f := range fl.List {
+		for _, n := range f.Names {
+			sc.shadow[n.Name] = true
+		}
+	}
+}
+
+func (sc *scope) shadowSpec(n *ast.GenDecl) {
+	for _, spec := range n.Specs {
+		switch spec := spec.(type) {
+		case *ast.ValueSpec:
+			for _, id := range spec.Names {
+				sc.shadow[id.Name] = true
+			}
+		case *ast.TypeSpec:
+			sc.shadow[spec.Name.Name] = true
+		}
+	}
 }
 
 // str returns the string a constant expression of string literals and
@@ -535,30 +598,36 @@ func (sc *scope) str(e ast.Expr) (string, bool) {
 		b, ok := sc.str(e.Y)
 		return a + b, ok
 	case *ast.Ident:
-		if sc == nil || sc.busy[e.Name] {
-			return "", false
-		}
-		if sc.busy == nil {
-			sc.busy = map[string]bool{}
-		}
-		if sc.shadow[e.Name] {
-			return "", false
-		}
-		in := sc
-		x, ok := sc.local[e.Name]
-		if !ok {
-			// A package's constant sees only the package's.
-			in = &scope{pkg: sc.pkg, busy: sc.busy}
-			x, ok = sc.pkg[e.Name]
-		}
-		if !ok || x == nil {
-			return "", false
-		}
-		sc.busy[e.Name] = true
-		defer delete(sc.busy, e.Name)
-		return in.str(x)
+		return sc.ident(e)
 	}
 	return "", false
+}
+
+// ident resolves a name to the constant it spells, guarding against a
+// constant that refers to itself.
+func (sc *scope) ident(e *ast.Ident) (string, bool) {
+	if sc == nil || sc.busy[e.Name] {
+		return "", false
+	}
+	if sc.busy == nil {
+		sc.busy = map[string]bool{}
+	}
+	if sc.shadow[e.Name] {
+		return "", false
+	}
+	in := sc
+	x, ok := sc.local[e.Name]
+	if !ok {
+		// A package's constant sees only the package's.
+		in = &scope{pkg: sc.pkg, busy: sc.busy}
+		x, ok = sc.pkg[e.Name]
+	}
+	if !ok || x == nil {
+		return "", false
+	}
+	sc.busy[e.Name] = true
+	defer delete(sc.busy, e.Name)
+	return in.str(x)
 }
 
 // importName returns the name a file gives ImportPath, "." for a dot
@@ -614,55 +683,65 @@ func goCatalog(fset *token.FileSet, path, name string, lit *ast.CompositeLit) *C
 			}
 			c.Lang = lang
 		case "Messages":
-			m, ok := ast.Unparen(kv.Value).(*ast.CompositeLit)
-			if !ok {
-				c.Partial = true
-				continue
-			}
-			for _, e := range m.Elts {
-				kv, ok := e.(*ast.KeyValueExpr)
-				if !ok {
-					continue
-				}
-				k, ok := literal(kv.Key)
-				if !ok {
-					c.Partial = true
-					continue
-				}
-				v, ok := literal(kv.Value)
-				if !ok {
-					c.dynamic[k] = true
-				}
-				c.Messages[k] = v
-			}
+			c.goMessages(kv.Value)
 		case "Plurals":
-			m, ok := ast.Unparen(kv.Value).(*ast.CompositeLit)
-			if !ok {
-				c.Partial = true
-				continue
-			}
-			for _, e := range m.Elts {
-				kv, ok := e.(*ast.KeyValueExpr)
-				if !ok {
-					continue
-				}
-				k, ok := literal(kv.Key)
-				if !ok {
-					c.Partial = true
-					continue
-				}
-				forms, ok := goForms(kv.Value)
-				if !ok {
-					c.dynamicPlural[k] = true
-				}
-				c.Plurals[k] = forms
-			}
+			c.goPlurals(kv.Value)
 		}
 	}
 	if c.Lang == "" && c.Err == nil {
 		c.Err = errors.New("it has no Lang")
 	}
 	return c
+}
+
+// goMessages reads the Messages table of a Go catalog literal.
+func (c *Catalog) goMessages(e ast.Expr) {
+	m, ok := ast.Unparen(e).(*ast.CompositeLit)
+	if !ok {
+		c.Partial = true
+		return
+	}
+	for _, e := range m.Elts {
+		kv, ok := e.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		k, ok := literal(kv.Key)
+		if !ok {
+			c.Partial = true
+			continue
+		}
+		v, ok := literal(kv.Value)
+		if !ok {
+			c.dynamic[k] = true
+		}
+		c.Messages[k] = v
+	}
+}
+
+// goPlurals reads the Plurals table of a Go catalog literal.
+func (c *Catalog) goPlurals(e ast.Expr) {
+	m, ok := ast.Unparen(e).(*ast.CompositeLit)
+	if !ok {
+		c.Partial = true
+		return
+	}
+	for _, e := range m.Elts {
+		kv, ok := e.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		k, ok := literal(kv.Key)
+		if !ok {
+			c.Partial = true
+			continue
+		}
+		forms, ok := goForms(kv.Value)
+		if !ok {
+			c.dynamicPlural[k] = true
+		}
+		c.Plurals[k] = forms
+	}
 }
 
 // goForms reads a composite literal of i18n.Forms, and reports whether
