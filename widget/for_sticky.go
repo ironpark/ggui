@@ -133,36 +133,43 @@ func (f *EachWidget[T, K]) pinned(r ggui.Rect) (*forEntry[T], int, ggui.Rect) {
 	if !ok {
 		return nil, 0, ggui.Rect{}
 	}
-	at := func(main, cross float64) ggui.Point {
-		return r.Origin.Add(gem.Pick(f.horizontal, ggui.Pt(main, cross), ggui.Pt(cross, main)))
-	}
 	if f.extent > 0 {
-		pitch, n := f.pin.pitch, len(f.items)
-		first, last := virtual.Fixed(n, pitch, edge, f.extent)
-		h := f.headerBefore(min(first, n-1))
-		if h < 0 || h != f.pin.row {
-			return nil, 0, ggui.Rect{}
-		}
-		start := float64(h) * pitch
-		end := max(float64(n)*pitch-f.pin.gap, start)
-		// Only a header that reaches the window's start can push.
-		if next := f.headerAfter(h); next >= 0 && next < min(n, last+1) {
-			end = float64(next)*pitch - f.pin.gap
-		}
-		pos := pinPos(edge, start, end, f.extent)
-		if pos == start {
-			return nil, 0, ggui.Rect{}
-		}
-		cross := (f.cross(r.Size) - f.cross(f.pin.size)) * f.align.Fraction()
-		if h >= f.first && h < f.last {
-			cross = f.crossAt(h - f.first)
-		}
-		return f.entries[f.keys[h]], h, ggui.Rct(at(pos, cross), f.pin.size)
+		return f.pinnedFixed(r, edge)
 	}
-	// Every row is laid out, rows leaving among them: find the item the
-	// window starts on, the header at or before it, and the end of its
-	// section, the end of the child before the next header's, or of the
-	// last child.
+	return f.pinnedEvery(r, edge)
+}
+
+// pinnedFixed is pinned for rows of a fixed extent, the window starting
+// edge into the list.
+func (f *EachWidget[T, K]) pinnedFixed(r ggui.Rect, edge float64) (*forEntry[T], int, ggui.Rect) {
+	pitch, n := f.pin.pitch, len(f.items)
+	first, last := virtual.Fixed(n, pitch, edge, f.extent)
+	h := f.headerBefore(min(first, n-1))
+	if h < 0 || h != f.pin.row {
+		return nil, 0, ggui.Rect{}
+	}
+	start := float64(h) * pitch
+	end := max(float64(n)*pitch-f.pin.gap, start)
+	// Only a header that reaches the window's start can push.
+	if next := f.headerAfter(h); next >= 0 && next < min(n, last+1) {
+		end = float64(next)*pitch - f.pin.gap
+	}
+	pos := pinPos(edge, start, end, f.extent)
+	if pos == start {
+		return nil, 0, ggui.Rect{}
+	}
+	cross := (f.cross(r.Size) - f.cross(f.pin.size)) * f.align.Fraction()
+	if h >= f.first && h < f.last {
+		cross = f.crossAt(h - f.first)
+	}
+	return f.entries[f.keys[h]], h, ggui.Rct(f.pinAt(r, pos, cross), f.pin.size)
+}
+
+// pinnedEvery is pinned when every row is laid out, rows leaving among
+// them: it finds the item the window, edge into the list, starts on, the
+// header at or before it, and the end of its section, the end of the
+// child before the next header's, or of the last child.
+func (f *EachWidget[T, K]) pinnedEvery(r ggui.Rect, edge float64) (*forEntry[T], int, ggui.Rect) {
 	n := min(len(f.childEntries), len(f.childItem), len(f.rects))
 	row := sort.Search(n, func(i int) bool { return f.mainAt(i) > edge }) - 1
 	if row < 0 || f.childItem[row] < 0 {
@@ -184,7 +191,13 @@ func (f *EachWidget[T, K]) pinned(r ggui.Rect) (*forEntry[T], int, ggui.Rect) {
 	if pos == start {
 		return nil, 0, ggui.Rect{}
 	}
-	return f.childEntries[head], h, ggui.Rct(at(pos, f.crossAt(head)), f.rects[head].Size)
+	return f.childEntries[head], h, ggui.Rct(f.pinAt(r, pos, f.crossAt(head)), f.rects[head].Size)
+}
+
+// pinAt is the point main along the list's axis and cross across it from
+// r's corner.
+func (f *EachWidget[T, K]) pinAt(r ggui.Rect, main, cross float64) ggui.Point {
+	return r.Origin.Add(gem.Pick(f.horizontal, ggui.Pt(main, cross), ggui.Pt(cross, main)))
 }
 
 // childOf returns the child painting item i, of the first n, or n when it
