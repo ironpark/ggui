@@ -187,32 +187,7 @@ func (s *session) Update() error {
 				return st.Error
 			}
 			if st.CommitKind.committed() {
-				replStart := st.ReplacementStartInBytes
-				replEnd := st.ReplacementEndInBytes
-				preLen := len(s.textBeforeCaret)
-				switch {
-				case st.ReplacementRelativeToCaret:
-					// The edit was diffed against a buffer whose caret sat where
-					// this session's does, but whose surrounding text was the
-					// previous session's. Clamp: this session decides how much
-					// text around the caret it exposes.
-					total := preLen + len(s.textAfterCaret)
-					replStart = min(max(preLen+replStart, 0), total)
-					replEnd = min(max(preLen+replEnd, replStart), total)
-				case replStart == noReplacement || replEnd == noReplacement:
-					replStart = preLen
-					replEnd = preLen
-				}
-				s.commitKind = st.CommitKind
-				s.commit = Commit{
-					text:            st.Text,
-					textBeforeCaret: s.textBeforeCaret,
-					textAfterCaret:  s.textAfterCaret,
-					replStart:       replStart,
-					replEnd:         replEnd,
-					passthroughKey:  st.CommitKind == commitWithPassthroughKey,
-				}
-				s.markClosed(true)
+				s.commitState(st)
 				return nil
 			}
 			// Non-committed state: mirror the preedit into composition so
@@ -226,6 +201,37 @@ func (s *session) Update() error {
 			return nil
 		}
 	}
+}
+
+// commitState records st's committed text as the session's commit and
+// closes the session.
+func (s *session) commitState(st textInputState) {
+	replStart := st.ReplacementStartInBytes
+	replEnd := st.ReplacementEndInBytes
+	preLen := len(s.textBeforeCaret)
+	switch {
+	case st.ReplacementRelativeToCaret:
+		// The edit was diffed against a buffer whose caret sat where
+		// this session's does, but whose surrounding text was the
+		// previous session's. Clamp: this session decides how much
+		// text around the caret it exposes.
+		total := preLen + len(s.textAfterCaret)
+		replStart = min(max(preLen+replStart, 0), total)
+		replEnd = min(max(preLen+replEnd, replStart), total)
+	case replStart == noReplacement || replEnd == noReplacement:
+		replStart = preLen
+		replEnd = preLen
+	}
+	s.commitKind = st.CommitKind
+	s.commit = Commit{
+		text:            st.Text,
+		textBeforeCaret: s.textBeforeCaret,
+		textAfterCaret:  s.textAfterCaret,
+		replStart:       replStart,
+		replEnd:         replEnd,
+		passthroughKey:  st.CommitKind == commitWithPassthroughKey,
+	}
+	s.markClosed(true)
 }
 
 // Composition returns the current preedit text and the IME-side selection
