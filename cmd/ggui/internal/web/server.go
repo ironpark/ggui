@@ -170,9 +170,7 @@ func (s *Server) startLocked() *build {
 	dir := filepath.Join(s.tmp, strconv.Itoa(s.seq))
 	prev := filepath.Join(s.tmp, strconv.Itoa(s.seq-2))
 	s.broadcastLocked(b.event())
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	s.wg.Go(func() {
 		defer cancel()
 		o := s.build
 		o.Out = filepath.Join(dir, WasmName)
@@ -202,7 +200,7 @@ func (s *Server) startLocked() *build {
 			os.RemoveAll(prev)
 		}
 		s.broadcastLocked(b.event())
-	}()
+	})
 	return b
 }
 
@@ -274,13 +272,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	switch rest {
 	case "", "index.html":
-		s.serveIndex(w, r)
+		s.serveIndex(w)
 	case WasmName:
 		s.serveWasm(w, r)
 	case "wasm_exec.js":
 		s.serveWasmExec(w, r)
 	case "_status":
-		s.serveStatus(w, r)
+		s.serveStatus(w)
 	case "_events":
 		s.serveEvents(w, r)
 	case "_rebuild":
@@ -312,7 +310,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if wantsPage(r) {
-				s.serveIndex(w, r)
+				s.serveIndex(w)
 				return
 			}
 			http.NotFound(w, r)
@@ -408,7 +406,7 @@ func wantsPage(r *http.Request) bool {
 		strings.Contains(r.Header.Get("Accept"), "text/html")
 }
 
-func (s *Server) serveIndex(w http.ResponseWriter, r *http.Request) {
+func (s *Server) serveIndex(w http.ResponseWriter) {
 	s.retryIfFailed() // a reload is how you ask for another go at it
 	s.current()       // start compiling while the page loads
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -472,7 +470,7 @@ func acceptsGzip(r *http.Request) bool {
 }
 
 // serveStatus answers what the build is doing, for the loading screen.
-func (s *Server) serveStatus(w http.ResponseWriter, r *http.Request) {
+func (s *Server) serveStatus(w http.ResponseWriter) {
 	b := s.current()
 	// Size is the binary as the page will see it, decoded, which is what its
 	// progress bar counts; Compressed is only for reporting.

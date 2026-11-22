@@ -461,10 +461,7 @@ func (w *SVGWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	switch {
 	case w.drive != svgDriveNone && (w.ctrl == nil || !w.ctrl.releasedBound):
 		if w.drive == svgDriveTime {
-			t := w.timeProp.Get()
-			if t < 0 {
-				t = 0
-			}
+			t := max(w.timeProp.Get(), 0)
 			ph.pos = t
 		} else {
 			ph.pos = progressToTime(w.progProp.Get(), tl.Span)

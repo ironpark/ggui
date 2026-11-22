@@ -147,8 +147,7 @@ func (m *model) work(label string, fn func(context.Context) (func(), error), onF
 	if m.post == nil {
 		perform()
 	} else {
-		m.workers.Add(1)
-		go func() { defer m.workers.Done(); perform() }()
+		m.workers.Go(perform)
 	}
 }
 func (m *model) stop() {
