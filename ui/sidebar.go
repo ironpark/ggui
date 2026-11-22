@@ -637,7 +637,7 @@ func (s *SidebarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 
 func (s *SidebarWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
-	pad, right := t.Space, s.onRight()
+	right := s.onRight()
 	root, outer := dst, r
 	// A sidebar going off its edge keeps its width and slides under the
 	// column's clip, taking no input on the way out: from the frame it is
@@ -650,6 +650,33 @@ func (s *SidebarWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 			dst = dst.Inert()
 		}
 	}
+	panel := s.paintSurface(dst, outer)
+	dst = dst.Clip(panel)
+	if !s.IsInert() && s.active >= 0 {
+		dst.HitKey(panel, s)
+	}
+	// Layout is skipped on a still frame, so the current destination is
+	// found here, where the items' own nodes read it back. One the layout
+	// did not style is laid out again.
+	s.cur = s.current()
+	if s.cur != s.laidCur {
+		ggui.Invalidate(s.env)
+	}
+	s.paintColumn(dst, panel)
+	s.reveal = false
+	if s.rail && s.mode != SidebarCollapseNone {
+		s.paintRail(root, r, right)
+	}
+	s.paintTip(root, right)
+}
+
+// paintSurface paints the surface of the variant in outer and returns the
+// panel inside it that holds the sidebar's contents: a card ruled on its
+// inner edge, a floating card a spacing unit in from outer, or an inset
+// panel on a card backdrop.
+func (s *SidebarWidget) paintSurface(dst *ggui.Canvas, outer ggui.Rect) ggui.Rect {
+	t := s.theme
+	pad, right := t.Space, s.onRight()
 	panel := outer
 	switch s.variant {
 	case SidebarVariantDefault:
@@ -665,25 +692,17 @@ func (s *SidebarWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.FillRect(outer, t.Card)
 		panel = ggui.Rct(outer.Origin.Add(ggui.Pt(pick(right, 0, pad), pad)), ggui.Sz(max(outer.Size.W-pad, 0), max(outer.Size.H-2*pad, 0)))
 	}
-	dst = dst.Clip(panel)
-	if !s.IsInert() && s.active >= 0 {
-		dst.HitKey(panel, s)
-	}
-	// Layout is skipped on a still frame, so the current destination is
-	// found here, where the items' own nodes read it back. One the layout
-	// did not style is laid out again.
-	s.cur = s.current()
-	if s.cur != s.laidCur {
-		ggui.Invalidate(s.env)
-	}
+	return panel
+}
+
+// paintColumn paints down panel the header, the list pinned under it, the
+// scrolling middle, the list pinned over the footer, and the footer.
+func (s *SidebarWidget) paintColumn(dst *ggui.Canvas, panel ggui.Rect) {
+	pad := s.theme.Space
 	x, w := panel.Origin.X, panel.Size.W
 	y := panel.Origin.Y
-	full := max(s.fullW-2*pad, 0)
-	lead := func(top float64, size ggui.Size) ggui.Rect {
-		return ggui.Rct(ggui.Pt(pick(s.rtl, x+w-pad-full, x+pad), top), ggui.Sz(full, size.H))
-	}
 	if s.header != nil && s.headerH > 0 {
-		s.folding(dst, ggui.Rct(ggui.Pt(x, y), ggui.Sz(w, s.headerH))).Paint(s.header, lead(y+pad*s.labelProgress, s.headerSize))
+		s.folding(dst, ggui.Rct(ggui.Pt(x, y), ggui.Sz(w, s.headerH))).Paint(s.header, s.foldRect(panel, y+pad*s.labelProgress, s.headerSize))
 		y += s.headerH
 	}
 	if s.listH[0] > 0 {
@@ -699,13 +718,17 @@ func (s *SidebarWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	if s.footer != nil && s.footerH > 0 {
 		top := bottom + s.listH[2]
-		s.folding(dst, ggui.Rct(ggui.Pt(x, top), ggui.Sz(w, s.footerH))).Paint(s.footer, lead(top+s.footerH-(pad+s.footerSize.H)*s.labelProgress, s.footerSize))
+		s.folding(dst, ggui.Rct(ggui.Pt(x, top), ggui.Sz(w, s.footerH))).Paint(s.footer, s.foldRect(panel, top+s.footerH-(pad+s.footerSize.H)*s.labelProgress, s.footerSize))
 	}
-	s.reveal = false
-	if s.rail && s.mode != SidebarCollapseNone {
-		s.paintRail(root, r, right)
-	}
-	s.paintTip(root, right)
+}
+
+// foldRect is the rect of the header or the footer, of size, at top in
+// panel: as wide as the expanded sidebar's content and at its leading
+// edge, so it keeps its layout while a rail folds it away.
+func (s *SidebarWidget) foldRect(panel ggui.Rect, top float64, size ggui.Size) ggui.Rect {
+	pad := s.theme.Space
+	full := max(s.fullW-2*pad, 0)
+	return ggui.Rct(ggui.Pt(pick(s.rtl, panel.Origin.X+panel.Size.W-pad-full, panel.Origin.X+pad), top), ggui.Sz(full, size.H))
 }
 
 // folding returns the canvas the header or the footer paints on: dst, or
@@ -796,14 +819,7 @@ func (s *SidebarWidget) Adopt(prev any) {
 	}
 	s.hover = find(p.hover)
 	s.railHover, s.tip = p.railHover, p.tip
-	relaid := false
-	for _, old := range p.rows {
-		if j, ok := byID[old.id()]; ok && old.e.collapsible {
-			n := s.rows[j]
-			relaid = relaid || (n.e.openBind == nil && n.open != old.open)
-			n.open, n.reveal = old.open, old.reveal
-		}
-	}
+	relaid := s.adoptFolds(p, byID)
 	// The collapse carries on from where it was, and a sidebar toggled by
 	// hand keeps that over the same configured state.
 	s.expand = p.expand
@@ -815,6 +831,21 @@ func (s *SidebarWidget) Adopt(prev any) {
 	if relaid {
 		s.props.Changed()
 	}
+}
+
+// adoptFolds keeps each collapsible row of p, by id, folded open or shut
+// as it was, and reports whether a row whose fold no binding sets has
+// changed it, so that the sidebar must be laid out again.
+func (s *SidebarWidget) adoptFolds(p *SidebarWidget, byID map[string]int) bool {
+	relaid := false
+	for _, old := range p.rows {
+		if j, ok := byID[old.id()]; ok && old.e.collapsible {
+			n := s.rows[j]
+			relaid = relaid || (n.e.openBind == nil && n.open != old.open)
+			n.open, n.reveal = old.open, old.reveal
+		}
+	}
+	return relaid
 }
 
 // BindDisabled follows r for Disabled without rebuilding the control.
