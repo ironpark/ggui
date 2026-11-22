@@ -191,31 +191,46 @@ func (l *Localizer) lookup(tag, key, ctx string) (string, string, bool) {
 // Entries whose selected form and Other fallback are empty are skipped so
 // broader fallback catalogs still apply.
 func (l *Localizer) lookupPlural(tag string, n int, key, ctx string) (string, string, bool) {
-	var cats map[string]*Catalog
-	if l != nil {
-		cats = l.cats
-	}
 	tags := fallbacks(tag)
 	for _, k := range keys(key, ctx) {
 		for _, t := range tags {
-			cat := pluralOf(t, n)
-			if c := cats[t]; c != nil {
-				if f, ok := c.Plurals[k]; ok {
-					if s := f.pick(cat); s != "" {
-						return s, t, true
-					}
-				}
-			}
-			if c := builtin[t]; c != nil {
-				if f, ok := c.Plurals[k]; ok {
-					if s := f.pick(cat); s != "" {
-						return s, t, true
-					}
-				}
+			if s, ok := l.pluralIn(k, t, pluralOf(t, n)); ok {
+				return s, t, true
 			}
 		}
 	}
 	return "", "", false
+}
+
+// pluralIn returns the plural message of key in tag t's catalogs, the
+// localizer's then the built-in ones, for category cat.
+func (l *Localizer) pluralIn(key, tag string, cat category) (string, bool) {
+	var cats map[string]*Catalog
+	if l != nil {
+		cats = l.cats
+	}
+	if c := cats[tag]; c != nil {
+		if s, ok := pickPlural(c, key, cat); ok {
+			return s, true
+		}
+	}
+	if c := builtin[tag]; c != nil {
+		if s, ok := pickPlural(c, key, cat); ok {
+			return s, true
+		}
+	}
+	return "", false
+}
+
+// pickPlural returns the plural form of key in catalog c for category
+// cat, when the catalog has a non-empty one.
+func pickPlural(c *Catalog, key string, cat category) (string, bool) {
+	if f, ok := c.Plurals[key]; ok {
+		if s := f.pick(cat); s != "" {
+			return s, true
+		}
+	}
+	return "", false
 }
 
 // keys returns the keys a message is looked up under: with its context,

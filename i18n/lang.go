@@ -58,22 +58,32 @@ func Match(supported, preferred []string) string {
 		norm[i] = normalize(s)
 	}
 	for _, p := range preferred {
-		for _, f := range fallbacks(p) {
-			for i, s := range norm {
-				if s == f {
-					return supported[i]
-				}
-			}
-		}
-		if b := base(normalize(p)); b != "" {
-			for i, s := range norm {
-				if base(s) == b {
-					return supported[i]
-				}
-			}
+		if tag, ok := matchPreferred(supported, norm, p); ok {
+			return tag
 		}
 	}
 	return supported[0]
+}
+
+// matchPreferred returns the supported tag serving the preference p: the
+// supported tag equal to it, else one equal to it with subtags dropped,
+// else one of the same language.
+func matchPreferred(supported, norm []string, p string) (string, bool) {
+	for _, f := range fallbacks(p) {
+		for i, s := range norm {
+			if s == f {
+				return supported[i], true
+			}
+		}
+	}
+	if b := base(normalize(p)); b != "" {
+		for i, s := range norm {
+			if base(s) == b {
+				return supported[i], true
+			}
+		}
+	}
+	return "", false
 }
 
 // rtl lists the languages written right to left.

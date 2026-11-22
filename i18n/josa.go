@@ -187,40 +187,19 @@ func directive(s string) (spec string, index int, verb rune, n int, ok bool) {
 	}
 	var sb strings.Builder
 	sb.WriteString(s[:j])
-	readIndex := func() bool {
-		if j >= len(s) || s[j] != '[' {
-			return true
-		}
-		end := strings.IndexByte(s[j:], ']')
-		if end < 0 {
-			return false
-		}
-		v, err := strconv.Atoi(s[j+1 : j+end])
-		if err != nil || v < 1 {
-			return false
-		}
-		index = v
-		j += end + 1
-		return true
-	}
-	if !readIndex() {
+	if index, j, ok = readArgIndex(s, j, index); !ok {
 		return "", 0, 0, 0, false
 	}
 	start := j
-	for j < len(s) && s[j] >= '0' && s[j] <= '9' {
-		j++
-	}
+	j = skipDigits(s, j)
 	if j < len(s) && s[j] == '.' {
-		j++
-		for j < len(s) && s[j] >= '0' && s[j] <= '9' {
-			j++
-		}
+		j = skipDigits(s, j+1)
 	}
 	if j < len(s) && s[j] == '*' {
 		return "", 0, 0, 0, false
 	}
 	sb.WriteString(s[start:j])
-	if !readIndex() {
+	if index, j, ok = readArgIndex(s, j, index); !ok {
 		return "", 0, 0, 0, false
 	}
 	if j >= len(s) {
@@ -229,6 +208,32 @@ func directive(s string) (spec string, index int, verb rune, n int, ok bool) {
 	verb, size := utf8.DecodeRuneInString(s[j:])
 	sb.WriteRune(verb)
 	return sb.String(), index, verb, j + size, true
+}
+
+// readArgIndex reads "[n]", the argument index, at s[j]; j and index are
+// unchanged when there is none. It fails on a bad index.
+func readArgIndex(s string, j, index int) (int, int, bool) {
+	if j >= len(s) || s[j] != '[' {
+		return index, j, true
+	}
+	end := strings.IndexByte(s[j:], ']')
+	if end < 0 {
+		return 0, 0, false
+	}
+	v, err := strconv.Atoi(s[j+1 : j+end])
+	if err != nil || v < 1 {
+		return 0, 0, false
+	}
+	return v, j + end + 1, true
+}
+
+// skipDigits returns the first index at or after j whose byte is not a
+// digit.
+func skipDigits(s string, j int) int {
+	for j < len(s) && s[j] >= '0' && s[j] <= '9' {
+		j++
+	}
+	return j
 }
 
 // writtenOut returns format with each particle pair written as Korean
