@@ -81,6 +81,21 @@ func parse(src string, stream bool) []Block {
 	p := &parser{src: src, stream: stream}
 	p.doc = &node{kind: document, open: true}
 	p.tip = p.doc
+	p.scanLines()
+	// Only a block still open where the source ends can be cut off inside
+	// it: one a blank line closed is whole.
+	if leaf := lastLeaf(p.doc); stream && leaf.open {
+		p.inlineTail = leaf
+	}
+	for p.tip != nil {
+		p.finalize(p.tip)
+	}
+	return p.blocks(p.doc.children)
+}
+
+// scanLines reads each line of the source into the document.
+func (p *parser) scanLines() {
+	src := p.src
 	for i := 0; i <= len(src); {
 		j := i
 		for j < len(src) && src[j] != '\n' && src[j] != '\r' {
@@ -106,15 +121,6 @@ func parse(src string, stream bool) []Block {
 			i = j + 1
 		}
 	}
-	// Only a block still open where the source ends can be cut off inside
-	// it: one a blank line closed is whole.
-	if leaf := lastLeaf(p.doc); stream && leaf.open {
-		p.inlineTail = leaf
-	}
-	for p.tip != nil {
-		p.finalize(p.tip)
-	}
-	return p.blocks(p.doc.children)
 }
 
 // lastLeaf is the last block of n with no blocks inside.
@@ -207,39 +213,15 @@ func (p *parser) rest() string {
 // incorporate reads one line into the document.
 func (p *parser) incorporate(ln string) {
 	p.ln, p.off, p.col, p.partial, p.consumed = ln, 0, 0, false, false
-	container := p.doc
 	p.oldtip = p.tip
-	// Continue the open blocks the line still belongs to.
-open:
-	for {
-		n := len(container.children)
-		if n == 0 || !container.children[n-1].open {
-			break
-		}
-		container = container.children[n-1]
-		p.findNext()
-		switch p.continues(container) {
-		case 1:
-			container = container.parent
-			break open
-		case 2:
-			return // a closing fence: nothing more on the line
-		}
+	container, done := p.continueBlocks()
+	if done {
+		return
 	}
 	p.allClosed = container == p.oldtip
 	p.matched = container
 	// Start new blocks in what remains.
-	leaf := container.kind != Paragraph && container.kind != Table && acceptsLines(container.kind)
-	for !leaf {
-		p.findNext()
-		res := p.blockStart(container)
-		if res == 0 {
-			p.advanceNext()
-			break
-		}
-		container = p.tip
-		leaf = res == 2
-	}
+	container = p.startBlocks(container)
 	if p.consumed {
 		return
 	}
@@ -260,6 +242,45 @@ open:
 	}
 }
 
+// continueBlocks descends into the open blocks the line still belongs to,
+// and reports the innermost one, or done when a closing fence used the
+// whole line.
+func (p *parser) continueBlocks() (container *node, done bool) {
+	container = p.doc
+	for {
+		n := len(container.children)
+		if n == 0 || !container.children[n-1].open {
+			break
+		}
+		container = container.children[n-1]
+		p.findNext()
+		switch p.continues(container) {
+		case 1:
+			return container.parent, false
+		case 2:
+			return nil, true // a closing fence: nothing more on the line
+		}
+	}
+	return container, false
+}
+
+// startBlocks starts new blocks at the position until a leaf did or none
+// starts, and returns the innermost open block.
+func (p *parser) startBlocks(container *node) *node {
+	leaf := container.kind != Paragraph && container.kind != Table && acceptsLines(container.kind)
+	for !leaf {
+		p.findNext()
+		res := p.blockStart(container)
+		if res == 0 {
+			p.advanceNext()
+			break
+		}
+		container = p.tip
+		leaf = res == 2
+	}
+	return container
+}
+
 // acceptsLines reports whether a block of kind k takes text lines.
 func acceptsLines(k Kind) bool { return k == Paragraph || k == CodeBlock || k == Table }
 
@@ -268,66 +289,89 @@ func acceptsLines(k Kind) bool { return k == Paragraph || k == CodeBlock || k ==
 func (p *parser) continues(c *node) int {
 	switch c.kind {
 	case Quote:
-		if !p.indented && p.peek(p.next) == '>' {
-			p.advanceNext()
-			p.advance(1, false)
-			if b := p.peek(p.off); b == ' ' || b == '\t' {
-				p.advance(1, true)
-			}
-			c.end = p.line
-			return 0
-		}
-		return 1
+		return p.continuesQuote(c)
 	case Item:
-		if p.blank {
-			if len(c.children) == 0 {
-				return 1 // an item starts with at most one blank line
-			}
-			p.advanceNext()
-			return 0
-		}
-		if p.indent >= c.list.markerOffset+c.list.padding {
-			p.advance(c.list.markerOffset+c.list.padding, true)
-			return 0
-		}
-		return 1
+		return p.continuesItem(c)
 	case Heading, ThematicBreak:
 		return 1
 	case CodeBlock:
-		if !c.fenced {
-			switch {
-			case p.indent >= 4:
-				p.advance(4, true)
-				return 0
-			case p.blank:
-				p.advanceNext()
-				return 0
-			}
-			return 1
-		}
-		if !p.indented && p.peek(p.next) == c.fenceChar {
-			s := p.ln[p.next:]
-			n := run(s, c.fenceChar)
-			if n >= c.fenceLen && strings.Trim(s[n:], " \t") == "" {
-				c.closed = true
-				c.end = p.line
-				p.finalize(c)
-				return 2
-			}
-		}
-		for i := c.fenceIndent; i > 0; i-- {
-			if b := p.peek(p.off); b != ' ' && b != '\t' {
-				break
-			}
-			p.advance(1, true)
-		}
-		return 0
-	case Paragraph, Table:
+		return p.continuesCode(c)
+	}
+	if c.kind == Paragraph || c.kind == Table {
 		if p.blank {
 			return 1
 		}
 	}
 	return 0
+}
+
+func (p *parser) continuesQuote(c *node) int {
+	if !p.indented && p.peek(p.next) == '>' {
+		p.advanceNext()
+		p.advance(1, false)
+		if b := p.peek(p.off); b == ' ' || b == '\t' {
+			p.advance(1, true)
+		}
+		c.end = p.line
+		return 0
+	}
+	return 1
+}
+
+func (p *parser) continuesItem(c *node) int {
+	if p.blank {
+		if len(c.children) == 0 {
+			return 1 // an item starts with at most one blank line
+		}
+		p.advanceNext()
+		return 0
+	}
+	if p.indent >= c.list.markerOffset+c.list.padding {
+		p.advance(c.list.markerOffset+c.list.padding, true)
+		return 0
+	}
+	return 1
+}
+
+func (p *parser) continuesCode(c *node) int {
+	if !c.fenced {
+		switch {
+		case p.indent >= 4:
+			p.advance(4, true)
+			return 0
+		case p.blank:
+			p.advanceNext()
+			return 0
+		}
+		return 1
+	}
+	if p.fenceClose(c) {
+		return 2
+	}
+	for i := c.fenceIndent; i > 0; i-- {
+		if b := p.peek(p.off); b != ' ' && b != '\t' {
+			break
+		}
+		p.advance(1, true)
+	}
+	return 0
+}
+
+// fenceClose reports whether the line closes c's fence, and finalizes c
+// when it does.
+func (p *parser) fenceClose(c *node) bool {
+	if p.indented || p.peek(p.next) != c.fenceChar {
+		return false
+	}
+	s := p.ln[p.next:]
+	n := run(s, c.fenceChar)
+	if n < c.fenceLen || strings.Trim(s[n:], " \t") != "" {
+		return false
+	}
+	c.closed = true
+	c.end = p.line
+	p.finalize(c)
+	return true
 }
 
 // run counts the bytes c that s starts with.
@@ -351,62 +395,124 @@ func depth(n *node) int {
 // blockStart tries each block start at the position: 0 when none starts, 1
 // when a container did, which more may start inside, 2 when a leaf did.
 func (p *parser) blockStart(container *node) int {
+	if !p.indented {
+		if res := p.lineStart(container); res != 0 {
+			return res
+		}
+	}
+	if res := p.containerStart(container); res != 0 {
+		return res
+	}
+	if p.indented && p.tip.kind != Paragraph && !p.blank {
+		p.advance(4, true)
+		p.closeUnmatched()
+		p.addChild(CodeBlock)
+		return 2
+	}
+	return 0
+}
+
+// lineStart tries each block start read from the rest of the line.
+func (p *parser) lineStart(container *node) int {
 	s := p.ln[p.next:]
 	var c byte
 	if len(s) > 0 {
 		c = s[0]
 	}
-	if !p.indented {
-		switch {
-		case c == '>' && depth(container) < maxDepth:
-			p.advanceNext()
-			p.advance(1, false)
-			if b := p.peek(p.off); b == ' ' || b == '\t' {
-				p.advance(1, true)
-			}
-			p.closeUnmatched()
-			p.addChild(Quote)
-			return 1
-		case c == '#':
-			if n := run(s, '#'); n <= 6 && (n == len(s) || s[n] == ' ' || s[n] == '\t') {
-				p.closeUnmatched()
-				h := p.addChild(Heading)
-				h.level = n
-				h.lines = []string{headingText(s[n:])}
-				return p.useLine()
-			}
-		case c == '`' || c == '~':
-			if n := run(s, c); n >= 3 && (c == '~' || strings.IndexByte(s[n:], '`') < 0) {
-				p.closeUnmatched()
-				f := p.addChild(CodeBlock)
-				f.fenced, f.fenceChar, f.fenceLen, f.fenceIndent = true, c, n, p.indent
-				f.info = unescape(strings.Trim(s[n:], " \t"))
-				return p.useLine()
-			}
+	switch {
+	case c == '>' && depth(container) < maxDepth:
+		return p.quoteStart()
+	case c == '#':
+		if res := p.headingStart(s); res != 0 {
+			return res
 		}
-		if (c == '=' || c == '-') && container.kind == Paragraph {
-			if n := run(s, c); strings.Trim(s[n:], " \t") == "" {
-				p.closeUnmatched()
-				h := &node{kind: Heading, parent: container.parent, open: true, start: container.start, end: p.line, level: 2}
-				if c == '=' {
-					h.level = 1
-				}
-				h.lines = []string{strings.TrimRight(strings.Join(container.lines, "\n"), " \t")}
-				siblings := container.parent.children
-				siblings[len(siblings)-1] = h
-				p.tip = h
-				return p.useLine()
-			}
-		}
-		if isBreak(s) {
-			p.closeUnmatched()
-			p.addChild(ThematicBreak)
-			return p.useLine()
-		}
-		if container.kind == Paragraph && p.tableStart(container, s) {
-			return p.useLine()
+	case c == '`' || c == '~':
+		if res := p.fenceStart(s); res != 0 {
+			return res
 		}
 	}
+	return p.tailStart(container, s, c)
+}
+
+// tailStart tries the block starts that need no marker of their own: a
+// setext underline, a thematic break and a table's delimiter row.
+func (p *parser) tailStart(container *node, s string, c byte) int {
+	if (c == '=' || c == '-') && container.kind == Paragraph {
+		if res := p.setextStart(container, s, c); res != 0 {
+			return res
+		}
+	}
+	if isBreak(s) {
+		p.closeUnmatched()
+		p.addChild(ThematicBreak)
+		return p.useLine()
+	}
+	if container.kind == Paragraph && p.tableStart(container, s) {
+		return p.useLine()
+	}
+	return 0
+}
+
+// headingStart starts an ATX heading when s opens one.
+func (p *parser) headingStart(s string) int {
+	n := run(s, '#')
+	if n > 6 || (n < len(s) && s[n] != ' ' && s[n] != '\t') {
+		return 0
+	}
+	p.closeUnmatched()
+	h := p.addChild(Heading)
+	h.level = n
+	h.lines = []string{headingText(s[n:])}
+	return p.useLine()
+}
+
+// quoteStart consumes a > and opens a quote.
+func (p *parser) quoteStart() int {
+	p.advanceNext()
+	p.advance(1, false)
+	if b := p.peek(p.off); b == ' ' || b == '\t' {
+		p.advance(1, true)
+	}
+	p.closeUnmatched()
+	p.addChild(Quote)
+	return 1
+}
+
+// fenceStart starts a fenced code block when s opens one.
+func (p *parser) fenceStart(s string) int {
+	c := s[0]
+	n := run(s, c)
+	if n < 3 || c == '`' && strings.IndexByte(s[n:], '`') >= 0 {
+		return 0
+	}
+	p.closeUnmatched()
+	f := p.addChild(CodeBlock)
+	f.fenced, f.fenceChar, f.fenceLen, f.fenceIndent = true, c, n, p.indent
+	f.info = unescape(strings.Trim(s[n:], " \t"))
+	return p.useLine()
+}
+
+// setextStart turns an open paragraph into a heading when s is its
+// underline of = or -.
+func (p *parser) setextStart(container *node, s string, c byte) int {
+	n := run(s, c)
+	if strings.Trim(s[n:], " \t") != "" {
+		return 0
+	}
+	p.closeUnmatched()
+	h := &node{kind: Heading, parent: container.parent, open: true, start: container.start, end: p.line, level: 2}
+	if c == '=' {
+		h.level = 1
+	}
+	h.lines = []string{strings.TrimRight(strings.Join(container.lines, "\n"), " \t")}
+	siblings := container.parent.children
+	siblings[len(siblings)-1] = h
+	p.tip = h
+	return p.useLine()
+}
+
+// containerStart tries the list item start at the position.
+func (p *parser) containerStart(container *node) int {
 	if (!p.indented || container.kind == List) && depth(container) < maxDepth {
 		if data, ok := p.listMarker(container); ok {
 			p.closeUnmatched()
@@ -417,12 +523,6 @@ func (p *parser) blockStart(container *node) int {
 			p.addChild(Item).list = data
 			return 1
 		}
-	}
-	if p.indented && p.tip.kind != Paragraph && !p.blank {
-		p.advance(4, true)
-		p.closeUnmatched()
-		p.addChild(CodeBlock)
-		return 2
 	}
 	return 0
 }
@@ -574,40 +674,65 @@ func (p *parser) listMarker(container *node) (listData, bool) {
 		return listData{}, false
 	}
 	s := p.ln[p.next:]
-	var d listData
-	n := 0
-	switch {
-	case len(s) == 0:
-		return d, false
-	case s[0] == '-' || s[0] == '+' || s[0] == '*':
-		d.marker, n = s[0], 1
-	case s[0] >= '0' && s[0] <= '9':
-		for n < len(s) && n < 9 && s[n] >= '0' && s[n] <= '9' {
-			d.number = d.number*10 + int(s[n]-'0')
-			n++
-		}
-		if n == len(s) || (s[n] != '.' && s[n] != ')') {
-			return d, false
-		}
-		// Only a list starting at 1 may interrupt a paragraph.
-		if container.kind == Paragraph && d.number != 1 {
-			return d, false
-		}
-		d.ordered, d.marker = true, s[n]
-		n++
-	default:
-		return d, false
-	}
-	if n < len(s) && s[n] != ' ' && s[n] != '\t' {
-		return d, false
+	d, n, ok := markerAt(s, container)
+	if !ok || (n < len(s) && s[n] != ' ' && s[n] != '\t') {
+		return listData{}, false
 	}
 	// An empty item may not interrupt a paragraph.
 	if container.kind == Paragraph && strings.Trim(s[n:], " \t") == "" {
-		return d, false
+		return listData{}, false
 	}
 	d.markerOffset = p.indent
 	p.advanceNext()
 	p.advance(n, true)
+	p.markerPadding(&d, n)
+	return d, true
+}
+
+// markerAt reads the list marker s starts with, if any: its data and the
+// number of characters it takes.
+func markerAt(s string, container *node) (listData, int, bool) {
+	var d listData
+	n := 0
+	switch {
+	case len(s) == 0:
+		return d, 0, false
+	case s[0] == '-' || s[0] == '+' || s[0] == '*':
+		d.marker, n = s[0], 1
+	case s[0] >= '0' && s[0] <= '9':
+		d, n = orderedMarker(s, container)
+		if d.marker == 0 {
+			return d, 0, false
+		}
+	default:
+		return d, 0, false
+	}
+	return d, n, true
+}
+
+// orderedMarker reads an ordered list marker: digits and a . or ), when a
+// list may start here.
+func orderedMarker(s string, container *node) (listData, int) {
+	var d listData
+	n := 0
+	for n < len(s) && n < 9 && s[n] >= '0' && s[n] <= '9' {
+		d.number = d.number*10 + int(s[n]-'0')
+		n++
+	}
+	if n == len(s) || (s[n] != '.' && s[n] != ')') {
+		return d, 0
+	}
+	// Only a list starting at 1 may interrupt a paragraph.
+	if container.kind == Paragraph && d.number != 1 {
+		return d, 0
+	}
+	d.ordered, d.marker = true, s[n]
+	return d, n + 1
+}
+
+// markerPadding moves the position past the spaces after a list marker
+// and sets where the item's content starts.
+func (p *parser) markerPadding(d *listData, n int) {
 	startCol, startOff, startPartial := p.col, p.off, p.partial
 	for {
 		p.advance(1, true)
@@ -617,17 +742,16 @@ func (p *parser) listMarker(container *node) (listData, bool) {
 	}
 	spaces := p.col - startCol
 	if spaces >= 5 || spaces < 1 || p.off >= len(p.ln) {
-		// Code indented in the item, or an item starting blank: its content
-		// starts one space after the marker.
+		// Code indented in the item, or an item starting blank: its
+		// content starts one space after the marker.
 		d.padding = n + 1
 		p.col, p.off, p.partial = startCol, startOff, startPartial
 		if b := p.peek(p.off); b == ' ' || b == '\t' {
 			p.advance(1, true)
 		}
-	} else {
-		d.padding = n + spaces
+		return
 	}
-	return d, true
+	d.padding = n + spaces
 }
 
 // closeUnmatched closes the blocks the line did not continue.
@@ -708,20 +832,26 @@ func (p *parser) finalize(b *node) {
 			b.end = b.start
 		}
 	case List:
-		b.tight = true
-		for i, item := range b.children {
-			last := i == len(b.children)-1
-			if !last && endsBlank(item, b.children[i+1]) {
-				b.tight = false
-			}
-			for j, sub := range item.children {
-				if j+1 < len(item.children) && endsBlank(sub, item.children[j+1]) {
-					b.tight = false
-				}
-			}
-		}
+		b.tighten()
 		if len(b.children) > 0 {
 			b.end = b.children[len(b.children)-1].end
+		}
+	}
+}
+
+// tighten reports whether a list is tight: no blank line parts its items
+// or their blocks.
+func (b *node) tighten() {
+	b.tight = true
+	for i, item := range b.children {
+		last := i == len(b.children)-1
+		if !last && endsBlank(item, b.children[i+1]) {
+			b.tight = false
+		}
+		for j, sub := range item.children {
+			if j+1 < len(item.children) && endsBlank(sub, item.children[j+1]) {
+				b.tight = false
+			}
 		}
 	}
 }
@@ -761,18 +891,31 @@ func (p *parser) block(n *node) Block {
 		b.Ordered, b.Number, b.Tight = n.list.ordered, n.list.number, n.tight
 		b.Children = p.blocks(n.children)
 	case Item:
-		b.Task = taskOf(n)
-		b.Children = p.blocks(n.children)
-		if b.Task != NoTask && len(b.Children) > 0 && b.Children[0].Kind == Paragraph && len(b.Children[0].Inlines) == 0 {
-			b.Children = b.Children[1:]
-		}
+		b = p.itemBlock(n, b)
 	case Table:
-		b.Align = n.align
-		cols := len(n.align)
-		b.Header = p.row(n.lines[0], cols, tail && len(n.lines) == 1)
-		for i, ln := range n.lines[1:] {
-			b.Rows = append(b.Rows, p.row(ln, cols, tail && i == len(n.lines)-2))
-		}
+		b = p.tableBlock(n, b, tail)
+	}
+	return b
+}
+
+// itemBlock fills b with an item's task and children, dropping the empty
+// paragraph a checked box leaves.
+func (p *parser) itemBlock(n *node, b Block) Block {
+	b.Task = taskOf(n)
+	b.Children = p.blocks(n.children)
+	if b.Task != NoTask && len(b.Children) > 0 && b.Children[0].Kind == Paragraph && len(b.Children[0].Inlines) == 0 {
+		b.Children = b.Children[1:]
+	}
+	return b
+}
+
+// tableBlock fills b with a table's alignment, header and body rows.
+func (p *parser) tableBlock(n *node, b Block, tail bool) Block {
+	b.Align = n.align
+	cols := len(n.align)
+	b.Header = p.row(n.lines[0], cols, tail && len(n.lines) == 1)
+	for i, ln := range n.lines[1:] {
+		b.Rows = append(b.Rows, p.row(ln, cols, tail && i == len(n.lines)-2))
 	}
 	return b
 }
