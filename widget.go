@@ -668,32 +668,11 @@ var readsSeen = sync.Pool{New: func() any { return map[reactive.LayoutSource]int
 // dedupeReads keeps each source once, at the version it was read last, in
 // the order it was first read, in a slice no larger than it needs.
 func dedupeReads(reads []sourceRead) []sourceRead {
-	n := 0
+	var n int
 	if len(reads) <= mostScannedReads {
-	scan:
-		for _, r := range reads {
-			for j := range n {
-				if reads[j].src == r.src {
-					reads[j].version = r.version
-					continue scan
-				}
-			}
-			reads[n] = r
-			n++
-		}
+		n = dedupeByScan(reads)
 	} else {
-		readSeen := readsSeen.Get().(map[reactive.LayoutSource]int)
-		defer readsSeen.Put(readSeen)
-		for _, r := range reads {
-			if j, ok := readSeen[r.src]; ok {
-				reads[j].version = r.version
-				continue
-			}
-			readSeen[r.src] = n
-			reads[n] = r
-			n++
-		}
-		clear(readSeen)
+		n = dedupeByMap(reads)
 	}
 	clear(reads[n:])
 	reads = reads[:n]
@@ -701,6 +680,43 @@ func dedupeReads(reads []sourceRead) []sourceRead {
 		return slices.Clone(reads)
 	}
 	return reads
+}
+
+// dedupeByScan moves each source in reads once to the front, at the
+// version it was read last, comparing every read with those kept, and
+// returns how many it kept.
+func dedupeByScan(reads []sourceRead) int {
+	n := 0
+scan:
+	for _, r := range reads {
+		for j := range n {
+			if reads[j].src == r.src {
+				reads[j].version = r.version
+				continue scan
+			}
+		}
+		reads[n] = r
+		n++
+	}
+	return n
+}
+
+// dedupeByMap is dedupeByScan for many reads, finding those kept in a map.
+func dedupeByMap(reads []sourceRead) int {
+	readSeen := readsSeen.Get().(map[reactive.LayoutSource]int)
+	defer readsSeen.Put(readSeen)
+	n := 0
+	for _, r := range reads {
+		if j, ok := readSeen[r.src]; ok {
+			reads[j].version = r.version
+			continue
+		}
+		readSeen[r.src] = n
+		reads[n] = r
+		n++
+	}
+	clear(readSeen)
+	return n
 }
 
 // Invalidate tells the runtime that the widget laid out under env changed

@@ -275,59 +275,41 @@ func keyEquivalent(k KeyboardKey) string {
 	case k >= KeyF1 && k <= KeyF24:
 		return string(rune(0xF704 + (k - KeyF1)))
 	}
-	switch k {
-	case KeyEnter, KeyNumpadEnter:
-		return "\r"
-	case KeyEscape:
-		return "\x1b"
-	case KeyTab:
-		return "\t"
-	case KeySpace:
-		return " "
-	case KeyBackspace:
-		return "\x08"
-	case KeyDelete:
-		return ""
-	case KeyArrowUp:
-		return ""
-	case KeyArrowDown:
-		return ""
-	case KeyArrowLeft:
-		return ""
-	case KeyArrowRight:
-		return ""
-	case KeyHome:
-		return ""
-	case KeyEnd:
-		return ""
-	case KeyPageUp:
-		return ""
-	case KeyPageDown:
-		return ""
-	case KeyComma:
-		return ","
-	case KeyPeriod:
-		return "."
-	case KeySlash:
-		return "/"
-	case KeySemicolon:
-		return ";"
-	case KeyQuote:
-		return "'"
-	case KeyBracketLeft:
-		return "["
-	case KeyBracketRight:
-		return "]"
-	case KeyBackslash:
-		return "\\"
-	case KeyMinus:
-		return "-"
-	case KeyEqual:
-		return "="
-	case KeyBackquote:
-		return "`"
+	if s, ok := keyEquivalents[k]; ok {
+		return s
 	}
 	return strings.ToLower(k.String())
+}
+
+// keyEquivalents are the key equivalents of the keys outside the letter,
+// digit and function-key ranges whose name is not what they type.
+var keyEquivalents = map[KeyboardKey]string{
+	KeyEnter:        "\r",
+	KeyNumpadEnter:  "\r",
+	KeyEscape:       "\x1b",
+	KeyTab:          "\t",
+	KeySpace:        " ",
+	KeyBackspace:    "\x08",
+	KeyDelete:       "",
+	KeyArrowUp:      "",
+	KeyArrowDown:    "",
+	KeyArrowLeft:    "",
+	KeyArrowRight:   "",
+	KeyHome:         "",
+	KeyEnd:          "",
+	KeyPageUp:       "",
+	KeyPageDown:     "",
+	KeyComma:        ",",
+	KeyPeriod:       ".",
+	KeySlash:        "/",
+	KeySemicolon:    ";",
+	KeyQuote:        "'",
+	KeyBracketLeft:  "[",
+	KeyBracketRight: "]",
+	KeyBackslash:    "\\",
+	KeyMinus:        "-",
+	KeyEqual:        "=",
+	KeyBackquote:    "`",
 }
 
 // NativeContextMenu reports whether the platform supports native context

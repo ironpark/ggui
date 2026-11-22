@@ -351,14 +351,29 @@ func (s semSource) Fill(i int, dst *SemNode) {
 }
 
 func sameNode(a, b *Node) bool {
-	if a.Role != b.Role || a.Name != b.Name || a.Description != b.Description ||
-		a.Value != b.Value || a.Checked != b.Checked || a.Selected != b.Selected ||
-		a.Disabled != b.Disabled || a.Min != b.Min || a.Max != b.Max || a.Now != b.Now ||
-		a.Actions != b.Actions || a.Offscreen != b.Offscreen || a.Level != b.Level ||
-		a.SelStart != b.SelStart || a.SelEnd != b.SelEnd || a.Expanded != b.Expanded {
-		return false
-	}
-	return (a.Runs == nil) == (b.Runs == nil) && slices.EqualFunc(a.Runs, b.Runs, func(a, b TextRun) bool {
+	return sameKind(a, b) && sameState(a, b) && sameText(a, b)
+}
+
+// sameKind reports whether a and b describe the same kind of element:
+// what it is, what it is called, how deep it sits and what it can do.
+func sameKind(a, b *Node) bool {
+	return a.Role == b.Role && a.Name == b.Name && a.Description == b.Description &&
+		a.Level == b.Level && a.Actions == b.Actions
+}
+
+// sameState reports whether a and b stand the same: value, check,
+// expansion, selection, whether they take input or show, and range.
+func sameState(a, b *Node) bool {
+	return a.Value == b.Value && a.Checked == b.Checked && a.Expanded == b.Expanded &&
+		a.Selected == b.Selected && a.Disabled == b.Disabled && a.Offscreen == b.Offscreen &&
+		a.Min == b.Min && a.Max == b.Max && a.Now == b.Now
+}
+
+// sameText reports whether a and b have the same caret and selection and
+// were laid out in the same runs.
+func sameText(a, b *Node) bool {
+	return a.SelStart == b.SelStart && a.SelEnd == b.SelEnd &&
+		(a.Runs == nil) == (b.Runs == nil) && slices.EqualFunc(a.Runs, b.Runs, func(a, b TextRun) bool {
 		return a.Start == b.Start && a.End == b.End && a.Rect == b.Rect &&
 			(a.Stops == nil) == (b.Stops == nil) && slices.Equal(a.Stops, b.Stops)
 	})

@@ -878,36 +878,50 @@ func isHashableValue(v reflect.Value) bool {
 	case reflect.Interface:
 		return v.IsNil() || isHashableValue(v.Elem())
 	case reflect.Array:
-		t := v.Type()
-		if !t.Comparable() {
-			return false
-		}
-		if safeComparableType(t.Elem()) {
-			return true
-		}
-		for i := range v.Len() {
-			if !isHashableValue(v.Index(i)) {
-				return false
-			}
-		}
-		return true
+		return hashableArray(v)
 	case reflect.Struct:
-		t := v.Type()
-		if !t.Comparable() {
-			return false
-		}
-		if safeComparableType(t) {
-			return true
-		}
-		for _, field := range v.Fields() {
-			if !isHashableValue(field) {
-				return false
-			}
-		}
-		return true
+		return hashableStruct(v)
 	default:
 		return false
 	}
+}
+
+// hashableArray reports whether the array v can be a map key: of a
+// comparable type, and either of an element type no value of which panics
+// when compared or holding no element that does.
+func hashableArray(v reflect.Value) bool {
+	t := v.Type()
+	if !t.Comparable() {
+		return false
+	}
+	if safeComparableType(t.Elem()) {
+		return true
+	}
+	for i := range v.Len() {
+		if !isHashableValue(v.Index(i)) {
+			return false
+		}
+	}
+	return true
+}
+
+// hashableStruct reports whether the struct v can be a map key: of a
+// comparable type, and either of a type no value of which panics when
+// compared or holding no field that does.
+func hashableStruct(v reflect.Value) bool {
+	t := v.Type()
+	if !t.Comparable() {
+		return false
+	}
+	if safeComparableType(t) {
+		return true
+	}
+	for _, field := range v.Fields() {
+		if !isHashableValue(field) {
+			return false
+		}
+	}
+	return true
 }
 
 // remember keeps out as the Env derived from e with key and val, for the
