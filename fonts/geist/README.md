@@ -20,13 +20,20 @@ label := widget.Text("Contribution History").Style(ggui.TextStyle{
 code := widget.Text("go test ./...").Style(ggui.TextStyle{Font: geist.Mono()})
 ```
 
-The theme builder exposes the same families through `theme.FontGeist` and
-`theme.FontGeistMono` for body or heading fonts, and `theme.ApplyCSS` maps a
-`--font-sans`, `--font-heading` or `--font-mono` naming `Geist` or `Geist Mono`
-to them. The default theme and zero `theme.Config` retain their existing fonts.
-All eight font files total 1,108,484 bytes (about 1.06 MiB); their data is
-embedded in binaries that link this package, including `ui/theme` for its Geist
-options. No runtime font download or system installation is needed.
+`ui/theme` does not import or embed `fonts/geist` automatically. To use
+`theme.FontGeist` or `theme.FontGeistMono` in `theme.Config`, or `Geist` /
+`Geist Mono` in `theme.ApplyCSS`/`FromCSS`, register them explicitly:
+
+```go
+theme.RegisterFont("Geist", geist.Font)
+theme.RegisterFont("Geist Mono", geist.Mono)
+recipe := theme.Config{Font: theme.FontGeist, Heading: theme.FontGeistMono}
+```
+
+The default theme and zero `theme.Config` retain their existing fonts. All eight
+font files total 1,108,484 bytes (about 1.06 MiB); their data is embedded only
+in binaries that import this package. No runtime font download or system
+installation is needed.
 
 ## Source and license
 

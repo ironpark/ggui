@@ -154,8 +154,8 @@ var AppTheme = theme.Config{
     },
     Chart:      theme.AccentRose,
     Radius:     theme.RadiusLarge,
-    Font:       theme.FontGeist,
-    Heading:    theme.FontGeistMono,
+    Font:       theme.FontGeist,     // registered via theme.RegisterFont("Geist", geist.Font)
+    Heading:    theme.FontGeistMono, // registered via theme.RegisterFont("Geist Mono", geist.Mono)
     MenuAccent: theme.MenuAccentBold,
     MenuColor:  theme.MenuColorInverted,
     Icons:      theme.IconsLucide, // registered by linking ui/icons/lucide
@@ -217,16 +217,41 @@ recipe := theme.Config{Icons: theme.IconsTabler}
 
 A recipe naming a library that is not registered panics, like any unknown name.
 
-`FontDefault` uses the application's font. `FontSans` selects bundled Go Sans
-with medium and bold faces, and `FontMono` selects bundled Go Mono with its bold
-face. `FontInter` selects the official Inter 4.1 family, and `FontGeist` and
-`FontGeistMono` the official Geist 1.9.2 families, the fonts of shadcn/ui's Nova
-preset, each including regular, medium, semibold and bold static faces. These
-fonts work offline and have the same family across platforms. Each is an
+`FontDefault` uses the application's font. The bundled font packages
+(`fonts/gofont`, `fonts/inter`, `fonts/geist`) are opt-in: `ui/theme` does not
+import or embed them automatically, so binaries only carry the font packs they
+register. Call `theme.RegisterFont` to enable the families you want for both
+`Config` and `ApplyCSS`/`FromCSS`:
+
+```go
+import (
+    "github.com/ironpark/ggui/fonts/geist"
+    "github.com/ironpark/ggui/fonts/gofont"
+    "github.com/ironpark/ggui/fonts/inter"
+    "github.com/ironpark/ggui/ui/theme"
+)
+
+theme.RegisterFont("Inter", inter.Font)
+theme.RegisterFont("Geist", geist.Font)
+theme.RegisterFont("Geist Mono", geist.Mono)
+theme.RegisterFont("Go", gofont.Font)
+theme.RegisterFont("Go Mono", gofont.Mono)
+```
+
+Once registered, `FontSans` selects Go Sans with medium and bold faces,
+`FontMono` selects Go Mono with its bold face, `FontInter` selects the official
+Inter 4.1 family, and `FontGeist` and `FontGeistMono` select the official Geist
+1.9.2 families, the fonts of shadcn/ui's Nova preset, each including regular,
+medium, semibold and bold static faces. `Fonts()` returns `FontDefault` followed
+by the registered built-in choices without loading any font faces, and naming a
+font in `Config` that is not registered panics, like an unregistered icon
+library. Custom families registered with `theme.RegisterFont` are accepted too.
+These fonts work offline and have the same family across platforms. Each is an
 explicit choice; none changes the zero configuration or global defaults. Their
 sources, hashes and SIL Open Font Licenses are documented in
-[fonts/inter](../../fonts/inter/README.md) and
-[fonts/geist](../../fonts/geist/README.md).
+[fonts/inter](../../fonts/inter/README.md),
+[fonts/geist](../../fonts/geist/README.md) and
+[fonts/gofont](../../fonts/gofont/README.md).
 `Heading` changes `Title` and `Heading`; its default inherits the body font.
 Labels and captions inherit the body font, while code uses the independent
 `Theme.Mono` style. Applications can load other fonts and customize the returned
@@ -234,17 +259,19 @@ Labels and captions inherit the body font, while code uses the independent
 
 `ApplyCSS` and `FromCSS` read `--font-sans` into `Text`, `--font-heading` into
 `Title` and `Heading`, and `--font-mono` into `Mono`, taking the first family in
-the list that is registered. Inter, Geist, Geist Mono, Go and Go Mono are;
-`theme.RegisterFont("Figtree", figtree.Font)` adds another. A list naming only
-system fonts leaves the theme's font as it is.
+the list that `theme.RegisterFont` knows (for example
+`theme.RegisterFont("Inter", inter.Font)` or
+`theme.RegisterFont("Figtree", figtree.Font)`). A list naming no registered
+family, such as system fonts alone, leaves the theme's font as it is.
 
 `GoCode(dark)` exports the complete recipe and appearance as a deterministic Go
 expression. It needs the `github.com/ironpark/ggui/ui/theme` import named `theme`.
 It reproduces the configuration's theme, including its chart, font, menu and
-icon choices, the last needing its library registered where the code runs;
-additional changes made to a returned `Theme` are outside the recipe. Building
-or exporting a configuration has no global theme side effect. Applying it uses
-the existing theme APIs, preserving accessibility preferences and layout caches.
+icon choices, with any named fonts and icon library needing to be registered
+where the code runs; additional changes made to a returned `Theme` are outside
+the recipe. Building or exporting a configuration has no global theme side
+effect. Applying it uses the existing theme APIs, preserving accessibility
+preferences and layout caches.
 
 ## Migration
 

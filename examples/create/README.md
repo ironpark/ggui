@@ -20,7 +20,7 @@ For the repository's browser runner, use `task serve EXAMPLE=create`.
 - Hover or focus a setting tile to reveal its lock. Locked choices survive Shuffle.
 - **Copy preset** exports JSON; **Open preset** restores it after validation.
 - **Get Code** exports a complete Go `applyTheme` function: the recipe, with its
-  icon library registered and its menu accent, applied in the chosen mode. `Cmd+Shift+C` copies it directly.
+  bundled fonts and icon library registered and its menu accent, applied in the chosen mode. `Cmd+Shift+C` copies it directly.
 - On narrow windows, **Customize** opens the settings sheet. The preview cards
   reflow to two columns and then one. Wide previews keep the reference collage:
   375px columns around a double one, 3000px across, panned horizontally.
@@ -37,6 +37,7 @@ defaults. Apply it to the whole app with `theme.Set`, or just a preview with
 `theme.With`:
 
 ```go
+theme.RegisterFont("Inter", inter.Font)
 recipe := theme.Config{
     Preset: theme.Preset{Base: theme.BaseNeutral, Accent: theme.AccentViolet},
     Chart: theme.AccentBlue,

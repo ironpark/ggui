@@ -103,8 +103,7 @@ func FromCSS(css string) (light, dark Theme, err error) {
 //
 // --font-sans sets the font of Text, --font-heading that of Title and
 // Heading, and --font-mono that of Mono, to the first family in the list
-// that RegisterFont knows: the bundled Inter, Geist, Geist Mono, Go and Go
-// Mono, and what the app registered. A list naming none of them, such as
+// that RegisterFont knows. A list naming no registered family, such as
 // one of system fonts alone, leaves the font as it is.
 //
 // A color variable with no token of its own, such as the --warning shadcn

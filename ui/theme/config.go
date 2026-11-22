@@ -10,9 +10,6 @@ import (
 	"sync"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/fonts/geist"
-	"github.com/ironpark/ggui/fonts/gofont"
-	"github.com/ironpark/ggui/fonts/inter"
 )
 
 // Radius selects a Config's --radius, the length every corner is a step of.
@@ -39,11 +36,14 @@ func RadiusOptions() []Radius {
 	return []Radius{RadiusDefault, RadiusNone, RadiusSmall, RadiusMedium, RadiusLarge}
 }
 
-// FontFamily selects an offline font for Config. Default leaves the application
-// font in control. Sans and Mono are the bundled Go fonts, with real bold faces;
-// Inter, Geist and GeistMono are the official bundled families, each with
-// medium, semibold and bold faces. Geist is the font of shadcn/ui's Nova preset.
-// No choice downloads fonts. A default heading inherits the body font.
+// FontFamily selects a font for Config. FontDefault leaves the application font
+// in control. The named choices correspond to opt-in bundled font packs
+// registered with RegisterFont: FontSans and FontMono for fonts/gofont,
+// FontInter for fonts/inter, and FontGeist and FontGeistMono for fonts/geist.
+// Any other name registered with RegisterFont is also accepted. ui/theme does
+// not import embedded font packages automatically; apps register whichever
+// families they want. No choice downloads fonts. A default heading inherits the
+// body font.
 type FontFamily string
 
 const (
@@ -55,11 +55,32 @@ const (
 	FontGeistMono FontFamily = "geist-mono"
 )
 
-// Fonts returns supported font choices. Labels should distinguish the app's
-// default font from the bundled Go Sans, Go Mono, Inter, Geist and Geist Mono
-// families.
+// builtInFonts defines the canonical order of named FontFamily choices and the
+// RegisterFont aliases that satisfy each choice.
+var builtInFonts = []struct {
+	choice  FontFamily
+	aliases []string
+}{
+	{FontSans, []string{"sans", "Go", "Go Sans"}},
+	{FontMono, []string{"mono", "Go Mono"}},
+	{FontInter, []string{"Inter"}},
+	{FontGeist, []string{"Geist", "Geist Sans"}},
+	{FontGeistMono, []string{"Geist Mono"}},
+}
+
+// Fonts returns FontDefault followed by the bundled font choices registered
+// with RegisterFont, in canonical order, without loading any font faces.
+// Labels should distinguish the app's default font from the bundled Go Sans,
+// Go Mono, Inter, Geist and Geist Mono families.
 func Fonts() []FontFamily {
-	return []FontFamily{FontDefault, FontSans, FontMono, FontInter, FontGeist, FontGeistMono}
+	out := make([]FontFamily, 1, 1+len(builtInFonts))
+	out[0] = FontDefault
+	for _, entry := range builtInFonts {
+		if hasConfigFont(entry.choice) {
+			out = append(out, entry.choice)
+		}
+	}
+	return out
 }
 
 // ChartBase is the Config.Chart that keeps the base palette's own chart
@@ -153,9 +174,10 @@ func IconLibraries() []IconLibrary {
 //
 // Chart follows Preset.Accent while it is AccentBase, as shadcn/ui's chart
 // color follows its theme; ChartBase keeps the base palette's charts and an
-// accent selects that accent's, changing only the five chart tokens. Heading
-// sets Title and Heading fonts; Label and Caption inherit the body font. Code
-// continues to use the theme's independent Mono style. Icons names a library
+// accent selects that accent's, changing only the five chart tokens. Font and
+// Heading name families RegisterFont registered; Heading sets Title and
+// Heading fonts, while Label and Caption inherit the body font. Code continues
+// to use the theme's independent Mono style. Icons names a library
 // RegisterIcons registered.
 //
 // Config does not apply a theme globally. Use For/Light/Dark with Set, Bind,
@@ -179,8 +201,8 @@ func (c Config) Light() Theme { return c.For(false) }
 func (c Config) Dark() Theme { return c.For(true) }
 
 // For builds a resolved light or dark theme. Invalid names panic, like Preset,
-// and so does an icon library that is not registered. No existing defaults,
-// preset values or environment preferences are modified.
+// and so does a font or icon library that is not registered. No existing
+// defaults, preset values or environment preferences are modified.
 func (c Config) For(dark bool) Theme {
 	t := c.Preset.For(dark)
 	if !slices.Contains(ChartColors(), c.Chart) {
@@ -188,12 +210,6 @@ func (c Config) For(dark bool) Theme {
 	}
 	if !slices.Contains(RadiusOptions(), c.Radius) {
 		panic("ggui: unknown theme radius " + string(c.Radius))
-	}
-	if !slices.Contains(Fonts(), c.Font) {
-		panic("ggui: unknown body font " + string(c.Font))
-	}
-	if !slices.Contains(Fonts(), c.Heading) {
-		panic("ggui: unknown heading font " + string(c.Heading))
 	}
 	if !slices.Contains(MenuAccents(), c.MenuAccent) {
 		panic("ggui: unknown menu accent " + string(c.MenuAccent))
@@ -221,10 +237,17 @@ func (c Config) For(dark bool) Theme {
 		t.setRadius(radiusValues[c.Radius])
 	}
 	if c.Font != FontDefault {
-		t.Text.Font = configFont(c.Font)
+		font := configFont(c.Font)
+		if font == nil {
+			panic("ggui: font " + string(c.Font) + " is not registered; see theme.RegisterFont")
+		}
+		t.Text.Font = font
 	}
 	if c.Heading != FontDefault {
 		font := configFont(c.Heading)
+		if font == nil {
+			panic("ggui: font " + string(c.Heading) + " is not registered; see theme.RegisterFont")
+		}
 		t.Title.Font, t.Heading.Font = font, font
 	}
 	if c.Icons != IconsDefault {
@@ -280,28 +303,51 @@ func MenuEnv(env ggui.Env) ggui.Env {
 	return env
 }
 
+func fontAliases(font FontFamily) []string {
+	for _, entry := range builtInFonts {
+		if entry.choice == font {
+			return entry.aliases
+		}
+	}
+	return nil
+}
+
+func hasConfigFont(font FontFamily) bool {
+	if font == FontDefault {
+		return true
+	}
+	if aliases := fontAliases(font); aliases != nil {
+		for _, alias := range aliases {
+			if hasFontNamed(alias) {
+				return true
+			}
+		}
+		return false
+	}
+	return hasFontNamed(string(font))
+}
+
 func configFont(font FontFamily) *ggui.Font {
-	switch font {
-	case FontSans:
-		return gofont.Font()
-	case FontMono:
-		return gofont.Mono()
-	case FontInter:
-		return inter.Font()
-	case FontGeist:
-		return geist.Font()
-	case FontGeistMono:
-		return geist.Mono()
-	default:
+	if font == FontDefault {
 		return nil
 	}
+	if aliases := fontAliases(font); aliases != nil {
+		for _, alias := range aliases {
+			if f := fontNamed(alias); f != nil {
+				return f
+			}
+		}
+		return nil
+	}
+	return fontNamed(string(font))
 }
 
 // GoCode returns a formatted Go expression that reproduces this configuration
 // and appearance, for example theme.Config{...}.For(true). The expression needs
 // the import "github.com/ironpark/ggui/ui/theme" under its usual name, and, for
-// a recipe that names an icon library, that library registered where it runs.
-// It is deterministic, uses only supported string choices, and does not apply a
+// a recipe that names a font or icon library, those fonts or libraries
+// registered where it runs (via RegisterFont or RegisterIcons). It is
+// deterministic, uses only supported string choices, and does not apply a
 // theme. Invalid configurations panic just as For does.
 func (c Config) GoCode(dark bool) string {
 	_ = c.For(dark)

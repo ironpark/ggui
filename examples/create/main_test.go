@@ -196,3 +196,96 @@ func TestReferencePayoutAmountDoesNotCrowdItsLabel(t *testing.T) {
 		t.Fatalf("payout amount crowds label: label=%v amount=%v", label.Full, value.Full)
 	}
 }
+
+func TestSourceCodeFontRegistrations(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		font       theme.FontFamily
+		heading    theme.FontFamily
+		want       []string
+		wantAbsent []string
+		wantCount  map[string]int
+	}{
+		{
+			name:    "default omits font imports and registrations",
+			font:    theme.FontDefault,
+			heading: theme.FontDefault,
+			wantAbsent: []string{
+				"github.com/ironpark/ggui/fonts/",
+				"theme.RegisterFont(",
+			},
+		},
+		{
+			name:    "inter deduplicates import and registration",
+			font:    theme.FontInter,
+			heading: theme.FontInter,
+			wantCount: map[string]int{
+				`"github.com/ironpark/ggui/fonts/inter"`:  1,
+				`theme.RegisterFont("Inter", inter.Font)`: 1,
+			},
+			wantAbsent: []string{
+				"github.com/ironpark/ggui/fonts/geist",
+				"github.com/ironpark/ggui/fonts/gofont",
+			},
+		},
+		{
+			name:    "geist and geist-mono share one import",
+			font:    theme.FontGeist,
+			heading: theme.FontGeistMono,
+			want: []string{
+				`theme.RegisterFont("Geist", geist.Font)`,
+				`theme.RegisterFont("Geist Mono", geist.Mono)`,
+			},
+			wantCount: map[string]int{
+				`"github.com/ironpark/ggui/fonts/geist"`: 1,
+			},
+			wantAbsent: []string{
+				"github.com/ironpark/ggui/fonts/inter",
+				"github.com/ironpark/ggui/fonts/gofont",
+			},
+		},
+		{
+			name:    "sans and mono share gofont import",
+			font:    theme.FontSans,
+			heading: theme.FontMono,
+			want: []string{
+				`theme.RegisterFont("Go", gofont.Font)`,
+				`theme.RegisterFont("Go Mono", gofont.Mono)`,
+			},
+			wantCount: map[string]int{
+				`"github.com/ironpark/ggui/fonts/gofont"`: 1,
+			},
+			wantAbsent: []string{
+				"github.com/ironpark/ggui/fonts/inter",
+				"github.com/ironpark/ggui/fonts/geist",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := defaults()
+			s.Theme.Font = tc.font
+			s.Theme.Heading = tc.heading
+			code := sourceCode(s)
+			if _, err := parser.ParseFile(token.NewFileSet(), "theme.go", code, parser.AllErrors); err != nil {
+				t.Fatalf("invalid generated Go:\n%s\nerr: %v", code, err)
+			}
+			for _, sub := range tc.want {
+				if !strings.Contains(code, sub) {
+					t.Errorf("generated Go missing %q:\n%s", sub, code)
+				}
+			}
+			for sub, count := range tc.wantCount {
+				if got := strings.Count(code, sub); got != count {
+					t.Errorf("generated Go has %d occurrences of %q, want %d:\n%s", got, sub, count, code)
+				}
+			}
+			for _, sub := range tc.wantAbsent {
+				if strings.Contains(code, sub) {
+					t.Errorf("generated Go unexpectedly contains %q:\n%s", sub, code)
+				}
+			}
+		})
+	}
+}
