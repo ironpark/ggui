@@ -27,7 +27,7 @@ func TestFloatingPanelsKeepTheCollisionPaddingFromTheEdges(t *testing.T) {
 		{"over an anchor with room only flush against the top", ggui.Rct(ggui.Pt(150, 56), ggui.Sz(40, 20)), widget.PopupTop, widget.PopupCenter, ggui.Pt(120, 80), widget.PopupBottom},
 		{"beside an anchor at the bottom edge", ggui.Rct(ggui.Pt(150, 280), ggui.Sz(40, 20)), widget.PopupRight, widget.PopupStart, ggui.Pt(194, 245), widget.PopupRight},
 	} {
-		got, on, _ := floatBeside(screen, c.anchor, size, c.side, c.align, 0, 4, false)
+		got, on, _ := floatBeside(screen, floatSpec{anchor: c.anchor, size: size, side: c.side, align: c.align, gap: 4})
 		if got.Origin != c.want || on != c.on {
 			t.Errorf("%s: at %v on side %v, want %v on side %v", c.name, got.Origin, on, c.want, c.on)
 		}

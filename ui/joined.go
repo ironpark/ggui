@@ -109,44 +109,52 @@ func joinedCorner(radius float64, a, b bool) float64 {
 	return radius
 }
 
-// fillJoined fills r with col, its corners rounded by radius except on the
-// joined sides.
-func fillJoined(dst *ggui.Canvas, r ggui.Rect, radius float64, j JoinedSides, col color.Color) {
+// joinedBox is the outline of a control that may be joined to its
+// neighbours: rect, its corners rounded by radius except on the joined
+// sides.
+type joinedBox struct {
+	rect   ggui.Rect
+	radius float64
+	sides  JoinedSides
+}
+
+// fillJoined fills box with col.
+func fillJoined(dst *ggui.Canvas, box joinedBox, col color.Color) {
 	if col == nil {
 		return
 	}
-	parts, n := joinedParts(r, radius, j, dst.Scale())
+	parts, n := joinedParts(box.rect, box.radius, box.sides, dst.Scale())
 	if n == 1 {
-		dst.FillRoundRect(r, parts[0].radius, col)
+		dst.FillRoundRect(box.rect, parts[0].radius, col)
 		return
 	}
 	for _, p := range parts[:n] {
-		dst.Clip(p.clip).FillRoundRect(r, p.radius, col)
+		dst.Clip(p.clip).FillRoundRect(box.rect, p.radius, col)
 	}
 }
 
-// strokeJoined draws a line of width w just inside r, its corners rounded
-// by radius except on the joined sides. With seam false it leaves the line
-// out on a joined Left or Top side, as a control's own border does; a
-// focus ring passes true and is drawn all the way round.
-func strokeJoined(dst *ggui.Canvas, r ggui.Rect, radius float64, j JoinedSides, w float64, col color.Color, seam bool) {
+// strokeJoined draws a line of width w just inside box. With seam false
+// it leaves the line out on a joined Left or Top side, as a control's own
+// border does; a focus ring passes true and is drawn all the way round.
+func strokeJoined(dst *ggui.Canvas, box joinedBox, w float64, col color.Color, seam bool) {
 	if col == nil || w <= 0 {
 		return
 	}
-	parts, n := joinedParts(r, radius, j, dst.Scale())
-	// The line on a side left out is drawn beyond r, where the clip drops
-	// it. Its corners are square, so the two beside it run to the edge.
-	line := r
-	if !seam && j.Left {
+	parts, n := joinedParts(box.rect, box.radius, box.sides, dst.Scale())
+	// The line on a side left out is drawn beyond the box, where the clip
+	// drops it. Its corners are square, so the two beside it run to the
+	// edge.
+	line := box.rect
+	if !seam && box.sides.Left {
 		line.Origin.X -= w
 		line.Size.W += w
 	}
-	if !seam && j.Top {
+	if !seam && box.sides.Top {
 		line.Origin.Y -= w
 		line.Size.H += w
 	}
-	if n == 1 && line == r {
-		dst.StrokeRoundRect(r, parts[0].radius, w, col)
+	if n == 1 && line == box.rect {
+		dst.StrokeRoundRect(box.rect, parts[0].radius, w, col)
 		return
 	}
 	for _, p := range parts[:n] {
@@ -154,38 +162,36 @@ func strokeJoined(dst *ggui.Canvas, r ggui.Rect, radius float64, j JoinedSides, 
 	}
 }
 
-// paintJoinedBox draws a control's surface and border in r, following the
-// joined sides: what a Box with a fill, a border and a radius draws, with
-// the corners squared and the border left out where the control meets its
-// neighbour.
-func paintJoinedBox(dst *ggui.Canvas, r ggui.Rect, radius float64, j JoinedSides, fill color.Color, borderWidth float64, border color.Color) {
-	fillJoined(dst, r, radius, j, fill)
-	strokeJoined(dst, r, radius, j, borderWidth, border, false)
+// paintJoinedBox draws a control's surface and border in box, following
+// its joined sides: what a Box with a fill, a border and a radius draws,
+// with the corners squared and the border left out where the control
+// meets its neighbour.
+func paintJoinedBox(dst *ggui.Canvas, box joinedBox, fill color.Color, borderWidth float64, border color.Color) {
+	fillJoined(dst, box, fill)
+	strokeJoined(dst, box, borderWidth, border, false)
 }
 
 // joinedFocus is a focus ring: the line at the edge of a control and the
 // soft halo around it, following its joined sides.
 type joinedFocus struct {
+	joinedBox
 	on         bool
-	r          ggui.Rect
-	radius     float64
-	sides      JoinedSides
 	width      float64
 	line, halo color.Color
 }
 
 func (f *joinedFocus) paint(dst *ggui.Canvas) {
-	strokeJoined(dst, f.r, f.radius, f.sides, f.width, f.line, true)
-	strokeJoined(dst, f.r.Grow(2), f.radius+2, f.sides, 3, f.halo, true)
+	strokeJoined(dst, f.joinedBox, f.width, f.line, true)
+	strokeJoined(dst, joinedBox{rect: f.rect.Grow(2), radius: f.radius + 2, sides: f.sides}, 3, f.halo, true)
 }
 
 // joinedFocusRing draws the focus ring of a control: line at its edge and
 // ring, at the theme's halo opacity, around it. Inside a ButtonGroup the
 // ring is handed to the group, which draws it over the children painted
 // after this one; they would otherwise cover the half of it on their side.
-func joinedFocusRing(dst *ggui.Canvas, t *uitheme.Theme, r ggui.Rect, radius float64, j JoinedSides, line, ring color.Color) {
-	f := joinedFocus{on: true, r: r, radius: radius, sides: j, width: t.BorderWidth, line: line, halo: t.Halo(ring)}
-	if g, ok := dst.Enclosing().(*ButtonGroupWidget); ok && j.Any() {
+func joinedFocusRing(dst *ggui.Canvas, t *uitheme.Theme, box joinedBox, line, ring color.Color) {
+	f := joinedFocus{joinedBox: box, on: true, width: t.BorderWidth, line: line, halo: t.Halo(ring)}
+	if g, ok := dst.Enclosing().(*ButtonGroupWidget); ok && box.sides.Any() {
 		g.ring(f)
 		return
 	}

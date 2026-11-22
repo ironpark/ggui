@@ -490,8 +490,9 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	if sides.Any() {
 		radius = t.Radius
 		s.box.Fill(nil).Border(0, nil)
-		paintJoinedBox(dst, r, radius, sides, fill, t.BorderWidth, border)
-		ring := joinedFocus{on: true, r: r, radius: radius, sides: sides, width: t.BorderWidth}
+		shape := joinedBox{rect: r, radius: radius, sides: sides}
+		paintJoinedBox(dst, shape, fill, t.BorderWidth, border)
+		ring := joinedFocus{joinedBox: shape, on: true, width: t.BorderWidth}
 		switch {
 		case inert:
 			ring.on = false
@@ -694,8 +695,8 @@ func (s *SelectWidget[T]) typeahead(text string) {
 	if start < 0 && open {
 		start = s.highlight
 	}
-	i := s.search.search(text, ggui.Now(), selectTypeaheadReset, len(s.options), start,
-		func(i int) string { return s.label(s.options[i]) }, s.enabled)
+	i := s.search.search(text, ggui.Now(), selectTypeaheadReset, start,
+		typeaheadRows{n: len(s.options), label: func(i int) string { return s.label(s.options[i]) }, available: s.enabled})
 	switch {
 	case i < 0:
 	case open:

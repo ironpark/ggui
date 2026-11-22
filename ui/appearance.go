@@ -62,37 +62,44 @@ var (
 	focusRingSlot    = ggui.NewSlot[*ggui.Motion]("focus ring")
 )
 
-// fieldState is what a field's chrome shows.
-type fieldState struct {
+// fieldLook is what a field's chrome is drawn from: the theme, what the
+// field shows, the motion it eases between states over, and the sides it
+// is joined on. Its corners are the theme's Radius.
+type fieldLook struct {
+	theme                   *uitheme.Theme
 	focused, invalid, inert bool
+	motion                  time.Duration
+	sides                   JoinedSides
 }
 
-// fieldChromeJoined colors a field's box for its state and draws the halo
+// fieldChromeJoined colors a field's box for its look and draws the halo
 // around it; see fieldTones. Call it in Paint, before painting b in r. The
 // field may sit in a ButtonGroup: on the sides joined to a neighbour its
 // corners are square, its border gives way to the neighbour's, and its
 // halo, which the group draws above its children, runs past the seam.
-func fieldChromeJoined(dst *ggui.Canvas, at ggui.Anchor, b *widget.BoxWidget, t *uitheme.Theme, r ggui.Rect, radius float64, s fieldState, motion time.Duration, sides JoinedSides) {
-	if !sides.Any() {
-		fill, border := fieldTones(dst, at, t, r, radius, s, motion)
-		b.Fill(fill).Border(t.BorderWidth, border)
+func fieldChromeJoined(dst *ggui.Canvas, at ggui.Anchor, b *widget.BoxWidget, r ggui.Rect, look fieldLook) {
+	if !look.sides.Any() {
+		fill, border := fieldTones(dst, at, r, look)
+		b.Fill(fill).Border(look.theme.BorderWidth, border)
 		return
 	}
 	b.Fill(nil).Border(0, nil)
-	fieldSurface(dst, at, t, r, radius, s, motion, sides)
+	fieldSurface(dst, at, r, look)
 }
 
 // fieldSurface paints a field's fill, border and halo in r itself, for a
 // field that draws its own surface rather than through a box, following
 // the sides it is joined on.
-func fieldSurface(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, r ggui.Rect, radius float64, s fieldState, motion time.Duration, sides JoinedSides) {
-	fill, border, halo, ringed := fieldToneParts(dst, at, t, s, motion)
-	paintJoinedBox(dst, r, radius, sides, fill, t.BorderWidth, border)
+func fieldSurface(dst *ggui.Canvas, at ggui.Anchor, r ggui.Rect, look fieldLook) {
+	t := look.theme
+	fill, border, halo, ringed := fieldToneParts(dst, at, look)
+	shape := joinedBox{rect: r, radius: t.Radius, sides: look.sides}
+	paintJoinedBox(dst, shape, fill, t.BorderWidth, border)
 	if !ringed {
 		return
 	}
-	f := joinedFocus{on: true, r: r, radius: radius, sides: sides, width: t.BorderWidth, line: border, halo: halo}
-	if g, ok := dst.Enclosing().(*ButtonGroupWidget); ok && sides.Any() {
+	f := joinedFocus{joinedBox: shape, on: true, width: t.BorderWidth, line: border, halo: halo}
+	if g, ok := dst.Enclosing().(*ButtonGroupWidget); ok && look.sides.Any() {
 		g.ring(f)
 		return
 	}
@@ -100,16 +107,16 @@ func fieldSurface(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, r ggui.Rec
 }
 
 // fieldTones draws the halo around a field in r and returns the fill and
-// the border its state calls for, easing between states over motion: the
-// border moves from InputBorder to the Ring while the editor has the
+// the border its look calls for, easing between states over its motion:
+// the border moves from InputBorder to the Ring while the editor has the
 // keyboard, and to the destructive border while the field is invalid,
 // focused or not, when it also keeps a destructive halo. The motions are
 // retained under at and rest once they arrive, so an idle field asks for
 // no frame.
-func fieldTones(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, r ggui.Rect, radius float64, s fieldState, motion time.Duration) (fill, border color.Color) {
-	fill, border, halo, ringed := fieldToneParts(dst, at, t, s, motion)
+func fieldTones(dst *ggui.Canvas, at ggui.Anchor, r ggui.Rect, look fieldLook) (fill, border color.Color) {
+	fill, border, halo, ringed := fieldToneParts(dst, at, look)
 	if ringed {
-		controlkit.HaloStroke(dst, r, radius, halo)
+		controlkit.HaloStroke(dst, r, look.theme.Radius, halo)
 	}
 	return fill, border
 }
@@ -118,12 +125,13 @@ func fieldTones(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, r ggui.Rect,
 // and the halo with whether there is one to draw. The fill is the theme's
 // Input, which may be translucent and is drawn as it is, or the muted
 // surface of a disabled field.
-func fieldToneParts(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, s fieldState, motion time.Duration) (fill, border, halo color.Color, ringed bool) {
-	focus := controlkit.Ease(dst, t, at, fieldFocusSlot, pick(s.focused && !s.inert, 1.0, 0.0), motion)
-	invalid := controlkit.Ease(dst, t, at, fieldInvalidSlot, pick(s.invalid, 1.0, 0.0), motion)
+func fieldToneParts(dst *ggui.Canvas, at ggui.Anchor, look fieldLook) (fill, border, halo color.Color, ringed bool) {
+	t := look.theme
+	focus := controlkit.Ease(dst, t, at, fieldFocusSlot, pick(look.focused && !look.inert, 1.0, 0.0), look.motion)
+	invalid := controlkit.Ease(dst, t, at, fieldInvalidSlot, pick(look.invalid, 1.0, 0.0), look.motion)
 	fill = t.Input
 	border = mix(mix(t.InputBorder, t.Ring, focus), invalidBorder(t), invalid)
-	if s.inert {
+	if look.inert {
 		fill = fade(t.InputBorder, pick(controlkit.IsDark(t.Bg), .8, .5))
 		border = t.Disabled(border)
 	} else if focus > 0 || invalid > 0 {

@@ -436,8 +436,8 @@ func (m *MenuWidget) typing() bool {
 // to the next row that starts with it.
 func (m *MenuWidget) typeahead(text string) {
 	leaf := m.leaf()
-	i := leaf.search.search(text, ggui.FrameTime(), menuTypeaheadReset, len(leaf.items), max(leaf.current, -1),
-		func(i int) string { return leaf.items[i].label }, leaf.enabled)
+	i := leaf.search.search(text, ggui.FrameTime(), menuTypeaheadReset, max(leaf.current, -1),
+		typeaheadRows{n: len(leaf.items), label: func(i int) string { return leaf.items[i].label }, available: leaf.enabled})
 	if i < 0 {
 		return
 	}

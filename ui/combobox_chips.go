@@ -421,7 +421,7 @@ func (f *comboboxChips[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		f.Hit(dst, r, c.input, ggui.CursorShapeText)
 	}
 	at := ggui.Anchor{Rect: r, ID: c.input.HitID()}
-	fieldSurface(dst, at, t, r, t.Radius, fieldState{focused, f.invalid, inert}, f.motion, JoinedSides{})
+	fieldSurface(dst, at, r, fieldLook{theme: t, focused: focused, invalid: f.invalid, inert: inert, motion: f.motion})
 	open := f.open
 	open.Origin = open.Origin.Add(r.Origin)
 	dst.Paint(c.input, open)

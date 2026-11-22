@@ -477,7 +477,7 @@ func (f *comboboxField) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		f.Hit(dst, r, f.input, ggui.CursorShapeText)
 	}
 	at := ggui.Anchor{Rect: r, ID: f.input.HitID()}
-	fieldSurface(dst, at, t, r, t.Radius, fieldState{f.input.Focused(), f.invalid, inert}, f.motion, f.sides.within(dst))
+	fieldSurface(dst, at, r, fieldLook{theme: t, focused: f.input.Focused(), invalid: f.invalid, inert: inert, motion: f.motion, sides: f.sides.within(dst)})
 	place := func(at ggui.Rect) ggui.Rect { at.Origin = at.Origin.Add(r.Origin); return at }
 	dst.Paint(f.input, place(f.inputRect))
 	if !inert {

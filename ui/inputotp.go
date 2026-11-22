@@ -380,8 +380,8 @@ func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state widget.Te
 			if o.invalid {
 				line, halo = t.Destructive, t.Halo(destructiveRing(t))
 			}
-			otpSlotBorder(d, ggui.Rct(at.Origin.Add(ggui.Pt(-1, -1)), ggui.Sz(at.Size.W+2, at.Size.H+2)), t.Radius+1, 3, fade(halo, k), left, right)
-			otpSlotBorder(d, at, t.Radius, 1, fade(line, k), left, right)
+			otpSlotBorder(d, slotBorderSpec{rect: ggui.Rct(at.Origin.Add(ggui.Pt(-1, -1)), ggui.Sz(at.Size.W+2, at.Size.H+2)), radius: t.Radius + 1, width: 3, color: fade(halo, k), left: left, right: right})
+			otpSlotBorder(d, slotBorderSpec{rect: at, radius: t.Radius, width: 1, color: fade(line, k), left: left, right: right})
 		}
 		if i == active {
 			caret = ggui.Rct(at.Center().Add(ggui.Pt(-.5, -8)), ggui.Sz(1, 16))
@@ -522,17 +522,27 @@ func (o *InputOTPWidget) Adopt(prev any) {
 	}
 }
 
+// slotBorderSpec is a line of width and color around one InputOTP slot in
+// rect, rounded by radius only on the left and right ends that are the
+// outer ends of the slot's group.
+type slotBorderSpec struct {
+	rect          ggui.Rect
+	radius, width float64
+	color         color.Color
+	left, right   bool
+}
+
 // Clip the two halves independently so internal slot corners remain square.
-func otpSlotBorder(d *ggui.Canvas, r ggui.Rect, radius, width float64, col color.Color, left, right bool) {
-	for i, rounded := range []bool{left, right} {
-		half := ggui.Rct(ggui.Pt(r.Origin.X+float64(i)*r.Size.W/2, r.Origin.Y-width), ggui.Sz(r.Size.W/2, r.Size.H+2*width))
+func otpSlotBorder(d *ggui.Canvas, b slotBorderSpec) {
+	for i, rounded := range []bool{b.left, b.right} {
+		half := ggui.Rct(ggui.Pt(b.rect.Origin.X+float64(i)*b.rect.Size.W/2, b.rect.Origin.Y-b.width), ggui.Sz(b.rect.Size.W/2, b.rect.Size.H+2*b.width))
 		if i == 0 {
-			half.Origin.X -= width
-			half.Size.W += width
+			half.Origin.X -= b.width
+			half.Size.W += b.width
 		} else {
-			half.Size.W += width
+			half.Size.W += b.width
 		}
-		d.Clip(half).StrokeRoundRect(r, pick(rounded, radius, 0.), width, col)
+		d.Clip(half).StrokeRoundRect(b.rect, pick(rounded, b.radius, 0.), b.width, b.color)
 	}
 }
 
