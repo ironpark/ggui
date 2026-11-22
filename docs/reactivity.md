@@ -36,12 +36,13 @@ Choose the smallest reactive boundary that expresses the change:
 | Run setup once and own local work | `Component` |
 | Replace a subtree when data changes | `View` or `Reactive` |
 | Keep state through those replacements | `Remember` |
+| Hold unvalidated input edits until they commit | `Draft` (see [Text input and validation](forms.md#text-input-and-validation)) |
 | Keep state through `ggui dev`'s restart after a save | `State(v).Keep(key)` |
 | Switch branches or reset an identity | `If` or `Key` |
-| Animate a branch out before removing it | `Presence` |
-| Build rows once from a plain slice | `List`, or `Children` for another container |
-| Follow a list whose rows have no identity | `Each` (rows reused by position) |
-| Preserve rows through collection edits | `EachKeyed` |
+| Animate a branch out before removing it | `widget.Presence` |
+| Build rows once from a plain slice | `widget.List`, or `ggui.Children` for another container |
+| Follow a list whose rows have no identity | `widget.Each` (rows reused by position) |
+| Preserve rows through collection edits | `widget.EachKeyed` |
 | Load asynchronously and render its status | `Resource` and `Await` |
 | Wait for typing to pause before acting on it | `Debounced` |
 | Synchronize with an external system | An owned `Effect` or `Watch` with cleanup |
@@ -187,7 +188,7 @@ goroutine other than the one running the frames of the app or probe it was
 made for, from that app's or probe's first frame until it closes. Run tests
 with the tag to catch a worker that writes state instead of posting it; see
 [Testing](testing.md#writes-from-the-wrong-goroutine). The
-[settings example](../examples/settings) saves on a worker this way.
+[settings example](examples/settings) saves on a worker this way.
 
 `TextOf` and `Textf` borrow their inputs and read during layout; constructing them
 creates no effect or derived value and requires no owner. `Textf` copies its
@@ -211,7 +212,7 @@ What is created outside every tree, such as a widget built before its probe
 or state made in `main`, stays in its goroutine's base runtime, which the
 app or probe made on that goroutine flushes as well.
 
-The settings `SetEnv`, `SetClock`, `SetDefaultFont`, `SetEmojiFont` and `SetIME`
+The settings `SetEnv`, `SetClock`, `SetDefaultFont`, `SetDefaultMonoFont`, `SetEmojiFont` and `SetIME`
 make belong to the same place: an app's or a probe's own when made during
 its frames, and before any frame the goroutine's base, which every app and
 probe made on that goroutine inherits until it is given its own.
@@ -256,7 +257,7 @@ field := ui.TextField(name)
 
 `Field` copies the struct, not the nested objects it points to. Use `Lens`
 with explicit copy logic for nested mutable containers. The
-[settings example](../examples/settings) binds a whole form this way. Tweens and springs
+[settings example](examples/settings) binds a whole form this way. Tweens and springs
 implement `Binding`, not `Writable`; use `Target()` when updating a motion's
 destination rather than its current animated value.
 
@@ -345,7 +346,8 @@ control with the same `Key` takes them over from the one it replaced.
 each save. `Keep(key)` marks a state that should come through the restart,
 so that the form half filled in, the tab that was open and the page shown
 are there on the new build. It returns the state, so it chains onto
-`State`; the router keeps its location with one line of its own:
+`State`; the router (`github.com/ironpark/ggui/router`; see [Routing](routing.md))
+keeps its location with one line of its own:
 
 ```go
 func SettingsPage(c *router.Context) ggui.Widget {

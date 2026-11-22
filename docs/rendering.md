@@ -11,6 +11,7 @@ See [example conventions](README.md#start-here) before copying snippets.
 
 - [HiDPI](#hidpi)
 - [Custom widgets](#custom-widgets)
+- [GPU textures](#gpu-textures)
 - [Frame lifecycle](#frame-lifecycle)
 - [Layout caching](#layout-caching)
 - [Retained paint state](#retained-paint-state)
@@ -140,7 +141,7 @@ func (g *Gauge) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 ```
 
 Paint children through `dst.Paint(child, r)` so the inspector can see them.
-The [custom example](../examples/custom) builds a dial on `Interactive`, a
+The [custom example](examples/custom) builds a dial on `Interactive`, a
 disclosure that calls `Invalidate`, and a virtualized list. For small
 widgets, `FromFuncs` wraps the two methods as closures:
 
@@ -152,6 +153,26 @@ dot := ggui.FromFuncs(
 	},
 )
 ```
+
+## GPU textures
+
+Custom widgets that upload and retain their own `*ggfx.Image` textures can use
+ggui's texture helpers so uploads respect atlas sizing and show up in
+[`inspect.ReadTextureBytes()`](inspector.md#frames-for-another-viewer):
+
+- `ggui.UploadTexture(img image.Image, format ggfx.PixelFormat) *ggfx.Image`
+  uploads `img` to a GPU image in `format`, allocating an unmanaged texture when
+  either dimension exceeds ggui's atlas threshold. Pass `ggfx.PixelFormatAlpha`
+  to keep only the alpha channel for tinted masks (1 byte per pixel instead of
+  4 for `ggfx.PixelFormatRGBA`).
+- `ggui.ImageBytes(w, h int, format ggfx.PixelFormat) int64` returns the byte
+  footprint attributed to a `w×h` image in `format` (1 byte per pixel for
+  `ggfx.PixelFormatAlpha`, 4 for RGBA).
+- `ggui.AccountTexture(kind ggui.TextureKind, delta int64)` adds `delta` bytes
+  (positive when retained, negative when released) to ggui's texture accounting
+  under `ggui.TextureIcons` (rasterized icon masks) or `ggui.TextureImages`
+  (decoded images), feeding `inspect.ReadTextureBytes()`. Unknown kinds are
+  ignored.
 
 ## Frame lifecycle
 
@@ -195,7 +216,7 @@ subscriptions. A signal write in one panel
 therefore measures that panel, not the whole window, even though the runtime
 lays out from the root whenever anything was written.
 
-`Cached(child)` is the same cache without a rebuild boundary, for a static
+`ggui.Cached(child)` is the same cache without a rebuild boundary, for a static
 subtree that sits under something that does rebuild.
 
 `EachKeyed`, `Scroll` and `widget.TextInput` ask for a layout when they change. A custom
@@ -207,20 +228,20 @@ reason to measure again. A size still easing somewhere calls it from its own
 asked for runs in the next frame, not again in this one.
 
 A change `Invalidate` reports is held by the nearest layout boundary around
-the widget: a `Scroll` whose viewport keeps its size, a `Contain(child)`, or
+the widget: a `Scroll` whose viewport keeps its size, a `widget.Contain(child)`, or
 a pane of `ui.Resizable`. A boundary clips what is inside it to its own
 Rect, so while its size stays as it was nothing outside it moves or draws
 differently, and a frame nothing else changed for is painted within it
 alone: a disclosure easing open in a fixed panel repaints the panel, not the
 window. Wrap a panel whose size its parent decides, a `Box` of fixed `Size`
-or an `Expanded` share, in `Contain` to make it one. A boundary checks every
+or an `Expanded` share, in `widget.Contain` to make it one. A boundary checks every
 layout it held: one whose size or baseline turned out to follow its content
 paints that frame whole and from then on leaves the next change to the
 boundary around it. Under a `Transform` or a shape clip a boundary cannot
 tell where it is in the window, and holds nothing.
 
 A widget of your own becomes a boundary by keeping a `LayoutBoundary`, as
-`Contain` and `Scroll` do. Its `Layout` calls `Begin(env)`, lays its child
+`widget.Contain` and `Scroll` do. Its `Layout` calls `Begin(env)`, lays its child
 out under the `Env` that returns, which carries the boundary to the subtree,
 and ends with `End(check, c, size, baseline, based)`, which checks what
 `Begin` said to; its `Paint` calls `Paint(dst, r)` and clips the child to

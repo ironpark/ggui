@@ -57,7 +57,8 @@ tags = ["hello", "gui"]
    also needs the commit pushed, a token that works, and no published
    release at the tag. All of this is checked before anything is built.
 3. **Builds.** Each of `release.targets` for each of `release.arches`
-   it has: macOS on a Mac as one universal build, signed and notarized as
+   it has: macOS as one `universal` build on any host whenever both `amd64`
+   and `arm64` are enabled (joined in pure Go), signed and notarized as
    `[macos]` says; Windows and Linux cross-compiled. The files go in
    `build/release/1.2.0/`:
 
@@ -115,8 +116,10 @@ checks its SHA-256. It names the app, `depends_on macos:` from
 `[macos.plist]`), a `livecheck` that follows the repository's latest
 release, and a `zap` that removes the app's files in
 `~/Library/Application Support`, `Preferences` and `Saved Application
-State`, all named for `app.id`. A release built per architecture, as
-off a Mac, gets an `arch` stanza with a checksum for each.
+State`, all named for `app.id`. When macOS is built as a `universal`
+binary (the default whenever both `amd64` and `arm64` are enabled), the
+cask points directly to that universal asset; a per-architecture release
+gets an `arch` stanza with a checksum for each architecture built.
 
 **Notarize what you put in a cask.** Homebrew sets the quarantine
 attribute on what it downloads, as a browser does, so macOS checks the
@@ -220,14 +223,14 @@ Apple ID needs `macos.notary.apple_id` and `team_id` in `ggui.toml`; with
 an App Store Connect API key, write the key's JSON to a file in a step
 before and name it in `macos.notary.api_key_file`.
 
-A Linux runner is cheaper and starts faster. There the macOS build is
-made per architecture and, with the ggui command as released, left
-unsigned, which suits a GitHub release but not a cask (see [Homebrew and
-Gatekeeper](#homebrew-and-gatekeeper)). Signing and notarizing on Linux
-takes a ggui built with cgo that links zapp's rcodesign; see [Shipping to
-other Macs](cli.md#shipping-to-other-macs) for whether your version has
-it. Otherwise release from macOS, or drop `macos` from the Linux job's
-`--targets` and make the macOS files in a job of their own.
+A Linux runner is cheaper and starts faster, and still builds a `universal`
+macOS binary whenever both `amd64` and `arm64` are enabled. The released
+Linux binary on GitHub (as well as Homebrew on Linux and `CGO_ENABLED=1 go
+install`) already links zapp's `rcodesign`, so a Linux CI runner can sign
+(with a `.p12` or PEM certificate) and notarize (with an App Store Connect
+API key) macOS `.app` and `.dmg` releases for both GitHub and Homebrew
+casks; only `.pkg` installers require a Mac. See [Signing and notarizing on
+Linux and Windows](cli.md#signing-and-notarizing-on-linux-and-windows).
 
 ## Trying it first: the dry run
 

@@ -6,7 +6,7 @@ Set a literal with `X(value)`, follow a source with `BindX(reader)`, and pass a
 `Binding[T]` when a control edits a value. Both forms return the concrete widget
 so expressions chain. Widgets expose setters, never a property type; a custom
 widget writes setters that keep this contract with the
-[`property`](../property/property.go) package, as `widget` and `ui` do.
+[`property`](../property/property.go) package, as `widget`, `ui`, `ui/chart`, and `ui/chat` do.
 
 ```go
 ui.TextField(name).Name("Display name").BindDisabled(saving)
@@ -31,9 +31,20 @@ tracking; plain external storage still needs explicit invalidation. Readers do
 not need to be comparable. See [Layout](layout.md) and [Reactivity](reactivity.md)
 for lifecycle and cache details.
 
-Bindings to writable view state include Scroll.BindOffset, Popup.BindOpen,
-Table.BindSelected and Questionnaire.BindActive. Their literal counterparts
-switch to local view state; user input can still change it.
+Bindings to writable view state include `widget.Scroll.BindOffset`,
+`widget.Popup.BindOpen`, `ui.Table.BindSelected`, and
+`chat.Questionnaire.BindActive`. Their literal counterparts switch to local
+view state; user input can still change it.
 
 Description values such as CommandEntry and AccordionSection are configuration
 values, not mounted widgets. Their setters keep their value semantics.
+
+`*theme.Theme` pointers follow a read-only vs. fresh-copy split. Constructors
+and derivations (`theme.Default`, `theme.Dark`, `theme.From`, `Preset.*`,
+`Config.*`, `FromCSS`, and `Clone`) return fresh mutable `*theme.Theme`
+pointers that callers may edit before applying. `theme.Use()` and
+`theme.Of(env)` return shared read-only `*theme.Theme` pointers without
+copying; call `.Clone()` or use `theme.Override` before modifying one.
+Compare themes structurally with `a.Equal(b)` rather than `==` (which compares
+pointers). See [Styling and themes](styling.md) and the
+[ui/theme README](../ui/theme/README.md).

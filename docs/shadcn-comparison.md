@@ -1,6 +1,6 @@
 # shadcn/ui defaults
 
-[Documentation](README.md) · [Gallery](../examples/gallery)
+[Documentation](README.md) · [Gallery](examples/gallery)
 
 The default visual reference is **Base UI / base-nova / Neutral**, inspected on
 2026-11-13 through the [current component docs](https://ui.shadcn.com/docs/components)
@@ -18,7 +18,7 @@ other bases, accents, styles, radii, menu colors and modes a choice away.
 | [Button Group](https://ui.shadcn.com/docs/components/base/button-group) / [Toggle Group](https://ui.shadcn.com/docs/components/base/toggle-group) | Joined children with squared inner corners and shared borders, buttons, text fields and selects alike, the focused child's ring on top, easing in and out as it does outside a group; group text and separators. Toggle groups have no track, a 2-unit gap by default and join at `Spacing(0)`. The arrows along a group move the keyboard between its options and Space or Enter presses one; `.Optional()` lets a press on the chosen option clear a single choice, which a group otherwise keeps. |
 | [Input](https://ui.shadcn.com/docs/components/base/input) / [Textarea](https://ui.shadcn.com/docs/components/base/textarea) | 32px input minimum; 64px multiline minimum with content growth; translucent input surface over whatever it sits on and disabled fill; shared focus/invalid halo easing over 150ms. Explicit line counts remain supported. Input groups are 32px, with rows above and below the editor; a single line keeps its 32px there and moves its text 4px away from the row, as `pt-3` and `pb-3` do. |
 | [Card](https://ui.shadcn.com/docs/components/base/card) | 16px padding, foreground/10 outline, 14px default radius, no default shadow; header (4px between its text and its action), content and a muted footer band as sections, `CardMedia` flush with the top and sides in first place, and a small size. |
-| [Badge](https://ui.shadcn.com/docs/components/base/badge) | Primary default, 20px height, 12px text, 8px horizontal padding, subtle destructive surface; ghost and link variants and icons. The ghost's muted surface and the link's underline follow the pointer without claiming it; `.OnTap(...)` makes a badge a link, which adds the `[a]:hover` looks, the pointer cursor and a focus ring. `.Secondary()` selects the former default. |
+| [Badge](https://ui.shadcn.com/docs/components/base/badge) | Primary default, 20px height, 12px text, 8px horizontal padding, subtle destructive surface; secondary, outline, ghost and link variants and icons. The ghost's muted surface and the link's underline follow the pointer without claiming it; `.OnTap(...)` makes a badge a link, which adds the `[a]:hover` looks, the pointer cursor and a focus ring. |
 | [Switch](https://ui.shadcn.com/docs/components/base/switch) | 32 × 18.4px track and 16px thumb, three quarters of that with `.Small()`; dark unchecked track and thumb colors follow the reference. |
 | [Checkbox](https://ui.shadcn.com/docs/components/base/checkbox) / [Radio](https://ui.shadcn.com/docs/components/base/radio-group) | 16px glyph; checkbox 4px radius and 14px check; selected radio fills primary with an 8px contrasting dot; checked fills ease over 150ms. A radio group stacks its options 8px apart and is one Tab stop, its choice moved by the arrow keys. All take an invalid state. Like a switch, a slider and a select with its options, they keep the default arrow cursor. A checkbox, a radio and a switch take the pointer 12px to either side of the glyph and 8px above and below it, and a slider's thumb 8px around it, at no cost in layout (`Interactive.HitReach`). |
 | [Avatar](https://ui.shadcn.com/docs/components/base/avatar) | 32px default, 24 small and 40 large; groups overlap with a background ring and count the rest. The count bubble has no hairline and keeps the body text at any size; a badge icon is 8px. |
@@ -27,7 +27,7 @@ other bases, accents, styles, radii, menu colors and modes a choice away.
 | [Toast](https://ui.shadcn.com/docs/components/base/toast) | Stacked notices that spread on hover, typed icons, six positions, 500ms motion; no countdown bar unless `.Countdown()`. |
 | [Slider](https://ui.shadcn.com/docs/components/base/slider) | 4px track, 12px white thumb with ring-colored outline, 3px hover/focus halo; Home/End, PageUp/PageDown and Shift-arrow larger steps. |
 | [Progress](https://ui.shadcn.com/docs/components/base/progress) | 4px muted track; a square-ended primary indicator that the track's round ends cut, running from the reading edge, animates while accessibility reports the actual value immediately. |
-| [Accordion](https://ui.shadcn.com/docs/components/base/accordion) | 10px vertical header padding inside the one-pixel border focus colors, so a closed section is 42px above its one-pixel rule; 10px content bottom padding, independent enabled header Tab stops, 200ms disclosure, up/down icon substitution. Existing arrow navigation remains available. A header under the pointer underlines every line of a title that wraps. |
+| [Accordion](https://ui.shadcn.com/docs/components/base/accordion) | 10px vertical header padding inside the one-pixel border focus colors, so a closed section is 42px above its one-pixel rule; 10px content bottom padding, independent enabled header Tab stops, 200ms disclosure, up/down icon substitution. Arrow navigation is also supported. A header under the pointer underlines every line of a title that wraps. |
 | [Tabs](https://ui.shadcn.com/docs/components/base/tabs) | Compact 32px list geometry; background-colored active segment with dark input surface and border, fading in where it stands over 150ms while the one left fades out, as a line strip's bar does. A line strip's bar hangs off the trigger's padding box: as long as the trigger less its border and, under a horizontal strip, half a pixel past the list's foot. |
 | [Dialog](https://ui.shadcn.com/docs/components/base/dialog) | 384px maximum default width, 16px outer margin/padding, 100ms fade/95% scale, black/10 scrim with 4px backdrop blur, default close button. The title is a `leading-none` 16px box 8px over the description; an alert dialog's and a sheet's are `text-base` 24px lines. |
 | [Sheet](https://ui.shadcn.com/docs/components/base/sheet) | Right-side default, 75% viewport width capped at 384px, 200ms ease-in-out, fade and 40px entrance translation, default close button, description and footer. Explicit `.Size()` overrides remain. The scrim fades over 150ms on its own curve. |
@@ -36,77 +36,74 @@ other bases, accents, styles, radii, menu colors and modes a choice away.
 | [Hover Card](https://ui.shadcn.com/docs/components/base/hover-card) | 256px width, 10px radius/padding, 600ms opening delay, 300ms closing grace period, 100ms transition; 4px from the anchor and, as `alignOffset = 4` has it, 4px along it. |
 | [Context Menu](https://ui.shadcn.com/docs/components/base/context-menu) | Opens to the right of the point pressed and 4px under it (`side="right"`, `alignOffset = 4`), to the left where the right has no room. |
 | [Alert](https://ui.shadcn.com/docs/components/base/alert) | 10/8px horizontal/vertical padding, 2px row gap, medium title, optional leading icon and top-right action; destructive changes text while retaining the neutral border. The text keeps clear of the action by the action's own width plus 16px, where shadcn reserves a fixed 72px (`pr-18`) and lets a wider action cover the text. |
-| [Skeleton](https://ui.shadcn.com/docs/components/base/skeleton) | 8px corners, muted fill, existing 2-second opacity pulse. |
+| [Skeleton](https://ui.shadcn.com/docs/components/base/skeleton) | 8px corners, muted fill, 2-second opacity pulse. |
 | Floating menus and shared controls | 4px popup padding, 6/4px item padding, foreground/10 popup outline, 100ms popup duration entering 8px from the anchor's side, soft 3px focus halos; labels, icons, right-hand checks and submenus beside their row; menus drawn in the theme's menu colors. A menu starts on its first row when the keyboard opened it and on none when the pointer did, and typing moves to the row that starts with what was typed, a search that lapses after 500ms in a menu and 750ms in a Select as Base UI's do; its rows keep the arrow cursor. A menu's arrows wrap past its ends and a Select's stop there; a menubar's menu opens on Down, Enter or Space. A select list with more options than fit shows a chevron over the edge there is more beyond, which scrolls a row every 40ms while the pointer moved onto it stays; the keyboard's row is shown clear of it. List box rows and the steppers of a number input keep the arrow as well, and a button inside a field shows it rather than the field's text beam. |
 | [Resizable](https://ui.shadcn.com/docs/components/base/resizable) / [Navigation Menu](https://ui.shadcn.com/docs/components/base/navigation-menu) | A hairline divider that takes no room, moved 5% by an arrow key. Navigation triggers are 36px with a rotating chevron and open on a 50ms hover, closing 50ms after the pointer leaves, Base UI's delays. The navigation panel is ringed in foreground/10 and leaves at nine tenths of its size. |
 | [Item](https://ui.shadcn.com/docs/components/base/item) | `.OnTap(...)` makes a row a link: the Muted surface eased in over 100ms under the pointer, the pointer cursor, a focus ring, Space and Enter. A row without it takes no input. |
 | [Menubar](https://ui.shadcn.com/docs/components/base/menubar) | A label in a bar's menu is the size of its rows. Moving from one open menu to the next plays the exit of one where it was and the entrance of the other. |
 | [Command](https://ui.shadcn.com/docs/components/base/command) | `CommandEntry.Checked(...)` shows a trailing check, which a shortcut hides. |
-| [Questionnaire](https://ui.shadcn.com/docs/components/base/questionnaire) | One 16px gap between the progress, the title block, the choices and the actions; the description straight under the title; 8px more above an error. |
-| [Attachment](https://ui.shadcn.com/docs/components/base/attachment) | A vertical card is 120px wide with a title or a description and 96px with media alone. |
+| [Questionnaire](https://ui.shadcn.com/docs/components/base/questionnaire) (`chat.Questionnaire`, `ui/chat`) | One 16px gap between the progress, the title block, the choices and the actions; the description straight under the title; 8px more above an error. |
+| [Attachment](https://ui.shadcn.com/docs/components/base/attachment) (`chat.Attachment`, `ui/chat`) | A vertical card is 120px wide with a title or a description and 96px with media alone. |
 | [Collapsible](https://ui.shadcn.com/docs/components/base/collapsible) | Eases open and shut over 200ms. shadcn's is Base UI's panel with no classes, which snaps until an author gives it a transition; ggui's cannot be styled from outside, so it keeps the motion a styled one has. |
 
 Dimensions are logical pixels at normal text scale. Buttons allow larger text
 to grow instead of clipping it. Explicit `Pad`, `Radius`, theme overrides,
 custom variants, and reduced-motion preferences remain supported.
 
-## Compatibility and verification
+## Customization and verification
 
-Default sizes and colors intentionally change existing applications. Use
-`theme.Override`, variant restyling, and explicit padding to preserve a custom
-look. `DestructiveFg` remains available for custom solid variants; built-in
-subtle destructive buttons/badges use `Destructive` for the text. `MotionFast`
-is 150ms, `MotionSlow` 200ms, and the new `MotionOverlay` 100ms. Hover, focus,
-checked and invalid fills, tab indicators, switch thumbs, progress bars, a
-sheet's slide and a trace row's height move along the theme's `Ease`, Tailwind's
-default `cubic-bezier(0.4, 0, 0.2, 1)`; an accordion panel opens on CSS's
-`ease-out` as `animate-accordion-down` does. Setting motion
+Use `theme.Override`, variant restyling, and explicit padding to customize
+beyond the default sizes and colors. `DestructiveFg` is available for custom
+solid variants; built-in subtle destructive buttons and badges use `Destructive`
+for their text. `MotionFast` is 150ms, `MotionSlow` 200ms, and `MotionOverlay`
+100ms. Hover, focus, checked and invalid fills, tab indicators, switch thumbs,
+progress bars, a sheet's slide and a trace row's height move along the theme's
+`Ease`, Tailwind's default `cubic-bezier(0.4, 0, 0.2, 1)`; an accordion panel
+opens on CSS's `ease-out` as `animate-accordion-down` does. Setting motion
 tokens to zero or providing `ReducedMotionKey` disables their animations.
 
 Dialogs and sheets expose `.CloseButton(false)` for surfaces that supply their
-own closing UI. AlertDialog, CommandDialog and Drawer omit this button by default.
-HoverCard exposes `.CloseDelay(...)`; Tooltip's existing `.Delay(...)` can
-restore delayed opening. Accordion's group is a semantic container; its
-individual headers now own focus and keep identity across keyed rebuilds.
+own closing UI. AlertDialog, CommandDialog and Drawer omit this button by
+default. HoverCard exposes `.CloseDelay(...)`, and Tooltip's `.Delay(...)`
+configures delayed opening. Accordion's group is a semantic container whose
+individual headers own focus and keep identity across keyed rebuilds.
 
-Checks include exact control sizes in default/preset light and dark themes,
-text scaling, independent accordion tab stops, close actions, retained pointer
-identity, overlay keyboard flow, reduced motion and progress semantics. Visual
-captures use the actual gallery in both themes, Nova/Rhea, and 320/640px widths.
-The parity round's previews render the same way:
-
-```sh
-go run ./examples/gallery -render-dir /tmp/ggui-parity \
-  -render-examples 'Theme presets,Buttons,Groups and addons,Card,Form layout,Validation states,Dropdown menu,Input group,Tooltip,Alert dialog,Sidebar,Toast,Table,Date picker,Calendar modes'
-```
+Automated checks cover exact control sizes in default and preset light/dark
+themes, text scaling, independent accordion tab stops, close actions, retained
+pointer identity, overlay keyboard flow, reduced motion and progress semantics.
+Visual captures render the gallery in both themes, Nova and Rhea styles, and
+320/640px widths:
 
 ```sh
 go test ./...
 go vet ./...
-go run ./examples/gallery -render-dir /tmp/ggui-base-nova-final \
+go run ./docs/examples/gallery -render-dir /tmp/ggui-gallery-renders \
   -render-examples 'Buttons,Text,Choices,Accordion,Dialog,Sheets and drawers,Tabs,Control states,Notices and empty states,Progress,Profile and media'
+go run ./docs/examples/gallery -render-dir /tmp/ggui-gallery-renders \
+  -render-examples 'Theme presets,Buttons,Groups and addons,Card,Form layout,Validation states,Dropdown menu,Input group,Tooltip,Alert dialog,Sidebar,Toast,Table,Date picker,Calendar modes'
 ```
 
-## Follow-up implementation
+## Catalog coverage and boundaries
 
-The subsequent multi-agent implementation adds the missing catalog APIs and
-behavioral modes. See the [66-component audit, API examples and remaining
-boundaries](shadcn-implementation.md). This includes Popover, Navigation Menu,
-Code Block, Trace, Label, Toggle and Native Select; multi-thumb sliders,
-calendar selection modes, multiple-choice comboboxes and toggles, vertical/manual
-Tabs, selected-item-aligned Select, tooltip arrows, and draggable Drawer snaps.
-The parity round after it brings the parts shadcn composes its components from:
-icon buttons, joined button groups, field sets, card sections, menu labels and
-submenus, typed toasts, a sidebar with an icon rail, multi-month calendars and a
-date-range picker, and the theme builder's radius, menu and mode choices.
+See [shadcn/ui component coverage](shadcn-implementation.md) for the full
+66-component mapping, behavioral conventions, and remaining boundaries. Coverage
+includes Popover, Navigation Menu, Code Block, `chat.Trace` (`ui/chat`), Label,
+Toggle and Native Select; multi-thumb sliders, calendar selection modes,
+multiple-choice comboboxes and toggles, vertical/manual Tabs,
+selected-item-aligned Select, tooltip arrows, and draggable Drawer snaps; as
+well as shadcn's composable parts: icon buttons, joined button groups, field
+sets, card sections, menu labels and submenus, typed toasts, a sidebar with an
+icon rail, multi-month calendars and a date-range picker, and the theme
+builder's radius, menu and mode choices.
 
-The default Tabs keyboard behavior is now manual activation: arrows move focus,
-Space or Enter changes the panel. `.ActivateOnFocus(true)` restores automatic
-activation. Each tab and multiple-toggle item is a real accessibility focus
-target, with one roving Tab stop per group. Slider step defaults are now 1 and
-10 for normal/large movement; `.Step(0)` retains continuous pointer adjustment.
+Tabs uses manual keyboard activation by default: arrows move focus and Space or
+Enter activates the focused tab, with `.ActivateOnFocus(true)` opting into
+automatic activation. Each tab and multiple-toggle item is an accessibility
+focus target with one roving Tab stop per group. Slider defaults to step 1 and
+large step 10; `.Step(0)` enables continuous pointer adjustment.
 
-This is a native adaptation, not React/DOM API compatibility. Native font metrics,
-text shaping and color interpolation can differ from CSS. The implementation
-audit separately records unsupported advanced browser behaviors rather than
-claiming pixel-for-pixel or prop-for-prop equivalence.
+This is a native adaptation, not React/DOM API compatibility. Native font
+metrics, text shaping and color interpolation can differ from CSS. The
+[component coverage reference](shadcn-implementation.md#remaining-boundaries)
+separately records unsupported browser-specific behaviors rather than claiming
+pixel-for-pixel or prop-for-prop equivalence.

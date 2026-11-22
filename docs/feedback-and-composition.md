@@ -4,7 +4,7 @@
 
 Compose notifications, modal panels, grouped actions, and reusable content surfaces.
 
-Examples use `ggui`, `widget`, `ui` and `ui/icons` imports and application-defined placeholders.
+Examples use `ggui`, `widget`, `ui`, `ui/icons` and `chat` (`github.com/ironpark/ggui/ui/chat`) imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
 ## On this page
@@ -16,6 +16,7 @@ See [example conventions](README.md#start-here) before copying snippets.
 - [Grouped actions and choices](#grouped-actions-and-choices)
 - [Confirmations](#confirmations)
 - [Composition helpers](#composition-helpers)
+- [Code and execution traces](#code-and-execution-traces)
 
 ## Notices and loading states
 
@@ -108,6 +109,23 @@ the sheet across rebuilds — construct it beside the signal it binds, or inside
 a `Component` — and one rebuilt every frame simply appears and goes, as
 `ui.Dialog` does.
 
+### Draggable drawers
+
+A bottom `Drawer` supports dragging by its handle, drawn or not. Use `.Draggable(false)` to
+turn this off. Snap heights are positive, increasing logical pixels:
+
+```go
+open := ggui.State(false)
+snap := ggui.State(1)
+ui.Drawer(open, content).SnapPoints(160, 280, 420).BindSnapPoint(snap)
+```
+
+Releasing settles to the nearest point; dragging below half the smallest point
+requests dismissal when `.Dismissible(true)`. `OnSnapChange` reports the requested
+index. Controlled bindings may reject a request. This native handle gesture does
+not implement browser scroll handoff, velocity snapping or nested drawer scaling.
+The handle also offers keyboard and accessibility resizing.
+
 ## Grouped actions and choices
 
 `ui.ButtonGroup(children...)` joins controls into one strip, as shadcn's
@@ -128,10 +146,11 @@ with no track behind them: `.Outline()` borders them, `.Size(...)` takes a butto
 size, and `.Spacing(units)` sets the gap in shadcn's spacing units, two by
 default, where 0 joins them into one strip that shares its borders. `.Format(fn)`
 sets how an option is shown, `.Vertical()` stacks the segments, and `.OnChange(fn)`
-reports user changes. The group is one tab stop, as a set of radio buttons is:
-Left and Right (Up and Down when vertical) move the choice and wrap, Home and
-End go to the ends, and Space or Enter re-picks where the choice already is.
-Each segment is announced as a radio that says whether it is the chosen one.
+reports user changes. The group is one roving tab stop: Left and Right (Up and
+Down when vertical), Home and End move keyboard focus between segments without
+changing the selection, and Space or Enter activates the focused option
+(`.Optional()` allows deselecting an active single choice). Each segment is
+announced as a radio that says whether it is the chosen one.
 
 ```go
 ui.ButtonGroup(ui.Button("Copy", copyIt).Outline(), ui.Button("Paste", pasteIt).Outline())
@@ -185,8 +204,8 @@ otherwise get rebuilt by hand in every application.
 | `ui.Avatar(name)` | A round portrait, 32 logical pixels across: the initials of the name on the muted surface until `.Image(img)` gives it one, cropped to cover the circle. `.Small()` (24), `.Large()` (40) or `.Size(px)` set the diameter, `.Square()` rounds it to the theme's radius instead, and `.Badge(color)` or `.BadgeIcon(role)` add a status dot at its lower right. |
 | `ui.AvatarGroup(avatars...)` | Avatars overlapping in a row, each ringed in the page's background. `.Max(n)` shows the first n and counts the rest in a bubble at the end; `.Count(n)` adds people with no avatar to that count. |
 | `ui.AspectRatio(ratio, child)` | Sizes the child to a width-over-height ratio inside the space it is offered: the width leads, unless the height it implies would not fit. |
-| `ui.Item(title, description)` | One row of a list: `.Media(widget)` or `.MediaIcon(role)` before the text, `.Action(widget)` after it, `.Header(widget)` and `.Footer(widget)` above and below, `.Outline()` for a bordered card or `.Muted()` for a tinted one, and `.Small()` or `.ExtraSmall()` for denser rows. It takes no input, so the action keeps its own. `ui.ItemGroup(items...)` stacks items as a list, with `ui.ItemSeparator()` drawing a line between two of them. |
-| `ui.Card(children...)` | A bordered surface. Given `ui.CardHeader(title, description)` (with `.Action(widget)` at its top right), `ui.CardContent(widget)` and `ui.CardFooter(widgets...)` (with `.Justify(j)`), it stacks them a CardPad apart and runs the footer to the card's bottom edge on a muted band; `.Small()` tightens it. |
+| `ui.Item(title, description)` | One row of a list: `.Media(widget)` or `.MediaIcon(role)` before the text, `.Action(widget)` after it, `.Header(widget)` and `.Footer(widget)` above and below, `.Outline()` for a bordered card or `.Muted()` for a tinted one, and `.Small()` or `.ExtraSmall()` for denser rows. `.OnTap(fn)` makes the whole row an interactive link; without `.OnTap`, it takes no input so an action keeps its own. `ui.ItemGroup(items...)` stacks items as a list, with `ui.ItemSeparator()` drawing a line between two of them. |
+| `ui.Card(children...)` | A bordered surface. Given `ui.CardMedia(child)` (flush at the top and sides when placed first), `ui.CardHeader(title, description)` (with `.Action(widget)` at its top right), `ui.CardContent(widget)` and `ui.CardFooter(widgets...)` (with `.Justify(j)`), it stacks them a CardPad apart and runs the footer to the card's bottom edge on a muted band; `.Small()` tightens it, and `.OnTap(fn)` makes the whole card an interactive button while inner controls keep their own input. |
 | `ui.Breadcrumb(crumbs...)` | The path to the page the user is on, built from `ui.Crumb(label, onTap)`. Every step but the last is a link with its own tab stop; a chevron separates them, `.Separator(s)` or `.SeparatorOf(widget)` replace it, and `.Max(n)` elides the middle behind an ellipsis. |
 | `ui.InputGroup(input)` | One field chrome around a bare `widget.TextInput` and the widgets that flank it: `.Leading(widget)`, `.Trailing(widget)`, and `.Top(widget)` and `.Bottom(widget)` on rows of their own above and below the editor. `.Multiline()` makes it a text area that grows by the line. The group owns the border, fill, padding and focus ring, so it takes the editor rather than `ui.TextField`, which draws a box of its own. A Button handed over in its default look becomes a ghost, extra-small addon button. |
 | `ui.Tooltip(child, text)` | A line of help shown above the child immediately on hover (customize with `.Delay(d)`), or while focus moved there with the keyboard is within it. `.Side(widget.PopupRight)` and the other sides, `.Align(a)` and `.AlignOffset(px)` place it; it flips when its side has no room. `.Shortcut(chord)` adds a key cap. A press closes it until the cursor leaves, and the focus a click gives does not open it. It registers no hit region, so the child gets every event, and paints through `Canvas.Overlay` above everything else. |
@@ -215,23 +234,6 @@ Custom containers can pass `ggui.InputDisabledKey` through `Env` or `Provide`;
 TextInput combines that inherited value with its own settings. A descendant
 `false` cannot clear an ancestor's `true`. Disabled editors remain in the
 accessibility tree and reject pointer, keyboard, and accessibility edits.
-
-## Draggable drawers
-
-A bottom `Drawer` supports dragging by its handle, drawn or not. Use `.Draggable(false)` to
-turn this off. Snap heights are positive, increasing logical pixels:
-
-```go
-open := ggui.State(false)
-snap := ggui.State(1)
-ui.Drawer(open, content).SnapPoints(160, 280, 420).BindSnapPoint(snap)
-```
-
-Releasing settles to the nearest point; dragging below half the smallest point
-requests dismissal when `.Dismissible(true)`. `OnSnapChange` reports the requested
-index. Controlled bindings may reject a request. This native handle gesture does
-not implement browser scroll handoff, velocity snapping or nested drawer scaling.
-The handle also offers keyboard and accessibility resizing.
 
 ## Code and execution traces
 

@@ -13,6 +13,8 @@ See [example conventions](README.md#start-here) before copying snippets.
 - [A small form](#a-small-form)
 - [Buttons and shared options](#buttons-and-shared-options)
 - [Text input and validation](#text-input-and-validation)
+- [Pressed buttons, labels and ranges](#pressed-buttons-labels-and-ranges)
+- [Multiple comboboxes and native selects](#multiple-comboboxes-and-native-selects)
 
 ## Controls
 
@@ -47,12 +49,14 @@ widget.Column(
 
 `ui.Button(label, onTap)` creates a primary button. Use `.Outline()`,
 `.Secondary()`, `.Ghost()`, `.Destructive()` or `.Link()` for the other
-shadcn/ui variants, `.Size(ui.ButtonSmall)`, `ui.ButtonLarge` or
-`ui.ButtonIcon` for the sizes, and `ui.ButtonOf(child, onTap)` for custom
-content. `.Icon(ui.Icon(role))` puts an icon before the label and
-`.TrailingIcon(...)` one after it, at the size's icon size and gap; a button
-holding nothing but an icon is `ui.ButtonOf(ui.Icon(role), onTap)` with one of
-the `ui.ButtonIcon` sizes and a `.Name`.
+shadcn/ui variants, `.Size(...)` with `ui.ButtonDefault`, `ui.ButtonExtraSmall`,
+`ui.ButtonSmall`, `ui.ButtonLarge`, `ui.ButtonIcon`, `ui.ButtonIconExtraSmall`,
+`ui.ButtonIconSmall` or `ui.ButtonIconLarge` for the sizes, and
+`ui.ButtonOf(child, onTap)` for custom content. `.Icon(ui.Icon(role))` puts an
+icon before the label and `.TrailingIcon(...)` one after it, at the size's icon
+size and gap; a button holding nothing but an icon is
+`ui.ButtonOf(ui.Icon(role), onTap)` with one of the `ui.ButtonIcon` sizes and a
+`.Name`.
 [Component variants](styling.md#component-variants) covers variants
 of your own and restyling the built-in ones.
 
@@ -67,10 +71,10 @@ group, stacked with 8 logical pixels between options as shadcn's RadioGroup is.
 `.Horizontal()` lays the options out in a row instead. `ui.Switch(on, label)`
 takes `.Small()` for shadcn's small switch.
 
-`Checkbox`, `Radio`, `Radios`, `Switch` and `Select` take `.Invalid(true)` for
-a value that failed validation: a destructive border and ring. `Checkbox`, `Radio` and `Switch` also take
-`.BindInvalid(reader)`. A control inside a `Field` that holds an error is
-invalid without either.
+`Checkbox`, `Radio`, `Radios`, `Switch`, `Button`, `Toggle` and `InputOTP`
+support both `.Invalid(v)` and `.BindInvalid(reader)` for a value that failed
+validation (a destructive border and ring); `Select` supports `.Invalid(v)`. A
+control inside a `Field` that holds an error is invalid without either.
 
 Common options on interactive controls include:
 

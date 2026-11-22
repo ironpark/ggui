@@ -5,7 +5,7 @@ The neutral editor surrounds a live, interactive card preview. Settings change
 the preview without resetting its drafts, selections or scroll position.
 
 ```sh
-go run ./examples/create
+go run ./docs/examples/create
 # macOS app bundle: task run-create
 ```
 
@@ -63,8 +63,8 @@ theme-editor/card-collage workflow with GGUI controls. It opens directly in the
 editor. Web framework installation, v0 publishing, browser navigation, preset
 URLs and CSS backdrop blur are not part of this native example. The font menu
 offers bundled Inter, Geist and Geist Mono (real 400/500/600/700 faces), the system
-font and Go Sans/Go Mono, so it works offline. See the [Inter](../../fonts/inter/README.md)
-and [Geist](../../fonts/geist/README.md) sources and licenses. A preset's JSON is the
+font and Go Sans/Go Mono, so it works offline. See the [Inter](../../../fonts/inter/README.md)
+and [Geist](../../../fonts/geist/README.md) sources and licenses. A preset's JSON is the
 recipe and the mode; the recipe's inverted menu color is carried but has no tile,
 since the preview's menus do not draw it yet. Styles and icon sets show those implemented
 by GGUI. Narrow screens reflow the cards rather than retaining the 3000px canvas.
@@ -74,8 +74,8 @@ the QR code is a sample pattern that encodes nothing.
 ## Verification and screenshots
 
 ```sh
-go test ./examples/create ./ui/theme
-go run ./examples/create -render-dir /tmp/ggui-create-renders
+go test ./docs/examples/create ./ui/theme
+go run ./docs/examples/create -render-dir /tmp/ggui-create-renders
 ```
 
 The render command captures the actual widget tree in light/dark at desktop,
@@ -83,6 +83,3 @@ tablet and phone widths, with baseline, customized, overlay and component-specim
 and the whole desktop collage in each mode (26 PNGs). Tests
 exercise theme selection, preserved preview drafts, clipboard/code export,
 preset validation and narrow-to-wide resizing.
-
-Verified on 2026-11-13: `go test ./...`, `go vet ./...` and all 26 screenshot
-renders passed. The collage frames were inspected beside the reference in both modes.

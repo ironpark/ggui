@@ -24,7 +24,7 @@ import (
 	"github.com/ironpark/ggwd/remote/viewer"
 )
 
-// TestEndToEnd runs the viewer and examples/counter, built with the
+// TestEndToEnd runs the viewer and docs/examples/counter, built with the
 // remote backend, as ggui dev does, on the system's own window and GPU
 // (DirectX on Windows, which GGFX_DIRECTX=warp makes software). It is
 // slow and opens a window, so it runs only with GGUI_E2E set; on Linux it
@@ -52,7 +52,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 	viewerExe, appExe := exe("ggviewer"), exe("counter")
 	build(t, "-o", viewerExe, ".")
-	build(t, "-tags", "ggwd_remote", "-o", appExe, "../../examples/counter")
+	build(t, "-tags", "ggwd_remote", "-o", appExe, "../../docs/examples/counter")
 	// The window's pictures go to GGUI_E2E_DIR when it is set, to be looked at.
 	shots := bin
 	if d := os.Getenv("GGUI_E2E_DIR"); d != "" {

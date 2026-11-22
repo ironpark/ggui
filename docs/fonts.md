@@ -4,8 +4,18 @@
 
 Configure text fallbacks, add color emoji, and choose semantic or library-specific icons.
 
-Examples use `ggui`, `widget` and `ui` imports and application-defined placeholders.
+Examples use `ggui`, `widget`, `ui`, `theme`, `fonts/*`, `ui/icons` and `ui/icons/lucide` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
+
+## On this page
+
+- [Fonts and international text](#fonts-and-international-text)
+  - [Choose text fonts](#choose-text-fonts)
+  - [Right-to-left text](#right-to-left-text)
+  - [Font weights](#font-weights)
+  - [Add color emoji](#add-color-emoji)
+  - [Load fonts separately on the web](#load-fonts-separately-on-the-web)
+- [Icons](#icons)
 
 ## Fonts and international text
 
@@ -62,8 +72,8 @@ fonts in its fallback chain.
 `TextStyle.Weight` asks for a CSS weight, from `ggui.WeightThin` (100) to
 `ggui.WeightBlack` (900), and like the other fields it inherits when zero:
 `Text(s).Weight(ggui.WeightBold)`, `Styled(child).Weight(...)`. The theme's
-`Title` and `Heading` are semibold and its `Label`, used by buttons, tabs and
-badges, is medium.
+`Title` is semibold, while `Heading` and `Label` (used by buttons, tabs and
+badges) are medium.
 
 A `Font` draws a weight with the face nearest it. Register the faces of a
 family with `WithWeight`; a variable font with a weight axis needs none,
@@ -126,6 +136,10 @@ theme.RegisterFont("Go", gofont.Font)
 theme.RegisterFont("Go Mono", gofont.Mono)
 ```
 
+`theme.Fonts()` lists `theme.FontDefault` plus the registered bundled choices.
+Requesting an unregistered font in `theme.Config.For` (or `.Light()` /
+`.Dark()`) panics.
+
 ### Add color emoji
 
 `Text` and `widget.TextInput` render color emoji as part of ordinary strings. Emoji
@@ -184,26 +198,43 @@ when the contents change. Initial total transfer still includes the font, but
 the browser can cache it independently of the WASM binary.
 
 The gallery uses this path on the web and the system emoji font on native
-platforms. Its `assets/NotoColorEmoji.ttf` is a symlink to the font in
-`fonts/notoemoji`. The development server serves it directly. For static
-deployment, copy the symlink's contents as a regular file to the same asset
-URL (for example with `cp -L`), and include the OFL and Unicode license files
-from `fonts/notoemoji`.
+platforms. Its `docs/examples/gallery/assets/NotoColorEmoji.ttf` is a symlink
+to the font in `fonts/notoemoji`. The development server serves it directly.
+For static deployment, copy the symlink's contents as a regular file to the
+same asset URL (for example with `cp -L`), and include the OFL and Unicode
+license files from `fonts/notoemoji`.
 
 ## Icons
 
 `ui.Icon(icons.Search)` uses a shared semantic placeholder backed by embedded
-Lucide SVGs. Use `lucide.Icon("download")` to request an explicit bundled icon.
-Both support `.Size(20)`, `.Color(col)`, and `.Alt("Download")`.
+Lucide SVGs. Use `lucide.Icon("download")` from `ui/icons/lucide` to request an
+explicit bundled icon. Both support `.Size(20)`, `.Color(col)`, and
+`.Alt("Download")`.
 
 Provide `icons.SetKey` through `ggui.Provide` for a subtree, or store it in a
 `Theme` with `.Set(icons.SetKey, set)` to replace built-in control icons. The
-bundled Lucide, Tabler and Heroicons sets register themselves with the theme as
-they are linked, so importing one (`import _ "github.com/ironpark/ggui/ui/icons/tabler"`)
-is enough for `theme.Config{Icons: theme.IconsTabler}`; another set registers
-with `theme.RegisterIcons`. Sets
-map roles such as `Check`, `Close`, and `ChevronDown` to parsed SVGs. Missing
-roles retain the Lucide defaults. Decorative icons stay out of accessibility;
-name the button that contains them, or use `Alt` for a standalone image.
+bundled `ui/icons/{lucide,tabler,heroicons}` sets register themselves with the
+theme as they are linked, so importing one
+(`import _ "github.com/ironpark/ggui/ui/icons/tabler"`) is enough for
+`theme.Config{Icons: theme.IconsTabler}`; another set registers with
+`theme.RegisterIcons`. Each set maps the 23 canonical semantic roles returned
+by `icons.Roles()`—including `Check`, `Close`, `ChevronDown`, `Copy`,
+`ArrowDown`, and `PanelLeft`—and those same roles are shared across both
+`ui/icons/{lucide,tabler,heroicons}` and `icons/{lucide,tabler,heroicons}`.
+Missing roles retain the Lucide defaults. Decorative icons stay out of
+accessibility; name the button that contains them, or use `Alt` for a
+standalone image.
 
-See [ui/icons/README.md](../ui/icons/README.md) for custom SVG sets, precedence and caching.
+For icons beyond the 23 control roles, import one of the standalone
+whole-library modules (`github.com/ironpark/ggui/icons/{lucide,tabler,heroicons}`).
+Each icon is an exported, pre-parsed `*icons.Glyph` variable, so Go's linker
+tree-shakes unused icons and embeds only what your code names:
+
+```go
+import "github.com/ironpark/ggui/icons/lucide"
+
+lucide.Rocket.Icon().Size(20)
+```
+
+See [ui/icons/README.md](../ui/icons/README.md) for custom SVG sets, precedence,
+whole-library modules, and caching.

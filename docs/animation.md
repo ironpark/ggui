@@ -7,6 +7,15 @@ Animate values and transitions while keeping motion tied to component lifetimes.
 Examples use `ggui`, `widget` and `ui` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
+## On this page
+
+- [Sizes that move](#sizes-that-move)
+- [Colors, points and other values](#colors-points-and-other-values)
+- [Curves](#curves)
+- [Timelines and stagger](#timelines-and-stagger)
+- [Enter and leave transitions](#enter-and-leave-transitions)
+- [Implicit animations](#implicit-animations)
+
 `Tween(v, d)` and `Spring(v)` move a value toward a target over time. Both
 implement `Binding`, so controls can read and set them. Bind a property to animate it without rebuilding the widget:
 
@@ -49,7 +58,7 @@ in `Layout` with `LayoutTo(env, target, d)`, or `LayoutToggle(env, on, d)`
 for a progress from zero to one. Each returns the value at the frame's
 instant and, while it is still moving, asks for the next layout under `env`
 as `Invalidate(env)` does, so the widget keeps no `Env` and checks nothing
-in `Paint`. Inside a `Scroll` whose viewport keeps its size, a `Contain` or
+in `Paint`. Inside a `Scroll` whose viewport keeps its size, a `widget.Contain` or
 another layout boundary, those frames are painted within it alone; see
 [Layout caching](rendering.md#layout-caching). Under reduced motion it lands
 at once.
@@ -131,12 +140,12 @@ application's environment asks for reduced motion (`SetEnv` with
 
 ## Enter and leave transitions
 
-`Transition(child).Fade().Slide(dx, dy).Scale(from)` plays
+`widget.Transition(child).Fade().Slide(dx, dy).Scale(from)` plays
 an enter animation when the child first appears, over `.Duration(d)` with
 `.Easing(e)`. Whether it is new is judged against the previous frame by the
 identity a keyed component gives it, else by Rect, so rebuilding a subtree
 with the same identity does not restart it.
-`Presence(show, child)` keeps the child on screen when `show` turns false,
+`widget.Presence(show, child)` keeps the child on screen when `show` turns false,
 inert to input, and runs the same animation backwards before removing it:
 
 ```go
@@ -145,7 +154,7 @@ widget.Presence(open, widget.Transition(panel).Slide(0, -8).Fade())
 
 ## Implicit animations
 
-`Switcher(key, build)` is `Key` that cross-fades: when the key changes the new
+`widget.Switcher(key, build)` is `Key` that cross-fades: when the key changes the new
 subtree enters while the old one plays the same animation backwards, inert,
 and is disposed once gone. The first subtree appears at once. Configure it with
 `.Fade()`, `.Slide(dx, dy)`, `.Scale(from)`, `.Duration(d)` and `.Easing(e)`;
@@ -156,7 +165,7 @@ top-left corner.
 widget.Switcher(tab, page).Slide(0, 8).Duration(180 * time.Millisecond)
 ```
 
-`AnimatedBox(child)` is a Box whose `Fill`, `Border`, `Radius`, `Width`,
+`widget.AnimatedBox(child)` is a Box whose `Fill`, `Border`, `Radius`, `Width`,
 `Height` and `Padding` ease to each new value, set or bound (`BindFill`,
 `BindBorderColor`, `BindRadius`, `BindWidth`, `BindHeight`, `BindPadding`),
 over `.Duration(d)` with `.Easing(e)`. A zero width or height sizes to the

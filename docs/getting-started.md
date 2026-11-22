@@ -30,7 +30,8 @@ ggui dev
 
 `ggui doctor` checks that the machine has what ggui needs, and
 `ggui build` bundles the app as a macOS `.app`, a Windows `.exe` with its
-icon and version information, or for the web.
+icon and version information, Linux packages (`.tar.gz`, `.deb`, `.rpm`), or
+for the web.
 
 The repository requires Go 1.27+ for generic methods. The core package provides
 layout, state, rendering, and input; `github.com/ironpark/ggui/ui` provides themed
@@ -53,11 +54,12 @@ shorthand when you do not need to register setup or shortcuts first.
 | `Remember` | `""`, off | Name the window's placement, such as `"main"`, to reopen it where it was last closed: [Reopening where it was](windows-and-platform.md#reopening-where-it-was). |
 | `Resizable` | `false` | Allow the user to resize the window. |
 | `Frameless`, `AlwaysOnTop`, `Transparent` | `false` | Drop the title bar, float above other windows, or let the desktop show through where nothing is painted. |
+| `TitlebarHidden`, `TrafficLights` | `false`, `nil` | Run content under a transparent title bar on macOS while keeping the traffic lights (and optionally place them); drag the window with `Window.StartDrag`. |
 | `Hidden`, `Maximized`, `Unfocused` | `false` | Open hidden (call `Show` later), maximized, or without taking the focus. |
 | `Icon` | `nil` | The window icon, in several sizes. |
 | `Background` | `nil` | Follow `ggui.BackgroundKey` (the UI theme maps `Bg` to it); set a color to override it. |
 | `Inspector` | zero, disabled | Bind a chord such as `"f1"` to the [inspector](inspector.md). |
-| `Accessibility` | `AccessibilityAuto` | Choose when the macOS [accessibility bridge](accessibility.md) is active. |
+| `Accessibility` | `AccessibilityAuto` | Choose when the native (macOS and Windows) [accessibility bridge](accessibility.md) is active. |
 
 The same `Config` opens more windows with `app.OpenWindow`, and the window it
 describes can be moved, resized and retitled while the app runs. See
@@ -102,5 +104,5 @@ build, so a goroutine started in `main` may Post from its first line.
 Prefer owned effects or resources when the work belongs to a component, and
 [`app.Shortcut`](input.md#shortcuts) for keyboard commands.
 
-Continue with [State and components](reactivity.md), or run the
-[example applications](../README.md#examples).
+Continue with [State and components](reactivity.md) and [Routing](routing.md),
+or run the [example applications](../README.md#examples).

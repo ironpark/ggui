@@ -60,7 +60,7 @@ everything beneath; the tree adds what a flat list could not say:
 `Scroll(child)` gives its child `Unbounded` height (or width, with
 `.Horizontal()`), shows a window onto it, moves that window with the wheel and
 clips both drawing and hit regions to the window. The offset carries across
-a rebuild; `.BindOffset(sig)` binds it to a `StateValue[float64]` for programmatic
+a rebuild; `.BindOffset(sig)` binds it to a `ggui.Binding[float64]` for programmatic
 scrolling; `.Bar(color)` tunes it. Widgets that fill their space
 fall back to their content size on an unbounded axis, so `Center`, `Expanded`
 and `.Justify` inside a `Scroll` do not blow up.
@@ -88,9 +88,11 @@ the input with growing resistance and spring back when it stops, as iOS
 does; `OverscrollStretch` stretches the content from that end instead.
 `.Snap(v)` settles the offset on a multiple of `v` (or the end) once
 scrolling stops, and `.Paging()` on whole viewports, turning the page when
-a gesture moved more than a sixth of one. ggfx reports no gesture phases,
-so both settle after a short pause in the input. The default clamps and
-never snaps.
+a gesture moved more than a sixth of one. When the platform reports trackpad
+gesture phases (`ggui.ScrollPhaseEnded`, `ggui.ScrollPhaseMomentumEnded`),
+both settle as the fingers lift or momentum stops; for wheel notches or
+platforms without phase reporting, they fall back to a short pause in the
+input. The default clamps and never snaps.
 
 A trackpad's gesture stays with the view that took it as it began, an
 axis each, its momentum included, as a browser latches one: an inner list
@@ -262,15 +264,17 @@ and `MenuItem(...).Shortcut(s)` show a hint without registering anything; a
 chord such as `"cmd+shift+z"` is written the platform's way, other text as
 it is.
 
-`Shortcut`, `OnKey`, `OnDrop`, `OnFrame`, `Post`, `Perform`, `Announce`,
-`Semantics` and `Close` are the same on `App` and `Probe`, and the `Host` interface
-names that set, so a function that registers shortcuts takes a `ggui.Host`
-and serves both main and its tests.
+`Shortcut`, `OnKey`, `OnDrop`, `OnFrame`, `Post`, `Dialogs`, `Clipboard`,
+`OnCloseRequest`, `Perform`, `Announce`, `Semantics`, `Notify`,
+`RemoveNotification`, `OnNotification` and `Close` are the same on `App`,
+`Window` and `Probe`, and the `Host` interface names that set, so a function
+that registers shortcuts takes a `ggui.Host` and serves both `main` and its
+tests.
 
 Keys, cursor shapes and mouse buttons carry ggui's own names: `ggui.KeyTab`,
 `ggui.CursorShapePointer`, `ggui.MouseButtonRight`. They are aliases for
-ggfx's, so they are the same values of the same types and a
-`ggfx.Key` still works wherever one is wanted; what they buy is that a
+ggwd's, so they are the same values of the same types and a
+`ggwd.Key` still works wherever one is wanted; what they buy is that a
 widget, or an app, imports `ggui` alone.
 
 ## Drag and drop
@@ -310,14 +314,14 @@ zone paints from. A custom handler implements `DragHandler`: `HandleDrag`
 receives `DragOver` each frame the cursor is over the region, returning
 false to be passed over, and `DragExit` once when the drag moves off it or
 ends. A `Pointer` with `OnDrop` claims the drag even without `OnDropHover`,
-so the zone that highlights is always the one the drop reaches. Ebitengine reports only the drop, so ggui follows the drag on the
-platform's own drag session where it can, which is macOS today; elsewhere a
-zone learns of a drag when it lands, and `OnDrop` still runs.
+so the zone that highlights is always the one the drop reaches. File drag
+hover (`ggwd.DragEvent`) is reported on macOS and Windows; on Linux and in
+browsers a zone learns of a drag when it lands, and `OnDrop` still runs.
 
 In a test, `Probe.Drop(pos, fsys)` drops the root entries of any `fs.FS`, a
 `testing/fstest.MapFS` being the easiest, and `Probe.DropPaths(pos,
 paths...)` drops real files with their paths; see
-[examples/files](../examples/files) for both. `Probe.DragOver(pos)` drags
+[docs/examples/files](examples/files) for both. `Probe.DragOver(pos)` drags
 files over the window without dropping them, and `Probe.DragEnd()` abandons
 the drag; either drop ends it too.
 
@@ -364,7 +368,7 @@ ease aside to open the gap it will drop into, an enclosing Scroll scrolls
 while the row is held near its edge, and Escape puts it back. Alt+Up and
 Alt+Down move the row holding focus, and each row offers increment and
 decrement actions to assistive technology. A move writes `items` through
-`Move` and then calls `OnReorder(from, to)` with the same indexes.
+`widget.MoveItem` and then calls `OnReorder(from, to)` with the same indexes.
 `Handles()` limits dragging to a `ReorderHandle` inside the row, which is
 also a focusable button for the keyboard:
 

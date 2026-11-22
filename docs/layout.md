@@ -160,7 +160,7 @@ tight so columns line up, with rows as tall as their tallest cell.
 there is no room), painted through `Canvas.Overlay` over a scrim: a press
 anywhere outside closes it and reaches nothing underneath. `Show`, `Hide`,
 `Toggle` and `IsOpen` drive it, or `.BindOpen(sig)` keeps the state in a
-`StateValue[bool]`; `.Keys(h)` keeps keyboard focus on the widget that opened it
+`ggui.Binding[bool]`; `.Keys(h)` keeps keyboard focus on the widget that opened it
 while the pointer is in the content, and a widget inside can find its popup
 with `PopupOf(env)` to close it after acting. `.Side(...)` among the
 `PopupSide` values (`PopupBottom` by default, `PopupTop`, `PopupLeft`,
@@ -217,8 +217,8 @@ the line breaks between grapheme clusters. Spaces are kept as written. `.Size(px
 `.Color(c)`, `.Font(f)`, `.LineHeight(mult)`, `.Tracking(em)`, `.Style(ts)`, `.Align(0.5)` and
 `.NoWrap()` adjust it; what is not set is inherited (see [Styling and themes](styling.md)). The
 default font is the platform's (see [Fonts](fonts.md#choose-text-fonts));
-`LoadFont(ttf)` or `LoadFontFile(path)` load your own, and `SetDefaultFont`
-makes one the default.
+`LoadFont(ttf)` or `LoadFontFile(path)` load your own; `SetDefaultFont` and
+`SetDefaultMonoFont` make them the defaults for body and monospaced text.
 
 ### Rich text
 
@@ -250,3 +250,11 @@ Shift-click to extend. Once a click has focused it, ⌘A/Ctrl+A selects all and
 ```go
 widget.Text(orderID).Selectable()
 ```
+
+Wrap a group of selectable texts in `widget.SelectionArea(child)` to drag one
+selection across all of them: ⌘A/Ctrl+A selects every selectable text in the
+area, ⌘C/Ctrl+C copies what is selected a line apart, and a click between them
+clears the selection. `SelectedText()` returns the combined selection in paint
+order, and `Find(needle, top, n)` selects the `n`th case-insensitive match
+painted below window y `top`, returning its window `Rect` and whether a match
+was found.

@@ -10,10 +10,11 @@ On macOS, install it with `brew install go-task`.
 
 - [Build and check](#build-and-check)
 - [Run native examples](#run-native-examples)
-- [The dev viewer](#the-dev-viewer)
+  - [The dev viewer](#the-dev-viewer)
 - [Run in a browser](#run-in-a-browser)
 - [Visual checks](#visual-checks)
 - [Repository layout](#repository-layout)
+- [Release the ggui command](#release-the-ggui-command)
 
 ## Build and check
 
@@ -41,14 +42,14 @@ runtime errors:
 
 ```sh
 go test -tags ggui_debug ./...
-go run -tags ggui_debug ./examples/counter
+go run -tags ggui_debug ./docs/examples/counter
 ```
 
 The [widget inspector](inspector.md) is behind its own tag, so that a
 release binary carries none of it:
 
 ```sh
-go run -tags ggui_inspector ./examples/gallery
+go run -tags ggui_inspector ./docs/examples/gallery
 ```
 
 `task test`, `task build` and `task vet` each run both configurations, and
@@ -59,36 +60,54 @@ for diagnosing effects that fail to settle.
 
 ### Continuous integration
 
-`.github/workflows/ci.yml` runs on every push to `main` and every pull
-request:
+`.github/workflows/ci.yml` runs on pushes to `main` and pull requests (plus
+nightly `schedule` and manual `workflow_dispatch` runs). `paths-ignore` skips
+Markdown-only edits and `assets/demos/**` recordings (Go code under
+`docs/examples/` still runs CI), and a `changes` job filters library versus
+command and packaging jobs; CI/tooling changes, nightly runs, and manual runs
+execute everything:
 
-- **test**, on Linux, macOS and Windows: `go test` plain, with
-  `ggui_inspector` and with `ggui_debug`, and with `-race` everywhere but
-  Windows, whose runner has no C toolchain for it. It also tests the
-  `ggwd_remote` build that `ggui dev` shows in its viewer, and builds
-  `examples/counter` with it.
-- **remote**, on Linux, macOS and Windows: runs the viewer and
-  `examples/counter` with the remote backend end to end, on the runner's
-  window system and GPU (`cmd/ggviewer`'s `TestEndToEnd`, which
-  `GGUI_E2E=1` turns on): the app attaches and shows its first frame,
-  takes input, shows a failed build's errors over its frame, follows a
-  resize, restarts into the same window, and gets its frames through
-  while the window is hidden or minimized. Linux runs it under Xvfb with
-  openbox and Mesa's software OpenGL, Windows on WARP, Direct3D's software
-  rasterizer; the window's pictures are kept as the job's artifact. `examples/sqlite`, the
-  other nested modules, `cmd/ggui` and `pkg/fswatch` are tested through a
-  `go work init` workspace, so they build against the checkout rather than
-  a published ggui; `cmd/ggui`'s tests include building the app `ggui init`
-  writes. `pkg/fswatch` is tested once more without cgo, and the command's
-  watcher once more by polling.
-- **wasm**: builds everything for `js/wasm` and runs the packages that do
-  not start ggfx under node, `internal/reactive/goid` among them.
-- **lint**: `gofmt`, `go vet`, the Windows vet of `task vet:windows`,
-  `task lint`'s staticcheck for every platform, and builds for
-  linux/riscv64 and windows/arm64.
-- **fuzz**: every fuzz target for 5s. `go test` already runs their seed
-  inputs; this goes a little past them. A failing input lands in the
-  package's `testdata/fuzz`: commit it with the fix, and it stays a test.
+- **test**, on Linux, macOS, and Windows: builds a `go.work` workspace over
+  `.`, `docs/examples/sqlite`, `fonts/notoemoji`, `icons/*`, `cmd/ggui`, and
+  `pkg/fswatch`, runs `go test` across `./...`, `docs/examples/sqlite`,
+  `fonts/notoemoji`, and `icons/*`, and re-runs tests with `-tags ggui_inspector`,
+  `-tags ggui_debug`, and `-tags ggwd_remote` (including building
+  `docs/examples/counter` with `ggwd_remote,ggui_inspector,ggui_debug`).
+- **command**, on Linux, macOS, and Windows: tests `cmd/ggui` and `pkg/fswatch`
+  against the checkout in a workspace (including building the app `ggui init`
+  writes), re-tests the watcher with `GGUI_WATCH=poll` and `CGO_ENABLED=0`, and
+  checks that both modules build, vet, and compile tests standalone with
+  `GOWORK=off`.
+- **race**, on Ubuntu (`ubuntu-latest`): runs `go test -race` for the library
+  (`./...`) and for `pkg/fswatch` and `cmd/ggui`.
+- **remote**, on Linux, macOS, and Windows: runs `cmd/ggviewer`'s
+  `TestEndToEnd` (`GGUI_E2E=1`) against `docs/examples/counter` with the remote
+  backend end to end on the runner's window system and GPU — attaching and
+  showing the first frame, taking input, overlaying build errors, resizing,
+  restarting into the same window, and rendering while hidden or minimized.
+  Linux runs under Xvfb with openbox and Mesa's software OpenGL, Windows runs
+  on DirectX WARP, and the captured window images are kept as job artifacts.
+- **linux-package**, on Ubuntu: builds `.tar.gz`, `.deb`, and `.rpm` packages
+  for a freshly initialized app, installs and runs the `.deb` under Xvfb
+  (verifying `StartupWMClass`), and installs the `.rpm` in a Fedora container
+  to check shared library resolution.
+- **sign-linux**, **sign-windows**, and **verify-signed-on-linux**: build
+  `cmd/ggui` with cgo on Linux (both GCC and `zig cc`) and cross-build the
+  Windows binary with `zig cc` and `-tags ggui_rcodesign`, sign a macOS `.app`
+  with a throwaway self-signed certificate on Linux and Windows via
+  `rcodesign`, and verify the Linux-signed bundles on macOS with Apple's
+  `codesign`.
+- **wasm**, on Ubuntu: builds everything for `js/wasm` and runs the packages
+  that do not start ggfx under Node (`internal/reactive/goid`,
+  `internal/reactive`, `internal/textedit`, `a11y`, `inspect`, and `runtime`).
+- **lint**, on Ubuntu across `linux/amd64`, `darwin/arm64`, `windows/amd64`,
+  and `windows/arm64`: checks `gofmt`, `go vet` (with `-unsafeptr=false` for
+  the Windows accessibility bridge), `staticcheck` across all modules, and a
+  `linux/riscv64` cross-build.
+- **fuzz**, on `schedule` and `workflow_dispatch` (nightly and manual): runs
+  every fuzz target for 5s each. `go test` already runs their seed inputs; a
+  failing input lands in the package's `testdata/fuzz` so committing it with
+  the fix keeps it as a regression test.
 
 A test that presses a shortcut should use `Probe.Key("cmd+k")` rather
 than a `Mods` literal: `cmd` is ⌘ on macOS and Ctrl elsewhere, and the
@@ -97,13 +116,14 @@ Linux and Windows jobs press Ctrl.
 ## Run native examples
 
 ```sh
-go run ./examples/counter
-go run ./examples/todo
-go run ./examples/gallery
-go run ./examples/charts
-go run ./examples/controls
-go run ./examples/settings
-go run ./examples/custom
+go run ./docs/examples/counter
+go run ./docs/examples/todo
+go run ./docs/examples/gallery
+go run ./docs/examples/charts
+go run ./docs/examples/controls
+go run ./docs/examples/settings
+go run ./docs/examples/router
+go run ./docs/examples/custom
 ```
 
 The [ggui command](cli.md) in [cmd/ggui](../cmd/ggui) runs any of them
@@ -111,8 +131,8 @@ with live rebuilds, restarting the app on every change:
 
 ```sh
 go build -C cmd/ggui -o ../../bin/ggui .
-bin/ggui dev ./examples/gallery
-bin/ggui dev --web ./examples/gallery
+bin/ggui dev ./docs/examples/gallery
+bin/ggui dev --web ./docs/examples/gallery
 ```
 
 It is a module of its own, so it is built from its directory and run from
@@ -151,7 +171,7 @@ clipboard goes through the viewer's (`ClipboardRequest` and
 works in bring a window to the front, so its viewer allows the app's
 process to with each click and key press, for the app's dialogs; and
 macOS turns the app into an accessory application while a dialog is up
-(`runtime/remote_darwin.go`). The tray is off on macOS and Windows.
+(`runtime/remote_darwin.go`).
 
 The point is a restart that keeps the window: a code change rebuilds and
 restarts only the app, while the window stays where it was, keeps the
@@ -160,8 +180,8 @@ errors itself. Replaying driver calls rather than pixels keeps the
 traffic small and the app's rendering the same code a release build
 runs, down to the shaders; the price is that the viewer must speak the
 app's ggfx and ggwd exactly, which is why `ggui dev` builds it from the
-project's own module graph. What the app gives up in the viewer, one
-window, native menus, the accessibility tree, is listed in
+project's own module graph. What the app gives up in the viewer — one
+window, native context menus, and the accessibility tree — is listed in
 [the ggui command](cli.md#the-window-remote-display).
 
 On macOS, the following commands build and launch application bundles:
@@ -215,22 +235,23 @@ those guides as historical measurements; rerun them on your target hardware.
 
 | Area | Source |
 | --- | --- |
-| Application and frame loop | [app.go](../app.go), [loop.go](../loop.go) |
-| Reactivity and component ownership | [reactivity.go](../reactivity.go), [widget.go](../widget.go), [widget/for.go](../widget/for.go) (`Each` and `EachKeyed`), [pkg/virtual/](../pkg/virtual/) (which rows a virtual list lays out, and where) |
-| Layout, geometry, and drawing | [boundary.go](../boundary.go) (`LayoutBoundary`), [widget/layout.go](../widget/layout.go) (boxes, rows, stacks, grids and `Responsive`), [widget/scroll.go](../widget/scroll.go), [canvas.go](../canvas.go) (the frame state, retained values, clips and hit-region registration), [paint.go](../paint.go) (shapes, paths, gradients and layers), [damage.go](../damage.go) and [internal/region/](../internal/region/) (the regions a partial frame repaints), [pkg/layout/](../pkg/layout/) (box layout and rectangles), [pkg/geom/](../pkg/geom/) (affine transforms and path outlines), [internal/render/](../internal/render/) (the shaders behind the Canvas, and the layer images it lends) |
+| Application, windows, and desktop | [app.go](../app.go), [loop.go](../loop.go), [window.go](../window.go), [placement.go](../placement.go), [menu.go](../menu.go), [notify.go](../notify.go), [appid.go](../appid.go), [locale.go](../locale.go), [loginitem.go](../loginitem.go) |
+| Reactivity and component ownership | [reactivity.go](../reactivity.go), [internal/reactive/](../internal/reactive/) (`signal.go`, `derived.go`, `owner.go`, `scheduler.go`, `lens.go`, `store.go`, `keep.go`, `scope.go`), [widget.go](../widget.go), [widget/for.go](../widget/for.go) (`Each` and `EachKeyed`), [pkg/virtual/](../pkg/virtual/) (which rows a virtual list lays out, and where) |
+| Layout, geometry, and drawing | [boundary.go](../boundary.go) (`LayoutBoundary`), [widget/layout.go](../widget/layout.go) (boxes, rows, stacks, grids and `Responsive`), [widget/scroll.go](../widget/scroll.go), [widget/scroll_controller.go](../widget/scroll_controller.go), [widget/sticky.go](../widget/sticky.go), [widget/for_sticky.go](../widget/for_sticky.go), [canvas.go](../canvas.go) (the frame state, retained values, clips and hit-region registration), [paint.go](../paint.go) (shapes, paths, gradients and layers), [texture.go](../texture.go), [damage.go](../damage.go) and [internal/region/](../internal/region/) (the regions a partial frame repaints), [pkg/layout/](../pkg/layout/) (box layout and rectangles), [pkg/geom/](../pkg/geom/) (affine transforms and path outlines), [internal/render/](../internal/render/) (the shaders behind the Canvas, and the layer images it lends) |
 | Unstyled widgets | [widget/](../widget/): layout, text, scrolling, lists, popups, transitions, compositing, pointer and drag and drop, the text input, images and Reveal, written on ggui's public API and the internal packages and importing nothing of `ui`, its theme, icons or fonts |
-| UI controls | [ui/](../ui/) (themed components, built on `ggui` and `widget`), [ui/chart/](../ui/chart/) (native charts), [ui/chat/](../ui/chat/) (attachments, bubbles, messages, transcript scroller, questionnaires, and execution traces), [pkg/markdown/](../pkg/markdown/) (the Markdown parser `ui.Markdown` renders) |
-| Text editing and fonts | [widget/textinput.go](../widget/textinput.go), [font.go](../font.go), [widget/text.go](../widget/text.go) and [widget/richtext.go](../widget/richtext.go), [internal/fontsys/](../internal/fontsys/) (fonts, fallback chains and emoji), [internal/textlayout/](../internal/textlayout/) (measuring and wrapping), [internal/paragraph/](../internal/paragraph/) (bidi lines, styled paragraphs and CPU rendering), [internal/textedit/](../internal/textedit/) (the buffer, selection, undo, click selection and case-blind find), [internal/editlayout/](../internal/editlayout/) (TextInput's wrap and bidi lines, cached by hard line), [input.go](../input.go) (`IME`, `NewIME`, `SetIME`: the IME session a text widget is given), [internal/platform/textinput/](../internal/platform/textinput/) (the platform IME) |
-| Input and shortcuts | [input.go](../input.go) (hit regions, pointer and focus routing, touch), [widget/interact.go](../widget/interact.go) (`Pointer`, `Tap` and `Focus`), [drag.go](../drag.go) (the drag session: a drag inside the app, and files dropped from the desktop), [widget/dragdrop.go](../widget/dragdrop.go) (`DragSource`, `DropZone` and `Reorderable`), [keys.go](../keys.go) (keys, chords and the shortcuts taken before and after the focused widget), [pkg/kinetics/](../pkg/kinetics/) (a touch's pan, velocity and fling) |
+| UI controls, themes, icons, and fonts | [ui/](../ui/) (themed components, built on `ggui` and `widget`), [ui/theme/](../ui/theme/) (palettes, style presets, and color modes), [ui/icons/](../ui/icons/) (bundled icons and semantic roles), [icons/](../icons/) (standalone full icon modules), [fonts/](../fonts/) (optional font packages), [ui/chart/](../ui/chart/) (native charts), [ui/chat/](../ui/chat/) (attachments, bubbles, messages, transcript scroller, questionnaires, and execution traces), [pkg/markdown/](../pkg/markdown/) (the Markdown parser `ui.Markdown` renders), [pkg/hangul/](../pkg/hangul/) (Hangul syllable and chosung search helpers) |
+| Text editing and fonts | [widget/textinput.go](../widget/textinput.go) (with [textinput_paint.go](../widget/textinput_paint.go), [textinput_input.go](../widget/textinput_input.go), [textinput_ime.go](../widget/textinput_ime.go), [textinput_a11y.go](../widget/textinput_a11y.go)), [font.go](../font.go), [widget/text.go](../widget/text.go) and [widget/richtext.go](../widget/richtext.go), [internal/fontsys/](../internal/fontsys/) (fonts, fallback chains and emoji), [internal/textlayout/](../internal/textlayout/) (measuring and wrapping), [internal/paragraph/](../internal/paragraph/) (bidi lines, styled paragraphs and CPU rendering), [internal/textedit/](../internal/textedit/) (the buffer, selection, undo, click selection and case-blind find), [internal/editlayout/](../internal/editlayout/) (TextInput's wrap and bidi lines, cached by hard line), [ime.go](../ime.go) (`IME`, `NewIME`, `SetIME`: the IME session a text widget is given), [internal/platform/textinput/](../internal/platform/textinput/) (the platform IME) |
+| Input and shortcuts | [input.go](../input.go), [hitregion.go](../hitregion.go), [focus.go](../focus.go), [touch.go](../touch.go), [ime.go](../ime.go), [routing.go](../routing.go), [widget/interact.go](../widget/interact.go) (`Pointer`, `Tap` and `Focus`), [drag.go](../drag.go) (the drag session: a drag inside the app, and files dropped from the desktop), [widget/dragdrop.go](../widget/dragdrop.go) (`DragSource`, `DropZone` and `Reorderable`), [keys.go](../keys.go) (keys, chords and the shortcuts taken before and after the focused widget), [pkg/kinetics/](../pkg/kinetics/) (a touch's pan, velocity and fling) |
+| Optional top-level packages | [router/](../router/) (page and layout routing), [i18n/](../i18n/) (application localization), [record/](../record/) (scripted offscreen GIF and PNG recording) |
 | Platform services | [runtime/](../runtime/) (file dialogs and the clipboard, reached through `Host`) |
 | Accessibility and semantics | [a11y/](../a11y/) (the vocabulary), [internal/platform/a11ybridge/](../internal/platform/a11ybridge/) (the platform bridges), [semantics.go](../semantics.go) |
 | Styling and animation | [environment.go](../environment.go) (styles), [anim.go](../anim.go), [widget/transition.go](../widget/transition.go), [effects.go](../effects.go) (the Canvas's blurs, shadows, edge fades and transforms), [widget/composite.go](../widget/composite.go) (`Opacity`, `Blur`, `BackdropBlur`, `Transform` and `ClipPath` on them), [pkg/kinetics/](../pkg/kinetics/) (easing curves, springs, and scroll and touch physics) — see [Styling and themes](styling.md) |
 | Overlays and images | [widget/popup.go](../widget/popup.go) (`Popup`), [overlay.go](../overlay.go) (the window's `Overlay`), [paint.go](../paint.go) (`Canvas.DrawImage`), [widget/image.go](../widget/image.go), [internal/imgcache/](../internal/imgcache/) (the cache `widget.AsyncImage` loads into) |
 | Testing and diagnostics | [probe.go](../probe.go), [inspect/panel/](../inspect/panel) (the panel, build tag `ggui_inspector`), [inspector.go](../inspector.go) (its registration, and the frame built from the trace), [inspect/](../inspect) (the frame model the panel and `App.OnInspect` share, and `ReadFrameStats` and `ReadMotionReport`), [internal/framestats/](../internal/framestats/) (the process's frame counters those read), [overlay.go](../overlay.go) (the Overlay the panel draws as), [widget.go](../widget.go) (Cached) |
-| Runnable applications | [examples/](../examples/) |
-| The ggui command | [cmd/ggui/](../cmd/ggui/): `init`, `dev`, `build` and `doctor`, a module of its own that drives the go command and imports nothing of ggui, and signs, notarizes and packages macOS builds with the packages of [zapp](https://github.com/ironpark/zapp); its [internal/](../cmd/ggui/internal/) packages keep what the watcher knows of Go, the process runner, the builders, the viewer's launcher and the bundle writers apart |
+| Runnable applications | [docs/examples/](examples/README.md) |
+| The ggui command | [cmd/ggui/](../cmd/ggui/): `init`, `dev`, `build`, `release`, `record`, `i18n`, and `doctor`, a module of its own that drives the go command and imports nothing of ggui, and signs, notarizes and packages macOS builds with the packages of [zapp](https://github.com/ironpark/zapp); its [internal/](../cmd/ggui/internal/) packages keep what the watcher knows of Go, the process runner, the builders, the viewer's launcher and the bundle writers apart |
 | Watching files | [pkg/fswatch/](../pkg/fswatch/): the file watcher `ggui dev` is built on, a module of its own that any Go program can use: a scan of every path is the truth, FSEvents, inotify and ReadDirectoryChangesW only wake it, and a content hook lets the caller say which edits matter |
-| The dev viewer | [cmd/ggviewer/](../cmd/ggviewer/): the window `ggui dev` shows an app in while it restarts, replaying the app's command stream; [internal/platform/remotedisplay/](../internal/platform/remotedisplay/) is what the app gives up in it |
+| The dev viewer | [cmd/ggviewer/](../cmd/ggviewer/) (`viewer.go`, `conn.go`, `replay.go`, `menu.go`, `overlay.go`, `control.go`): the window `ggui dev` shows an app in while it restarts, replaying the app's command stream; [internal/platform/remotedisplay/](../internal/platform/remotedisplay/) is what the app gives up in it |
 
 The module is built in three layers, each importing only those below it:
 
@@ -297,11 +318,13 @@ The command signs and packages macOS builds with zapp's `pkg/` packages,
 and two things follow from that dependency. zapp requires ggui and ggfx itself, for its own window, so an
 older ggui and ggfx stand in the command's module graph without being
 built; in a workspace with `.` they resolve to the checkout, and with
-`GOWORK=off` nothing of them is downloaded. And the command imports
-zapp's signing and verification packages on macOS only: on Linux and
-Windows they would import its rcodesign binding, which a cgo build links
-against 30 MB static libraries, and MinGW's GCC on Windows cannot link at
-all. To try a release without publishing it:
+`GOWORK=off` nothing of them is downloaded. And for signing, macOS builds
+always link zapp's signing and verification packages, while Linux cgo builds
+(`amd64` and `arm64`) and Windows cgo builds with `-tags ggui_rcodesign`
+(compiled with LLVM MinGW / `zig cc`, since MinGW's GCC cannot link the static
+libraries) link zapp's `rcodesign` binding; non-cgo builds and untagged Windows
+builds omit it (`cmd/ggui/internal/macos/sign_zapp.go`). To try a release
+without publishing it:
 
 ```sh
 GORELEASER_CURRENT_TAG=v0.2.0 goreleaser release --clean --skip=publish,validate -f cmd/ggui/.goreleaser.yaml

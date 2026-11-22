@@ -22,7 +22,9 @@ The gallery's reference scenes bundle Geist, the original demo photos/avatars,
 and the optional Noto Color Emoji font for consistent offline/native/WASM
 rendering. The gallery uses theme.Preset for its palette and geometry; library
 widgets continue to use the host theme and font. Sources and licenses are listed in
-[the asset notes](../examples/gallery/assets/chat/README.md).
+[the asset notes](examples/gallery/assets/chat/README.md). For `chat.Trace`
+execution traces alongside `ui.CodeBlock`, see
+[Code and execution traces](feedback-and-composition.md#code-and-execution-traces).
 
 ## On this page
 
@@ -158,7 +160,7 @@ bind its text directly. The scroller does not own transport or message storage.
 
 ### Control scrolling
 
-- `Opening(ScrollStart|ScrollEnd|ScrollLastAnchor)` chooses the first nonempty
+- `Opening(chat.ScrollStart|chat.ScrollEnd|chat.ScrollLastAnchor)` chooses the first nonempty
   transcript's position. End is the default; last-anchor falls back to end when
   that turn fits. Opening is applied before the first paint.
 - `AutoScroll` defaults to false. When enabled, it follows output at the live
@@ -169,7 +171,8 @@ bind its text directly. The scroller does not own transport or message storage.
 - Prepending history or changing measured row heights preserves the first visible
   stable row and the offset within it. `Save()`/`Restore()` persist that reading
   position. Restore waits if its row has not been loaded yet.
-- `ScrollToMessage(id, alignment)` supports start, center, end and nearest;
+- `ScrollToMessage(id, alignment)` supports `chat.ScrollAlignStart`,
+  `chat.ScrollAlignCenter`, `chat.ScrollAlignEnd`, and `chat.ScrollAlignNearest`;
   missing rows remain queued until available. Later jump commands replace them.
   `ScrollToStart()` and `ScrollToEnd()` target the edges.
 - `Animation(duration)` controls programmatic scrolling; reduced motion jumps
@@ -213,8 +216,10 @@ choices are not selectable or serialized.
 The answer binding stores `Values`, `Text` and `Skipped` per question.
 `OnSubmit` receives a deep copy containing enabled answered questions; skipped
 questions are omitted. `Status(name)` and `OnStatusChange` distinguish unanswered,
-answered and skipped. `Active(binding)` controls the active question by name;
-`OnItemChange` observes navigation. `SetItems` supports conditional collections.
+answered and skipped. `Active(name)` selects a question directly;
+`BindActive(binding)` controls the active question through a
+`ggui.Binding[string]`; `OnItemChange` observes navigation. `SetItems` supports
+conditional collections.
 `Reset()` restores initial answers and navigation, clearing skips and errors.
 
 ### Validate and navigate

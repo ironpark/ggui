@@ -21,18 +21,29 @@ See [example conventions](README.md#start-here) before copying snippets.
 - [Accordions and search](#accordions-and-search)
 - [Sidebar navigation](#sidebar-navigation)
 - [Command and menu presentation](#command-and-menu-presentation)
+- [Rich navigation and popovers](#rich-navigation-and-popovers)
 
 ## Containers and feedback
 
 | Control | Behavior |
 | --- | --- |
-| `ui.Tabs(selected, ui.Tab("One", page), ...)` | Displays the selected index, with an animated segmented selection. Arrows move focus; Enter/Space activates. `.ActivateOnFocus(true)` opts into automatic selection; `.Line()` uses an underline. Only the active page is laid out. `Tab(...).Header(widget)` draws an icon, count or badge in place of the label's text, which still names the tab; `Tab(...).Tooltip(text)` explains it. |
+| `ui.Tabs(selected, ui.Tab("One", page), ...)` | Displays the selected index with an animated segmented selection (`.Line()` uses an underline). Only the active page is laid out. `Tab(...).Header(widget)` draws an icon, count or badge in place of the label's text, which still names the tab; `Tab(...).Tooltip(text)` explains it. |
 | `ui.EditorTab("main.go", show)` | One tab of an editor's own tab bar, not a page of one control: a rounded box, raised while `.Selected(true)` and brighter and lifted with `.Current(true)`, as the tab of the pane with the focus, washed under the pointer. `.OnClose(fn)` adds a close button that shows while the pointer is over the tab or the focus is in it; `.Dirty(true)` puts a dot in its place, `.Preview(true)` sets the label in italics, `.Icon(w)` goes before it and `.Status(w)` before that, in a dot's room the tab keeps whether set or not. A tab is at least `.MinWidth` wide; a label past `.MaxLabelWidth` fades out at its end and shows whole in a tooltip. `ui.TabGroup(tabs...).Label(w).Tint(c)` runs them over a line of its color, headed by a chip of it as tall as a tab, as a browser's tab groups; `.OnLabel(fn)` makes the chip a button, as one folding the group away. In a horizontal `Scroll` carried past the group's start, the label sticks at the start of what shows as far as the group goes, the tabs behind it fading in after it; give the Scroll `.FadeEnds(0, w)` so its own fade leaves the label be. The bar, scrolling, reordering and splitting stay the app's. |
 | `ui.Collapsible(open, "Title", content)` | A titled section whose content eases open and closed, as `widget.Reveal` does. `ui.CollapsibleOf(open, trigger, content)` takes a header of your own, painted as it is, all of which toggles the content. |
 | `ui.Card(child)` | Adds a surface, foreground/10 outline, radius and padding; `.Shadow(...)` opts into elevation. Given `CardHeader`, `CardContent` and `CardFooter` sections it lays them out as shadcn's card does; see [composition helpers](feedback-and-composition.md#composition-helpers). |
-| `ui.Badge("new")` | Displays a small label; `.Secondary()`, `.Outline()`, `.Ghost()`, `.Link()` and `.Destructive()` change its look, and `.Icon(role)` or `.TrailingIcon(role)` add an icon. |
+| `ui.Badge("new")` | Displays a small label; `.Secondary()`, `.Outline()`, `.Ghost()`, `.Link()` and `.Destructive()` change its look, `.Icon(role)` or `.TrailingIcon(role)` add an icon, and `.OnTap(fn)` makes it an interactive link. |
 | `ui.Progress(value)` | Eases toward a fraction from a `Readable[float64]`. `.Label(text)` writes a label above its left end, `.ShowValue()` the percentage above its right end, and `.FormatValue(fn)` that value in words of your own, "3 of 12". |
 | `ui.Dialog(open, content)` | Shows a modal while the binding is true; see [focus scopes](input.md#focus-scopes). |
+
+### Tabs
+
+`Tabs` uses manual keyboard activation by default: arrows, Home and End move
+focus without replacing the panel, and Space or Enter activates the focused tab.
+Use `.ActivateOnFocus(true)` to opt into automatic selection on focus.
+`.Vertical()` places the tab list beside the content and uses Up/Down
+navigation; `.Line()` works in both orientations. `ui.Tab(...).Disabled(true)`
+is skipped by navigation and cannot be activated. Horizontal geometry and arrow
+keys follow `ggui.Directionality`.
 
 ## Tables
 
@@ -198,14 +209,15 @@ motion. This model processes a local slice; server-side paging and multi-column
 sorting are outside this API. For a custom toolbar or server-driven table,
 compose the existing `Table`, fields and navigation controls directly.
 
-See `examples/gallery/datatable.go` for a payment table with row actions.
+See `docs/examples/gallery/datatable.go` for a payment table with row actions.
 
 ## Select and menu
 
 `ui.Select(value).Options(options)` is a dropdown bound to a
-signal, labelled through `fmt.Sprint` or `.Format(fn)`: a click
-or Space opens the list in a `Popup`, the arrow keys move through it (or
-step the value while it is closed), Enter picks, Escape closes.
+signal, labelled through `fmt.Sprint` or `.Format(fn)`: a click, Space, or
+Up/Down opens the list in a `Popup` on the chosen option (Up/Down do not step
+the value while closed), the arrow keys and Home/End move through it, Enter
+picks, Escape closes, and typing letters selects a matching option.
 
 Select, Combobox, Radios and ToggleGroup shallow-copy their option slices; changing the caller's slice never replaces displayed options.
 Treat objects referenced by slice elements as immutable.
@@ -322,10 +334,11 @@ picker.Calendar().WeekStartsOn(time.Monday)
 Bounds are inclusive; zero endpoints are unbounded. Dates are interpreted in
 the configured timezone. Reversed bounds allow no selections. Arrow keys move
 the focused day by one day or week; Home/End move within the configured week;
-PageUp/PageDown change month, clamping the day for shorter months. Navigation
-does not select or modify the binding. Disabled dates can receive the keyboard
-highlight for orientation, but Enter/Space and accessibility selection cannot
-select them. Month controls and the date grid are separate tab stops.
+PageUp/PageDown and Shift+Left/Right change month, clamping the day for shorter
+months; and Shift+Up/Down and Shift+PageUp/PageDown change year. Navigation
+does not select or modify the binding and skips over disabled dates rather than
+landing on them; Enter/Space and accessibility selection cannot select disabled
+dates either. Month controls and the date grid are separate tab stops.
 
 `.WeekdayLabels([7]string{...})` takes Sunday-to-Saturday labels;
 `.MonthLabel(fn)` formats the heading. Both, and the month names, otherwise
@@ -338,6 +351,31 @@ heading with a month and a year Select, as shadcn's `captionLayout="dropdown"`
 does, offering the years `.DropdownYears(from, to)` names, or the bounds, or a
 hundred years back to ten ahead; `.MonthNames(names)` localizes the month list.
 Keep it persistent or give it a stable `Key` when rebuilding.
+
+### Selection modes
+
+`Calendar` selects one date. `CalendarRange` binds `ui.DateRange{Start, End}`;
+`CalendarMultiple` binds `[]time.Time`. All return `*CalendarWidget`, sharing
+localization, bounds, disabled dates and keyboard navigation.
+
+```go
+trip := ggui.State(ui.DateRange{})
+ui.CalendarRange(trip).RangeNights(1, 14).ExcludeDisabled(true).
+    ResetOnSelect(true).OnRangeChange(updateTrip)
+
+dates := ggui.State([]time.Time{})
+ui.CalendarMultiple(dates).SelectionLimits(0, 4).OnMultipleChange(updateDates)
+```
+
+A zero `Start` means no range; a zero `End` with a start is unfinished. Nights
+are civil-day differences, including across daylight saving changes. Range
+endpoints cannot be disabled. `.ExcludeDisabled(true)` also rejects intervals
+containing a disabled date. `.Required(true)` prevents clearing the last
+selection; it does not invent an initial value. Multiple selections publish
+sorted, deduplicated copies. Callbacks receive requests; a controlled binding's
+getter remains authoritative if it rejects a request.
+
+### Date pickers
 
 `ui.DatePicker(date)` opens the same calendar in a popup. `.Calendar()` exposes
 its bounds, timezone, localization and disabled-date settings. `.Format(fn)`
@@ -371,7 +409,7 @@ buttons; for a whole app in another language provide
 [`ui.Strings`](accessibility.md#localization) instead. Data slicing or fetching
 stays with the application.
 
-Explore these controls in the [component gallery](../examples/gallery).
+Explore these controls in the [component gallery](examples/gallery).
 
 ## Accordions and search
 
@@ -507,25 +545,15 @@ content in a Card only when a separate content surface is needed. Menubar and
 ContextMenu share the same subdued floating-panel shadow.
 
 
-## Tab orientation and activation
-
-`Tabs` uses manual keyboard activation by default. Arrows, Home and End move
-focus without replacing the panel; Space or Enter selects the focused tab.
-Use `.ActivateOnFocus(true)` to restore automatic selection. `.Vertical()` places
-the list beside the content and uses Up/Down navigation. `.Line()` works in both
-orientations. `ui.Tab(...).Disabled(true)` is skipped by navigation and cannot be
-activated. Horizontal geometry and arrows follow `ggui.Directionality`.
-
 ## Rich navigation and popovers
 
 `ui.NavigationMenu` groups direct `NavigationMenuLink` callbacks and
 `NavigationMenuItem(label, content)` dropdowns. Panel content is arbitrary Go
 widgets, so link descriptions, columns and cards compose normally. Links expose
 link semantics, and `.Active(true)` marks the current destination. Resting the
-pointer on a trigger for 200ms opens its dropdown, as shadcn's does, and it
-closes shortly after the pointer leaves both; one opened by a click or the
-keyboard stays open until dismissed. `.OpenOnHover(false)` opens dropdowns by
-activation alone.
+pointer on a trigger for 50ms opens its dropdown, and it closes 50ms after the
+pointer leaves both; one opened by a click or the keyboard stays open until
+dismissed. `.OpenOnHover(false)` opens dropdowns by activation alone.
 
 `ui.Popover(label, content)` provides a themed interactive panel. `.Title(text)`
 and `.Description(text)` head it, `.Side(widget.PopupRight)` and the other sides
@@ -535,26 +563,3 @@ and `.Align(a)` and `.AlignOffset(px)` place it along that side. Use
 controlled visibility, and `Show`, `Hide` or `Toggle` for programmatic control.
 `Trigger()` exposes button variants and `Popup()` the lower-level configuration.
 Keep popovers mounted or give them a stable `Key` across rebuilds.
-
-## Calendar selection modes
-
-`Calendar` selects one date. `CalendarRange` binds `ui.DateRange{Start, End}`;
-`CalendarMultiple` binds `[]time.Time`. All return `*CalendarWidget`, sharing
-localization, bounds, disabled dates and keyboard navigation.
-
-```go
-trip := ggui.State(ui.DateRange{})
-ui.CalendarRange(trip).RangeNights(1, 14).ExcludeDisabled(true).
-    ResetOnSelect(true).OnRangeChange(updateTrip)
-
-dates := ggui.State([]time.Time{})
-ui.CalendarMultiple(dates).SelectionLimits(0, 4).OnMultipleChange(updateDates)
-```
-
-A zero `Start` means no range; a zero `End` with a start is unfinished. Nights
-are civil-day differences, including across daylight saving changes. Range
-endpoints cannot be disabled. `.ExcludeDisabled(true)` also rejects intervals
-containing a disabled date. `.Required(true)` prevents clearing the last
-selection; it does not invent an initial value. Multiple selections publish
-sorted, deduplicated copies. Callbacks receive requests; a controlled binding's
-getter remains authoritative if it rejects a request.

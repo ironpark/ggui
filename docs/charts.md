@@ -100,8 +100,9 @@ constrain size or create an aspect ratio.
 ### Choose series and category colors
 
 `chart.Series.Color` overrides its palette token. `ColorIndex` selects one of the
-five theme tokens (1-based); zero uses series order. `ThemeColor` can resolve a
-custom color from the current theme. A datum can also override its color or token.
+five theme tokens (1-based); zero uses series order. `ThemeColor`
+(`func(*theme.Theme) color.Color`) resolves a custom color from the current
+theme. A datum can also override its color or token.
 `CategoryColors(true)` uses successive tokens for categories. Optional series
 `FillOpacity` overrides the chart's opacity. `Icon` uses ggui's normal icon-set
 lookup in both tooltips and legends.
@@ -179,9 +180,9 @@ go test ./ui/chart -run '^$' -bench BenchmarkChart -benchmem
 Run from the repository root:
 
 ```sh
-go run ./examples/charts
-go run ./examples/charts -dark -chart chart-pie-donut-text
-go run ./examples/charts -render-dir /tmp/ggui-chart-renders
+go run ./docs/examples/charts
+go run ./docs/examples/charts -dark -chart chart-pie-donut-text
+go run ./docs/examples/charts -render-dir /tmp/ggui-chart-renders
 ```
 
 The catalog includes all 70 examples from the inspected shadcn source, using its
@@ -195,13 +196,12 @@ The render command exercises the actual GPU renderer and writes 560 PNGs: all
 standalone content. This is an explicit developer tool; it does not run during
 ordinary unit tests or capture the user's desktop.
 
-Reference review used the live shadcn gallery and the source of every example.
-Native render review covered the complete catalog and animation samples. The
-comparison/fix cycle corrected translucent gradient seams, lost sections in dense
-curves, category tick collisions, stacked-bar joins, polar sizing and labels,
-series-color order, custom tooltip totals and keyboard/hover interference.
-This is a native visual adaptation, not a pixel-identical browser rendering:
-ggui fonts and controls remain native.
+Visual checks cover the full catalog and animation samples against the live
+shadcn gallery and example sources—including translucent gradients, dense
+curves, tick spacing, stacked-bar joins, polar sizing and labels, series-color
+order, custom tooltip totals, and keyboard/hover interplay. This is a native
+visual adaptation, not a pixel-identical browser rendering: ggui fonts and
+controls remain native.
 
 Automated tests cover every catalog entry at 320/640px widths, signed and expanded
 stacks, invalid/missing data, empty and narrow layouts, selection, keyboard and

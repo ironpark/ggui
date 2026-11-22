@@ -11,7 +11,7 @@ paths = ["^internal/third_party/"]
 # Examples and tests read top to bottom, as a catalog or a script: their
 # length and branching is not what the complexity limits guard against.
 [[exclude]]
-paths = ["^examples/"]
+paths = ["^docs/examples/"]
 rules = ["complexity"]
 
 [[exclude]]

@@ -1,7 +1,8 @@
 name: CI
 
 # A change to the documentation alone runs nothing: no test reads a
-# Markdown file, the guide under docs or the recordings under assets/demos.
+# Markdown file or the recordings under assets/demos. Runnable Go examples
+# live under docs/examples/, so non-Markdown changes under docs/ still run CI.
 # Otherwise the changes job says what changed, and each job runs only for
 # what it tests: the library, the ggui command with its watcher, or
 # both. A change to CI itself, the nightly run and a run by hand run
@@ -11,12 +12,10 @@ on:
     branches: [main]
     paths-ignore:
       - '**.md'
-      - 'docs/**'
       - 'assets/demos/**'
   pull_request:
     paths-ignore:
       - '**.md'
-      - 'docs/**'
       - 'assets/demos/**'
   # Every job, fuzzing included, nightly and by hand.
   schedule:
@@ -61,7 +60,6 @@ jobs:
               - '!pkg/fswatch/**'
               - '!.github/**'
               - '!**.md'
-              - '!docs/**'
               - '!assets/demos/**'
             cmd:
               - '{cmd/ggui,pkg/fswatch}/**'
@@ -87,14 +85,14 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: |
             go.sum
-            examples/sqlite/go.sum
+            docs/examples/sqlite/go.sum
             fonts/notoemoji/go.sum
             icons/heroicons/go.sum
             icons/lucide/go.sum
             icons/tabler/go.sum
             cmd/ggui/go.sum
             pkg/fswatch/go.sum
-      # examples/sqlite, fonts/notoemoji and the icon libraries under icons
+      # docs/examples/sqlite, fonts/notoemoji and the icon libraries under icons
       # are modules of their own that
       # require a published ggui; the workspace makes them build against
       # this checkout instead. cmd/ggui, the ggui command, is a module of
@@ -105,7 +103,7 @@ jobs:
       # committed.
       - name: Workspace
         run: |
-          go work init . ./examples/sqlite ./fonts/notoemoji ./icons/heroicons ./icons/lucide ./icons/tabler ./cmd/ggui ./pkg/fswatch
+          go work init . ./docs/examples/sqlite ./fonts/notoemoji ./icons/heroicons ./icons/lucide ./icons/tabler ./cmd/ggui ./pkg/fswatch
       # The Ubuntu image has DejaVu Sans but no font for Korean, which the
       # system font fallback is tested with. Mesa supplies a surfaceless EGL
       # context for the offscreen text rendering tests.
@@ -113,7 +111,7 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y fonts-nanum libegl1 libegl-mesa0 libgl1 libgl1-mesa-dri
       - name: Test
-        run: go test ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/...
+        run: go test ./... ./docs/examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/...
       - name: Test with the inspector
         run: go test -tags ggui_inspector . ./widget
       - name: Test the debug build
@@ -125,7 +123,7 @@ jobs:
         shell: bash
         run: |
           go test -tags ggwd_remote . ./internal/platform/... ./runtime
-          go build -tags ggwd_remote,ggui_inspector,ggui_debug -o "$RUNNER_TEMP/counter-remote" ./examples/counter
+          go build -tags ggwd_remote,ggui_inspector,ggui_debug -o "$RUNNER_TEMP/counter-remote" ./docs/examples/counter
 
   # The ggui command and its watcher, beside the library's tests rather than
   # after them: they build apps against this checkout and take as long.
@@ -206,7 +204,7 @@ jobs:
           go -C pkg/fswatch test -race ./...
           go -C cmd/ggui test -race ./...
 
-  # The viewer and examples/counter with the remote backend, end to end, on
+  # The viewer and docs/examples/counter with the remote backend, end to end, on
   # the runner's window system and GPU: cmd/ggviewer's TestEndToEnd. Linux
   # draws with Mesa's software OpenGL under Xvfb, with openbox to minimize
   # the window; Windows' runner has no GPU, and DirectX draws with WARP.
@@ -500,7 +498,7 @@ jobs:
         platform: [linux/amd64, darwin/arm64, windows/amd64, windows/arm64]
     runs-on: ubuntu-latest
     env:
-      PKGS: ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/... ./cmd/ggui/... ./pkg/fswatch/...
+      PKGS: ./... ./docs/examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/... ./cmd/ggui/... ./pkg/fswatch/...
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -512,7 +510,7 @@ jobs:
             pkg/fswatch/go.sum
       - name: Workspace
         run: |
-          go work init . ./examples/sqlite ./fonts/notoemoji ./icons/heroicons ./icons/lucide ./icons/tabler ./cmd/ggui ./pkg/fswatch
+          go work init . ./docs/examples/sqlite ./fonts/notoemoji ./icons/heroicons ./icons/lucide ./icons/tabler ./cmd/ggui ./pkg/fswatch
           echo "GOOS=${PLATFORM%/*}" >> "$GITHUB_ENV"
           echo "GOARCH=${PLATFORM#*/}" >> "$GITHUB_ENV"
         env:

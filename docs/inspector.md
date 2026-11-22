@@ -7,6 +7,12 @@ Inspect widget geometry, resolved properties, and accessibility while your appli
 Examples use `ggui` and `ui` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
+## On this page
+
+- [Inspector](#inspector)
+- [Custom widgets](#custom-widgets)
+- [Frames for another viewer](#frames-for-another-viewer)
+
 ## Inspector
 
 `Config{Inspector: "f1"}` binds a key that toggles a development
@@ -84,11 +90,16 @@ Wide bottom panels show tree, properties, and layout in three columns;
 narrow panels stack the tree above tabbed details. Light and dark palettes
 follow the app theme. The selected widget stays highlighted when all-widget
 outlines are off. Custom widgets participate when painted through
-`Canvas.Paint`. `App.SetInspector` sets the initial docking and outline options:
+`Canvas.Paint`. `SetInspector` sets the initial docking (`ggui.InspectorBottom`
+or `ggui.InspectorRight`) and outline options on `App` or on any individual
+`*ggui.Window` (each window opened with `app.OpenWindow` has its own
+`Inspector`, `SetInspector`, and `OnInspect`):
 
 ```go
-app.SetInspector(ggui.InspectorOptions{Dock: ggui.InspectorBottom})
+app.SetInspector(ggui.InspectorOptions{Dock: ggui.InspectorRight})
 ```
+
+In tests, `Probe.OnInspect` registers the same frame callback on a `Probe`.
 
 ## Custom widgets
 
@@ -144,3 +155,21 @@ accessibility node under a point. A viewer in another process implements
 `inspect.Source` over its connection to answer the same questions. Frames
 are built only once a handler or a panel asks for them, so an app with
 neither pays nothing for the trace.
+
+Package `inspect` also exposes three concurrency-safe runtime telemetry
+readers that work in any build:
+
+- `inspect.ReadFrameStats()` returns an `inspect.FrameStats` snapshot of total
+  `Frames` and CPU `Busy` time across the app's windows since startup, broken
+  down by what requested each frame (`ForAnimation`, `ForTime`, `ForCallback`,
+  `ForPosted`, `ForInput`, `ForLayout`) and how frames were painted (`Partial`,
+  `Skipped`, `Contained`, `Pointer`).
+- `inspect.ReadMotionReport()` returns an `inspect.MotionReport` naming the
+  widget types that moved in the last painted frame (`Movers`), why frames that
+  could have been painted in part were painted whole (`Refusals`), and the
+  callers that marked frames dirty (`Dirtiers`).
+- `inspect.ReadTextureBytes()` returns an `inspect.TextureBytes` live gauge of
+  retained GPU texture memory by category (`Layers`, `Backbuffer`, `PathMasks`,
+  `Icons`, `Images`, `Stencils`) plus `Total()`. Custom widgets can report
+  their own icons and images into those totals with `ggui.AccountTexture` (see
+  [GPU textures](rendering.md#gpu-textures)).
