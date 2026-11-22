@@ -1102,7 +1102,7 @@ func (f *frameState) lastFrame(h *hitRegion) *hitRegion {
 		f.indexPrev()
 	}
 	if h.id != nil {
-		if !comparableID(h.id) {
+		if !isHashable(h.id) {
 			return nil
 		}
 		if i, ok := f.prevByID[h.id]; ok {
@@ -1135,16 +1135,11 @@ func (f *frameState) indexPrev() {
 		switch p := &f.prev[i]; {
 		case p.id == nil:
 			f.prevByRect[p.rect] = i
-		case comparableID(p.id):
+		case isHashable(p.id):
 			f.prevByID[p.id] = i
 		}
 	}
 }
-
-// comparableID reports whether id may be used as a map key. A map operation
-// on a key the language cannot compare panics where == only would have if
-// the dynamic types matched, so both sides of the index check first.
-func comparableID(id any) bool { return isHashable(id) }
 
 // Group paints fn with every hit region it registers marked as belonging
 // to g, so that GroupBusy can tell, frames later, whether g holds the focus
@@ -1184,7 +1179,7 @@ func (c *Canvas) Grouped() any {
 // a row go. Outside every frame loop, and for a nil or uncomparable g, it
 // is false.
 func GroupBusy(g any) bool {
-	return g != nil && comparableID(g) && activeWorld().busy[g]
+	return g != nil && isHashable(g) && activeWorld().busy[g]
 }
 
 // focusScope is a focus trap for one frame: while regions carrying it

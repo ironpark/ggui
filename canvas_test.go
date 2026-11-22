@@ -391,10 +391,10 @@ func TestPhysicalGuardsEmptyAndNonFiniteAndComparableIDRejectsUncomparableInterf
 	}
 
 	type idWrap struct{ V any }
-	if comparableID(idWrap{V: []int{1}}) {
-		t.Fatal("comparableID accepted struct containing slice inside interface")
+	if isHashable(idWrap{V: []int{1}}) {
+		t.Fatal("isHashable accepted struct containing slice inside interface")
 	}
-	if !comparableID(idWrap{V: "ok"}) {
-		t.Fatal("comparableID rejected struct containing string inside interface")
+	if !isHashable(idWrap{V: "ok"}) {
+		t.Fatal("isHashable rejected struct containing string inside interface")
 	}
 }

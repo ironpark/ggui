@@ -375,7 +375,7 @@ func (in *inputState) markBusyGroups() {
 	busy := activeWorld().busy
 	clear(busy)
 	for _, r := range []*hitRegion{in.focused, in.pressed, in.touchMotion.target} {
-		if r != nil && r.group != nil && comparableID(r.group) {
+		if r != nil && r.group != nil && isHashable(r.group) {
 			busy[r.group] = true
 		}
 	}
