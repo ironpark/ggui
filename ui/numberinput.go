@@ -333,7 +333,7 @@ func (n *NumberInputWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		n.Hit(dst, r, n.input, ggui.CursorShapeText)
 	}
 	at := ggui.Anchor{Rect: r, ID: n.input.HitID()}
-	fieldChromeJoined(dst, at, n.box, n.theme, r, n.theme.Radius, fieldState{n.input.Focused(), n.invalid, n.disabled}, n.motion, n.sides.within(dst))
+	fieldChromeJoined(dst, at, n.box, r, fieldLook{theme: n.theme, focused: n.input.Focused(), invalid: n.invalid, inert: n.disabled, motion: n.motion, sides: n.sides.within(dst)})
 	dst.Paint(n.box, r)
 }
 

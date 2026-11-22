@@ -186,7 +186,7 @@ func (h *HoverCardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		w = min(w, screen.W)
 	}
 	h.size = h.effect.Layout(ggui.Constraints{MinW: w, MaxW: w, MaxH: ggui.Unbounded}, h.env)
-	panel, side, along := floatBeside(dst.Size(), r, h.size, h.side, h.align, h.alignOffset, h.theme.Space/2, h.env.Direction() == ggui.DirRTL)
+	panel, side, along := floatBeside(dst.Size(), floatSpec{anchor: r, size: h.size, side: h.side, align: h.align, offset: h.alignOffset, gap: h.theme.Space / 2, rtl: h.env.Direction() == ggui.DirRTL})
 	h.effect.PopFrom(side, along)
 	state.panel = panel
 	dst.Retain(at, hoverCardSlot, state)

@@ -301,7 +301,7 @@ func (t *TooltipWidget) paintTip(dst *ggui.Canvas, anchor ggui.Rect) {
 	// arrow. Which side that is takes the body's size to settle, and the
 	// opposite side is along the same axis, so the size holds either way.
 	rtl := t.env.Direction() == ggui.DirRTL
-	_, t.placed, _ = floatBeside(ggui.Size{}, anchor, ggui.Size{}, t.side, t.align, 0, 0, rtl)
+	_, t.placed, _ = floatBeside(ggui.Size{}, floatSpec{anchor: anchor, side: t.side, align: t.align, rtl: rtl})
 	size := t.effect.Layout(ggui.Loose(ggui.Sz(maxW, maxH)), t.env)
 	body := size
 	if t.arrow {
@@ -311,7 +311,7 @@ func (t *TooltipWidget) paintTip(dst *ggui.Canvas, anchor ggui.Rect) {
 			body.H -= tooltipGap
 		}
 	}
-	at, placed, _ := floatBeside(screen, anchor, body, t.side, t.align, t.alignOffset, tooltipGap, rtl)
+	at, placed, _ := floatBeside(screen, floatSpec{anchor: anchor, size: body, side: t.side, align: t.align, offset: t.alignOffset, gap: tooltipGap, rtl: rtl})
 	t.placed = placed
 	// Keep the arrow pointed at the anchor when collision shifts the body,
 	// without letting it emerge from one of the rounded corners.

@@ -199,13 +199,13 @@ func (l *sidebarList) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	x, w := r.Origin.X+m.pad, max(r.Size.W-2*m.pad, 0)
 	// One clip down the column cuts what every row holds while the rows
 	// are narrower than they were laid out for.
-	face := dst
+	column := sidebarColumn{dst: dst, face: dst, x: x, w: w}
 	if w < s.fullW-2*m.pad-.5 {
-		face = dst.Clip(ggui.Rct(ggui.Pt(x, r.Origin.Y), ggui.Sz(w, r.Size.H)))
+		column.face = dst.Clip(ggui.Rct(ggui.Pt(x, r.Origin.Y), ggui.Sz(w, r.Size.H)))
 	}
 	y := r.Origin.Y
 	for _, n := range l.top {
-		y += s.paintNode(dst, face, n, x, y, w, m)
+		y += s.paintNode(column, n, y, m)
 	}
 }
 
@@ -378,107 +378,115 @@ func (s *SidebarWidget) fold(dst, face *ggui.Canvas, n *sidebarNode, block ggui.
 	return clip(dst), clip(face)
 }
 
-// paintNode paints n at (x, y) in a column w wide and returns the height
-// it took. Rows go on dst; what they hold goes on face, which is clipped
-// to the column while the sidebar is narrower than its rows were laid out.
-func (s *SidebarWidget) paintNode(dst, face *ggui.Canvas, n *sidebarNode, x, y, w float64, m sidebarMetrics) float64 {
+// sidebarColumn is a column of rows, x across and w wide. Rows go on dst;
+// what they hold goes on face, which is clipped to the column while the
+// sidebar is narrower than its rows were laid out.
+type sidebarColumn struct {
+	dst, face *ggui.Canvas
+	x, w      float64
+}
+
+// paintNode paints n at y in column and returns the height it took.
+func (s *SidebarWidget) paintNode(column sidebarColumn, n *sidebarNode, y float64, m sidebarMetrics) float64 {
 	t := s.theme
-	row := ggui.Rct(ggui.Pt(x, y), ggui.Sz(w, n.rowH))
+	row := ggui.Rct(ggui.Pt(column.x, y), ggui.Sz(column.w, n.rowH))
 	switch n.e.kind {
 	case sidebarRowSeparator:
-		dst.FillRect(row, t.Border)
+		column.dst.FillRect(row, t.Border)
 		return n.rowH
 	case sidebarRowSection:
-		return s.paintGroup(dst, face, n, x, y, w, m)
+		return s.paintGroup(column, n, y, m)
 	case sidebarRowSkeleton:
 		at := m.pad
 		if n.e.icon != "" {
-			face.Paint(n.bones[0], s.place(row, at, (n.rowH-m.icon)/2, ggui.Sz(m.icon, m.icon)))
+			column.face.Paint(n.bones[0], s.place(row, at, (n.rowH-m.icon)/2, ggui.Sz(m.icon, m.icon)))
 			at += m.icon + m.gap
 		}
-		face.Paint(n.bones[1], s.place(row, at, (n.rowH-n.widgetSize.H)/2, n.widgetSize))
+		column.face.Paint(n.bones[1], s.place(row, at, (n.rowH-n.widgetSize.H)/2, n.widgetSize))
 		return n.rowH
 	case sidebarRowCustom:
 		if n.rowH <= 0 {
 			return 0
 		}
-		c := face
+		c := column.face
 		if n.rowH < n.widgetSize.H {
-			c = face.Clip(row).Inert()
+			c = column.face.Clip(row).Inert()
 		}
 		c.Paint(n.e.widget, s.place(row, 0, 0, n.widgetSize))
 		return n.rowH
 	}
-	s.paintItem(dst, face, n, row, m)
+	s.paintItem(column.dst, column.face, n, row, m)
 	if n.progress <= 0 || len(n.kids) == 0 {
 		return n.rowH
 	}
 	// The sub-items, beside a line down from the row.
 	h := n.kidsH * n.progress
-	block := ggui.Rct(ggui.Pt(x-m.pad, y+n.rowH), ggui.Sz(w+2*m.pad, h))
-	bd, bf := s.fold(dst, face, n, block)
-	under := ggui.Rct(ggui.Pt(x, y+n.rowH), ggui.Sz(w, n.kidsH))
+	block := ggui.Rct(ggui.Pt(column.x-m.pad, y+n.rowH), ggui.Sz(column.w+2*m.pad, h))
+	bd, bf := s.fold(column.dst, column.face, n, block)
+	under := ggui.Rct(ggui.Pt(column.x, y+n.rowH), ggui.Sz(column.w, n.kidsH))
 	bd.FillRect(s.place(under, m.subIndent, 0, ggui.Sz(m.line, n.kidsH)), t.Border)
-	sub := s.place(under, m.subIndent+m.line+m.subPad, m.subY, ggui.Sz(max(w-2*m.subIndent-m.line-2*m.subPad, 0), 0))
+	sub := s.place(under, m.subIndent+m.line+m.subPad, m.subY, ggui.Sz(max(column.w-2*m.subIndent-m.line-2*m.subPad, 0), 0))
+	kids := sidebarColumn{dst: bd, face: bf, x: sub.Origin.X, w: sub.Size.W}
 	sy := sub.Origin.Y
 	for i, k := range n.kids {
 		if i > 0 {
 			sy += m.subGap
 		}
-		sy += s.paintNode(bd, bf, k, sub.Origin.X, sy, sub.Size.W, m)
+		sy += s.paintNode(kids, k, sy, m)
 	}
 	return n.rowH + h
 }
 
 // paintGroup paints a group: its heading with the group's action, and its
 // rows under that.
-func (s *SidebarWidget) paintGroup(dst, face *ggui.Canvas, n *sidebarNode, x, y, w float64, m sidebarMetrics) float64 {
+func (s *SidebarWidget) paintGroup(column sidebarColumn, n *sidebarNode, y float64, m sidebarMetrics) float64 {
 	t := s.theme
 	y += m.pad
 	if n.rowH > 0 {
-		row := ggui.Rct(ggui.Pt(x, y), ggui.Sz(w, n.rowH))
+		row := ggui.Rct(ggui.Pt(column.x, y), ggui.Sz(column.w, n.rowH))
 		col := fade(t.Fg, .7*s.labelProgress)
-		c := face
+		c := column.face
 		if n.rowH < n.fullH {
-			c = face.Clip(row)
+			c = column.face.Clip(row)
 		}
 		trails := !s.railed()
 		if n.e.collapsible && trails {
 			item := sidebarItem{s, n.index}
-			dst.Describe(row, item)
+			column.dst.Describe(row, item)
 			if !s.IsInert() && !n.e.disabled {
-				dst.HitPointer(row, item)
-				dst.HitCursor(row, ggui.CursorShapePointer)
+				column.dst.HitPointer(row, item)
+				column.dst.HitCursor(row, ggui.CursorShapePointer)
 				if n.index == s.hover {
-					dst.FillRoundRect(row, t.RadiusSm, t.Accent)
+					column.dst.FillRoundRect(row, t.RadiusSm, t.Accent)
 					col = t.AccentFg
 				}
 			}
 			s.paintChevron(c, n, s.place(row, n.chevronX, (n.fullH-m.icon)/2, ggui.Sz(m.icon, m.icon)), col)
 			if n.index == s.active {
-				s.focusRing(dst, row)
+				s.focusRing(column.dst, row)
 				if s.reveal {
-					dst.RequestReveal(row)
+					column.dst.RequestReveal(row)
 				}
 			}
 		}
 		n.label.Color(col)
 		c.Paint(n.label, s.place(row, m.pad, (n.fullH-n.labelSize.H)/2, n.labelSize))
 		if n.e.action != nil && trails {
-			dst.Paint(n.e.action, s.place(row, n.actionX, (n.fullH-n.actionSize.H)/2, n.actionSize))
+			column.dst.Paint(n.e.action, s.place(row, n.actionX, (n.fullH-n.actionSize.H)/2, n.actionSize))
 		}
 		n.rect = row
 		y += n.rowH
 	}
 	if n.progress > 0 {
 		h := n.kidsH * n.progress
-		bd, bf := s.fold(dst, face, n, ggui.Rct(ggui.Pt(x-m.pad, y), ggui.Sz(w+2*m.pad, h)))
+		kids := column
+		kids.dst, kids.face = s.fold(column.dst, column.face, n, ggui.Rct(ggui.Pt(column.x-m.pad, y), ggui.Sz(column.w+2*m.pad, h)))
 		ky := y
 		for i, k := range n.kids {
 			if i > 0 {
 				ky += m.rowGap
 			}
-			ky += s.paintNode(bd, bf, k, x, ky, w, m)
+			ky += s.paintNode(kids, k, ky, m)
 		}
 	}
 	return 2*m.pad + n.rowH + n.kidsH*n.progress

@@ -319,7 +319,7 @@ func (g *InputGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	} else {
 		dst.Describe(r, g)
 	}
-	fieldSurface(dst, g.Anchor(r), t, r, t.Radius, fieldState{g.hasFocus(), g.invalid, g.effectiveDisabled}, g.motion, g.sides.within(dst))
+	fieldSurface(dst, g.Anchor(r), r, fieldLook{theme: t, focused: g.hasFocus(), invalid: g.invalid, inert: g.effectiveDisabled, motion: g.motion, sides: g.sides.within(dst)})
 	place := func(at ggui.Rect) ggui.Rect { at.Origin = at.Origin.Add(r.Origin); return at }
 	if g.top != nil {
 		dst.Paint(g.top, place(g.topRect))

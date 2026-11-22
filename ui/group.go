@@ -194,7 +194,7 @@ func (g *ButtonGroupWidget) ring(f joinedFocus) { g.rings = append(g.rings, f) }
 // ringAt is the ring handed over for the child painted in r, if any.
 func (g *ButtonGroupWidget) ringAt(r ggui.Rect) (joinedFocus, bool) {
 	for _, f := range g.rings {
-		if f.r == r {
+		if f.rect == r {
 			return f, true
 		}
 	}
@@ -305,7 +305,7 @@ func (x *ButtonGroupTextWidget) Baseline() (float64, bool) {
 // Paint implements ggui.Widget.
 func (x *ButtonGroupTextWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := x.theme
-	paintJoinedBox(dst, r, t.Radius, x.sides.within(dst), t.Muted, t.BorderWidth, t.Border)
+	paintJoinedBox(dst, joinedBox{rect: r, radius: t.Radius, sides: x.sides.within(dst)}, t.Muted, t.BorderWidth, t.Border)
 	dst.Paint(x.child, ggui.Rct(ggui.Pt(r.Origin.X+x.pad, r.Origin.Y+(r.Size.H-x.size.H)/2), x.size))
 }
 
@@ -775,7 +775,7 @@ func (g *ToggleGroupWidget[T]) paint(dst *ggui.Canvas, r ggui.Rect) {
 		if inert && fill != nil {
 			fill = t.Disabled(fill)
 		}
-		paintJoinedBox(dst, seg, g.radius, g.sidesAt(i), fill, t.BorderWidth, border)
+		paintJoinedBox(dst, joinedBox{rect: seg, radius: g.radius, sides: g.sidesAt(i)}, fill, t.BorderWidth, border)
 		// The icon and the label, centred together and each on the line.
 		p, x := g.parts[i], seg.Origin.X+(seg.Size.W-s.W)/2
 		if ic := g.iconAt(i); ic != nil {
@@ -803,7 +803,7 @@ func (g *ToggleGroupWidget[T]) paint(dst *ggui.Canvas, r ggui.Rect) {
 	focused := cur >= 0 && g.Focused && g.FocusVisible && !inert
 	if k := controlkit.Ease(dst, g.theme, g.Anchor(r), focusRingSlot, pick(focused, 1.0, 0.0), g.motion); k > 0 && cur >= 0 {
 		ring := controlkit.ColorOr(st.Ring, t.Ring)
-		f := joinedFocus{r: g.rects[cur], radius: g.radius, sides: g.sidesAt(cur), width: t.BorderWidth, line: fade(controlkit.ColorOr(st.FocusBorder, ring), k), halo: fade(t.Halo(ring), k)}
+		f := joinedFocus{rect: g.rects[cur], radius: g.radius, sides: g.sidesAt(cur), width: t.BorderWidth, line: fade(controlkit.ColorOr(st.FocusBorder, ring), k), halo: fade(t.Halo(ring), k)}
 		f.paint(dst)
 	}
 }

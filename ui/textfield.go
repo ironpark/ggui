@@ -198,7 +198,7 @@ func (f *TextFieldWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	if !f.plain {
 		at := ggui.Anchor{Rect: r, ID: f.input.HitID()}
-		fieldChromeJoined(dst, at, f.box, f.theme, r, f.theme.Radius, fieldState{f.input.Focused(), f.invalid, inert}, f.motion, f.sides.within(dst))
+		fieldChromeJoined(dst, at, f.box, r, fieldLook{theme: f.theme, focused: f.input.Focused(), invalid: f.invalid, inert: inert, motion: f.motion, sides: f.sides.within(dst)})
 	}
 	dst.Paint(f.box, r)
 }

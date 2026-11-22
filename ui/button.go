@@ -486,8 +486,7 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if border != nil && inert {
 		border = t.Disabled(border)
 	}
-	radius := b.corner
-	sides := b.sides.within(dst)
+	radius, sides := b.corner, b.sides.within(dst)
 	// shadcn's aria-invalid:border-destructive aria-invalid:ring-3
 	// aria-invalid:ring-destructive/20, eased as transition-all eases it.
 	// A button has a transparent border to color; a toggle has one only
@@ -510,6 +509,7 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if b.Pressed && b.Hovered && !inert && b.expands == nil && !toggle {
 		r.Origin.Y++
 	}
+	shape := joinedBox{rect: r, radius: radius, sides: sides}
 	if st.Shadow && !inert {
 		dst.Shadow(r, radius, t.CardShadow)
 	}
@@ -517,7 +517,7 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		// Joined to its neighbours the ring is the group's to draw over
 		// them; alone, the box draws the line and only the halo is left.
 		if halo := fade(destructiveRing(t), invalid); sides.Any() {
-			joinedFocusRing(dst, t, r, radius, sides, border, halo)
+			joinedFocusRing(dst, t, shape, border, halo)
 		} else {
 			controlkit.HaloStroke(dst, r, radius, t.Halo(halo))
 		}
@@ -526,7 +526,7 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		// A box rounds every corner alike, so the surface of a button joined
 		// to a neighbour is drawn here and the box draws the content alone.
 		b.box.Fill(nil).Border(0, nil)
-		paintJoinedBox(dst, r, radius, sides, fill, t.BorderWidth, border)
+		paintJoinedBox(dst, shape, fill, t.BorderWidth, border)
 	} else {
 		b.box.Fill(fill).Border(pick(border != nil, t.BorderWidth, 0), border)
 	}
@@ -560,7 +560,7 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			ring, line = destructiveRing(t), controlkit.ColorOr(border, t.Destructive)
 		}
 		if !isInvalid || toggle {
-			joinedFocusRing(dst, t, r, radius, sides, fade(line, k), fade(ring, k))
+			joinedFocusRing(dst, t, shape, fade(line, k), fade(ring, k))
 		}
 	}
 }
