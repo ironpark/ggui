@@ -15,11 +15,14 @@
 package text_test
 
 import (
+	"bytes"
 	"fmt"
 	"image/color"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/third_party/text"
@@ -135,15 +138,7 @@ func TestDrawColorGlyph(t *testing.T) {
 }
 
 func TestGlyphColoredGrayscale(t *testing.T) {
-	f, err := os.Open(filepath.Join("testdata", "Roboto-Regular.ttf"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		_ = f.Close()
-	}()
-
-	src, err := text.NewGoTextFaceSource(f)
+	src, err := text.NewGoTextFaceSource(bytes.NewReader(goregular.TTF))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -5,11 +5,11 @@ import (
 	"image"
 	"testing"
 
+	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/math/fixed"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggui/internal/third_party/text/internal/testfonts"
 )
 
 // BenchmarkOutlineGlyphImage rasterizes a line's outline glyphs and uploads
@@ -19,7 +19,7 @@ func BenchmarkOutlineGlyphImage(b *testing.B) {
 		name string
 		data []byte
 		size float64
-	}{{"latin13", goregular.TTF, 13}, {"cjk32", testfonts.MPlus1pRegular_ttf, 32}} {
+	}{{"latin13", goregular.TTF, 13}, {"bold32", gobold.TTF, 32}} {
 		b.Run(c.name, func(b *testing.B) {
 			src, err := NewGoTextFaceSource(bytes.NewReader(c.data))
 			if err != nil {
