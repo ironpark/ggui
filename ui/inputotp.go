@@ -222,42 +222,7 @@ func (o *InputOTPWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
 			o.anchors[i] = ggui.Anchor{ID: childKey{owner, i}}
 		}
 	}
-	o.cells = o.cells[:0]
-	o.groups = o.groups[:0]
-	o.separators = o.separators[:0]
-	x := 0.
-	seen := make([]bool, o.maxLength)
-	for p, part := range o.parts {
-		if p > 0 {
-			x += o.gap
-		}
-		switch part := part.(type) {
-		case InputOTPGroupSpec:
-			start := x
-			last := len(part.slots) - 1
-			for k, slot := range part.slots {
-				if slot.Index < 0 || slot.Index >= o.maxLength || seen[slot.Index] {
-					panic("ui.InputOTP: each slot index must occur exactly once")
-				}
-				seen[slot.Index] = true
-				left, right := k == 0, k == last
-				if o.rtl {
-					left, right = right, left
-				}
-				o.cells = append(o.cells, otpCell{slot.Index, ggui.Rct(ggui.Pt(x, 0.), ggui.Sz(o.slot, o.slot)), left, right})
-				x += o.slot
-			}
-			o.groups = append(o.groups, otpGroup{ggui.Rct(ggui.Pt(start, 0.), ggui.Sz(x-start, o.slot))})
-		case InputOTPSeparatorSpec:
-			o.separators = append(o.separators, ggui.Rct(ggui.Pt(x, 0.), ggui.Sz(o.sepWidth, o.slot)))
-			x += o.sepWidth
-		}
-	}
-	for _, ok := range seen {
-		if !ok {
-			panic("ui.InputOTP: groups must cover every slot")
-		}
-	}
+	x := o.arrange()
 	size := c.Constrain(ggui.Sz(x, o.slot))
 	scale := 1.
 	if x > size.W && x > 0 {
@@ -291,6 +256,56 @@ func (o *InputOTPWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
 	o.lastText = "\x00"
 	return size
 }
+
+// arrange lays the parts out in one row from zero, a gap apart, and
+// returns its width. A slot index out of range, repeated or left out
+// panics.
+func (o *InputOTPWidget) arrange() float64 {
+	o.cells = o.cells[:0]
+	o.groups = o.groups[:0]
+	o.separators = o.separators[:0]
+	x := 0.
+	seen := make([]bool, o.maxLength)
+	for p, part := range o.parts {
+		if p > 0 {
+			x += o.gap
+		}
+		switch part := part.(type) {
+		case InputOTPGroupSpec:
+			x = o.arrangeGroup(part, x, seen)
+		case InputOTPSeparatorSpec:
+			o.separators = append(o.separators, ggui.Rct(ggui.Pt(x, 0.), ggui.Sz(o.sepWidth, o.slot)))
+			x += o.sepWidth
+		}
+	}
+	for _, ok := range seen {
+		if !ok {
+			panic("ui.InputOTP: groups must cover every slot")
+		}
+	}
+	return x
+}
+
+// arrangeGroup lays the slots of part out from x, marking each in seen,
+// and returns where the group ends.
+func (o *InputOTPWidget) arrangeGroup(part InputOTPGroupSpec, x float64, seen []bool) float64 {
+	start := x
+	last := len(part.slots) - 1
+	for k, slot := range part.slots {
+		if slot.Index < 0 || slot.Index >= o.maxLength || seen[slot.Index] {
+			panic("ui.InputOTP: each slot index must occur exactly once")
+		}
+		seen[slot.Index] = true
+		left, right := k == 0, k == last
+		if o.rtl {
+			left, right = right, left
+		}
+		o.cells = append(o.cells, otpCell{slot.Index, ggui.Rct(ggui.Pt(x, 0.), ggui.Sz(o.slot, o.slot)), left, right})
+		x += o.slot
+	}
+	o.groups = append(o.groups, otpGroup{ggui.Rct(ggui.Pt(start, 0.), ggui.Sz(x-start, o.slot))})
+	return x
+}
 func (o *InputOTPWidget) Semantics() (ggui.Role, string) {
 	return ggui.RoleTextField, pick(o.SemanticName() != "", o.SemanticName(), stringsOf(o.env).OneTimePassword)
 }
@@ -321,26 +336,8 @@ func (o *InputOTPWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 	o.input.PaintCustom(d, r, o.paintSlots)
 }
 func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state widget.TextInputState) ggui.Rect {
-	t := o.theme
-	// The border and the halo of an invalid code ease in and out together.
-	invalid := controlkit.Ease(d, o.theme, o.Anchor(r), fieldInvalidSlot, pick(o.invalid, 1.0, 0.0), o.motion)
-	fg, border, fill := t.Fg, mix(t.InputBorder, t.Destructive, invalid), t.Input
-	if o.disabled {
-		fg, border, fill = t.Disabled(fg), t.Disabled(border), t.Disabled(fill)
-	}
-	translate := func(at ggui.Rect) ggui.Rect { at.Origin = at.Origin.Add(r.Origin); return at }
-	for _, group := range o.groups {
-		at := translate(group.rect)
-		// An invalid group keeps its destructive halo, focused or not.
-		if invalid > 0 && !o.disabled {
-			controlkit.HaloStroke(d, at, t.Radius, fade(t.Halo(destructiveRing(t)), invalid))
-		}
-		d.FillRoundRect(at, t.Radius, fill)
-		d.StrokeRoundRect(at, t.Radius, t.BorderWidth, border)
-	}
-	for _, sep := range o.separators {
-		controlkit.PaintIconAt(d, o.env, controlkit.IconMark{Role: icons.Minus, Center: translate(sep).Center(), Size: o.sepWidth, Color: fg})
-	}
+	ink := o.ink(d, r)
+	o.paintGroups(d, r.Origin, ink)
 	runes := []rune(state.Text)
 	active := min(utf8.RuneCountInString(state.Text[:state.Caret]), o.maxLength-1)
 	lo, hi := min(state.Anchor, state.Caret), max(state.Anchor, state.Caret)
@@ -351,58 +348,117 @@ func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state widget.Te
 	if state.Text != o.lastText {
 		o.lastText = state.Text
 		o.blink = ggui.FrameTime()
-		for i, l := range o.labels {
-			s := ""
-			if i < len(runes) {
-				s = string(runes[i])
-			} else if i < len(o.placeholder) {
-				s = string(o.placeholder[i])
-			}
-			l.Content(s).Style(t.Text).Color(fg)
-			o.sizes[i] = l.Layout(ggui.Loose(ggui.Sz(o.slot, o.slot)), o.env)
-		}
+		o.relabel(runes, ink.fg)
 	}
 	caret := r
 	for _, cell := range o.cells {
-		at := translate(cell.rect)
+		at := ggui.Rct(cell.rect.Origin.Add(r.Origin), cell.rect.Size)
 		i := cell.index
 		// Interior borders are straight; only the group's two outer ends are rounded.
 		if !cell.left {
-			d.FillRect(ggui.Rct(at.Origin, ggui.Sz(1, at.Size.H)), border)
+			d.FillRect(ggui.Rct(at.Origin, ggui.Sz(1, at.Size.H)), ink.border)
 		}
-		left, right := cell.left, cell.right
 		selected := state.Focused && !o.disabled && (i == active || (i >= start && i < end))
-		// The ring of the slot being typed into eases in and out, as
-		// the slot's transition-all does. An invalid one keeps the
-		// destructive line and takes the halo an invalid field has.
-		if k := controlkit.Ease(d, o.theme, o.anchors[i], focusRingSlot, pick(selected, 1.0, 0.0), o.motion); k > 0 {
-			line, halo := t.Ring, t.Halo(t.Ring)
-			if o.invalid {
-				line, halo = t.Destructive, t.Halo(destructiveRing(t))
-			}
-			otpSlotBorder(d, slotBorderSpec{rect: ggui.Rct(at.Origin.Add(ggui.Pt(-1, -1)), ggui.Sz(at.Size.W+2, at.Size.H+2)), radius: t.Radius + 1, width: 3, color: fade(halo, k), left: left, right: right})
-			otpSlotBorder(d, slotBorderSpec{rect: at, radius: t.Radius, width: 1, color: fade(line, k), left: left, right: right})
-		}
+		o.paintSlotRing(d, cell, at, selected)
 		if i == active {
 			caret = ggui.Rct(at.Center().Add(ggui.Pt(-.5, -8)), ggui.Sz(1, 16))
 		}
-		col := fg
-		if i >= len(runes) {
-			col = t.MutedFg
-			if o.disabled {
-				col = t.Disabled(col)
-			}
-		}
-		o.labels[i].Color(col)
-		sz := o.sizes[i]
-		d.Clip(at).Paint(o.labels[i], ggui.Rct(at.Center().Add(ggui.Pt(-sz.W/2, -sz.H/2)), sz))
+		o.paintSlotLabel(d, i, at, ink.fg, len(runes))
 		if i == active && selected && i >= len(runes) && !state.Composing {
 			if alpha := o.caretAlpha(); alpha > 0 {
-				d.FillRect(caret, fade(fg, alpha))
+				d.FillRect(caret, fade(ink.fg, alpha))
 			}
 		}
 	}
 	return caret
+}
+
+// slotInk is the colors the slots are painted in, and how far the look of
+// an invalid code has eased in.
+type slotInk struct {
+	fg, border, fill color.Color
+	invalid          float64
+}
+
+// ink eases the look of an invalid code in or out over the anchor of r and
+// returns the colors it gives the slots, dimmed while disabled.
+func (o *InputOTPWidget) ink(d *ggui.Canvas, r ggui.Rect) slotInk {
+	t := o.theme
+	// The border and the halo of an invalid code ease in and out together.
+	invalid := controlkit.Ease(d, o.theme, o.Anchor(r), fieldInvalidSlot, pick(o.invalid, 1.0, 0.0), o.motion)
+	ink := slotInk{fg: t.Fg, border: mix(t.InputBorder, t.Destructive, invalid), fill: t.Input, invalid: invalid}
+	if o.disabled {
+		ink.fg, ink.border, ink.fill = t.Disabled(ink.fg), t.Disabled(ink.border), t.Disabled(ink.fill)
+	}
+	return ink
+}
+
+// paintGroups paints the box of every group of slots and the separators
+// between the groups, offset by origin.
+func (o *InputOTPWidget) paintGroups(d *ggui.Canvas, origin ggui.Point, ink slotInk) {
+	t := o.theme
+	for _, group := range o.groups {
+		at := ggui.Rct(group.rect.Origin.Add(origin), group.rect.Size)
+		// An invalid group keeps its destructive halo, focused or not.
+		if ink.invalid > 0 && !o.disabled {
+			controlkit.HaloStroke(d, at, t.Radius, fade(t.Halo(destructiveRing(t)), ink.invalid))
+		}
+		d.FillRoundRect(at, t.Radius, ink.fill)
+		d.StrokeRoundRect(at, t.Radius, t.BorderWidth, ink.border)
+	}
+	for _, sep := range o.separators {
+		center := ggui.Rct(sep.Origin.Add(origin), sep.Size).Center()
+		controlkit.PaintIconAt(d, o.env, controlkit.IconMark{Role: icons.Minus, Center: center, Size: o.sepWidth, Color: ink.fg})
+	}
+}
+
+// relabel gives every slot's label its character in fg, from runes or
+// past them from the placeholder, and measures it.
+func (o *InputOTPWidget) relabel(runes []rune, fg color.Color) {
+	t := o.theme
+	for i, l := range o.labels {
+		s := ""
+		if i < len(runes) {
+			s = string(runes[i])
+		} else if i < len(o.placeholder) {
+			s = string(o.placeholder[i])
+		}
+		l.Content(s).Style(t.Text).Color(fg)
+		o.sizes[i] = l.Layout(ggui.Loose(ggui.Sz(o.slot, o.slot)), o.env)
+	}
+}
+
+// paintSlotRing eases the ring of the slot in cell, painted at at, in
+// while it is selected and out after, as the slot's transition-all does.
+// An invalid one keeps the destructive line and takes the halo an invalid
+// field has.
+func (o *InputOTPWidget) paintSlotRing(d *ggui.Canvas, cell otpCell, at ggui.Rect, selected bool) {
+	t := o.theme
+	k := controlkit.Ease(d, o.theme, o.anchors[cell.index], focusRingSlot, pick(selected, 1.0, 0.0), o.motion)
+	if k <= 0 {
+		return
+	}
+	line, halo := t.Ring, t.Halo(t.Ring)
+	if o.invalid {
+		line, halo = t.Destructive, t.Halo(destructiveRing(t))
+	}
+	otpSlotBorder(d, slotBorderSpec{rect: ggui.Rct(at.Origin.Add(ggui.Pt(-1, -1)), ggui.Sz(at.Size.W+2, at.Size.H+2)), radius: t.Radius + 1, width: 3, color: fade(halo, k), left: cell.left, right: cell.right})
+	otpSlotBorder(d, slotBorderSpec{rect: at, radius: t.Radius, width: 1, color: fade(line, k), left: cell.left, right: cell.right})
+}
+
+// paintSlotLabel paints slot i's character centred in at: one of the
+// first typed slots in fg, and the placeholder's past them muted.
+func (o *InputOTPWidget) paintSlotLabel(d *ggui.Canvas, i int, at ggui.Rect, fg color.Color, typed int) {
+	col := fg
+	if i >= typed {
+		col = o.theme.MutedFg
+		if o.disabled {
+			col = o.theme.Disabled(col)
+		}
+	}
+	o.labels[i].Color(col)
+	sz := o.sizes[i]
+	d.Clip(at).Paint(o.labels[i], ggui.Rct(at.Center().Add(ggui.Pt(-sz.W/2, -sz.H/2)), sz))
 }
 
 // caretAlpha is the opacity of the fake caret now, and asks for the frame
