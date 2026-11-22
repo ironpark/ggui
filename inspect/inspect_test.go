@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui/a11y"
-	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/layout"
 )
 
 func node(name string, depth int, x, y, w, h float64) Node {

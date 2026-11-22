@@ -7,9 +7,9 @@ import (
 	"strconv"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/inspect"
-	"github.com/ironpark/ggui/pkg/gem"
-	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/layout"
 	"github.com/ironpark/ggui/property"
 )
 

@@ -11,7 +11,7 @@ import (
 	"slices"
 	"sort"
 
-	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/gem"
 )
 
 // Fixed returns the rows [first, last) of n, each pitch apart (a row's

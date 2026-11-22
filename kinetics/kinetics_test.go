@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/layout"
 )
 
 func TestRubberFollowsInsideAndResistsPast(t *testing.T) {

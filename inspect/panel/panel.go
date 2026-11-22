@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/inspect"
-	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // inspectKey prefers the widget's explicit identity, then its instance and

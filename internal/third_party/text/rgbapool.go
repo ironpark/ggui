@@ -18,7 +18,7 @@ import (
 	"image"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/gem"
 )
 
 var theRGBAPool = gem.Pool[*image.RGBA]{

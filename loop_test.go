@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/pkg/gem"
 )
 
 func TestCloseDisposesEverythingBuilt(t *testing.T) {

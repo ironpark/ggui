@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/internal/render"
-	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // Canvas is what a Widget paints into: the target image plus the frame's list

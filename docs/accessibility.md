@@ -42,7 +42,7 @@ The accessibility vocabulary and `SemTree` live in the `a11y` package, while
 the native bridges live in `internal/platform/a11ybridge`. The `ggui` package
 re-exports every name from `a11y`, so `ggui.Node` and `a11y.Node` are the same
 type and normal code never imports `a11y` directly. Geometry sits below both,
-in `pkg/layout`, for the same reason.
+in `layout`, for the same reason.
 
 The split is what lets a bridge read everything a widget published without a
 copy of `Node` that falls behind the original. A new platform is a new file in

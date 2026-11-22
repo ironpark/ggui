@@ -4,7 +4,7 @@
 // empty rectangle is no region and drops out of every union.
 package region
 
-import "github.com/ironpark/ggui/pkg/layout"
+import "github.com/ironpark/ggui/layout"
 
 type Rect = layout.Rect
 

@@ -5,7 +5,7 @@ import (
 	"math"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/layout"
 )
 
 // MaxStops is how many colour stops a gradient carries to the shader.

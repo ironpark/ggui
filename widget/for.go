@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/virtual"
 	"github.com/ironpark/ggui/property"
 )

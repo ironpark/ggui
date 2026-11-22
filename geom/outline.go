@@ -1,6 +1,6 @@
 package geom
 
-import "github.com/ironpark/ggui/pkg/layout"
+import "github.com/ironpark/ggui/layout"
 
 // Outline is a path as its points: subpaths of lines and quadratic and
 // cubic Bézier curves, as a vector renderer is given them. It answers what

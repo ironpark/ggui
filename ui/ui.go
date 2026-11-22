@@ -23,7 +23,7 @@ import (
 	"slices"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/gem"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -43,7 +43,7 @@ func sprint[T any](v T) string {
 	return fmt.Sprint(v)
 }
 
-// pick, bounded and clamp come from pkg/gem, shared with ggui, so the two
+// pick, bounded and clamp come from gem, shared with ggui, so the two
 // agree on clamp's contradicting bounds: see gem.Clamp.
 func pick[T any](cond bool, a, b T) T { return gem.Pick(cond, a, b) }
 

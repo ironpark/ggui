@@ -1,6 +1,6 @@
 # Layout without ggui widgets
 
-Import `github.com/ironpark/ggui/pkg/layout` to measure and position boxes without
+Import `github.com/ironpark/ggui/layout` to measure and position boxes without
 importing the root `ggui` package. The package owns `Point`, `Size`, `Rect`, their
 operations and numeric constructors. It depends only on the standard library and
 does not import graphics,
@@ -82,11 +82,11 @@ size/offset buffers or result-copy loop. Virtualized lists use the same `[]Rect`
 representation for the rows they measure themselves.
 
 `ggui.Point`, `Size`, and `Rect` alias the types in this package. Geometry
-consumers import `github.com/ironpark/ggui/pkg/layout` directly.
+consumers import `github.com/ironpark/ggui/layout` directly.
 
 Scroll behavior, virtualized item lifetimes/estimation, reactive caches, and text
 shaping remain in ggui. Extracting those domains or publishing a separate module
 is independent of using this layout package.
 
-Run `go test ./pkg/layout` for the renderer-independent contract tests and example,
+Run `go test ./layout` for the renderer-independent contract tests and example,
 or `go test ./...` to verify ggui integration as well.

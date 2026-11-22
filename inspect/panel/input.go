@@ -5,7 +5,7 @@ package panel
 import (
 	"fmt"
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/gem"
 	"slices"
 	"strings"
 	"unicode/utf8"

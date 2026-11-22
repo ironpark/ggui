@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/pkg/gem"
-	"github.com/ironpark/ggui/pkg/kinetics"
+	"github.com/ironpark/ggui/kinetics"
 	"github.com/ironpark/ggui/property"
 )
 
@@ -46,7 +46,7 @@ func EaseIn(t float64) float64 { return kinetics.EaseIn(t) }
 // EaseInOut accelerates, then decelerates (cubic).
 func EaseInOut(t float64) float64 { return kinetics.EaseInOut(t) }
 
-// The curves below are pkg/kinetics', where their tests and
+// The curves below are kinetics', where their tests and
 // benchmarks are.
 
 // CubicBezier returns the easing CSS writes cubic-bezier(x1, y1, x2, y2): the
