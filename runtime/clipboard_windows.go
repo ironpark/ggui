@@ -3,7 +3,9 @@
 package runtime
 
 import (
+	goruntime "runtime"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -36,6 +38,8 @@ const (
 
 func nativeClipboard() Clipboard { return winClipboard{} }
 
+var clipboardMu sync.Mutex
+
 // winClipboard is the system clipboard through user32.
 type winClipboard struct{}
 
@@ -52,6 +56,10 @@ func open() bool {
 }
 
 func (winClipboard) Read() string {
+	clipboardMu.Lock()
+	defer clipboardMu.Unlock()
+	goruntime.LockOSThread()
+	defer goruntime.UnlockOSThread()
 	if !open() {
 		return ""
 	}
@@ -78,6 +86,10 @@ func (winClipboard) Write(s string) {
 		// s holds a NUL, which the clipboard's text format cannot.
 		u, _ = windows.UTF16FromString(strings.ReplaceAll(s, "\x00", ""))
 	}
+	clipboardMu.Lock()
+	defer clipboardMu.Unlock()
+	goruntime.LockOSThread()
+	defer goruntime.UnlockOSThread()
 	if !open() {
 		return
 	}

@@ -21,12 +21,15 @@ import (
 
 const ptrSize = unsafe.Sizeof(uintptr(0))
 
-// winHandOut writes one of an object's interface slots into a caller's out
-// parameter, with the reference COM requires the caller to own. A zero base
-// means there is nothing there, which is a success with a null result:
-// "no parent" is an answer, not a failure.
+// winHandOut adopts a caller-owned COM reference to base and writes its
+// interface slot k into ppv. When ppv is nil, base is released so the caller
+// never leaks the reference. A zero base means there is nothing there, which
+// is a success with a null result: "no parent" is an answer, not a failure.
 func winHandOut(base uintptr, k int, ppv uintptr) uintptr {
 	if ppv == 0 {
+		if base != 0 {
+			comRelease(base)
+		}
 		return ePointer
 	}
 	*(*uintptr)(unsafe.Pointer(ppv)) = 0
@@ -34,7 +37,6 @@ func winHandOut(base uintptr, k int, ppv uintptr) uintptr {
 		return sOK
 	}
 	slot := base + uintptr(k)*ptrSize
-	comAddRef(slot)
 	*(*uintptr)(unsafe.Pointer(ppv)) = slot
 	return sOK
 }
@@ -107,7 +109,9 @@ func winGetPatternProvider(this, patternID, ppRetVal uintptr) uintptr {
 	if k < 0 || !o.offers(k) {
 		return winHandOut(0, 0, ppRetVal)
 	}
-	return winHandOut(uintptr(unsafe.Pointer(o)), k, ppRetVal)
+	base := uintptr(unsafe.Pointer(o))
+	comAddRef(base)
+	return winHandOut(base, k, ppRetVal)
 }
 
 // winPatternIface maps a UIA pattern identifier onto the interface that
@@ -188,6 +192,16 @@ func winGetPropertyValue(this, propertyID, pRetVal uintptr) uintptr {
 			return sOK
 		}
 		return varStr(v, n.Name)
+	case uiaAutomationIDProperty:
+		if s, is := n.ID.ID.(string); is && s != "" {
+			return varStr(v, s)
+		}
+		return sOK
+	case uiaLevelProperty:
+		if n.Level > 0 {
+			return varI4(v, int32(n.Level))
+		}
+		return sOK
 	case uiaHelpTextProperty:
 		if n.Description == "" {
 			return sOK
@@ -442,6 +456,10 @@ func winGetFragmentRoot(this, ppRetVal uintptr) uintptr {
 // receive a floating-point argument; see the thunk that puts them where
 // this can read them.
 func winElementFromPoint(this, xBits, yBits, ppRetVal uintptr) uintptr {
+	return winElementFromPointXY(this, math.Float64frombits(uint64(xBits)), math.Float64frombits(uint64(yBits)), ppRetVal)
+}
+
+func winElementFromPointXY(this uintptr, x, y float64, ppRetVal uintptr) uintptr {
 	_, b, _, _ := selfOf(this)
 	f := winFrame(b)
 	h := winHandle(b)
@@ -453,10 +471,7 @@ func winElementFromPoint(this, xBits, yBits, ppRetVal uintptr) uintptr {
 	if s == 0 {
 		return winHandOut(0, 0, ppRetVal)
 	}
-	p := a11y.Pt(
-		(math.Float64frombits(uint64(xBits))-ox)/s,
-		(math.Float64frombits(uint64(yBits))-oy)/s,
-	)
+	p := a11y.Pt((x-ox)/s, (y-oy)/s)
 	i := axHitTest(f.tree, p)
 	if i < 0 {
 		return winHandOut(0, 0, ppRetVal)
@@ -534,9 +549,13 @@ func winIsReadOnly(this, pRetVal uintptr) uintptr {
 // winRangeSetValue moves a slider to a number. Like the hit test, the
 // number arrives as raw bits from a thunk.
 func winRangeSetValue(this, valBits uintptr) uintptr {
+	return winRangeSetValueF64(this, math.Float64frombits(uint64(valBits)))
+}
+
+func winRangeSetValueF64(this uintptr, val float64) uintptr {
 	return winAct(this, axSetValue, a11y.Action{
 		Kind: a11y.ActionSetValue,
-		Num:  math.Float64frombits(uint64(valBits)),
+		Num:  val,
 	})
 }
 

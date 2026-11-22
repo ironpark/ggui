@@ -139,3 +139,42 @@ func TestSetWantsDetailIsSeenByWantsDetail(t *testing.T) {
 		t.Error("WantsDetail = true after SetWantsDetail(false)")
 	}
 }
+
+func TestDetailRefcountingDoesNotClobberOtherHolders(t *testing.T) {
+	SetWantsDetail(false)
+	if WantsDetail() {
+		t.Fatal("WantsDetail = true before AcquireDetail")
+	}
+	AcquireDetail()
+	AcquireDetail()
+	if !WantsDetail() {
+		t.Fatal("WantsDetail = false with two active claims")
+	}
+	ReleaseDetail()
+	if !WantsDetail() {
+		t.Fatal("WantsDetail = false after releasing only one of two claims")
+	}
+	ReleaseDetail()
+	if WantsDetail() {
+		t.Fatal("WantsDetail = true after releasing all claims")
+	}
+	// Extra releases must not underflow into negative counts.
+	ReleaseDetail()
+	AcquireDetail()
+	if !WantsDetail() {
+		t.Fatal("WantsDetail = false after re-acquiring following extra release")
+	}
+	ReleaseDetail()
+}
+
+func TestSelectionNormalizesBackwardsRange(t *testing.T) {
+	t.Parallel()
+	n := Node{Value: "aé😀b", SelStart: 7, SelEnd: 1}
+	loc, length := Selection(n)
+	if loc != 1 || length != 3 {
+		t.Fatalf("Selection(backwards) = %d+%d, want 1+3", loc, length)
+	}
+	if got := Selected(n); got != "é😀" {
+		t.Fatalf("Selected(backwards) = %q, want %q", got, "é😀")
+	}
+}

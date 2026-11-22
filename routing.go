@@ -55,7 +55,7 @@ func (in *inputState) sameRegion(now, prev *hitRegion, key bool) bool {
 		return false
 	}
 	if prev.id != nil {
-		return now.id == prev.id
+		return gem.Same(now.id, prev.id)
 	}
 	return now.id == nil && now.rect == prev.rect
 }
@@ -267,7 +267,7 @@ func (in *inputState) sameWithin(i int32, prev *hitRegion, h any) bool {
 	}
 	r := &in.regions[i]
 	if prev.id != nil {
-		return r.id == prev.id
+		return gem.Same(r.id, prev.id)
 	}
 	return r.id == nil && r.rect == prev.rect
 }

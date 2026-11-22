@@ -155,6 +155,9 @@ func (h *ShortcutHandle) Chord() Chord { return h.chord }
 // focused widget sees them -- and returns what is left for the widget. The
 // frame's slice belongs to the caller of dispatch, so a removal clones it.
 func (in *inputState) consumeBindings(keys []KeyboardKey, mods Mods) []KeyboardKey {
+	if len(keys) == 0 {
+		return keys
+	}
 	// A chord the focused handler claims is its own: none of the bindings
 	// below sees it.
 	claimed := func(k KeyboardKey) bool { return in.claimedBy(KeyEvent{Kind: KeyPress, Key: k, Mods: mods}) != nil }
@@ -169,11 +172,24 @@ func (in *inputState) consumeBindings(keys []KeyboardKey, mods Mods) []KeyboardK
 		keys = in.withoutShortcuts(keys, mods, claimed)
 	}
 	if len(in.chords) > 0 || len(in.painted) > 0 {
-		keys = slices.DeleteFunc(slices.Clone(keys), func(k KeyboardKey) bool {
-			return !claimed(k) && in.runChords(k, mods, true)
-		})
+		keys = in.withoutChords(keys, mods, claimed)
 	}
 	return keys
+}
+
+// withoutChords returns keys less those a before-focus chord consumed, copying
+// only once one has.
+func (in *inputState) withoutChords(keys []KeyboardKey, mods Mods, claimed func(KeyboardKey) bool) []KeyboardKey {
+	out, copied := keys, false
+	for i, k := range keys {
+		switch taken := !claimed(k) && in.runChords(k, mods, true); {
+		case taken && !copied:
+			out, copied = slices.Clone(keys[:i]), true
+		case !taken && copied:
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 // claimedBy returns the focused handler when it claims ev, else nil.

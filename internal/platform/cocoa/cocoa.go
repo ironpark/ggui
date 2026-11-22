@@ -16,6 +16,9 @@ import (
 )
 
 var (
+	selAlloc                = objc.RegisterName("alloc")
+	selInit                 = objc.RegisterName("init")
+	selDrain                = objc.RegisterName("drain")
 	selSharedApplication    = objc.RegisterName("sharedApplication")
 	selCount                = objc.RegisterName("count")
 	selObjectAtIndex        = objc.RegisterName("objectAtIndex:")
@@ -23,10 +26,24 @@ var (
 	selArrayWithObjects     = objc.RegisterName("arrayWithObjects:count:")
 	selArray                = objc.RegisterName("array")
 
-	classNSString = objc.ID(objc.GetClass("NSString"))
-	classNSArray  = objc.ID(objc.GetClass("NSArray"))
-	classNSApp    = objc.ID(objc.GetClass("NSApplication"))
+	classNSAutoreleasePool objc.ID
+	classNSString          objc.ID
+	classNSArray           objc.ID
+	classNSApp             objc.ID
 )
+
+// WithAutoreleasePool runs fn on a locked OS thread inside a fresh
+// NSAutoreleasePool that is drained before returning.
+func WithAutoreleasePool(fn func()) {
+	if fn == nil {
+		return
+	}
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	pool := classNSAutoreleasePool.Send(selAlloc).Send(selInit)
+	defer pool.Send(selDrain)
+	fn()
+}
 
 // App is the shared NSApplication.
 func App() objc.ID { return classNSApp.Send(selSharedApplication) }
@@ -103,6 +120,12 @@ var (
 )
 
 func init() {
+	if _, err := purego.Dlopen("/System/Library/Frameworks/Foundation.framework/Foundation", purego.RTLD_LAZY|purego.RTLD_GLOBAL); err != nil {
+		panic(err)
+	}
+	if _, err := purego.Dlopen("/System/Library/Frameworks/AppKit.framework/AppKit", purego.RTLD_LAZY|purego.RTLD_GLOBAL); err != nil {
+		panic(err)
+	}
 	libSystem, err := purego.Dlopen("/usr/lib/libSystem.B.dylib", purego.RTLD_LAZY|purego.RTLD_GLOBAL)
 	if err != nil {
 		panic(err)
@@ -111,6 +134,10 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+	classNSAutoreleasePool = objc.ID(objc.GetClass("NSAutoreleasePool"))
+	classNSString = objc.ID(objc.GetClass("NSString"))
+	classNSArray = objc.ID(objc.GetClass("NSArray"))
+	classNSApp = objc.ID(objc.GetClass("NSApplication"))
 }
 
 // Block is a global block whose body is fn. It is made once and kept for

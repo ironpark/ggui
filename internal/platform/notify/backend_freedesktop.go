@@ -22,13 +22,24 @@ type fdSent struct {
 	foreground []string // the actions that bring the app forward
 }
 
+// fdEarly holds signals that arrived for a notification number while a Notify
+// call was still in flight (before post recorded the returned number in sent).
+type fdEarly struct {
+	closed  bool
+	actions []string
+}
+
+const maxEarlySignals = 64
+
 var fd struct {
 	sync.Mutex
-	conn   *busConn
-	failed error             // the reason the bus could not be reached
-	markup bool              // the service reads markup in the body
-	ids    map[string]uint32 // a notification's ID to the service's number
-	sent   map[uint32]fdSent // the service's number to the notification
+	conn     *busConn
+	failed   error               // the reason the bus could not be reached
+	markup   bool                // the service reads markup in the body
+	ids      map[string]uint32   // a notification's ID to the service's number
+	sent     map[uint32]fdSent   // the service's number to the notification
+	inFlight int                 // active Notify calls awaiting their reply
+	early    map[uint32]*fdEarly // signals received while inFlight > 0
 }
 
 func setup() {}
@@ -76,10 +87,9 @@ func connect() (*busConn, error) {
 		markup = slices.Contains(caps, any("body-markup"))
 	}
 	fd.Lock()
-	fd.conn, fd.markup = conn, markup
-	if fd.ids == nil {
-		fd.ids, fd.sent = map[string]uint32{}, map[uint32]fdSent{}
-	}
+	fd.conn, fd.failed, fd.markup = conn, nil, markup
+	fd.ids, fd.sent = map[string]uint32{}, map[uint32]fdSent{}
+	fd.early = nil
 	fd.Unlock()
 	return conn, nil
 }
@@ -99,24 +109,52 @@ func post(n Notification) error {
 	if n.ID != "" {
 		fo.replaces = fd.ids[n.ID]
 	}
+	fd.inFlight++
 	fd.Unlock()
 	r, err := conn.call(fdService, fdPath, fdService, "Notify", fdNotify, notifyArgs(n, fo)...)
 	if err != nil {
+		fd.Lock()
+		fd.inFlight--
+		if fd.inFlight == 0 {
+			fd.early = nil
+		}
+		fd.Unlock()
 		return err
 	}
 	var num uint32
 	if len(r.body) == 1 {
 		num, _ = r.body[0].(uint32)
 	}
+	sent := fdSent{id: n.ID, data: n.Data, foreground: foregroundIDs(n.Actions)}
+	var early *fdEarly
 	fd.Lock()
-	defer fd.Unlock()
+	fd.inFlight--
+	if fd.early != nil {
+		early = fd.early[num]
+		delete(fd.early, num)
+	}
+	if fd.inFlight == 0 {
+		fd.early = nil
+	}
 	if fo.replaces != 0 && fo.replaces != num {
 		delete(fd.sent, fo.replaces)
 	}
-	if n.ID != "" {
-		fd.ids[n.ID] = num
+	if early != nil && early.closed {
+		if n.ID != "" && fd.ids[n.ID] == fo.replaces {
+			delete(fd.ids, n.ID)
+		}
+	} else {
+		if n.ID != "" {
+			fd.ids[n.ID] = num
+		}
+		fd.sent[num] = sent
 	}
-	fd.sent[num] = fdSent{id: n.ID, data: n.Data, foreground: foregroundIDs(n.Actions)}
+	fd.Unlock()
+	if early != nil {
+		for _, key := range early.actions {
+			deliverFDAction(sent, key)
+		}
+	}
 	return nil
 }
 
@@ -131,6 +169,12 @@ func remove(id string) {
 	if _, err := conn.call(fdService, fdPath, fdService, "CloseNotification", "u", num); err != nil {
 		Report(err)
 	}
+	fd.Lock()
+	if fd.conn == conn && fd.ids[id] == num {
+		delete(fd.ids, id)
+		delete(fd.sent, num)
+	}
+	fd.Unlock()
 }
 
 // permission: the service asks nobody.
@@ -149,10 +193,28 @@ func onSignal(m *message) {
 	num, _ := m.body[0].(uint32)
 	fd.Lock()
 	s, ok := fd.sent[num]
-	if m.member == "NotificationClosed" && ok {
-		delete(fd.sent, num)
-		if fd.ids[s.id] == num {
-			delete(fd.ids, s.id)
+	if ok {
+		if m.member == "NotificationClosed" {
+			delete(fd.sent, num)
+			if fd.ids[s.id] == num {
+				delete(fd.ids, s.id)
+			}
+		}
+	} else if fd.inFlight > 0 && (m.member == "NotificationClosed" || m.member == "ActionInvoked") {
+		if fd.early == nil {
+			fd.early = map[uint32]*fdEarly{}
+		}
+		e := fd.early[num]
+		if e == nil && len(fd.early) < maxEarlySignals {
+			e = &fdEarly{}
+			fd.early[num] = e
+		}
+		if e != nil {
+			if m.member == "NotificationClosed" {
+				e.closed = true
+			} else if key, _ := m.body[1].(string); key != "" {
+				e.actions = append(e.actions, key)
+			}
 		}
 	}
 	fd.Unlock()
@@ -160,6 +222,10 @@ func onSignal(m *message) {
 		return
 	}
 	key, _ := m.body[1].(string)
+	deliverFDAction(s, key)
+}
+
+func deliverFDAction(s fdSent, key string) {
 	action, ok := fdAction(key)
 	if !ok {
 		return

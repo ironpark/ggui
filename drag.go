@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // The drag session: what input does while something is dragged. A drag
@@ -158,12 +160,14 @@ func (in *inputState) updateAppDrag(f frameInput) {
 		return ok && r.contains(f.pos) && t.AcceptsDrop(d.value)
 	})
 	if !in.continues(now, d.target) {
-		if d.target != nil {
-			d.target.pointer.(DropTarget).DropHover(false)
-		}
+		in.unhoverDrop(d.target)
 		if now != nil {
 			now.pointer.(DropTarget).DropHover(true)
 		}
+	} else if now != nil && (d.target == nil || !gem.Same(now.pointer, d.target.pointer)) {
+		// The drop target was rebuilt in place under the drag: tell the new
+		// instance it is hovered.
+		now.pointer.(DropTarget).DropHover(true)
 	}
 	d.target = keep(now)
 	if now != nil && !released {
@@ -208,11 +212,26 @@ func (in *inputState) cancelAppDrag() bool {
 	if d == nil || d.source == nil {
 		return false
 	}
-	if d.target != nil {
-		d.target.pointer.(DropTarget).DropHover(false)
-	}
+	in.unhoverDrop(d.target)
 	d.source.DragEnded(false)
 	return true
+}
+
+// unhoverDrop tells the drop target for target that the drag left it,
+// resolving target to the current frame's handler when the widget was rebuilt.
+func (in *inputState) unhoverDrop(target *hitRegion) {
+	if target == nil {
+		return
+	}
+	if cur := in.findPointer(target); cur != nil {
+		if t, ok := cur.pointer.(DropTarget); ok {
+			t.DropHover(false)
+			return
+		}
+	}
+	if t, ok := target.pointer.(DropTarget); ok {
+		t.DropHover(false)
+	}
 }
 
 // Files dropped onto the window from the desktop. The platform reports a

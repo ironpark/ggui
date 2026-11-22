@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -93,13 +95,15 @@ var (
 	procGlobalAlloc            = kernel32.NewProc("GlobalAlloc")
 )
 
-// toasts is the state of the app's toasts. The objects are touched only
-// on the posting goroutine; the mutex guards what check reads.
+// toasts is the state of the app's toasts. The COM objects are touched only
+// on the MTA posting goroutine; the mutex and atomics guard what check reads.
 var toasts struct {
 	sync.Mutex
 	initErr error // why WinRT gave no notifier
 
 	ready    bool
+	denied   atomic.Bool  // cached !enabled(), updated only on the MTA work goroutine
+	recheck  atomic.Int64 // Unix nanoseconds when a denied refresh was last queued
 	aumid    string
 	notifier uintptr // IToastNotifier
 	factory  uintptr // IToastNotificationFactory
@@ -122,6 +126,8 @@ const keepUntagged = 32
 
 func setup() {}
 
+const recheckInterval = 2 * time.Second
+
 func check() error {
 	toasts.Lock()
 	ready, err := toasts.ready, toasts.initErr
@@ -129,7 +135,15 @@ func check() error {
 	switch {
 	case err != nil:
 		return fmt.Errorf("%w: %v", ErrUnavailable, err)
-	case ready && !enabled():
+	case ready && toasts.denied.Load():
+		now := time.Now().UnixNano()
+		if last := toasts.recheck.Load(); now-last > int64(recheckInterval) && toasts.recheck.CompareAndSwap(last, now) {
+			enqueue(func() {
+				if start() == nil {
+					enabled()
+				}
+			})
+		}
 		return errDenied
 	}
 	return nil
@@ -137,13 +151,14 @@ func check() error {
 
 var errDenied = fmt.Errorf("%w in Settings, System, Notifications", ErrDenied)
 
-// enabled reports whether the app's toasts are turned on, as the notifier
-// says at the moment. The notifier lives in the process's multithreaded
-// apartment, which any thread may call it from; it is read only once
-// made.
+// enabled reports whether the app's toasts are turned on and caches the result
+// for check(). It must only be called on the MTA work() goroutine after
+// toasts.notifier has been created.
 func enabled() bool {
 	var setting int32
-	return failed(call(toasts.notifier, mGetSetting, uintptr(unsafe.Pointer(&setting)))) || setting == settingEnabled
+	ok := failed(call(toasts.notifier, mGetSetting, uintptr(unsafe.Pointer(&setting)))) || setting == settingEnabled
+	toasts.denied.Store(!ok)
+	return ok
 }
 
 // failed reports whether hr is a failure.
@@ -284,6 +299,7 @@ func initToasts() error {
 	toasts.aumid, toasts.notifier, toasts.factory, toasts.history = id, notifier, factory, history
 	toasts.handler = newActivatedHandler()
 	toasts.byTag = map[string]uintptr{}
+	enabled()
 	return nil
 }
 

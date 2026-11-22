@@ -1382,3 +1382,145 @@ func TestLookupFollowsRowsReordered(t *testing.T) {
 		t.Fatalf("drags a=%d b=%d c=%d, want only c's", a.drags, b.drags, c.drags)
 	}
 }
+
+func TestSecondaryButtonDownPreservesActivePressAndDragMods(t *testing.T) {
+	t.Parallel()
+	var dragMods Mods
+	var ups, taps int
+	w := onPointer(sized(50, 50), func(ev PointerEvent) bool {
+		switch ev.Kind {
+		case PointerDrag:
+			dragMods = ev.Mods
+		case PointerUp:
+			if ev.Button == MouseButtonLeft {
+				ups++
+			}
+		case PointerTap:
+			if ev.Button == MouseButtonLeft {
+				taps++
+			}
+		}
+		return ev.Kind == PointerDown || ev.Kind == PointerDrag || ev.Kind == PointerUp || ev.Kind == PointerTap
+	})
+	var in inputState
+	paintFrame(&in, w, Sz(50, 50))
+	in.dispatch(frameInput{pos: Pt(10, 10), down: []MouseButton{MouseButtonLeft}})
+	// Secondary button press while left is held must not clobber the active press.
+	in.dispatch(frameInput{pos: Pt(10, 10), down: []MouseButton{MouseButtonRight}})
+	in.dispatch(frameInput{pos: Pt(15, 10), mods: Mods{Shift: true}})
+	in.dispatch(frameInput{pos: Pt(15, 10), up: []MouseButton{MouseButtonRight}})
+	in.dispatch(frameInput{pos: Pt(15, 10), up: []MouseButton{MouseButtonLeft}})
+	if !dragMods.Shift {
+		t.Fatalf("PointerDrag Mods = %+v, want Shift=true", dragMods)
+	}
+	if ups != 1 || taps != 1 {
+		t.Fatalf("left ups=%d taps=%d, want 1, 1", ups, taps)
+	}
+}
+
+func TestStationaryPointerDragSkipsTouch(t *testing.T) {
+	t.Parallel()
+	w := onPointer(sized(50, 50), func(ev PointerEvent) bool {
+		return ev.Kind == PointerDown || ev.Kind == PointerDrag || ev.Kind == PointerUp
+	})
+	var in inputState
+	paintFrame(&in, w, Sz(50, 50))
+	in.dispatch(frameInput{pos: Pt(10, 10), down: []MouseButton{MouseButtonLeft}})
+	in.takeTouched()
+	// Holding the button stationary without moving must not mark the region dirty.
+	in.dispatch(frameInput{pos: Pt(10, 10)})
+	if touched, _ := in.takeTouched(); len(touched) != 0 {
+		t.Fatalf("stationary PointerDrag touched %v, want empty", touched)
+	}
+	// Moving while dragging marks the region dirty.
+	in.dispatch(frameInput{pos: Pt(12, 10)})
+	if touched, _ := in.takeTouched(); len(touched) != 1 {
+		t.Fatalf("moving PointerDrag touched %v, want 1 rect", touched)
+	}
+}
+
+func TestUncomparableIDAndScopeOwnerDoNotPanic(t *testing.T) {
+	t.Parallel()
+	id := []int{1}
+	owner := []int{2}
+	scope := &focusScope{owner: owner}
+	kh := onKey(sized(20, 20), nil)
+	r1 := hitRegion{rect: Rct(Pt(0, 0), Sz(20, 20)), id: id, key: kh, scope: scope}
+	r2 := hitRegion{rect: Rct(Pt(0, 0), Sz(20, 20)), id: []int{1}, pointer: onPointer(sized(20, 20), nil)}
+	// Merging uncomparable IDs must not panic.
+	_ = r1.merge(r2)
+	var in inputState
+	in.setRegions([]hitRegion{r1}, nil, regionIndex{scopeAt: 0})
+	in.updateTrap()
+	in.moveFocus(1)
+	_ = in.continuing(&hitRegion{rect: r1.rect, id: []int{1}, key: onKey(sized(20, 20), nil)}, true)
+	_ = in.sameRegion(&r1, &hitRegion{rect: r1.rect, id: []int{1}, key: onKey(sized(20, 20), nil)}, true)
+}
+
+type testDragSrc struct{ ended bool }
+
+func (s *testDragSrc) DragValue() any           { return "item" }
+func (s *testDragSrc) DragMoved(at, grab Point) {}
+func (s *testDragSrc) DragEnded(dropped bool)   { s.ended = true }
+
+type testDropZone struct {
+	hovers []bool
+}
+
+func (z *testDropZone) HandlePointer(PointerEvent) bool { return false }
+func (z *testDropZone) AcceptsDrop(v any) bool          { return v == "item" }
+func (z *testDropZone) DropHover(over bool)             { z.hovers = append(z.hovers, over) }
+func (z *testDropZone) DropOver(any, Point)             {}
+func (z *testDropZone) Drop(any, Point)                 {}
+
+func TestRebuiltDropTargetReceivesHoverAndResolvedUnhover(t *testing.T) {
+	t.Parallel()
+	src := &testDragSrc{}
+	z1, z2 := &testDropZone{}, &testDropZone{}
+	r := Rct(Pt(0, 0), Sz(100, 100))
+	var in inputState
+	in.setRegions([]hitRegion{
+		{rect: r, full: r, drag: src},
+		{rect: r, full: r, id: "zone", pointer: z1},
+	}, nil, regionIndex{scopeAt: -1})
+
+	in.dispatch(frameInput{pos: Pt(10, 10), down: []MouseButton{MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(25, 10)})
+	if !slices.Equal(z1.hovers, []bool{true}) {
+		t.Fatalf("z1 hovers = %v, want [true]", z1.hovers)
+	}
+
+	// Rebuild the drop zone with a new handler carrying the same ID.
+	in.setRegions([]hitRegion{
+		{rect: r, full: r, drag: src},
+		{rect: r, full: r, id: "zone", pointer: z2},
+	}, nil, regionIndex{scopeAt: -1})
+	in.dispatch(frameInput{pos: Pt(26, 10)})
+	if !slices.Equal(z2.hovers, []bool{true}) {
+		t.Fatalf("rebuilt z2 hovers = %v, want [true]", z2.hovers)
+	}
+
+	// Cancel the drag after rebuilding again to z3; z3 receives DropHover(false).
+	z3 := &testDropZone{}
+	in.setRegions([]hitRegion{
+		{rect: r, full: r, drag: src},
+		{rect: r, full: r, id: "zone", pointer: z3},
+	}, nil, regionIndex{scopeAt: -1})
+	if !in.cancelAppDrag() {
+		t.Fatal("cancelAppDrag returned false")
+	}
+	if !slices.Equal(z3.hovers, []bool{false}) {
+		t.Fatalf("resolved rebuilt z3 hovers = %v, want [false]", z3.hovers)
+	}
+}
+
+func TestConsumeBindingsAvoidsCloningWhenUnmatched(t *testing.T) {
+	t.Parallel()
+	var in inputState
+	in.addShortcut("cmd+s", func() {})
+	keys := []KeyboardKey{KeyA, KeyB}
+	out := in.consumeBindings(keys, Mods{})
+	if len(out) != 2 || &out[0] != &keys[0] {
+		t.Fatal("consumeBindings cloned keys even though no shortcut matched")
+	}
+}

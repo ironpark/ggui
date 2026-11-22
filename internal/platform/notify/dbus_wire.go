@@ -493,6 +493,9 @@ func (d *decoder) value(t string, depth int) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+		if uint64(n) >= uint64(len(d.b)-d.pos) {
+			return nil, errShort
+		}
 		b, err := d.take(int(n) + 1)
 		if err != nil {
 			return nil, err
@@ -520,10 +523,10 @@ func (d *decoder) value(t string, depth int) (any, error) {
 		if err := d.align(alignment(elem)); err != nil {
 			return nil, err
 		}
-		end := d.pos + int(n)
-		if end > len(d.b) {
+		if int(n) > len(d.b)-d.pos {
 			return nil, errShort
 		}
+		end := d.pos + int(n)
 		items := []any{}
 		for d.pos < end {
 			v, err := d.value(elem, depth+1)

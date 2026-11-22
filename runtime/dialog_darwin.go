@@ -4,6 +4,7 @@ package runtime
 
 import (
 	"sync"
+	"unsafe"
 
 	"github.com/ebitengine/purego/cstrings"
 	"github.com/ebitengine/purego/objc"
@@ -47,15 +48,54 @@ var (
 // nsModalResponseOK is what a panel returns when the user chose.
 const nsModalResponseOK = 1
 
+type sheetModal struct {
+	inModal  bool
+	done     bool
+	response int
+}
+
+// activeSheet tracks the in-flight sheet on the main thread so a completion
+// handler fired synchronously during beginSheetModalForWindow: records its
+// response and prevents entering a modal loop that would never terminate.
+var activeSheet *sheetModal
+
 // sheetDone is the sheet's completion handler: the sheet has closed with a
-// response, and the modal loop runSheet started is told so. It is made on
+// response, and the modal loop runSheetModal started is told so. It is made on
 // first use, since a block takes a callback slot for the life of the
 // process and most apps never open a sheet.
 var sheetDone = sync.OnceValue(func() *cocoa.Block {
 	return cocoa.NewBlock(func(_ uintptr, response int) {
+		if s := activeSheet; s != nil {
+			s.done = true
+			s.response = response
+			if !s.inModal {
+				return
+			}
+		}
 		cocoa.App().Send(selStopModalWithCode, response)
 	})
 })
+
+// runSheetModal presents a sheet via begin (passing sheetDone().Ptr() as the
+// completion handler) and runs the modal loop on modalWin unless begin already
+// invoked the completion handler synchronously. Must run on the main thread.
+func runSheetModal(modalWin objc.ID, begin func(handler unsafe.Pointer)) int {
+	prev := activeSheet
+	s := &sheetModal{}
+	activeSheet = s
+	defer func() { activeSheet = prev }()
+
+	begin(sheetDone().Ptr())
+	if s.done {
+		return s.response
+	}
+	s.inModal = true
+	resp := objc.Send[int](cocoa.App(), selRunModalForWindow, modalWin)
+	if s.done {
+		return s.response
+	}
+	return resp
+}
 
 // showDialog runs the panel on the main thread and waits for it.
 func showDialog(k dialogKind, d FileDialog, owner uintptr) (paths []string, err error) {
@@ -115,8 +155,9 @@ func runSheet(panel, win objc.ID) int {
 	if win == 0 {
 		return objc.Send[int](panel, selRunModal)
 	}
-	panel.Send(selBeginSheetModal, win, sheetDone().Ptr())
-	return objc.Send[int](cocoa.App(), selRunModalForWindow, panel)
+	return runSheetModal(panel, func(handler unsafe.Pointer) {
+		panel.Send(selBeginSheetModal, win, handler)
+	})
 }
 
 // extensions flattens the filters into the one list of extensions a panel

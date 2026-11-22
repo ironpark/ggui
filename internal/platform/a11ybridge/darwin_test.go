@@ -9,6 +9,7 @@ import (
 	"github.com/ebitengine/purego/cstrings"
 	"github.com/ebitengine/purego/objc"
 	"github.com/ironpark/ggui/a11y"
+	"github.com/ironpark/ggui/internal/platform/cocoa"
 )
 
 func TestAXElementsResolveTheirOwningBridge(t *testing.T) {
@@ -113,4 +114,33 @@ func TestAXRolesCoverEveryRole(t *testing.T) {
 	if role, _ := axRole(a11y.Role("nonsense")); role != "AXUnknown" {
 		t.Errorf("an unknown role mapped to %s", role)
 	}
+}
+
+func TestAXSetValueIgnoresUnexpectedObjCType(t *testing.T) {
+	cocoa.WithAutoreleasePool(func() {
+		var acts []a11y.Action
+		d := &darwinAX{}
+		b := &Bridge{
+			plat: d,
+			act:  func(_ a11y.NodeID, a a11y.Action) { acts = append(acts, a) },
+		}
+		d.bridge = b
+		tree := axRoots(a11y.SemNode{Role: a11y.RoleSlider, Actions: a11y.ActionSetValue})
+		b.cur.Store(newAXFrame(tree))
+		defer b.clear()
+		e := objc.ID(b.element(axKeyOf(tree.At(0).ID)))
+
+		// Passing an NSArray (neither NSString nor NSNumber) must be ignored
+		// rather than raising an ObjC unrecognized-selector exception on doubleValue.
+		e.Send(axSelSetValue, cocoa.Array(nil))
+		if len(acts) != 0 {
+			t.Fatalf("unexpected action for NSArray value: %+v", acts)
+		}
+
+		// Passing an NSNumber still delivers the numeric value.
+		e.Send(axSelSetValue, nsNumber(42.5))
+		if len(acts) != 1 || acts[0].Num != 42.5 {
+			t.Fatalf("actions = %+v, want single numeric value 42.5", acts)
+		}
+	})
 }

@@ -155,3 +155,14 @@ func TestReadsBigEndian(t *testing.T) {
 		t.Errorf("big-endian reply %+v", m)
 	}
 }
+
+func TestDecodeStringRejectsMaxUint32Length(t *testing.T) {
+	// On 32-bit architectures, int(0xffffffff)+1 overflows to 0; decoding
+	// must reject the length before calling take rather than panicking.
+	var buf [8]byte
+	binary.LittleEndian.PutUint32(buf[:4], 0xffffffff)
+	d := decoder{b: buf[:], order: binary.LittleEndian}
+	if _, err := d.value("s", 0); err == nil {
+		t.Fatal("decoded string with 0xffffffff length without error")
+	}
+}

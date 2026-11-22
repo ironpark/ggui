@@ -275,13 +275,18 @@ func (a *App) OnNotification(fn func(NotificationResponse)) {
 // notifications are available and, on Windows, turned on. An app outside
 // a bundle on macOS, which posts through osascript, is told true.
 func (a *App) RequestNotificationPermission(fn func(granted bool)) {
+	if fn == nil {
+		return
+	}
 	a.startNotifications()
 	notify.RequestPermission(func(granted bool) {
 		w := a.activeWindow()
 		if w == nil {
 			w = a.Window
 		}
-		w.post(func() { fn(granted) })
+		if w != nil {
+			w.post(func() { fn(granted) })
+		}
 	})
 }
 

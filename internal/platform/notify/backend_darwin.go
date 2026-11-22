@@ -109,13 +109,15 @@ var loadFramework = sync.OnceValue(func() bool {
 // identifier, which UserNotifications needs: asked for its center without
 // one, it raises an exception that ends the process.
 var bundled = sync.OnceValue(func() bool {
-	pool := objc.ID(objc.GetClass("NSAutoreleasePool")).Send(selNew)
-	defer pool.Send(selDrain)
-	b := objc.ID(objc.GetClass("NSBundle")).Send(selMainBundle)
-	if b == 0 || b.Send(selBundleIdentifier) == 0 {
-		return false
-	}
-	return strings.HasSuffix(goString(b.Send(selBundlePath)), ".app") && loadFramework()
+	var ok bool
+	cocoa.WithAutoreleasePool(func() {
+		b := objc.ID(objc.GetClass("NSBundle")).Send(selMainBundle)
+		if b == 0 || b.Send(selBundleIdentifier) == 0 {
+			return
+		}
+		ok = strings.HasSuffix(goString(b.Send(selBundlePath)), ".app") && loadFramework()
+	})
+	return ok
 })
 
 // classes are the framework's classes, looked up once it is open.
@@ -179,15 +181,17 @@ func setup() {
 	if !bundled() {
 		return
 	}
-	class, err := delegateClass()
-	if err != nil {
-		Report(err)
-		return
-	}
-	cls = lookupClasses()
-	center = cls.center.Send(selCurrentCenter).Send(selRetain)
-	delegate = objc.ID(class).Send(selAlloc).Send(selInit)
-	center.Send(selSetDelegate, delegate)
+	cocoa.WithAutoreleasePool(func() {
+		class, err := delegateClass()
+		if err != nil {
+			Report(err)
+			return
+		}
+		cls = lookupClasses()
+		center = cls.center.Send(selCurrentCenter).Send(selRetain)
+		delegate = objc.ID(class).Send(selAlloc).Send(selInit)
+		center.Send(selSetDelegate, delegate)
+	})
 }
 
 // recheck is how often a denial is asked about again: the user may allow
@@ -225,30 +229,32 @@ func askAuthorization() <-chan bool {
 	if inFlight {
 		return answer
 	}
-	block := objc.NewBlock(func(_ objc.Block, granted bool, err objc.ID) {
-		switch {
-		case granted:
-			auth.Store(authGranted)
-		case err != 0:
-			// Not the user's answer but the system's refusal to ask, as
-			// for an app it does not know: one run from a temporary
-			// directory, say. Each post asks again, and fails.
-			auth.Store(authUnknown)
-			Report(errors.New("asking to allow notifications: " + goString(err.Send(selLocalizedDesc))))
-		default:
-			auth.Store(authDenied)
-		}
-		authMu.Lock()
-		waiting := authWaiting
-		authWaiting = nil
-		authMu.Unlock()
-		for _, w := range waiting {
-			w <- granted
-		}
+	cocoa.WithAutoreleasePool(func() {
+		block := objc.NewBlock(func(_ objc.Block, granted bool, err objc.ID) {
+			switch {
+			case granted:
+				auth.Store(authGranted)
+			case err != 0:
+				// Not the user's answer but the system's refusal to ask, as
+				// for an app it does not know: one run from a temporary
+				// directory, say. Each post asks again, and fails.
+				auth.Store(authUnknown)
+				Report(errors.New("asking to allow notifications: " + goString(err.Send(selLocalizedDesc))))
+			default:
+				auth.Store(authDenied)
+			}
+			authMu.Lock()
+			waiting := authWaiting
+			authWaiting = nil
+			authMu.Unlock()
+			for _, w := range waiting {
+				w <- granted
+			}
+		})
+		center.Send(selRequestAuth, uint(authAlert|authSound), block)
+		// The center copied the block; the reference NewBlock made is ours.
+		block.Release()
 	})
-	center.Send(selRequestAuth, uint(authAlert|authSound), block)
-	// The center copied the block; the reference NewBlock made is ours.
-	block.Release()
 	return answer
 }
 

@@ -11,14 +11,16 @@ import (
 // everything above the platform seam can be tested without an assistive
 // technology, a window, or Objective-C.
 type axFake struct {
-	on      bool
-	next    uintptr
-	made    []int64
-	freed   []uintptr
-	asked   int
-	notes   []axNote
-	flushes int
-	handles map[uintptr]int64
+	on       bool
+	next     uintptr
+	made     []int64
+	retained []uintptr
+	onRetain func(uintptr)
+	freed    []uintptr
+	asked    int
+	notes    []axNote
+	flushes  int
+	handles  map[uintptr]int64
 }
 
 func newAXFake(on bool) *axFake {
@@ -35,6 +37,13 @@ func (f *axFake) element(handle int64) uintptr {
 	f.made = append(f.made, handle)
 	f.handles[f.next] = handle
 	return f.next
+}
+
+func (f *axFake) retain(elem uintptr) {
+	f.retained = append(f.retained, elem)
+	if f.onRetain != nil {
+		f.onRetain(elem)
+	}
 }
 
 func (f *axFake) release(elems []uintptr) { f.freed = append(f.freed, elems...) }
@@ -92,6 +101,7 @@ func TestAXKeyFollowsIdentityNotPosition(t *testing.T) {
 func TestAXElementsAreStableAndSweptByLiveness(t *testing.T) {
 	f := newAXFake(true)
 	b := &Bridge{plat: f, mode: a11y.Always}
+	defer b.Close()
 	keep := axNode(a11y.RoleButton, "keep", "keep", a11y.Rct(a11y.Pt(0, 0), a11y.Sz(10, 10)))
 	goes := axNode(a11y.RoleButton, "goes", "goes", a11y.Rct(a11y.Pt(0, 20), a11y.Sz(10, 10)))
 	b.Publish(axRoots(keep, goes), nil)
@@ -127,6 +137,7 @@ func TestAXStaleHandleResolvesToNothing(t *testing.T) {
 	// rather than whatever moved in.
 	f := newAXFake(true)
 	b := &Bridge{plat: f, mode: a11y.Always}
+	defer b.Close()
 	gone := axNode(a11y.RoleButton, "gone", "gone", a11y.Rct(a11y.Pt(0, 0), a11y.Sz(10, 10)))
 	b.Publish(axRoots(gone), nil)
 	e := b.element(axKeyOf(gone.ID))
@@ -341,6 +352,7 @@ func TestAXDiffReportsFocusAndSelection(t *testing.T) {
 func TestAXNotifiesOncePerFrameAndOnlyWhenThereIsNews(t *testing.T) {
 	f := newAXFake(true)
 	b := &Bridge{plat: f, mode: a11y.Always}
+	defer b.Close()
 	n := axNode(a11y.RoleSlider, "vol", "vol", a11y.Rct(a11y.Pt(0, 0), a11y.Sz(10, 10)))
 	b.Publish(axRoots(n), nil)
 	if f.flushes != 1 {
@@ -368,6 +380,7 @@ func TestAXReusedSnapshotStillAnnouncesAndPolls(t *testing.T) {
 	defer a11y.SetWantsDetail(oldDetail)
 	f := newAXFake(true)
 	b := &Bridge{plat: f, mode: a11y.Auto}
+	defer b.Close()
 	tree := axRoots(axNode(a11y.RoleButton, "save", "save", a11y.Rect{}))
 	b.Publish(tree, nil)
 	first := b.frame()
@@ -419,6 +432,7 @@ func TestAXPressReachesTheApp(t *testing.T) {
 	var at []a11y.NodeID
 	b := &Bridge{plat: newAXFake(true), mode: a11y.Always,
 		act: func(id a11y.NodeID, a a11y.Action) { at, got = append(at, id), append(got, a) }}
+	defer b.Close()
 	button := axNode(a11y.RoleButton, "ring", "bell", a11y.Rct(a11y.Pt(0, 0), a11y.Sz(40, 20)))
 	button.Actions = a11y.ActionPress | a11y.ActionFocus
 	b.Publish(axRoots(button), nil)
@@ -436,5 +450,76 @@ func TestAXPressReachesTheApp(t *testing.T) {
 	}
 	if len(at) != 1 || at[0].ID != "bell" {
 		t.Errorf("press aimed at %v, want the button", at)
+	}
+}
+
+func TestAXElementRetainsUnderLock(t *testing.T) {
+	f := newAXFake(true)
+	b := &Bridge{plat: f, mode: a11y.Always}
+	defer b.Close()
+	heldLock := false
+	f.onRetain = func(uintptr) {
+		if b.mu.TryLock() {
+			b.mu.Unlock()
+			t.Error("retain called without holding b.mu")
+		} else {
+			heldLock = true
+		}
+	}
+	btn := axNode(a11y.RoleButton, "ok", "ok", a11y.Rct(a11y.Pt(0, 0), a11y.Sz(10, 10)))
+	b.Publish(axRoots(btn), nil)
+	e := b.element(axKeyOf(btn.ID))
+	if !heldLock || len(f.retained) != 1 || f.retained[0] != e {
+		t.Fatalf("retain not invoked under lock: heldLock=%v retained=%v elem=%d", heldLock, f.retained, e)
+	}
+}
+
+func TestAXListeningAutoPollsWithoutForcingTreeBuild(t *testing.T) {
+	f := newAXFake(false)
+	b := &Bridge{plat: f, mode: a11y.Auto}
+	defer b.Close()
+	n := axNode(a11y.RoleButton, "x", "x", a11y.Rct(a11y.Pt(0, 0), a11y.Sz(10, 10)))
+	for range axPollFrames * 2 {
+		if b.Listening() {
+			t.Fatal("Listening returned true while no assistive technology was attached")
+		}
+		b.Publish(axRoots(n), nil)
+	}
+	if f.asked != 2 {
+		t.Fatalf("asked = %d in %d frames, want 2 (no double polling)", f.asked, axPollFrames*2)
+	}
+	f.on = true
+	attached := false
+	for range axPollFrames + 1 {
+		if b.Listening() {
+			attached = true
+			b.Publish(axRoots(n), nil)
+			break
+		}
+		b.Publish(axRoots(n), nil)
+	}
+	if !attached || b.frame() == nil {
+		t.Fatalf("attached=%v frame=%v, want immediate publish when AT attaches", attached, b.frame())
+	}
+}
+
+func TestAXMultiWindowDetailRefcount(t *testing.T) {
+	a11y.SetWantsDetail(false)
+	f1, f2 := newAXFake(true), newAXFake(true)
+	b1 := &Bridge{plat: f1, mode: a11y.Always}
+	b2 := &Bridge{plat: f2, mode: a11y.Always}
+	tree := axRoots(axNode(a11y.RoleButton, "x", "x", a11y.Rect{}))
+	b1.Publish(tree, nil)
+	b2.Publish(tree, nil)
+	if !a11y.WantsDetail() {
+		t.Fatal("WantsDetail = false with two active bridges")
+	}
+	b1.Close()
+	if !a11y.WantsDetail() {
+		t.Fatal("closing first bridge clobbered WantsDetail for second bridge")
+	}
+	b2.Close()
+	if a11y.WantsDetail() {
+		t.Fatal("WantsDetail = true after closing all bridges")
 	}
 }

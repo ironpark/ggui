@@ -9,6 +9,8 @@ import (
 	"os"
 	goruntime "runtime"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -101,4 +103,79 @@ func TestClaimInstanceReplacesAStaleSocket(t *testing.T) {
 		t.Fatalf("claim over a stale socket = %v, want it replaced", err)
 	}
 	release()
+}
+
+func TestClaimInstanceAllowsNilCallback(t *testing.T) {
+	t.Parallel()
+	id := instanceID(t)
+	release, err := ClaimInstance(id, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	if _, err := ClaimInstance(id, nil); !errors.Is(err, ErrRunning) {
+		t.Fatalf("second claim with nil callback = %v, want ErrRunning", err)
+	}
+}
+
+func TestClaimInstanceScopedByUIDAndRestricted(t *testing.T) {
+	t.Parallel()
+	if goruntime.GOOS == "windows" {
+		t.Skip("Windows uses per-user TempDir without POSIX UID/mode")
+	}
+	id := instanceID(t)
+	addr := instanceAddr(id)
+	if !strings.Contains(addr, "-"+strconv.Itoa(os.Getuid())) {
+		t.Fatalf("instanceAddr = %q, want UID %d in path", addr, os.Getuid())
+	}
+	if goruntime.GOOS == "linux" {
+		return
+	}
+	release, err := ClaimInstance(id, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	info, err := os.Stat(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("socket mode = %04o, want 0600", perm)
+	}
+}
+
+func TestClaimInstanceDoesNotRemoveLiveBusySocket(t *testing.T) {
+	t.Parallel()
+	if goruntime.GOOS == "linux" {
+		t.Skip("Linux abstract sockets have no file to remove")
+	}
+	id := instanceID(t)
+	addr := instanceAddr(id)
+	ln, err := net.Listen("unix", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	// Accept and immediately close without writing ack, simulating a live
+	// peer that rejects or fails handOver without being a dead socket.
+	accepted := make(chan struct{}, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		accepted <- struct{}{}
+		conn.Close()
+	}()
+
+	if release, err := ClaimInstance(id, nil); err == nil {
+		release()
+		t.Fatal("ClaimInstance replaced a live listening socket")
+	}
+	<-accepted
+	if _, err := os.Stat(addr); err != nil {
+		t.Fatalf("live socket file was removed: %v", err)
+	}
 }

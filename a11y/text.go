@@ -13,18 +13,39 @@ import (
 // Node.SelStart and SelEnd, and the Runs a text widget froze into it -- and
 // never from the live widget, which belongs to another thread.
 
-// axDetail reports whether anything is reading the tree closely enough to
+// WantsDetail reports whether anything is reading the tree closely enough to
 // want a text node's full layout. Building it costs a measurement per
 // character on every frame, which is not a price to pay while nothing is
 // listening; a widget asks this before filling Node.Runs.
-func WantsDetail() bool { return axWantsDetail.Load() }
+func WantsDetail() bool { return axDetailForce.Load() || axDetailRefs.Load() > 0 }
 
-// SetWantsDetail forces the answer WantsDetail gives. The bridge sets it
-// itself as assistive technologies come and go; a test that wants a widget
-// to freeze its text layout without one attached sets it by hand.
-func SetWantsDetail(on bool) { axWantsDetail.Store(on) }
+// SetWantsDetail forces the answer WantsDetail gives. A test that wants a
+// widget to freeze its text layout without an assistive technology attached
+// sets it by hand; bridges use AcquireDetail and ReleaseDetail so multiple
+// windows do not overwrite each other.
+func SetWantsDetail(on bool) { axDetailForce.Store(on) }
 
-var axWantsDetail atomic.Bool
+// AcquireDetail records that a bridge wants detailed text layout. Pair each
+// call with ReleaseDetail when the bridge detaches or closes.
+func AcquireDetail() { axDetailRefs.Add(1) }
+
+// ReleaseDetail releases one detail claim previously taken with AcquireDetail.
+func ReleaseDetail() {
+	for {
+		n := axDetailRefs.Load()
+		if n <= 0 {
+			return
+		}
+		if axDetailRefs.CompareAndSwap(n, n-1) {
+			return
+		}
+	}
+}
+
+var (
+	axDetailForce atomic.Bool
+	axDetailRefs  atomic.Int32
+)
 
 // axUTF16Len is the length of s in UTF-16 code units, which is what every
 // offset crossing into AppKit is counted in.
@@ -137,10 +158,12 @@ func (n Node) byteAt(u int) int {
 }
 
 // Selection is the selected range, as a UTF-16 location and length. An
-// empty selection is the caret, which is what it usually is.
+// empty selection is the caret, which is what it usually is. Backwards
+// selections (SelStart > SelEnd) are normalized so length is never negative.
 func Selection(n Node) (loc, length int) {
-	lo := n.unitsAt(n.SelStart)
-	return lo, n.unitsAt(n.SelEnd) - lo
+	start, end := min(n.SelStart, n.SelEnd), max(n.SelStart, n.SelEnd)
+	lo := n.unitsAt(start)
+	return lo, n.unitsAt(end) - lo
 }
 
 // Selected is the selected text.

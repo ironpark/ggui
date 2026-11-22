@@ -3,6 +3,7 @@
 package a11ybridge
 
 import (
+	"sync"
 	"sync/atomic"
 
 	"github.com/ironpark/ggui/a11y"
@@ -28,12 +29,24 @@ import (
 func init() { buildVtables() }
 
 type windowsAX struct {
-	bridge     *Bridge
-	window     *ggwd.Window
-	root, hwnd atomic.Uintptr
+	bridge *Bridge
+	window *ggwd.Window
+	hwnd   atomic.Uintptr
+	rootMu sync.Mutex
+	root   uintptr
 }
 
 func newAXPlatform() axPlatform { return &windowsAX{} }
+
+func (d *windowsAX) retainRoot() uintptr {
+	d.rootMu.Lock()
+	root := d.root
+	if root != 0 {
+		comAddRef(root)
+	}
+	d.rootMu.Unlock()
+	return root
+}
 
 func (d *windowsAX) setWindow(b *Bridge, w *ggwd.Window) {
 	d.bridge, d.window = b, w
@@ -45,16 +58,19 @@ func (d *windowsAX) setWindow(b *Bridge, w *ggwd.Window) {
 	if root == 0 {
 		return
 	}
-	d.root.Store(root)
+	d.rootMu.Lock()
+	d.root = root
+	d.rootMu.Unlock()
 	d.hwnd.Store(h)
 	native.SetGetObjectHandler(w, func(wparam, lparam uintptr) (uintptr, bool) {
 		if int32(uint32(lparam)) != uiaRootObjectID {
 			return 0, false
 		}
-		root := d.root.Load()
+		root := d.retainRoot()
 		if root == 0 {
 			return 0, false
 		}
+		defer comRelease(root)
 		r, _, _ := procUiaReturnRawElementProvider.Call(h, wparam, lparam, root)
 		return r, true
 	})
@@ -73,7 +89,10 @@ func (d *windowsAX) close() {
 		native.SetGetObjectHandler(d.window, nil)
 	}
 	h := d.hwnd.Swap(0)
-	root := d.root.Swap(0)
+	d.rootMu.Lock()
+	root := d.root
+	d.root = 0
+	d.rootMu.Unlock()
 	if h != 0 {
 		ggwd.RunOnMainThread(func() { procUiaReturnRawElementProvider.Call(h, 0, 0, 0) })
 	}
@@ -101,17 +120,22 @@ func winHandle(b *Bridge) uintptr {
 	return 0
 }
 
+// winRootFor returns the root provider with a caller-owned COM reference.
 func winRootFor(b *Bridge) uintptr {
 	if p := winAX(b); p != nil {
-		return p.root.Load()
+		return p.retainRoot()
 	}
 	return 0
 }
 
 // element makes a provider object for one node, carrying its handle. The
 // bridge's cache holds the reference this returns; a copy handed to UI
-// Automation gets one of its own.
+// Automation gets one of its own via retain while b.mu is held.
 func (d *windowsAX) element(handle int64) uintptr { return newWinObj(d.bridge, handle) }
+
+// retain increments the COM refcount while b.mu is held so a concurrent sweep
+// cannot free the provider before the caller adopts or releases it.
+func (*windowsAX) retain(e uintptr) { comAddRef(e) }
 
 // release tells UI Automation that these elements answer nothing more and
 // then drops the cache's reference. Disconnecting first is what keeps a
@@ -151,6 +175,7 @@ func winPost(b *Bridge, n axNote) {
 	if root == 0 {
 		return
 	}
+	defer comRelease(root)
 	if n.kind == axAnnouncement {
 		// The notification event arrived in Windows 10 1709. Calling an
 		// export that is not there panics, so an older Windows gets a
@@ -179,9 +204,10 @@ func winPost(b *Bridge, n axNote) {
 	el := root
 	if !n.root {
 		el = b.element(n.key)
-	}
-	if el == 0 {
-		return
+		if el == 0 {
+			return
+		}
+		defer comRelease(el)
 	}
 	switch n.kind {
 	case axFocusChanged:
@@ -222,6 +248,9 @@ func winPostValue(b *Bridge, el uintptr, k axKey) {
 	case winPattern(n.Node, ifValue):
 		prop = uiaValueValueProperty
 		varStr(&fresh, n.Value)
+	case winPattern(n.Node, ifExpandCollapse):
+		prop = uiaExpandCollapseStateProperty
+		varI4(&fresh, winExpandStateOf(n.Node))
 	default:
 		varStr(&fresh, n.Name)
 	}

@@ -5,6 +5,9 @@ package runtime
 import (
 	"slices"
 	"testing"
+	"unsafe"
+
+	"github.com/ebitengine/purego"
 )
 
 func TestExtensionsFlattenAndUnrestrict(t *testing.T) {
@@ -17,5 +20,18 @@ func TestExtensionsFlattenAndUnrestrict(t *testing.T) {
 	}
 	if _, restricted := extensions(nil); restricted {
 		t.Fatal("no filters should mean no restriction")
+	}
+}
+
+func TestRunSheetModalHandlesSynchronousCompletion(t *testing.T) {
+	// Invoke the Objective-C block synchronously inside begin; runSheetModal
+	// must observe s.done and return the response without calling runModalForWindow:.
+	got := runSheetModal(0, func(handler unsafe.Pointer) {
+		// struct Block_literal: {isa, flags+reserved, invoke, descriptor}
+		layout := (*[3]uintptr)(handler)
+		purego.SyscallN(layout[2], uintptr(handler), uintptr(nsModalResponseOK))
+	})
+	if got != nsModalResponseOK {
+		t.Fatalf("runSheetModal = %d, want %d", got, nsModalResponseOK)
 	}
 }

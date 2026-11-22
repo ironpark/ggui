@@ -92,6 +92,9 @@ func (b *busConn) send(m *message, register func(serial uint32)) error {
 	}
 	_ = b.c.SetWriteDeadline(time.Now().Add(callTimeout))
 	_, err = b.c.Write(data)
+	if err != nil {
+		b.close(err)
+	}
 	return err
 }
 
