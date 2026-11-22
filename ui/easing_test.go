@@ -18,12 +18,12 @@ var easingTestSlot = ggui.NewSlot[*ggui.Motion]("easing test")
 func TestControlTransitionsMoveOnTheThemesCurve(t *testing.T) {
 	for _, c := range []struct {
 		name  string
-		theme uitheme.Theme
+		theme *uitheme.Theme
 		curve ggui.Easing
 	}{
 		{"default", uitheme.Default(), ggui.CubicBezier(0.4, 0, 0.2, 1)},
-		{"unset", func() uitheme.Theme { th := uitheme.Default(); th.Ease = uitheme.Curve{}; return th }(), ggui.CubicBezier(0.4, 0, 0.2, 1)},
-		{"custom", func() uitheme.Theme {
+		{"unset", func() *uitheme.Theme { th := uitheme.Default(); th.Ease = uitheme.Curve{}; return th }(), ggui.CubicBezier(0.4, 0, 0.2, 1)},
+		{"custom", func() *uitheme.Theme {
 			th := uitheme.Default()
 			th.Ease = uitheme.Curve{X1: 0, Y1: 0, X2: 1, Y2: 1}
 			return th
@@ -34,7 +34,7 @@ func TestControlTransitionsMoveOnTheThemesCurve(t *testing.T) {
 		w := ggui.FromFuncs(
 			func(cs ggui.Constraints, _ ggui.Env) ggui.Size { return cs.Constrain(ggui.Sz(10, 10)) },
 			func(dst *ggui.Canvas, r ggui.Rect) {
-				got = ease(dst, &th, ggui.Anchor{Rect: r}, easingTestSlot, target, 200*time.Millisecond)
+				got = ease(dst, th, ggui.Anchor{Rect: r}, easingTestSlot, target, 200*time.Millisecond)
 			})
 		p := ggui.NewProbe(w, ggui.Sz(100, 100))
 		p.Advance(0)

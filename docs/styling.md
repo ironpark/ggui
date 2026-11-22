@@ -289,7 +289,7 @@ Start from `theme.Default()`, `theme.Dark()`, or a `theme.Preset`, and set
 only what your brand changes:
 
 ```go
-func brandTheme() theme.Theme {
+func brandTheme() *theme.Theme {
 	t := theme.Default()
 	t.Primary = color.RGBA{0x2f, 0x6f, 0xed, 0xff}
 	t.PrimaryFg = color.White
@@ -310,11 +310,24 @@ A preset sets its whole palette and its radii, so on a preset only the tokens
 shadcn has no variable for, such as `PrimaryHover`, `Selection` and `Input`,
 follow.
 
+`theme.Default()`, `theme.Dark()`, `Preset.For`/`Config.For`, and
+`theme.From(env)` each return a fresh `*theme.Theme` safe to customize. To
+derive a variant from an existing `*theme.Theme` (or from `theme.Of(env)` or
+`theme.Use()`, which return shared read-only pointers), call `t.Clone()` before
+modifying fields so the original is not mutated. To compare two `*theme.Theme`
+values by content rather than pointer identity, use `a.Equal(b)`:
+
+```go
+compact := base.Clone()
+compact.ButtonPad = ggui.Insets(4, 8)
+same := compact.Equal(base) // false
+```
+
 `Apply`, `Set` and `With` resolve the followers as they apply a theme, and
-`theme.From` and `theme.Use` return resolved themes. Call `t.Resolve()`
+`theme.Of`, `theme.From` and `theme.Use` return resolved themes. Call `t.Resolve()`
 yourself only to read a follower of a theme you changed before applying it.
 
-A `Theme` literal works too: colors it leaves unset with nothing to follow
+A `&theme.Theme{...}` literal works too: colors it leaves unset with nothing to follow
 are `Default`'s, as are a zero `ControlSize`, `IconSize`, `MenuWidth`, `Chat`
 or `Mono` font. Other zero sizes, such as `BorderWidth`, mean zero.
 
@@ -351,7 +364,7 @@ under `theme.CSSColor(name)`:
 
 ```go
 widget.Text("Low disk space").Color(theme.Var("warning"))
-warning, ok := theme.From(env).Get(theme.CSSColor("warning")) // in a widget's Layout
+warning, ok := theme.Of(env).Get(theme.CSSColor("warning")) // in a widget's Layout
 ```
 
 Other variables, such as fonts, are ignored.
@@ -391,12 +404,13 @@ subtree, like a form's disabled state.
 
 | Call | Does |
 | --- | --- |
-| `theme.Use()` | Read the global theme's values; inside a tracked computation such as `Reactive`, subscribe it to changes. To color a widget, use a token such as `theme.Primary` instead. |
+| `theme.Use()` | Read the global theme as a shared read-only `*theme.Theme`; inside a tracked computation such as `Reactive`, subscribe it to changes. Call `Clone()` before modifying fields. To color a widget, use a token such as `theme.Primary` instead. |
 | `theme.Set(t)` | Replace the global theme, invalidate inherited layout, and notify tracked readers. |
 | `theme.Bind(sig, on, off)` | follows a `Readable[bool]`, swapping between two themes |
 | `theme.With(t, child)` | gives one subtree a theme without touching the app's |
 | `theme.Override(fn, child)` | changes some tokens of the inherited theme for a subtree, as a CSS variable set on an element does |
-| `theme.From(env)` | the theme at layout time, for a widget |
+| `theme.Of(env)` | the shared read-only `*theme.Theme` at layout time, for a widget (no copy; call `Clone()` to customize) |
+| `theme.From(env)` | a fresh `*theme.Theme` copy of the theme at layout time, safe to customize |
 
 The usual dark-mode switch is three lines:
 
@@ -417,15 +431,15 @@ Read the theme from the `Env` in `Layout`, not with `theme.Use`:
 
 ```go
 func (w *MyWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	t := theme.From(env)
-	w.theme = t                    // Paint needs it too
+	t := theme.Of(env)
+	w.theme = t                    // Paint needs it too (*theme.Theme)
 	w.pad = t.ItemPad
 	return c.Constrain(...)
 }
 ```
 
 `theme.Use` reads the theme from the reactive root environment; it does not create an effect.
-Use `theme.From(env)` in a widget so local `theme.With` overrides are respected.
+Use `theme.Of(env)` in a widget to read the inherited `*theme.Theme` without copying while respecting local `theme.With` overrides (or `theme.From(env)` when you need a copy to customize).
 Use `theme.Use()` inside `Reactive` when constructing a subtree from the global
 theme's values; for colors, a token does it with no rebuild. Reads in app root
 setup or `Component` setup do not make setup rerun.
@@ -485,8 +499,8 @@ joins them with `Canvas.EaseWith`:
 k := dst.EaseWith(w.Anchor(r), hoverSlot, target, w.motion, t.Ease.Easing())
 ```
 
-`theme.Curve` is a `cubic-bezier` as its four numbers, so that a theme holding
-one still compares; `Easing()` makes its `ggui.Easing` once.
+`theme.Curve` is a `cubic-bezier` as its four numbers, so that themes holding
+one still compare with `Equal`; `Easing()` makes its `ggui.Easing` once.
 
 ## Theme presets
 
@@ -502,7 +516,7 @@ preset := theme.Preset{
 }
 app.Setup(func() { theme.Bind(dark, preset.Dark(), preset.Light()) })
 
-// Returned Themes are independent values; customize after selecting a preset.
+// Each call returns an independent *theme.Theme; customize after selecting a preset.
 // For(dark) picks Dark or Light.
 t := preset.For(dark)
 t.Chat.BubbleRadius = 20
@@ -659,7 +673,7 @@ be changed for everything drawn with it under a theme, the way editing the
 
 ```go
 t := theme.Default()
-t = ui.ButtonPrimary.Restyle(t, func(t theme.Theme) ui.ButtonStyle {
+t = ui.ButtonPrimary.Restyle(t, func(t *theme.Theme) ui.ButtonStyle {
 	s := ui.ButtonPrimary.Base(t) // the built-in look, to change
 	s.Shadow = false
 	return s
@@ -675,7 +689,7 @@ too.
 `ui.NewVariant` makes a variant of your own, used with `.Variant(v)`:
 
 ```go
-var ButtonBrand = ui.NewVariant("brand", func(t theme.Theme) ui.ButtonStyle {
+var ButtonBrand = ui.NewVariant("brand", func(t *theme.Theme) ui.ButtonStyle {
 	return ui.ButtonStyle{Fill: brand, Hover: t.Hovered(brand), Label: color.White, Shadow: true}
 })
 

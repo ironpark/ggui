@@ -102,13 +102,13 @@ type fadeKey struct {
 const mostFades = 256
 
 // Disabled is c as a disabled control draws it, faded by DisabledMix.
-func (t Theme) Disabled(c color.Color) color.Color { return Fade(c, 1-t.DisabledMix) }
+func (t *Theme) Disabled(c color.Color) color.Color { return Fade(c, 1-t.DisabledMix) }
 
 // Hovered is c under the pointer, moved HoverMix toward Fg.
-func (t Theme) Hovered(c color.Color) color.Color { return Mix(c, t.Fg, t.HoverMix) }
+func (t *Theme) Hovered(c color.Color) color.Color { return Mix(c, t.Fg, t.HoverMix) }
 
 // Pressed is c while pressed, moved PressMix toward Fg.
-func (t Theme) Pressed(c color.Color) color.Color { return Mix(c, t.Fg, t.PressMix) }
+func (t *Theme) Pressed(c color.Color) color.Color { return Mix(c, t.Fg, t.PressMix) }
 
 // Halo is ring as the soft halo around a focused field, at RingAlpha.
-func (t Theme) Halo(ring color.Color) color.Color { return Fade(ring, t.RingAlpha) }
+func (t *Theme) Halo(ring color.Color) color.Color { return Fade(ring, t.RingAlpha) }

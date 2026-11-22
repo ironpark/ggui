@@ -559,7 +559,7 @@ func (s *SidebarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	// Children see the sidebar palette in place of the page's, so a button
 	// or badge inside an item paints against the sidebar surface, and the
 	// tokens that follow these follow them here too.
-	t := uitheme.From(env)
+	t := *uitheme.Of(env)
 	s.pageFg = t.Fg // what a Tooltip is filled with, on the page and here
 	t.Card, t.Fg = t.Sidebar, t.SidebarFg
 	t.Primary, t.PrimaryFg = t.SidebarPrimary, t.SidebarPrimaryFg

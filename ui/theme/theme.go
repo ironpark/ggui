@@ -139,22 +139,117 @@ type tokenNode struct {
 	next *tokenNode
 }
 
-// Set returns t with v stored under k, a token of the caller's own that
-// travels with the theme: a control set's colors, a brand's spacing. t is
+// Clone returns a shallow copy of t that can be customized without affecting t.
+// A nil receiver returns Default.
+func (t *Theme) Clone() *Theme {
+	if t == nil {
+		return Default()
+	}
+	c := *t
+	return &c
+}
+
+// Equal reports whether t and other hold the same tokens, extension tokens,
+// and menu theme. Uncomparable values in extension tokens compare equal only
+// when they share the same token node.
+func (t *Theme) Equal(other *Theme) (same bool) {
+	if t == other {
+		return true
+	}
+	if t == nil || other == nil {
+		return false
+	}
+	defer func() {
+		if recover() != nil {
+			same = false
+		}
+	}()
+	if t.ext == other.ext && t.menu == other.menu {
+		return *t == *other
+	}
+	if !equalTokens(t.ext, other.ext) || !t.menu.Equal(other.menu) {
+		return false
+	}
+	a, b := *t, *other
+	a.ext, b.ext, a.menu, b.menu = nil, nil, nil, nil
+	return a == b
+}
+
+// equalTokens reports whether two persistent extension-token lists define the
+// same effective key-value bindings.
+func equalTokens(a, b *tokenNode) bool {
+	if a == b {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	for n := a; n != nil; n = n.next {
+		if shadowedBefore(a, n) {
+			continue
+		}
+		bv, ok := lookupToken(b, n.key)
+		if !ok || !sameTokenVal(n.val, bv) {
+			return false
+		}
+	}
+	for n := b; n != nil; n = n.next {
+		if shadowedBefore(b, n) {
+			continue
+		}
+		if _, ok := lookupToken(a, n.key); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func shadowedBefore(head, target *tokenNode) bool {
+	for n := head; n != target; n = n.next {
+		if n.key == target.key {
+			return true
+		}
+	}
+	return false
+}
+
+func lookupToken(head *tokenNode, key any) (any, bool) {
+	for n := head; n != nil; n = n.next {
+		if n.key == key {
+			return n.val, true
+		}
+	}
+	return nil, false
+}
+
+func sameTokenVal(a, b any) (same bool) {
+	defer func() {
+		if recover() != nil {
+			same = false
+		}
+	}()
+	return a == b
+}
+
+// Set returns a copy of t with v stored under k, a token of the caller's own
+// that travels with the theme: a control set's colors, a brand's spacing. t is
 // not changed, so a theme can be derived from another.
 //
 //	var DangerColor = ggui.NewEnvKey[color.Color]("danger")
-//	theme = theme.Set(DangerColor, color.RGBA{0xd3, 0x2f, 0x2f, 0xff})
-func (t Theme) Set[T any](k ggui.EnvKey[T], v T) Theme {
-	t.ext = &tokenNode{key: k, val: v, next: t.ext}
-	return t
+//	th = th.Set(DangerColor, color.RGBA{0xd3, 0x2f, 0x2f, 0xff})
+func (t *Theme) Set[T any](k ggui.EnvKey[T], v T) *Theme {
+	c := t.Clone()
+	c.ext = &tokenNode{key: k, val: v, next: c.ext}
+	return c
 }
 
 // Get returns the token stored under k, if Set stored one.
-func (t Theme) Get[T any](k ggui.EnvKey[T]) (T, bool) {
-	for n := t.ext; n != nil; n = n.next {
-		if n.key == any(k) {
-			return n.val.(T), true
+func (t *Theme) Get[T any](k ggui.EnvKey[T]) (T, bool) {
+	if t != nil {
+		for n := t.ext; n != nil; n = n.next {
+			if n.key == any(k) {
+				return n.val.(T), true
+			}
 		}
 	}
 	var zero T
@@ -165,22 +260,23 @@ func (t Theme) Get[T any](k ggui.EnvKey[T]) (T, bool) {
 // style, with the tokens of Preset{}.Light(). Unlike a Preset's, a color of
 // it that has the value it would follow does follow, so changing Primary or
 // Fg on a copy moves what derives from them.
-func Default() Theme { return stock(false) }
+func Default() *Theme { return stock(false) }
 
 // Dark is the dark counterpart of Default, with the tokens of Preset{}.Dark().
-func Dark() Theme { return stock(true) }
+func Dark() *Theme { return stock(true) }
 
 // stock is the zero Preset with every color that equals what it would
 // follow left to follow it.
-func stock(dark bool) Theme {
+func stock(dark bool) *Theme {
 	t := Preset{}.build(dark)
 	resolved := t.Resolve()
 	for _, f := range followers {
-		if p := f.field(&t); *p != nil && sameColor(*p, f.from(&resolved)) {
+		if p := f.field(t); *p != nil && sameColor(*p, f.from(resolved)) {
 			*p = nil
 		}
 	}
-	return t.Resolve()
+	t.resolveInPlace()
+	return t
 }
 
 // lightBase is what a Preset lays its palette and Style over: the Neutral
@@ -344,10 +440,10 @@ type followed struct {
 	radii  [nRadii]float64
 }
 
-// Resolve fills in the tokens that follow others, and gives every unset
-// color with nothing to follow, and every unset size a control cannot do
-// without, Default's value. A token still holding the value an earlier
-// Resolve gave it follows its source again, so
+// Resolve returns a copy of t with the tokens that follow others filled in,
+// and gives every unset color with nothing to follow, and every unset size a
+// control cannot do without, Default's value. A token still holding the value
+// an earlier Resolve gave it follows its source again, so
 //
 //	t := theme.Default()
 //	t.Primary = brand
@@ -358,9 +454,15 @@ type followed struct {
 //
 // Apply resolves the theme it applies, so only code that reads a derived
 // token from a theme it changed itself needs to call Resolve.
-func (t Theme) Resolve() Theme {
+func (t *Theme) Resolve() *Theme {
+	c := t.Clone()
+	c.resolveInPlace()
+	return c
+}
+
+func (t *Theme) resolveInPlace() {
 	for i, f := range followers {
-		if p := f.field(&t); *p != nil && sameColor(*p, t.auto.colors[i]) {
+		if p := f.field(t); *p != nil && sameColor(*p, t.auto.colors[i]) {
 			*p = nil
 		}
 	}
@@ -372,8 +474,8 @@ func (t Theme) Resolve() Theme {
 	t.fillUnset()
 	var a followed
 	for i, f := range followers {
-		if p := f.field(&t); *p == nil {
-			*p = f.from(&t)
+		if p := f.field(t); *p == nil {
+			*p = f.from(t)
 			a.colors[i] = *p
 		}
 	}
@@ -391,7 +493,6 @@ func (t Theme) Resolve() Theme {
 		}
 	}
 	t.auto = a
-	return t
 }
 
 // pin marks the follower at p as set, so it keeps its value even if that

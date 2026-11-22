@@ -903,7 +903,7 @@ func (a *questionActions) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(a.bod
 type questionInput struct{ *TextFieldWidget }
 
 func (f *questionInput) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	t := uitheme.From(env)
+	t := *uitheme.Of(env)
 	t.FieldPad = ggui.Insets(5, 10)
 	t.Radius = t.Chat.QuestionInputRadius
 	c.MinH = min(c.MaxH, max(c.MinH, 32))

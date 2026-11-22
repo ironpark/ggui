@@ -55,11 +55,11 @@ func TestIconButtonInheritsForeground(t *testing.T) {
 	b := ui.ButtonOf(content, nil)
 	env := ggui.Env{}
 	b.Layout(ggui.Loose(ggui.Sz(100, 50)), env)
-	if content.env.Text().Color != uitheme.From(env).PrimaryFg {
+	if content.env.Text().Color != uitheme.Of(env).PrimaryFg {
 		t.Fatal("icon button did not inherit primary foreground")
 	}
 	b.Disabled(true).Layout(ggui.Loose(ggui.Sz(100, 50)), env)
-	if content.env.Text().Color == uitheme.From(env).PrimaryFg {
+	if content.env.Text().Color == uitheme.Of(env).PrimaryFg {
 		t.Fatal("disabled icon did not inherit muted foreground")
 	}
 }

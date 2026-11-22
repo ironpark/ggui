@@ -12,7 +12,7 @@ import (
 
 func TestTraceStatusColorsEveryVariantWithoutTintingDetails(t *testing.T) {
 	t.Parallel()
-	for _, theme := range []uitheme.Theme{uitheme.Default(), uitheme.Dark()} {
+	for _, theme := range []*uitheme.Theme{uitheme.Default(), uitheme.Dark()} {
 		for _, status := range []TraceStatus{TracePending, TraceRunning, TraceFailed, TraceError, TraceCompleted} {
 			var detailsForeground color.Color
 			details := ggui.FromFuncs(func(cs ggui.Constraints, env ggui.Env) ggui.Size {

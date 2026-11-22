@@ -21,14 +21,21 @@ theme.With(preset.Dark(), preview)
 ```
 
 Importing `ui/theme`, including through `ui`, installs `theme.Default()` in the
-root environment. `Default` and `Dark` are shadcn/ui's stock base-nova themes:
-they have the tokens of `Preset{}.Light()` and `Preset{}.Dark()`, and differ
-from them only in that a color equal to the one it would follow keeps following
-it, so changing `Primary` or `Fg` on a copy moves what derives from them. `theme.Set(t)` replaces the global theme while preserving
-unrelated environment values. `theme.Use()` reads it reactively;
-`theme.From(env)` resolves the local theme during layout. `t.Apply(env)` returns
-an environment with the theme and its core styles, and `theme.With(t, child)`
-applies it to a subtree. Changes apply to already-built widgets on layout.
+root environment. Theme constructors and derivations (`Default`, `Dark`,
+`Preset.Light`/`Dark`/`For`, `Config.Light`/`Dark`/`For`, `FromCSS`, `Clone`,
+`Resolve`, `Set`, `ApplyCSS`, `Menu`) return `*Theme`. `Default` and `Dark` are
+shadcn/ui's stock base-nova themes: they have the tokens of `Preset{}.Light()`
+and `Preset{}.Dark()`, and differ from them only in that a color equal to the
+one it would follow keeps following it, so changing `Primary` or `Fg` on a
+fresh theme or `t.Clone()` moves what derives from them. `theme.Set(t)` replaces
+the global theme while preserving unrelated environment values. `theme.Use()`
+reads it reactively as a shared read-only `*Theme`; during layout,
+`theme.Of(env)` reads the local `*Theme` without copying, while `theme.From(env)`
+returns a mutable clone. Use `a.Equal(b)` to compare two `*Theme` values by
+their tokens, extension tokens, and menu theme rather than `==` (which compares
+pointers). `t.Apply(env)` returns an environment with the theme and its core
+styles, and `theme.With(t, child)` applies it to a subtree. Changes apply to
+already-built widgets on layout.
 
 The core consumes only the settings it needs:
 
@@ -280,13 +287,13 @@ This move changes public import paths and APIs; the old paths are not aliases.
 | Before | Now |
 | --- | --- |
 | `ggui/icons`, `ggui/icons/lucide` (and other sets) | `ggui/ui/icons`, `ggui/ui/icons/lucide` |
-| `ggui.Theme`, `ggui.ChatTokens` | `theme.Theme`, `theme.ChatTokens` |
+| `ggui.Theme`, `ggui.ChatTokens` | `*theme.Theme`, `theme.ChatTokens` |
 | `ggui.DefaultTheme()`, `ggui.DarkTheme()` | `theme.Default()`, `theme.Dark()` |
 | `ggui.ThemePreset`, `ggui.ThemeStyle` | `theme.Preset`, `theme.Style` |
 | `ggui.BaseColor`, `ggui.AccentColor`, palette/style constants | Same names in `theme` |
 | `ggui.BaseColors()`, `ggui.AccentColors()`, `ggui.ThemeStyles()` | `theme.BaseColors()`, `theme.AccentColors()`, `theme.Styles()` |
 | `ggui.UseTheme()`, `ggui.SetTheme(t)`, `ggui.BindTheme(...)` | `theme.Use()`, `theme.Set(t)`, `theme.Bind(...)` |
-| `env.Theme()`, `env.WithTheme(t)` | `theme.From(env)`, `t.Apply(env)` |
+| `env.Theme()`, `env.WithTheme(t)` | `theme.Of(env)` / `theme.From(env)`, `t.Apply(env)` |
 | `ggui.Themed(t, child)` | `theme.With(t, child)` |
 | `ggui.Title(s)`, `ggui.Caption(s)` | `ui.Title(s)`, `ui.Caption(s)` |
 | `text.AsTitle()` | `text.StyleKey(theme.TitleKey, theme.Default().Title).Role(ggui.RoleHeading)` |

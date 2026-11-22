@@ -495,26 +495,26 @@ type BadgeVariant = Variant[BadgeStyle]
 // The badge variants of shadcn/ui. Restyle one to change every badge drawn
 // with it under a theme, or make more with NewVariant.
 var (
-	BadgePrimary = NewVariant("primary", func(t uitheme.Theme) BadgeStyle {
+	BadgePrimary = NewVariant("primary", func(t *uitheme.Theme) BadgeStyle {
 		return BadgeStyle{Fill: t.Primary, Label: t.PrimaryFg, LinkFill: fade(t.Primary, .8)}
 	})
-	BadgeSecondary = NewVariant("secondary", func(t uitheme.Theme) BadgeStyle {
+	BadgeSecondary = NewVariant("secondary", func(t *uitheme.Theme) BadgeStyle {
 		return BadgeStyle{Fill: t.Secondary, Label: t.SecondaryFg, LinkFill: fade(t.Secondary, .8)}
 	})
-	BadgeOutline = NewVariant("outline", func(t uitheme.Theme) BadgeStyle {
+	BadgeOutline = NewVariant("outline", func(t *uitheme.Theme) BadgeStyle {
 		return BadgeStyle{Label: t.Fg, Border: t.Border, LinkFill: t.Muted, LinkLabel: t.MutedFg}
 	})
-	BadgeDestructive = NewVariant("destructive", func(t uitheme.Theme) BadgeStyle {
+	BadgeDestructive = NewVariant("destructive", func(t *uitheme.Theme) BadgeStyle {
 		return BadgeStyle{Fill: fade(t.Destructive, pick(isDark(t.Bg), .2, .1)), Label: t.Destructive, LinkFill: fade(t.Destructive, .2)}
 	})
 	// BadgeGhost is a bare label in the page's text color, on the Muted
 	// surface under the pointer.
-	BadgeGhost = NewVariant("ghost", func(t uitheme.Theme) BadgeStyle {
+	BadgeGhost = NewVariant("ghost", func(t *uitheme.Theme) BadgeStyle {
 		return BadgeStyle{Label: t.Fg, HoverFill: fade(t.Muted, pick(isDark(t.Bg), .5, 1)), HoverLabel: t.MutedFg}
 	})
 	// BadgeLink is a bare label in the Primary color, underlined under
 	// the pointer.
-	BadgeLink = NewVariant("link", func(t uitheme.Theme) BadgeStyle {
+	BadgeLink = NewVariant("link", func(t *uitheme.Theme) BadgeStyle {
 		return BadgeStyle{Label: t.Primary, Underline: true}
 	})
 )
@@ -621,7 +621,7 @@ func (b *BadgeWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := uitheme.Of(env)
 	b.theme, b.env = t, env
 	b.motion = env.Motion(t.MotionFast)
-	b.style = b.variant.Style(*t)
+	b.style = b.variant.Style(t)
 	b.leads, b.trails = b.lead != "", b.trail != ""
 	// An icon is three quarters of the theme's, half a space from the
 	// label, and the side it is on is padded a quarter less.

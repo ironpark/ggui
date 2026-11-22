@@ -110,7 +110,7 @@ func MessageScroller(items ggui.Readable[[]MessageEntry]) *MessageScrollerWidget
 
 // scrollEdgeButton is the look of a transcript's scroll-to-edge button: the
 // page's background inside a border, and the muted surface under the pointer.
-var scrollEdgeButton = NewVariant("message-scroller", func(t uitheme.Theme) ButtonStyle {
+var scrollEdgeButton = NewVariant("message-scroller", func(t *uitheme.Theme) ButtonStyle {
 	return ButtonStyle{Fill: t.Bg, Hover: t.Muted, Label: t.Fg, HoverLabel: t.Fg, Border: t.Border}
 })
 

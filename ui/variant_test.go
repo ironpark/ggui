@@ -13,7 +13,7 @@ var testBrand = color.NRGBA{0x25, 0x63, 0xeb, 0xff}
 
 func TestRestyleChangesAVariantUnderItsTheme(t *testing.T) {
 	t.Parallel()
-	th := ButtonPrimary.Restyle(uitheme.Default(), func(t uitheme.Theme) ButtonStyle {
+	th := ButtonPrimary.Restyle(uitheme.Default(), func(t *uitheme.Theme) ButtonStyle {
 		s := ButtonPrimary.Base(t)
 		s.Fill, s.Shadow = testBrand, false
 		return s
@@ -36,7 +36,7 @@ func TestRestyleChangesAVariantUnderItsTheme(t *testing.T) {
 
 func TestACustomVariantDrawsAButton(t *testing.T) {
 	t.Parallel()
-	brand := NewVariant("brand", func(t uitheme.Theme) ButtonStyle {
+	brand := NewVariant("brand", func(t *uitheme.Theme) ButtonStyle {
 		return ButtonStyle{Fill: testBrand, Hover: t.Hovered(testBrand), Label: t.PrimaryFg}
 	})
 	b := Button("go", nil).Variant(brand)

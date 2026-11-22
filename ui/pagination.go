@@ -54,7 +54,7 @@ func Pagination(page ggui.Binding[int], pages ggui.Readable[int]) *PaginationWid
 		p.numbers[i] = Button("", func() { p.selectPage(p.targets[i]) }).Size(ButtonIcon)
 	}
 	for i := range p.gaps {
-		p.gaps[i] = &moreIcon{icon: Icon(icons.MoreHorizontal), alt: func(s *Strings) string { return s.MorePages }, side: func(t *uitheme.Theme) float64 { return ButtonIcon.Style(*t).Height }}
+		p.gaps[i] = &moreIcon{icon: Icon(icons.MoreHorizontal), alt: func(s *Strings) string { return s.MorePages }, side: func(t *uitheme.Theme) float64 { return ButtonIcon.Style(t).Height }}
 	}
 	return p
 }

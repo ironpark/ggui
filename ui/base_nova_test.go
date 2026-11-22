@@ -12,7 +12,7 @@ import (
 
 func TestBaseNovaControlGeometry(t *testing.T) {
 	t.Parallel()
-	for _, theme := range []uitheme.Theme{uitheme.Default(), uitheme.Dark(), (uitheme.Preset{}).Light(), (uitheme.Preset{}).Dark()} {
+	for _, theme := range []*uitheme.Theme{uitheme.Default(), uitheme.Dark(), (uitheme.Preset{}).Light(), (uitheme.Preset{}).Dark()} {
 		env := theme.Apply(ggui.Env{})
 		c := ggui.Loose(ggui.Sz(500, 200))
 		for _, tc := range []struct {

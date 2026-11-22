@@ -41,7 +41,7 @@ func TestApplyCSSMapsFontVariablesToRegisteredFonts(t *testing.T) {
 	if th.Mono.Font != geist.Mono() {
 		t.Error("--font-mono did not follow an undefined var() to the family it names")
 	}
-	if th.Resolve() != th {
+	if !th.Resolve().Equal(th) {
 		t.Error("the fonts did not survive Resolve")
 	}
 	plain, err := Default().ApplyCSS(`--font-sans: ui-sans-serif, system-ui, sans-serif; --font-mono: var(--font-sans);`)

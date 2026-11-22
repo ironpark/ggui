@@ -308,10 +308,7 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 // through their own popup, so the width lives here rather than in Layout.
 func (m *MenuWidget) chrome(t *uitheme.Theme) *widget.BoxWidget {
 	m.theme = t
-	if t.Menu().Popover != t.Popover {
-		mt := t.Menu()
-		t = &mt
-	}
+	t = t.Menu()
 	panelBox(m.panel, t)
 	switch {
 	case m.widthSet:

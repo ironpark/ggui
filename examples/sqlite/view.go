@@ -14,7 +14,7 @@ import (
 	"github.com/ironpark/ggui/widget"
 )
 
-func clientTheme(dark bool) uitheme.Theme {
+func clientTheme(dark bool) *uitheme.Theme {
 	preset := uitheme.Preset{Base: uitheme.BaseNeutral, Accent: uitheme.AccentEmerald}
 	t := preset.For(dark)
 	t.Radius, t.RadiusSm, t.RadiusLg = 5, 3, 8

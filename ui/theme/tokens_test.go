@@ -23,7 +23,7 @@ func TestColorResolvesUnderItsTheme(t *testing.T) {
 	light.Chart[1] = color.RGBA{10, 20, 30, 255}
 	for _, tc := range []struct {
 		token uitheme.Color
-		in    uitheme.Theme
+		in    *uitheme.Theme
 		want  color.Color
 	}{
 		{uitheme.Primary, light, light.Primary},

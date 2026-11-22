@@ -4,7 +4,6 @@ import (
 	"image/color"
 	"math"
 	"strconv"
-	"unsafe"
 
 	"github.com/ironpark/ggui"
 )
@@ -83,23 +82,9 @@ var colorFields, colorField = func() ([]func(*Theme) *color.Color, map[string]in
 	return fields, index
 }()
 
-// colorOffsets are where in a Theme each of colorFields is, so that In reads
-// its copy of the theme in place: handing that copy's address to an
-// accessor would move it, a whole Theme, to the heap on every call.
-var colorOffsets = func() []uintptr {
-	var t Theme
-	offsets := make([]uintptr, len(colorFields))
-	for i, f := range colorFields {
-		// Both addresses are taken after the call, with none between them, so
-		// the stack cannot move under the difference.
-		offsets[i] = uintptr(unsafe.Pointer(f(&t))) - uintptr(unsafe.Pointer(&t)) //nolint:stackaddr // see above
-	}
-	return offsets
-}()
-
 // colorAt is t's field for the token field c.field names.
 func (t *Theme) colorAt(field int) color.Color {
-	return *(*color.Color)(unsafe.Add(unsafe.Pointer(t), colorOffsets[field-1]))
+	return *colorFields[field-1](t)
 }
 
 // Or is the color, or fallback under a theme with no color by its name,
@@ -125,7 +110,10 @@ func (c Color) Alpha(alpha float64) Color {
 }
 
 // In returns the color t has.
-func (c Color) In(t Theme) color.Color {
+func (c Color) In(t *Theme) color.Color {
+	if t == nil {
+		t = defaultTheme()
+	}
 	var v color.Color
 	if c.field != 0 {
 		if v = t.colorAt(c.field); v == nil {
@@ -147,7 +135,7 @@ func (c Color) In(t Theme) color.Color {
 
 // resolveIn resolves any color fallback against t, including Color tokens,
 // faded/mixed combinations, and arbitrary ggui.EnvColor values.
-func resolveIn(c color.Color, t Theme) color.Color {
+func resolveIn(c color.Color, t *Theme) color.Color {
 	switch fb := c.(type) {
 	case Color:
 		return fb.In(t)

@@ -28,14 +28,16 @@ var (
 // it with Set, Bind, or ggui.SetEnv before their first frame.
 func init() { Set(Default()) }
 
-// From returns the theme inherited by env, or the default light theme.
-func From(env ggui.Env) Theme { return *Of(env) }
+// From returns a fresh copy of the theme inherited by env, or the default
+// light theme, safe for the caller to customize. Use Of when reading without
+// modifying tokens.
+func From(env ggui.Env) *Theme { return Of(env).Clone() }
 
 // Of returns the theme inherited by env, or the default light theme, as a
 // pointer shared by everything under the same theme: a widget keeps it
 // from Layout to Paint without copying the theme, and a theme switch
 // reaches it as a new Env and so a new pointer at the next layout. Treat
-// it as read-only; copy it (or use From) to change a token.
+// it as read-only; call Clone (or use From) to change a token.
 func Of(env ggui.Env) *Theme {
 	if t, ok := env.Get(key); ok {
 		return t
@@ -47,60 +49,52 @@ func Of(env ggui.Env) *Theme {
 var scratch = sync.Pool{New: func() any { return new(Theme) }}
 
 // defaultTheme is Default made once, for an Env no theme was applied to.
-var defaultTheme = sync.OnceValue(func() *Theme {
-	t := Default()
-	return &t
-})
+var defaultTheme = sync.OnceValue(func() *Theme { return Default() })
 
-// sameTheme is *a == *b, false where == panics on a token of a type it
-// cannot compare.
-func sameTheme(a, b *Theme) (same bool) {
-	if a == b {
-		return true
-	}
-	defer func() {
-		if recover() != nil {
-			same = false
-		}
-	}()
-	return *a == *b
-}
+// sameTheme reports whether a and b hold equal themes.
+func sameTheme(a, b *Theme) bool { return a.Equal(b) }
 
 // Apply supplies this theme, resolved, and the corresponding core styles to
 // env. Unrelated environment values, including accessibility preferences,
-// survive.
-func (t Theme) Apply(env ggui.Env) ggui.Env {
-	t = t.Resolve()
+// survive. Mutating t after Apply does not affect env.
+func (t *Theme) Apply(env ggui.Env) ggui.Env {
+	if t == nil {
+		t = defaultTheme()
+	}
 	// The theme goes into the Env by pointer. An equal theme applied before
 	// under the same parent is found by value and its pointer reused, so a
 	// copy is made for the Env only when none is: in a scratch theme that
 	// goes back to the pool when it was not kept.
 	p := scratch.Get().(*Theme)
-	*p = t
+	*p = *t
+	p.resolveInPlace()
 	env = env.With(key, p)
-	if Of(env) != p {
+	applied := Of(env)
+	if applied != p {
+		*p = Theme{}
 		scratch.Put(p)
 	}
-	return env.WithText(t.Text).
-		With(TitleKey, t.Title).With(HeadingKey, t.Heading).With(LabelKey, t.Label).
-		With(CaptionKey, t.Caption).With(MonoKey, t.Mono).
-		With(ggui.BackgroundKey, t.Bg).With(ggui.SpacingKey, t.Space).
-		With(ggui.EditorStyleKey, ggui.EditorStyle{Muted: t.MutedFg, Selection: t.Selection}).
-		With(ggui.ScrollStyleKey, ggui.ScrollStyle{Color: t.Border, HoverColor: t.MutedFg, Thickness: 7, HoverThickness: 7, Margin: 1, Duration: t.MotionFast}).
-		With(ggui.PopupDurationKey, t.MotionOverlay)
+	return env.WithText(applied.Text).
+		With(TitleKey, applied.Title).With(HeadingKey, applied.Heading).With(LabelKey, applied.Label).
+		With(CaptionKey, applied.Caption).With(MonoKey, applied.Mono).
+		With(ggui.BackgroundKey, applied.Bg).With(ggui.SpacingKey, applied.Space).
+		With(ggui.EditorStyleKey, ggui.EditorStyle{Muted: applied.MutedFg, Selection: applied.Selection}).
+		With(ggui.ScrollStyleKey, ggui.ScrollStyle{Color: applied.Border, HoverColor: applied.MutedFg, Thickness: 7, HoverThickness: 7, Margin: 1, Duration: applied.MotionFast}).
+		With(ggui.PopupDurationKey, applied.MotionOverlay)
 }
 
 // Use reads the application theme and subscribes the current Reactive or
-// effect. A builder colors what it builds with tokens such as Primary
-// instead: read here, the theme is a snapshot a theme switch leaves behind.
-func Use() Theme { return From(ggui.UseEnv()) }
+// effect. Treat the returned pointer as read-only; call Clone to customize it.
+// A builder colors what it builds with tokens such as Primary instead: read
+// here, the theme is a snapshot a theme switch leaves behind.
+func Use() *Theme { return Of(ggui.UseEnv()) }
 
 // Set replaces the application theme while preserving other environment
 // values, and matches the windows' title bars to it.
-func Set(t Theme) {
-	t = t.Resolve()
-	ggui.SetEnv(t.Apply(ggui.Untrack(ggui.UseEnv).WithTextReplaced(t.Text)))
-	ggui.SetAppearance(appearanceOf(t.Bg))
+func Set(t *Theme) {
+	resolved := t.Resolve()
+	ggui.SetEnv(resolved.Apply(ggui.Untrack(ggui.UseEnv).WithTextReplaced(resolved.Text)))
+	ggui.SetAppearance(appearanceOf(resolved.Bg))
 }
 
 // appearanceOf is the platform appearance that suits a theme whose
@@ -114,7 +108,7 @@ func appearanceOf(bg color.Color) ggui.Appearance {
 
 // Bind applies on while sw is true and off otherwise through a Watch.
 // Its first application runs when effects flush; the returned function stops it.
-func Bind(sw ggui.Readable[bool], on, off Theme) func() {
+func Bind(sw ggui.Readable[bool], on, off *Theme) func() {
 	return ggui.Watch(sw, func(v bool) {
 		if v {
 			Set(on)
@@ -172,12 +166,12 @@ func (m Mode) String() string {
 //
 //	mode := ggui.State(theme.ModeSystem)
 //	app.Setup(func() { theme.BindMode(mode, recipe.Dark(), recipe.Light()) })
-func BindMode(mode ggui.Readable[Mode], dark, light Theme) func() {
+func BindMode(mode ggui.Readable[Mode], dark, light *Theme) func() {
 	return Bind(ggui.Combine(mode, ggui.SystemDark(), Mode.Dark), dark, light)
 }
 
 // With applies a theme to a subtree at layout time.
-func With(t Theme, child ggui.Widget) *ggui.EnvWidget {
+func With(t *Theme, child ggui.Widget) *ggui.EnvWidget {
 	return ggui.WithEnv(t.Apply, child)
 }
 
@@ -189,7 +183,7 @@ func With(t Theme, child ggui.Widget) *ggui.EnvWidget {
 func Override(fn func(*Theme), child ggui.Widget) *ggui.EnvWidget {
 	return ggui.WithEnv(func(env ggui.Env) ggui.Env {
 		t := From(env)
-		fn(&t)
+		fn(t)
 		return t.Apply(env)
 	}, child)
 }

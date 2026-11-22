@@ -66,7 +66,7 @@ const (
 type ChartSeries struct {
 	// ColorIndex is a 1-based Theme.Chart token; zero uses the series order.
 	ColorIndex int
-	ThemeColor func(uitheme.Theme) color.Color
+	ThemeColor func(*uitheme.Theme) color.Color
 	// Optional per-series polar radii are fractions of the chart radius.
 	InnerRadius, OuterRadius float64
 	FillOpacity              *float64
@@ -432,7 +432,7 @@ func (c *ChartWidget) value(i, j int) (float64, bool) {
 func (c *ChartWidget) seriesColor(j int) color.Color {
 	s := c.config[j]
 	if s.ThemeColor != nil {
-		if col := s.ThemeColor(*c.theme); col != nil {
+		if col := s.ThemeColor(c.theme); col != nil {
 			return col
 		}
 	}

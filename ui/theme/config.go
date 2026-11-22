@@ -195,15 +195,15 @@ type Config struct {
 }
 
 // Light is the recipe's light theme.
-func (c Config) Light() Theme { return c.For(false) }
+func (c Config) Light() *Theme { return c.For(false) }
 
 // Dark is the recipe's dark theme.
-func (c Config) Dark() Theme { return c.For(true) }
+func (c Config) Dark() *Theme { return c.For(true) }
 
 // For builds a resolved light or dark theme. Invalid names panic, like Preset,
 // and so does a font or icon library that is not registered. No existing
 // defaults, preset values or environment preferences are modified.
-func (c Config) For(dark bool) Theme {
+func (c Config) For(dark bool) *Theme {
 	t := c.Preset.For(dark)
 	if !slices.Contains(ChartColors(), c.Chart) {
 		panic("ggui: unknown chart accent " + string(c.Chart))
@@ -262,7 +262,8 @@ func (c Config) For(dark bool) Theme {
 	if c.MenuColor == MenuColorInverted && !dark {
 		t.menu = invertedMenu(c)
 	}
-	return t.Resolve()
+	t.resolveInPlace()
+	return t
 }
 
 // invertedMenus keeps the dark theme each recipe's inverted menus draw
@@ -277,7 +278,7 @@ func invertedMenu(c Config) *Theme {
 	d := c
 	d.MenuColor = MenuColorDefault
 	menu := d.For(true)
-	t, _ := invertedMenus.LoadOrStore(c, &menu)
+	t, _ := invertedMenus.LoadOrStore(c, menu)
 	return t.(*Theme)
 }
 
@@ -286,9 +287,12 @@ func invertedMenu(c Config) *Theme {
 // recipe's dark theme. A menu applies it to its panel:
 //
 //	env = theme.Of(env).Menu().Apply(env)
-func (t Theme) Menu() Theme {
+func (t *Theme) Menu() *Theme {
+	if t == nil {
+		return defaultTheme()
+	}
 	if t.menu != nil {
-		return *t.menu
+		return t.menu
 	}
 	return t
 }

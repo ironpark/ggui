@@ -21,7 +21,7 @@ func TestBindUpdatesCachedLayoutAndTrackedReaders(t *testing.T) {
 	t.Parallel()
 	preserveEnv(t)
 	dark := ggui.State(true)
-	var seen theme.Theme
+	var seen *theme.Theme
 	layouts, builds := 0, 0
 	child := ggui.FromFuncs(func(c ggui.Constraints, env ggui.Env) ggui.Size {
 		layouts++
@@ -134,7 +134,7 @@ func TestOverrideChangesTokensForASubtreeAndKeepsItsLayoutCached(t *testing.T) {
 	t.Parallel()
 	preserveEnv(t)
 	brand := color.NRGBA{0x25, 0x63, 0xeb, 0xff}
-	var inside, outside theme.Theme
+	var inside, outside *theme.Theme
 	layouts := 0
 	child := ggui.FromFuncs(func(c ggui.Constraints, env ggui.Env) ggui.Size {
 		layouts++

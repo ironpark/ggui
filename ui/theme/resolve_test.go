@@ -17,9 +17,9 @@ func TestFollowersFollowAChangedSource(t *testing.T) {
 	// same colors, and follow wherever shadcn's value is the one followed:
 	// the card and popover text is the page's, the sidebar's border the
 	// page's. Radii follow Radius in all three.
-	for name, base := range map[string]Theme{"light": Default(), "dark": Dark(), "preset": Preset{Accent: AccentBlue}.Light()} {
+	for name, base := range map[string]*Theme{"light": Default(), "dark": Dark(), "preset": Preset{Accent: AccentBlue}.Light()} {
 		preset := name == "preset"
-		th := base
+		th := base.Clone()
 		border := color.NRGBA{4, 5, 6, 255}
 		th.Primary, th.Fg, th.Border, th.Radius = brand, color.NRGBA{1, 2, 3, 255}, border, 4
 		th = th.Resolve()
@@ -45,10 +45,10 @@ func TestFollowersFollowAChangedSource(t *testing.T) {
 // differing only in which of them follow.
 func TestStockThemesAreTheZeroPreset(t *testing.T) {
 	t.Parallel()
-	for name, pair := range map[string][2]Theme{"light": {Default(), Preset{}.Light()}, "dark": {Dark(), Preset{}.Dark()}} {
-		stock, preset := pair[0], pair[1]
+	for name, pair := range map[string][2]*Theme{"light": {Default(), Preset{}.Light()}, "dark": {Dark(), Preset{}.Dark()}} {
+		stock, preset := pair[0].Clone(), pair[1].Clone()
 		stock.auto, preset.auto = followed{}, followed{}
-		if stock != preset {
+		if !stock.Equal(preset) {
 			t.Errorf("%s: the stock theme differs from Preset{}:\n%+v\n%+v", name, stock, preset)
 		}
 	}
@@ -73,7 +73,7 @@ func TestStockThemesAreTheZeroPreset(t *testing.T) {
 	layer := func(y, blur, spread float64) ggui.ShadowStyle {
 		return ggui.ShadowStyle{Offset: ggui.Pt(0, y), Blur: blur, Spread: spread, Color: color.NRGBA{A: 26}}
 	}
-	for _, th := range []Theme{light, dark} {
+	for _, th := range []*Theme{light, dark} {
 		if th.PanelShadow != layer(4, 6, -1) || th.PanelContact != layer(2, 4, -2) {
 			t.Errorf("panel shadow %+v over %+v: want shadow-md's 0 4px 6px -1px and 0 2px 4px -2px", th.PanelShadow, th.PanelContact)
 		}
@@ -95,7 +95,7 @@ func TestInputSurfaceIsTranslucent(t *testing.T) {
 	if got := color.NRGBAModel.Convert(dark.Input).(color.NRGBA); got.A == 0 || got.A >= want.A || got.R != want.R {
 		t.Errorf("dark Input %v is not InputBorder %v at 30%%", got, want)
 	}
-	pinned := dark
+	pinned := dark.Clone()
 	pinned.Input = dark.Card
 	if pinned.Resolve().Input != dark.Card {
 		t.Error("a set Input did not stay set")
@@ -125,7 +125,7 @@ func TestRadiiFollowRadiusInEveryStyle(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		set := th
+		set := th.Clone()
 		set.Radius = css.Radius
 		set = set.Resolve()
 		for i, p := range css.radii() {
@@ -137,7 +137,7 @@ func TestRadiiFollowRadiusInEveryStyle(t *testing.T) {
 				t.Errorf("%s: radius %d is %v from CSS and %v from Radius, want %v", style, i, *p, *set.radii()[i], want)
 			}
 		}
-		if css.Resolve() != css {
+		if !css.Resolve().Equal(css) {
 			t.Errorf("%s: resolving again changed the radii", style)
 		}
 	}
@@ -181,8 +181,8 @@ func TestASetFollowerStaysSet(t *testing.T) {
 
 func TestResolveIsStable(t *testing.T) {
 	t.Parallel()
-	for _, th := range []Theme{Default(), Dark(), Preset{Style: StyleRhea}.Dark()} {
-		if again := th.Resolve(); again != th {
+	for _, th := range []*Theme{Default(), Dark(), Preset{Style: StyleRhea}.Dark()} {
+		if again := th.Resolve(); !again.Equal(th) {
 			t.Fatalf("resolving a resolved theme changed it:\n%+v\n%+v", th, again)
 		}
 	}
@@ -190,7 +190,7 @@ func TestResolveIsStable(t *testing.T) {
 
 func TestALiteralThemeDraws(t *testing.T) {
 	t.Parallel()
-	th := Theme{Primary: brand}.Resolve()
+	th := (&Theme{Primary: brand}).Resolve()
 	if th.Bg == nil || th.Fg == nil || th.Ring == nil || th.Popover == nil || th.SidebarRing == nil || th.Text.Color == nil {
 		t.Fatalf("unset colors stayed unset: %+v", th)
 	}

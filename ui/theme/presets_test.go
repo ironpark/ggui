@@ -11,7 +11,7 @@ func TestThemePresetsHaveCompleteSemanticPairs(t *testing.T) {
 		for _, accent := range AccentColors() {
 			for _, style := range Styles() {
 				p := Preset{base, accent, style}
-				for _, theme := range []Theme{p.Light(), p.Dark()} {
+				for _, theme := range []*Theme{p.Light(), p.Dark()} {
 					colors := []color.Color{theme.Bg, theme.Fg, theme.Card, theme.CardFg, theme.Popover, theme.PopoverFg, theme.Primary, theme.PrimaryFg, theme.Secondary, theme.SecondaryFg, theme.Muted, theme.MutedFg, theme.Accent, theme.AccentFg, theme.Input, theme.InputBorder, theme.Border, theme.Ring, theme.Destructive, theme.Sidebar, theme.SidebarFg, theme.SidebarPrimary, theme.SidebarPrimaryFg, theme.SidebarAccent, theme.SidebarAccentFg, theme.SidebarBorder, theme.SidebarRing}
 					colors = append(colors, theme.Chart[:]...)
 					for _, c := range colors {
@@ -70,7 +70,7 @@ func TestPresetColorConversionAndGeometry(t *testing.T) {
 
 func TestChatTokensFillsAnOmittedChatBlock(t *testing.T) {
 	t.Parallel()
-	manual := Theme{}
+	manual := &Theme{}
 	if got := manual.ChatTokens(); got != Default().Chat || got == (ChatTokens{}) {
 		t.Errorf("a Theme without Chat resolved to %+v, want Default's tokens %+v", got, Default().Chat)
 	}

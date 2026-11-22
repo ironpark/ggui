@@ -14,7 +14,7 @@ type dial struct {
 	ggui.Interactive
 	value  *ggui.StateValue[float64]
 	needle *ggui.Sprung[float64] // eases toward value; Paint reads it
-	theme  uitheme.Theme
+	theme  *uitheme.Theme
 	rect   ggui.Rect
 }
 
@@ -29,7 +29,7 @@ func newDial(value *ggui.StateValue[float64], name string) *dial {
 // Layout resolves the theme now, because Paint receives only the canvas.
 func (d *dial) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	d.Sync()
-	d.theme = uitheme.From(env)
+	d.theme = uitheme.Of(env)
 	s := min(c.MaxW, c.MaxH, 160)
 	return c.Constrain(ggui.Sz(s, s))
 }

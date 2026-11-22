@@ -43,7 +43,7 @@ func chatImage(name string) *ggfx.Image {
 
 // Reference scenes inherit the selected preset, whose fonts main.go installs.
 func chatSurface(content ggui.Widget, maxWidth ...float64) ggui.Widget {
-	t := uitheme.Use()
+	t := uitheme.Use().Clone()
 	t.Card = t.Bg // reaction rings cut out against the actual conversation surface
 	width := 384.0
 	if len(maxWidth) > 0 {
