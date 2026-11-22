@@ -162,6 +162,19 @@ func TestDevBundleStageIncremental(t *testing.T) {
 	if err := os.Chtimes(icnsPath, past, past); err != nil {
 		t.Fatal(err)
 	}
+	var exe1File *os.File
+	if runtime.GOOS != "windows" {
+		// Keep v1 open across Stage so Unix filesystems that aggressively
+		// recycle unlinked inode numbers (such as ext4 on Linux) cannot hand
+		// v1's inode back to machosign's temporary file during the same Stage.
+		// This also matches a running process still referencing the old vnode;
+		// an in-place overwrite would still keep the same inode.
+		exe1File, err = os.Open(exe1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer exe1File.Close()
+	}
 	exe1Info, err := os.Stat(exe1)
 	if err != nil {
 		t.Fatal(err)
@@ -187,6 +200,9 @@ func TestDevBundleStageIncremental(t *testing.T) {
 	}
 	if runtime.GOOS != "windows" && os.SameFile(exe1Info, exe2Info) {
 		t.Error("executable kept the same inode across rebuilds (must replace with fresh inode)")
+	}
+	if exe1File != nil {
+		_ = exe1File.Close()
 	}
 
 	if runtime.GOOS == "darwin" {
