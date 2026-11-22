@@ -429,15 +429,7 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		s.list.Width(max(w, least))
 		return s.popup.Layout(ggui.Constraints{MinW: w, MaxW: w, MinH: min(c.MaxH, max(c.MinH, minH)), MaxH: c.MaxH}, env)
 	}
-	// As wide as the widest option, so the field does not resize as the
-	// value changes, and never wider than the row wants unless told to.
-	widest := 0.0
-	for _, it := range s.items {
-		widest = max(widest, it.text.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env).W)
-	}
-	if s.placeholder != "" && index < 0 {
-		widest = max(widest, s.text.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env).W)
-	}
+	widest := s.widestLabel(c, env, index)
 	// The field holds its label, a gap and the chevron; the list under it,
 	// just as wide, holds the same label and the room for a check mark.
 	trail := s.chevronRoom(t)
@@ -453,6 +445,21 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // chevron and the padding beside it.
 func (s *SelectWidget[T]) chevronRoom(t *uitheme.Theme) float64 {
 	return menuGap(t) + t.IconSize + s.pad.Right
+}
+
+// widestLabel is the width of the widest option's label, or of the
+// placeholder while nothing is chosen: the field is as wide as that, so it
+// does not resize as the value changes, and never wider than the row wants
+// unless told to.
+func (s *SelectWidget[T]) widestLabel(c ggui.Constraints, env ggui.Env, index int) float64 {
+	widest := 0.0
+	for _, it := range s.items {
+		widest = max(widest, it.text.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env).W)
+	}
+	if s.placeholder != "" && index < 0 {
+		widest = max(widest, s.text.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env).W)
+	}
+	return widest
 }
 
 // selectHoverSlot keeps the field's hover fill easing across rebuilds.
@@ -492,19 +499,8 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 		s.box.Fill(nil).Border(0, nil)
 		shape := joinedBox{rect: r, radius: radius, sides: sides}
 		paintJoinedBox(dst, shape, fill, t.BorderWidth, border)
-		ring := joinedFocus{joinedBox: shape, on: true, width: t.BorderWidth}
-		switch {
-		case inert:
-			ring.on = false
-		case s.shownInvalid:
-			ring.line, ring.halo = border, t.Halo(fieldRing(t, true))
-		case s.Focused && s.FocusVisible:
-			ring.line, ring.halo = t.Ring, t.Halo(t.Ring)
-		default:
-			ring.on = false
-		}
-		if g, ok := dst.Enclosing().(*ButtonGroupWidget); ok && ring.on {
-			g.ring(ring)
+		if !inert {
+			s.ringJoined(dst, shape, border)
 		}
 	} else {
 		if s.shownInvalid && !inert {
@@ -525,6 +521,26 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	if !s.shownInvalid && !sides.Any() {
 		FocusRing(dst, &s.Interactive, Ring{Theme: t, Rect: r, Radius: radius, Color: t.Ring, Motion: s.motion})
+	}
+}
+
+// ringJoined hands the ButtonGroup the field is joined in the field's
+// ring, which the group draws over the neighbours painted after it: the
+// destructive ring while the field is invalid, the keyboard's while it
+// has visible focus, and none otherwise.
+func (s *SelectWidget[T]) ringJoined(dst *ggui.Canvas, shape joinedBox, border color.Color) {
+	t := s.theme
+	ring := joinedFocus{joinedBox: shape, on: true, width: t.BorderWidth}
+	switch {
+	case s.shownInvalid:
+		ring.line, ring.halo = border, t.Halo(fieldRing(t, true))
+	case s.Focused && s.FocusVisible:
+		ring.line, ring.halo = t.Ring, t.Halo(t.Ring)
+	default:
+		return
+	}
+	if g, ok := dst.Enclosing().(*ButtonGroupWidget); ok {
+		g.ring(ring)
 	}
 }
 
@@ -642,43 +658,57 @@ func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
 	if ev.Kind != ggui.KeyPress {
 		return
 	}
-	open := s.popup.IsOpen()
 	if ev.Key == ggui.KeySpace && s.search.active(ggui.Now(), selectTypeaheadReset) {
 		// A space in the middle of a search is part of it, as Base UI's
 		// typeahead has it; the text event that follows adds it.
 		return
 	}
 	if ggui.Activates(ev) {
-		if open && s.highlight >= 0 {
-			s.choose(s.highlight)
-			return
-		}
-		s.toggle()
-		if !open && s.highlight < 0 && len(s.options) > 0 {
-			// Opened from the keyboard with nothing chosen, the list
-			// starts on its first option.
-			s.highlight = controlkit.StepIndex(-1, 1, len(s.options), s.enabled)
-		}
+		s.keyActivate()
 		return
 	}
 	switch ev.Key {
 	case ggui.KeyEscape:
 		s.popup.Hide()
 	case ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd:
-		if len(s.options) == 0 {
-			return
-		}
-		if open {
-			// The list does not wrap: Base UI's Select leaves loopFocus off.
-			s.highlight, _ = navIndexBounded(ev, navVertical, s.highlight, len(s.options), s.enabled)
-			s.viewport.reveal = true
-		} else if ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyArrowDown {
-			// An arrow opens the list on the chosen option, as Base UI's
-			// trigger does, or on the near end when nothing is chosen.
-			s.toggle()
-			if s.highlight < 0 {
-				s.highlight, _ = navIndex(ev, navVertical, -1, len(s.options), s.enabled)
-			}
+		s.keyMove(ev)
+	}
+}
+
+// keyActivate chooses the highlighted option of the open list, or else
+// opens or closes the list.
+func (s *SelectWidget[T]) keyActivate() {
+	open := s.popup.IsOpen()
+	if open && s.highlight >= 0 {
+		s.choose(s.highlight)
+		return
+	}
+	s.toggle()
+	if !open && s.highlight < 0 && len(s.options) > 0 {
+		// Opened from the keyboard with nothing chosen, the list
+		// starts on its first option.
+		s.highlight = controlkit.StepIndex(-1, 1, len(s.options), s.enabled)
+	}
+}
+
+// keyMove moves the highlight of the open list on an arrow, Home or End,
+// and opens the closed list on an arrow.
+func (s *SelectWidget[T]) keyMove(ev ggui.KeyEvent) {
+	if len(s.options) == 0 {
+		return
+	}
+	if s.popup.IsOpen() {
+		// The list does not wrap: Base UI's Select leaves loopFocus off.
+		s.highlight, _ = navIndexBounded(ev, navVertical, s.highlight, len(s.options), s.enabled)
+		s.viewport.reveal = true
+		return
+	}
+	if ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyArrowDown {
+		// An arrow opens the list on the chosen option, as Base UI's
+		// trigger does, or on the near end when nothing is chosen.
+		s.toggle()
+		if s.highlight < 0 {
+			s.highlight, _ = navIndex(ev, navVertical, -1, len(s.options), s.enabled)
 		}
 	}
 }
