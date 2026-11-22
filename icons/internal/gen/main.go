@@ -83,12 +83,25 @@ func read(lib library) ([]glyph, error) {
 	if err != nil {
 		return nil, err
 	}
+	glyphs, err := scanGlyphs(tar.NewReader(zr), lib)
+	if err != nil {
+		return nil, err
+	}
+	if len(glyphs) == 0 {
+		return nil, fmt.Errorf("no icons under %v of %s", lib.variants, url)
+	}
+	sort.Slice(glyphs, func(i, j int) bool { return glyphs[i].name < glyphs[j].name })
+	return glyphs, nil
+}
+
+// scanGlyphs reads every icon file of lib from tr.
+func scanGlyphs(tr *tar.Reader, lib library) ([]glyph, error) {
 	var glyphs []glyph
 	idents := map[string]string{}
-	for tr := tar.NewReader(zr); ; {
+	for {
 		h, err := tr.Next()
 		if err == io.EOF {
-			break
+			return glyphs, nil
 		}
 		if err != nil {
 			return nil, err
@@ -102,38 +115,42 @@ func read(lib library) ([]glyph, error) {
 			if path.Dir(file) != v.dir {
 				continue
 			}
-			data, err := io.ReadAll(tr)
+			g, err := readGlyph(tr, file, v, idents)
 			if err != nil {
 				return nil, err
 			}
-			g := glyph{name: strings.TrimSuffix(path.Base(file), ".svg") + v.suffix}
-			g.ident = ident(g.name)
-			if other, taken := idents[g.ident]; taken {
-				return nil, fmt.Errorf("%s and %s are both %s", other, g.name, g.ident)
-			}
-			idents[g.ident] = g.name
-			// What is kept is the icon as parsed, not its source: smaller,
-			// and read without parsing.
-			parsed, err := icons.Parse(data)
-			if err != nil {
-				return nil, fmt.Errorf("%s: %w", file, err)
-			}
-			bin, err := parsed.MarshalBinary()
-			if err != nil {
-				return nil, fmt.Errorf("%s: %w", file, err)
-			}
-			if _, err := icons.ParseBinary(bin); err != nil {
-				return nil, fmt.Errorf("%s: %w", file, err)
-			}
-			g.data = string(bin)
 			glyphs = append(glyphs, g)
 		}
 	}
-	if len(glyphs) == 0 {
-		return nil, fmt.Errorf("no icons under %v of %s", lib.variants, url)
+}
+
+// readGlyph reads one icon file as the glyph v names it.
+func readGlyph(tr *tar.Reader, file string, v variant, idents map[string]string) (glyph, error) {
+	data, err := io.ReadAll(tr)
+	if err != nil {
+		return glyph{}, err
 	}
-	sort.Slice(glyphs, func(i, j int) bool { return glyphs[i].name < glyphs[j].name })
-	return glyphs, nil
+	g := glyph{name: strings.TrimSuffix(path.Base(file), ".svg") + v.suffix}
+	g.ident = ident(g.name)
+	if other, taken := idents[g.ident]; taken {
+		return glyph{}, fmt.Errorf("%s and %s are both %s", other, g.name, g.ident)
+	}
+	idents[g.ident] = g.name
+	// What is kept is the icon as parsed, not its source: smaller,
+	// and read without parsing.
+	parsed, err := icons.Parse(data)
+	if err != nil {
+		return glyph{}, fmt.Errorf("%s: %w", file, err)
+	}
+	bin, err := parsed.MarshalBinary()
+	if err != nil {
+		return glyph{}, fmt.Errorf("%s: %w", file, err)
+	}
+	if _, err := icons.ParseBinary(bin); err != nil {
+		return glyph{}, fmt.Errorf("%s: %w", file, err)
+	}
+	g.data = string(bin)
+	return g, nil
 }
 
 // reserved are the names the packages declare themselves.
