@@ -356,7 +356,7 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		t.focusPending = false
 	}
 	if focus := t.focusIndex(); focus >= 0 {
-		controlFocusRing(dst, &t.Interactive, th, t.labelRect[focus], th.RadiusSm, th.Ring, t.motion)
+		FocusRing(dst, &t.Interactive, Ring{Theme: th, Rect: t.labelRect[focus], Radius: th.RadiusSm, Color: th.Ring, Motion: t.motion})
 	}
 	if cur >= 0 && t.tabs[cur].Content != nil {
 		at := ggui.Pt(r.Origin.X, r.Origin.Y+t.headerH)

@@ -284,7 +284,7 @@ func (i *NavigationMenuItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Paint(i.box, r)
 	if !i.inContent {
 		// A link in a panel shows focus as its surface alone.
-		controlFocusRing(dst, &i.Interactive, t, r, pick(i.radius >= 0, i.radius, t.Radius), t.Ring, i.motion)
+		FocusRing(dst, &i.Interactive, Ring{Theme: t, Rect: r, Radius: pick(i.radius >= 0, i.radius, t.Radius), Color: t.Ring, Motion: i.motion})
 	}
 }
 

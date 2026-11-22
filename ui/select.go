@@ -522,7 +522,7 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 		chevron(dst, s.env, t, center, 2, muted)
 	}
 	if !s.shownInvalid && !sides.Any() {
-		controlFocusRing(dst, &s.Interactive, t, r, radius, t.Ring, s.motion)
+		FocusRing(dst, &s.Interactive, Ring{Theme: t, Rect: r, Radius: radius, Color: t.Ring, Motion: s.motion})
 	}
 }
 

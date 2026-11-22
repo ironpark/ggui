@@ -52,7 +52,7 @@ func (g *toggle) stateRing(dst *ggui.Canvas, box ggui.Rect, radius, invalid floa
 	// In a FieldCard the ring is the card's, and the glyph keeps its
 	// border: shadcn's group-has-[:focus-visible]/field-label:ring-0.
 	if !g.inCard {
-		focusRing(dst, &g.Interactive, t, box, radius, fieldRing(t, g.invalid()), g.motion)
+		FocusRing(dst, &g.Interactive, Ring{Theme: t, Rect: box, Radius: radius, Color: fieldRing(t, g.invalid()), Motion: g.motion})
 	}
 }
 

@@ -263,7 +263,7 @@ func (c *CardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		c.Hit(dst, r, c, ggui.CursorShapePointer)
 		dst.Paint(c.box, r)
 	})
-	focusRing(dst, &c.Interactive, t, r, c.shownRadius, t.Ring, 0)
+	FocusRing(dst, &c.Interactive, Ring{Theme: t, Rect: r, Radius: c.shownRadius, Color: t.Ring, Motion: 0})
 }
 
 // cardHoverSlot keeps a tappable card's easing onto its hover surface.
@@ -706,7 +706,7 @@ func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		paintIcon(dst, b.env, b.trail, trailRect, label, 0)
 	}
 	if b.action != nil {
-		focusRing(dst, &b.Interactive, b.theme, r, radius, b.theme.Ring, b.motion)
+		FocusRing(dst, &b.Interactive, Ring{Theme: b.theme, Rect: r, Radius: radius, Color: b.theme.Ring, Motion: b.motion})
 	}
 }
 
