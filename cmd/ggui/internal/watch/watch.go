@@ -120,6 +120,9 @@ type Options struct {
 	// Settle is how long the watcher gathers what the system reports
 	// before it scans, for the steps of one save.
 	Settle time.Duration
+	// Steady is how long a file found empty or still changing is looked
+	// at again before it is judged as it is. Zero uses fswatch's default.
+	Steady time.Duration
 	// Poll is the time between scans when there are no notifications;
 	// SafetyNet when there are.
 	Poll, SafetyNet time.Duration
@@ -158,6 +161,7 @@ func New(paths []string, o Options) *Watcher {
 			},
 		},
 		Settle:   o.Settle,
+		Steady:   o.Steady,
 		Poll:     o.Poll,
 		Rescan:   o.SafetyNet,
 		NoNotify: poll,

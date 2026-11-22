@@ -291,6 +291,15 @@ func write(t *testing.T, path, data string) {
 	}
 }
 
+func writeRetry(path string, data []byte) error {
+	var err error
+	for deadline := time.Now().Add(500 * time.Millisecond); ; time.Sleep(5 * time.Millisecond) {
+		if err = os.WriteFile(path, data, 0o644); err == nil || !time.Now().Before(deadline) {
+			return err
+		}
+	}
+}
+
 // A scan that catches a save between its truncating the file and writing
 // it sees an empty file. The edit is judged by what the save writes: one
 // to a comment is not a real change because the file was empty in passing.
@@ -299,15 +308,23 @@ func TestClassifyWaitsOutATruncatedSave(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "main.go")
 	const src = "package main\n\nfunc main() {}\n"
 	touch(t, path, src)
-	w := New([]string{path}, Options{})
-	time.Sleep(100 * time.Millisecond) // the fingerprint is taken
+	w := New([]string{path}, Options{Steady: 2 * time.Second})
+	// Wait deterministically for New's background fingerprint goroutine:
+	// Run with a canceled context returns once background work finishes.
+	doneCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	w.fs.Run(doneCtx, nil)
 
 	touch(t, path, "")
+	done := make(chan error, 1)
 	go func() {
 		time.Sleep(10 * time.Millisecond)
-		os.WriteFile(path, []byte(src+"// A comment.\n"), 0o644)
+		done <- writeRetry(path, []byte(src+"// A comment.\n"))
 	}()
 	real, cosmetic, _, _ := w.classify(w.fs.Sync(context.Background()))
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
 	if len(real) > 0 || !slices.Equal(cosmetic, []string{path}) {
 		t.Errorf("real %v, cosmetic %v: want the comment's edit cosmetic", real, cosmetic)
 	}
