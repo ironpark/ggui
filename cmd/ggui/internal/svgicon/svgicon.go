@@ -122,44 +122,62 @@ func Draw(ctx context.Context, o Options) error {
 	if _, err := os.Stat(o.SVG); err != nil {
 		return err
 	}
-	mods, err := gotool.Modules(ctx, o.Dir, ggfxModule)
+	ggfx, err := projectGGFX(ctx, o)
 	if err != nil {
 		return err
 	}
-	if len(mods) != 1 || mods[0].Error != nil {
-		return fmt.Errorf("app.icon %s is an SVG, which ggui draws with the ggfx of the project's module, and the module does not require %s: an SVG icon needs a ggui project; or export the icon as a %d×%d PNG and name that", o.Name, ggfxModule, Size, Size)
-	}
-	ggfx := mods[0]
-
 	tmp, err := os.MkdirTemp("", "ggui-svgicon-")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(tmp)
+	exe, err := buildDrawer(ctx, o, tmp, ggfx)
+	if err != nil {
+		return err
+	}
+	return runDrawer(ctx, o, exe)
+}
+
+// projectGGFX returns the ggfx module of the project's module, or says
+// why an SVG icon cannot be drawn without it.
+func projectGGFX(ctx context.Context, o Options) (gotool.Module, error) {
+	mods, err := gotool.Modules(ctx, o.Dir, ggfxModule)
+	if err != nil {
+		return gotool.Module{}, err
+	}
+	if len(mods) != 1 || mods[0].Error != nil {
+		return gotool.Module{}, fmt.Errorf("app.icon %s is an SVG, which ggui draws with the ggfx of the project's module, and the module does not require %s: an SVG icon needs a ggui project; or export the icon as a %d×%d PNG and name that", o.Name, ggfxModule, Size, Size)
+	}
+	return mods[0], nil
+}
+
+// buildDrawer writes the drawing program and its overlay into tmp and
+// builds it for the host, returning the program's path.
+func buildDrawer(ctx context.Context, o Options, tmp string, ggfx gotool.Module) (string, error) {
 	src := filepath.Join(tmp, "main.go")
 	if err := os.WriteFile(src, Source(Size), 0o644); err != nil {
-		return err
+		return "", err
 	}
 	pkg, err := virtualDir(o.Dir)
 	if err != nil {
-		return err
+		return "", err
 	}
 	overlay, err := json.Marshal(map[string]map[string]string{
 		"Replace": {filepath.Join(o.Dir, pkg, "main.go"): src},
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
 	ov := filepath.Join(tmp, "overlay.json")
 	if err := os.WriteFile(ov, overlay, 0o644); err != nil {
-		return err
+		return "", err
 	}
 
 	// The program runs here, so it is built for the host whatever the
 	// build is for.
 	host, err := gotool.Env(ctx, o.Dir, nil, "GOHOSTOS", "GOHOSTARCH")
 	if err != nil {
-		return err
+		return "", err
 	}
 	exe := filepath.Join(tmp, "svgicon")
 	if host["GOHOSTOS"] == "windows" {
@@ -180,11 +198,15 @@ func Draw(ctx context.Context, o Options) error {
 	if err := gotool.Build(ctx, bo); err != nil {
 		var be *gotool.BuildError
 		if errors.As(err, &be) && ctx.Err() == nil {
-			return buildFailure(o.Name, ggfx, string(be.Output))
+			return "", buildFailure(o.Name, ggfx, string(be.Output))
 		}
-		return err
+		return "", err
 	}
+	return exe, nil
+}
 
+// runDrawer runs the drawing program on o.SVG into o.Out.
+func runDrawer(ctx context.Context, o Options, exe string) error {
 	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, exe, o.SVG, o.Out)
 	cmd.Stderr = &stderr
