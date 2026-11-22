@@ -429,7 +429,9 @@ func (t *RichTextWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		x := r.Origin.X + p.LineX(i, r.Size.W, align)
 		t.paintBackgrounds(dst, r, ln, x)
 		col := func(style int) color.Color { return t.runStyle(ln.Styles[style].Run).Color }
-		paragraph.Draw(dst.Image, &t.pieceOp, ln.S, ln.Pieces, ln.Styles, scale, ln.Baseline*scale, col, func(op *text.DrawOptions) {
+		paragraph.Draw(dst.Image, &t.pieceOp, paragraph.DrawSpec{
+			S: ln.S, Pieces: ln.Pieces, Styles: ln.Styles, Scale: scale, Baseline: ln.Baseline * scale,
+		}, col, func(op *text.DrawOptions) {
 			op.GeoM.Translate(x*scale, r.Origin.Y*scale)
 		})
 		t.paintDecorations(dst, r, ln, x)

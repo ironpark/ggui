@@ -288,7 +288,7 @@ func (l *Line) SpanX(lo, hi int, fn func(a, b float64)) {
 // top, as paragraph.Draw does: op is reused for each piece, col gives its
 // color and place moves it to where the line is.
 func (l *Line) Draw(dst *ggfx.Image, op *text.DrawOptions, scale, baseline float64, col func(int) color.Color, place func(*text.DrawOptions)) {
-	paragraph.Draw(dst, op, l.s, l.pieces, l.styles, scale, baseline, col, place)
+	paragraph.Draw(dst, op, paragraph.DrawSpec{S: l.s, Pieces: l.pieces, Styles: l.styles, Scale: scale, Baseline: baseline}, col, place)
 }
 
 // noBidi marks a line that needs no reordering.

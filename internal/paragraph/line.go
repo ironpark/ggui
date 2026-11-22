@@ -539,18 +539,29 @@ func SpanX(s string, ps []Piece, styles []LineStyle, lo, hi int, yield func(x0, 
 	}
 }
 
-// Draw draws a laid-out line. scale is the Canvas's, baseline the
-// line's baseline below where place puts the line's origin, in image
+// DrawSpec is what Draw draws: the line's text, its pieces and styles,
+// and how it is scaled and placed.
+type DrawSpec struct {
+	S        string
+	Pieces   []Piece
+	Styles   []LineStyle
+	Scale    float64
+	Baseline float64
+}
+
+// Draw draws a laid-out line. spec.Scale is the Canvas's, spec.Baseline
+// the line's baseline below where place puts the line's origin, in image
 // pixels, and col the color of a style; place moves a freshly translated
-// GeoM to the line. op is scratch space the caller keeps, so that drawing
-// allocates no options.
-func Draw(dst *ggfx.Image, op *text.DrawOptions, s string, ps []Piece, styles []LineStyle, scale, baseline float64, col func(style int) color.Color, place func(op *text.DrawOptions)) {
+// GeoM to the line. col and place are parameters rather than spec fields
+// so a closure that does not escape stays on the stack. op is scratch
+// space the caller keeps, so that drawing allocates no options.
+func Draw(dst *ggfx.Image, op *text.DrawOptions, spec DrawSpec, col func(style int) color.Color, place func(op *text.DrawOptions)) {
 	if dst == nil || dst.Bounds().Empty() {
 		return
 	}
-	for i := range ps {
-		p := &ps[i]
-		st := styles[p.Style]
+	for i := range spec.Pieces {
+		p := &spec.Pieces[i]
+		st := spec.Styles[p.Style]
 		*op = text.DrawOptions{}
 		c := col(p.Style)
 		if c == nil {
@@ -558,10 +569,10 @@ func Draw(dst *ggfx.Image, op *text.DrawOptions, s string, ps []Piece, styles []
 		}
 		op.ColorScale.ScaleWithColor(c)
 		if !p.RTL {
-			face := st.Style.Face(scale)
-			op.GeoM.Translate(p.X*scale, baseline-face.Metrics().HAscent)
+			face := st.Style.Face(spec.Scale)
+			op.GeoM.Translate(p.X*spec.Scale, spec.Baseline-face.Metrics().HAscent)
 			place(op)
-			t := s[p.Start:p.End]
+			t := spec.S[p.Start:p.End]
 			plain := fontsys.PlainFace(face, t)
 			if plain == nil {
 				fontsys.DrawText(dst, t, face, op)
@@ -574,20 +585,20 @@ func Draw(dst *ggfx.Image, op *text.DrawOptions, s string, ps []Piece, styles []
 			text.DrawLazyGlyphs(dst, p.glyphs, op)
 			continue
 		}
-		chain := rtlFaces(st.Style, scale, p.lang)
+		chain := rtlFaces(st.Style, spec.Scale, p.lang)
 		right := p.X + p.W
 		for _, sg := range p.segs {
 			right -= sg.W
-			face, rtl := chain.faceOf(s[sg.Start:sg.End])
+			face, rtl := chain.faceOf(spec.S[sg.Start:sg.End])
 			op.GeoM.Reset()
-			op.GeoM.Translate(right*scale, baseline-face.Metrics().HAscent)
+			op.GeoM.Translate(right*spec.Scale, spec.Baseline-face.Metrics().HAscent)
 			place(op)
 			op.LayoutOptions.PrimaryAlign = text.AlignStart
 			if rtl {
 				// A right-to-left face starts at the right; its end is the left.
 				op.LayoutOptions.PrimaryAlign = text.AlignEnd
 			}
-			text.Draw(dst, s[sg.Start:sg.End], face, op)
+			text.Draw(dst, spec.S[sg.Start:sg.End], face, op)
 		}
 	}
 }
