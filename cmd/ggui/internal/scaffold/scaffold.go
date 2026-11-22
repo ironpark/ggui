@@ -134,13 +134,7 @@ func Write(o Options) (*Result, error) {
 	}
 
 	if !o.Force {
-		var exist []string
-		for _, f := range Files {
-			if _, err := os.Lstat(filepath.Join(dir, f)); err == nil {
-				exist = append(exist, f)
-			}
-		}
-		if len(exist) > 0 {
+		if exist := existingFiles(dir); len(exist) > 0 {
 			return nil, fmt.Errorf("%s already has %s; pass --force to overwrite, or choose an empty directory",
 				dir, strings.Join(exist, ", "))
 		}
@@ -149,24 +143,9 @@ func Write(o Options) (*Result, error) {
 		return nil, err
 	}
 
-	var main bytes.Buffer
-	if err := mainTmpl.Execute(&main, map[string]string{"Name": r.Name, "Executable": base}); err != nil {
+	files, err := planFiles(o, r)
+	if err != nil {
 		return nil, err
-	}
-	gomod := fmt.Sprintf("module %s\n\ngo %s\n", r.Module, goDirective)
-	if o.Replace != "" {
-		rel, err := replacePath(dir, o.Replace)
-		if err != nil {
-			return nil, err
-		}
-		gomod += fmt.Sprintf("\nreplace %s => %s\n", GGUI, quoteGoModPath(rel))
-	}
-	files := map[string][]byte{
-		"go.mod":        []byte(gomod),
-		"main.go":       main.Bytes(),
-		config.FileName: config.Template(r.Name, project.DefaultID(r.Module), "0.1.0"),
-		// go build names the program after the directory.
-		".gitignore": []byte(gitignore(base)),
 	}
 	for _, f := range Files {
 		if err := os.WriteFile(filepath.Join(dir, f), files[f], 0o644); err != nil {
@@ -175,6 +154,41 @@ func Write(o Options) (*Result, error) {
 		r.Files = append(r.Files, f)
 	}
 	return r, nil
+}
+
+// existingFiles lists which of Files already exist in dir.
+func existingFiles(dir string) []string {
+	var exist []string
+	for _, f := range Files {
+		if _, err := os.Lstat(filepath.Join(dir, f)); err == nil {
+			exist = append(exist, f)
+		}
+	}
+	return exist
+}
+
+// planFiles builds the content of each file Write writes.
+func planFiles(o Options, r *Result) (map[string][]byte, error) {
+	base := filepath.Base(r.Dir)
+	var main bytes.Buffer
+	if err := mainTmpl.Execute(&main, map[string]string{"Name": r.Name, "Executable": base}); err != nil {
+		return nil, err
+	}
+	gomod := fmt.Sprintf("module %s\n\ngo %s\n", r.Module, goDirective)
+	if o.Replace != "" {
+		rel, err := replacePath(r.Dir, o.Replace)
+		if err != nil {
+			return nil, err
+		}
+		gomod += fmt.Sprintf("\nreplace %s => %s\n", GGUI, quoteGoModPath(rel))
+	}
+	return map[string][]byte{
+		"go.mod":        []byte(gomod),
+		"main.go":       main.Bytes(),
+		config.FileName: config.Template(r.Name, project.DefaultID(r.Module), "0.1.0"),
+		// go build names the program after the directory.
+		".gitignore": []byte(gitignore(base)),
+	}, nil
 }
 
 // replacePath writes the replacement relative to the new module when the
