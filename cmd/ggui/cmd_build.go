@@ -1016,8 +1016,8 @@ func (b *builder) web(ctx context.Context) error {
 		return err
 	}
 	log.Success("%s, %s gzipped; serve %s at %s", web.MB(r.Size), web.MB(r.GzSize), log.Cyan(dir), web.CleanBase(cfg.Web.Base))
-	fmt.Println(dir)
-	return nil
+	_, err = fmt.Println(dir)
+	return err
 }
 
 // report says what was built, on standard error, and prints its path on
@@ -1034,6 +1034,6 @@ func report(path, what string) error {
 		}
 	}
 	ui.Stderr.Success("Built %s (%s%s)", ui.Stderr.Cyan(rel), what, size)
-	fmt.Fprintln(reportOut, path)
-	return nil
+	_, err := fmt.Fprintln(reportOut, path)
+	return err
 }

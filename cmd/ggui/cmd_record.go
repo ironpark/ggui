@@ -341,8 +341,8 @@ func reportRecording(path, format string, rep recordReport) error {
 		what = byteSize(fi.Size()) + ", " + what
 	}
 	ui.Stderr.Success("Wrote %s (%s)", ui.Stderr.Cyan(rel), what)
-	fmt.Println(path)
-	return nil
+	_, err := fmt.Println(path)
+	return err
 }
 
 // byteSize writes n bytes for a person: 57.3 KB, 2.1 MB.
