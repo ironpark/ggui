@@ -337,11 +337,12 @@ func (m *modal) paintSurface(dst *ggui.Canvas, r ggui.Rect) {
 	m.paintClose(dst, r)
 }
 
-// paintClose paints the close button in the panel's top right corner.
+// paintClose paints the close button in the panel's top trailing corner.
 func (m *modal) paintClose(dst *ggui.Canvas, r ggui.Rect) {
 	if m.hideClose {
 		return
 	}
 	inset := m.shape.closeInset
-	dst.Paint(m.closeButton, ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-m.closeSize.W-inset, r.Origin.Y+inset), m.closeSize))
+	btn := ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-m.closeSize.W-inset, r.Origin.Y+inset), m.closeSize)
+	dst.Paint(m.closeButton, mirrorHorizontal(btn, r, m.env.Direction() == ggui.DirRTL))
 }

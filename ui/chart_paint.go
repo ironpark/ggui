@@ -11,10 +11,12 @@ import (
 )
 
 type chartTextKey struct {
-	text string
-	size float64
-	rgba uint64
-	face chartFace
+	text   string
+	size   float64
+	rgba   uint64
+	face   chartFace
+	font   *ggui.Font
+	weight ggui.FontWeight
 }
 
 // chartFace is the cut of a chart label: most are the regular body face.
@@ -43,6 +45,9 @@ func (c *ChartWidget) text(dst *ggui.Canvas, text string, p ggui.Point, size flo
 // textMiddle is text in face, centered vertically on p.Y: the rows of a
 // tooltip and a legend place their labels by the middle of the row.
 func (c *ChartWidget) textMiddle(dst *ggui.Canvas, text string, p ggui.Point, face chartFace, col color.Color, align float64) {
+	if col == nil {
+		return
+	}
 	t := c.measuredFace(text, 12, col, face)
 	dst.Paint(t.widget, ggui.Rct(ggui.Pt(p.X-align*t.size.W, p.Y-t.size.H/2), t.size))
 }
@@ -50,8 +55,19 @@ func (c *ChartWidget) measuredText(text string, size float64, col color.Color) *
 	return c.measuredFace(text, size, col, chartRegular)
 }
 func (c *ChartWidget) measuredFace(text string, size float64, col color.Color, face chartFace) *chartText {
+	if col == nil {
+		col = color.Transparent
+	}
 	r, g, b, a := col.RGBA()
-	key := chartTextKey{text, size, uint64(r)<<48 | uint64(g)<<32 | uint64(b)<<16 | uint64(a), face}
+	var font *ggui.Font
+	var weight ggui.FontWeight
+	switch face {
+	case chartMedium:
+		weight = c.theme.Label.Weight
+	case chartMono:
+		font, weight = c.theme.Mono.Font, c.theme.Label.Weight
+	}
+	key := chartTextKey{text, size, uint64(r)<<48 | uint64(g)<<32 | uint64(b)<<16 | uint64(a), face, font, weight}
 	if c.textCache == nil {
 		c.textCache = make(map[chartTextKey]*chartText)
 	}
@@ -59,11 +75,11 @@ func (c *ChartWidget) measuredFace(text string, size float64, col color.Color, f
 	t := c.textCache[key]
 	if t == nil {
 		w := widget.Text(text).Size(size).Color(col)
-		switch face {
-		case chartMedium:
-			w.Weight(c.theme.Label.Weight)
-		case chartMono:
-			w.Font(c.theme.Mono.Font).Weight(c.theme.Label.Weight)
+		if font != nil {
+			w.Font(font)
+		}
+		if weight != 0 {
+			w.Weight(weight)
 		}
 		t = &chartText{widget: w, size: w.Layout(free, c.env), layout: c.textLayout}
 		if len(c.textCache) > 512 {
@@ -140,7 +156,7 @@ func (c *ChartWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if c.legend {
 		c.paintLegend(dst, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+r.Size.H-legendH), ggui.Sz(r.Size.W, legendH)))
 	}
-	controlFocusRing(dst, &c.Interactive, c.theme, r, c.theme.RadiusSm, c.theme.Ring)
+	controlFocusRing(dst, &c.Interactive, c.theme, r, c.theme.RadiusSm, c.theme.Ring, c.env.Motion(c.theme.MotionFast))
 	if c.active >= 0 && c.active < len(c.data) && !c.tooltip.Disabled {
 		c.paintTooltip(dst, r)
 	}
@@ -310,6 +326,9 @@ func (c *ChartWidget) paintCartesian(dst *ggui.Canvas, progress float64) {
 			}
 		}
 	}
+	if c.kind != ChartBar {
+		c.prepareCurves()
+	}
 	clipped := dst.Clip(r)
 	for j, s := range c.geometry.series {
 		if c.kind == ChartBar {
@@ -320,7 +339,6 @@ func (c *ChartWidget) paintCartesian(dst *ggui.Canvas, progress float64) {
 		if progress < 1 && c.kind == ChartArea {
 			reveal = dst.Clip(ggui.Rct(r.Origin, ggui.Sz(r.Size.W*progress, r.Size.H)))
 		}
-		c.prepareCurves()
 		totalLength := 0.
 		if c.kind == ChartLine && progress < 1 {
 			for k := range c.curves[j] {
@@ -329,20 +347,22 @@ func (c *ChartWidget) paintCartesian(dst *ggui.Canvas, progress float64) {
 		}
 		remaining := totalLength * progress
 		col, opacity := c.seriesColor(j), c.seriesOpacity(j)
-		for k := range c.curves[j] {
-			paths := &c.curves[j][k]
-			if c.kind == ChartLine && progress < 1 {
-				if remaining <= 0 {
-					break
+		reveal.Transform(ggui.Affine{}.Translate(r.Origin.X, r.Origin.Y), func(dst *ggui.Canvas) {
+			for k := range c.curves[j] {
+				paths := &c.curves[j][k]
+				if c.kind == ChartLine && progress < 1 {
+					if remaining <= 0 {
+						break
+					}
+					if remaining < paths.length {
+						paths.strokePrefix(dst, remaining, c.stroke, col)
+						break
+					}
+					remaining -= paths.length
 				}
-				if remaining < paths.length {
-					paths.strokePrefix(reveal, remaining, c.stroke, col)
-					break
-				}
-				remaining -= paths.length
+				c.paintCurvePaths(dst, paths, col, opacity)
 			}
-			c.paintCurvePaths(reveal, paths, col, opacity)
-		}
+		})
 
 		if progress == 1 && (c.dots || c.labels) {
 			for _, i := range s.indices {
@@ -502,10 +522,11 @@ type chartCurvePaths struct {
 }
 
 func (c *ChartWidget) prepareCurves() {
-	if c.curves != nil && c.curveRect == c.plot {
+	if c.curves != nil && c.curveSize == c.plot.Size {
 		return
 	}
-	c.curveRect = c.plot
+	c.curveSize = c.plot.Size
+	localPlot := ggui.Rct(ggui.Pt(0, 0), c.plot.Size)
 	c.curves = make([][]chartCurvePaths, len(c.geometry.series))
 	for j, s := range c.geometry.series {
 		for start := 0; start < len(s.indices); {
@@ -525,8 +546,8 @@ func (c *ChartWidget) prepareCurves() {
 					top := make([]ggui.Point, len(ids))
 					base := make([]ggui.Point, len(ids))
 					for k, i := range ids {
-						top[k] = chartPosition(c.plot, s.top[i])
-						base[len(ids)-1-k] = chartPosition(c.plot, s.base[i])
+						top[k] = chartPosition(localPlot, s.top[i])
+						base[len(ids)-1-k] = chartPosition(localPlot, s.base[i])
 					}
 					paths := chartCurvePaths{}
 					curvePath(&paths.line, top, c.curve, true, func(p ggui.Point) {
@@ -553,7 +574,7 @@ func (c *ChartWidget) prepareCurves() {
 func (c *ChartWidget) paintCurvePaths(dst *ggui.Canvas, paths *chartCurvePaths, col color.Color, opacity float64) {
 	if c.kind == ChartArea {
 		if c.gradient {
-			dst.FillPathGradient(&paths.fill, c.plot, fade(col, .8), fade(col, .05))
+			dst.FillPathGradient(&paths.fill, ggui.Rct(ggui.Pt(0, 0), c.plot.Size), fade(col, .8), fade(col, .05))
 		} else {
 			dst.FillPath(&paths.fill, fade(col, opacity))
 		}

@@ -90,9 +90,18 @@ func (b *MenubarWidget) open(i int, first bool) {
 	// The panel hangs a little left of its trigger, clear of the bar.
 	b.popup.ShowAt(r.Origin.Add(ggui.Pt(-b.inset(), r.Size.H)))
 }
+func (b *MenubarWidget) hide() {
+	if b.active >= 0 && b.active < len(b.menus) {
+		b.menus[b.active].closeSub()
+	}
+	if b.shown >= 0 && b.shown < len(b.menus) {
+		b.menus[b.shown].closeSub()
+	}
+	b.popup.Hide()
+}
 func (b *MenubarWidget) toggle(i int, first bool) {
 	if b.popup.IsOpen() && i == b.active {
-		b.popup.Hide()
+		b.hide()
 	} else {
 		b.open(i, first)
 	}
@@ -110,9 +119,9 @@ func (b *MenubarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	for _, m := range b.menus {
 		m.button.Pad(t.Space/4, t.Space*.75)
 	}
-	if len(b.menus) > 0 && b.menus[b.active].button.IsInert() {
-		b.popup.Hide()
-		b.active = stepIndex(b.active, 1, len(b.menus), b.enabled)
+	if len(b.menus) > 0 && (b.active < 0 || b.active >= len(b.menus) || b.menus[b.active].button.IsInert()) {
+		b.hide()
+		b.active = stepIndex(max(b.active, -1), 1, len(b.menus), b.enabled)
 	}
 	return b.popup.Layout(c, env)
 }
@@ -135,6 +144,14 @@ func (b *MenubarWidget) Adopt(prev any) {
 
 // Paint implements ggui.Widget.
 func (b *MenubarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	if !b.popup.IsOpen() {
+		if b.active >= 0 && b.active < len(b.menus) && b.menus[b.active].sub != nil {
+			b.menus[b.active].closeSub()
+		}
+		if b.shown >= 0 && b.shown < len(b.menus) && b.menus[b.shown].sub != nil {
+			b.menus[b.shown].closeSub()
+		}
+	}
 	if b.compact {
 		r.Size.W = min(r.Size.W, b.naturalWidth)
 	}
@@ -172,7 +189,8 @@ func (b *MenubarWidget) ConsumesKey(e ggui.KeyEvent) bool {
 	if e.Kind != ggui.KeyPress {
 		return false
 	}
-	return navConsumes(e, navBoth) || ggui.Activates(e) || b.popup.IsOpen() && b.menus[b.active].consumes(e)
+	return navConsumes(e, navBoth) || ggui.Activates(e) ||
+		b.popup.IsOpen() && b.active >= 0 && b.active < len(b.menus) && b.menus[b.active].consumes(e)
 }
 
 // inset is the space between the bar's edge and its triggers: the border
@@ -188,7 +206,7 @@ func (b *MenubarWidget) enabled(i int) bool { return !b.menus[i].button.IsInert(
 // HandleKey implements ggui.KeyHandler.
 func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 	b.Keyboard(e, nil)
-	if e.Kind == ggui.KeyText && !b.IsInert() && len(b.menus) > 0 && b.popup.IsOpen() {
+	if e.Kind == ggui.KeyText && !b.IsInert() && b.active >= 0 && b.active < len(b.menus) && b.popup.IsOpen() {
 		b.menus[b.active].typeahead(e.Text)
 		return
 	}
@@ -200,11 +218,11 @@ func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 	ends := along == navFirst || along == navLast
 	vertical := along == navNone && navMoveOf(e.Key, navVertical) != navNone // Up or Down
 	switch {
-	case open && b.menus[b.active].key(e):
+	case open && b.active >= 0 && b.active < len(b.menus) && b.menus[b.active].key(e):
 		// The open menu moved or ran an item; Left, Right and Escape
 		// belong to a submenu of it before they belong to the bar.
 	case e.Key == ggui.KeyEscape:
-		b.popup.Hide()
+		b.hide()
 	case vertical && !open:
 		// Down opens the menu on its first item. Up does nothing: Base UI
 		// opens a menu of a horizontal bar on the cross-axis key that
@@ -240,7 +258,7 @@ func (a menubarAction) Act(e ggui.Action) bool {
 	case ggui.ActionExpand:
 		a.b.open(a.i, true)
 	case ggui.ActionCollapse:
-		a.b.popup.Hide()
+		a.b.hide()
 	default:
 		return false
 	}
@@ -290,7 +308,7 @@ type menubarPanel struct{ b *MenubarWidget }
 
 func (p menubarPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	b := p.b
-	if len(b.menus) == 0 {
+	if b.active < 0 || b.active >= len(b.menus) {
 		return ggui.Size{}
 	}
 	t := uitheme.Of(env)
@@ -298,7 +316,7 @@ func (p menubarPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 }
 func (p menubarPanel) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	b := p.b
-	if len(b.menus) == 0 {
+	if b.active < 0 || b.active >= len(b.menus) {
 		return
 	}
 	dst.Paint(b.menus[b.active].panel, r)

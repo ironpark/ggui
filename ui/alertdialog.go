@@ -64,6 +64,7 @@ func AlertDialog(open ggui.Binding[bool], title, description string) *AlertDialo
 // first, so fn may open another.
 func (a *AlertDialogWidget) Confirm(label string, fn func()) *AlertDialogWidget {
 	a.confirmLabel, a.onConfirm = label, fn
+	a.props.Changed()
 	return a
 }
 
@@ -129,7 +130,11 @@ func (a *AlertDialogWidget) Close() { a.finish(a.onCancel) }
 // OnClose, which is the Escape path, from cancelling a second time.
 func (a *AlertDialogWidget) finish(fn func()) {
 	a.answered = true
-	a.dialog.Close()
+	if a.dialog != nil {
+		a.dialog.Close()
+	} else if a.open != nil {
+		a.open.Set(false)
+	}
 	a.answered = false
 	if fn != nil {
 		fn()

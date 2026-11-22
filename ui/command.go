@@ -98,14 +98,15 @@ type CommandWidget struct {
 	inDialog           bool     // rows take the dialog's larger radius
 	// menuRows draws the list as a combobox's: a menu's rows, padding and
 	// panel, and a muted empty line.
-	menuRows bool
-	keepOpen bool                     // choosing leaves the popup open, as a multiple combobox does
-	loop     bool                     // the arrows wrap past the ends of the list
-	bare     bool                     // no search pill: a combobox's input above the list filters it
-	onKey    func(ggui.KeyEvent) bool // sees a key before the list does, set by its owner
-	theme    *uitheme.Theme
-	env      ggui.Env
-	rects    []ggui.Rect
+	menuRows      bool
+	keepOpen      bool                     // choosing leaves the popup open, as a multiple combobox does
+	loop          bool                     // the arrows wrap past the ends of the list
+	bare          bool                     // no search pill: a combobox's input above the list filters it
+	onKey         func(ggui.KeyEvent) bool // sees a key before the list does, set by its owner
+	theme         *uitheme.Theme
+	env           ggui.Env
+	rects         []ggui.Rect
+	revealPending bool
 }
 
 // commandListHeight is the most a command list's rows take before the
@@ -143,7 +144,21 @@ func (c *CommandWidget) setEntries(entries []CommandEntry) {
 	c.matched = nil
 	c.highlight = -1
 	c.initialized = false
+	c.revealPending = false
 	c.rects = make([]ggui.Rect, len(entries))
+	if len(c.results.headings) > 0 {
+		active := make(map[string]struct{}, len(entries))
+		for _, e := range entries {
+			if e.group != "" {
+				active[e.group] = struct{}{}
+			}
+		}
+		for group := range c.results.headings {
+			if _, ok := active[group]; !ok {
+				delete(c.results.headings, group)
+			}
+		}
+	}
 	for i, e := range entries {
 		item := MenuItem(e.label, func() { c.choose(i) }).Disabled(e.disabled)
 		item.style = commandStyle
@@ -176,10 +191,10 @@ func (c *CommandWidget) Entries(entries ...CommandEntry) *CommandWidget {
 // owns its spacing; no visible dialog title is added. Choosing an action
 // closes the dialog before the action runs.
 func CommandDialog(open ggui.Binding[bool], command *CommandWidget) *DialogWidget {
-	command.dismiss = func() { open.Set(false) }
 	command.inDialog = true
 	d := Dialog(open, command.Borderless()).CloseButton(false).Compact().Width(384).TopAt(1.0 / 3)
 	d.defaultName = func(s *Strings) string { return s.Commands }
+	command.dismiss = d.Close
 	return d
 }
 
@@ -386,7 +401,7 @@ func (c *CommandWidget) key(ev ggui.KeyEvent) bool {
 		}
 		if next >= 0 {
 			c.highlight = c.matched[next]
-			c.scroll.Reveal(c.rects[c.highlight])
+			c.revealPending = true
 		}
 		return true
 	}
@@ -609,6 +624,7 @@ func (r *commandResults) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 func (r *commandResults) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	c := r.owner
 	if len(r.rows) == 0 {
+		c.revealPending = false
 		s := r.emptySize
 		dst.Paint(r.empty, ggui.Rct(ggui.Pt(rect.Origin.X+(rect.Size.W-s.W)/2, rect.Origin.Y+(rect.Size.H-s.H)/2), s))
 		return
@@ -632,10 +648,15 @@ func (r *commandResults) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 		}
 		at := ggui.Rct(ggui.Pt(rect.Origin.X, y), ggui.Sz(rect.Size.W, row.size.H))
 		c.rects[i] = at
+		if c.revealPending && i == c.highlight {
+			c.revealPending = false
+			c.scroll.Reveal(at)
+		}
 		c.items[i].active = i == c.highlight
 		dst.Paint(c.items[i], at)
 		y += row.size.H
 	}
+	c.revealPending = false
 }
 
 // commandSearchRow is what the search pill holds: the search icon, drawn

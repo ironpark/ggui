@@ -62,10 +62,19 @@ var cssColors = map[string]func(*Theme) *color.Color{
 func FromCSS(css string) (light, dark Theme, err error) {
 	var root, darkVars []string
 	collectBlocks(stripComments(css), func(selector, body string) {
-		switch {
-		case strings.Contains(selector, ":root"):
+		inRoot, inDark := false, false
+		for part := range strings.SplitSeq(selector, ",") {
+			switch {
+			case hasSelectorToken(part, ".dark"):
+				inDark = true
+			case hasSelectorToken(part, ":root"):
+				inRoot = true
+			}
+		}
+		if inRoot {
 			root = append(root, body)
-		case strings.Contains(selector, ".dark"):
+		}
+		if inDark {
 			darkVars = append(darkVars, body)
 		}
 	})
@@ -175,25 +184,59 @@ func CSSColor(name string) ggui.EnvKey[color.Color] {
 	return k.(ggui.EnvKey[color.Color])
 }
 
+// hasSelectorToken reports whether sel contains the CSS selector token tok
+// (such as ":root" or ".dark") as a complete identifier rather than a prefix
+// of a longer name like ".dark-card".
+func hasSelectorToken(sel, tok string) bool {
+	for i := 0; i < len(sel); {
+		idx := strings.Index(sel[i:], tok)
+		if idx < 0 {
+			return false
+		}
+		start := i + idx
+		end := start + len(tok)
+		if (tok[0] != ':' || start == 0 || sel[start-1] != ':') &&
+			(end == len(sel) || !isCSSIdentChar(sel[end])) {
+			return true
+		}
+		i = end
+	}
+	return false
+}
+
+func isCSSIdentChar(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_' || c >= 0x80
+}
+
 // resolveVar returns the value of the variable name, following var().
 func resolveVar(vars map[string]string, name string, depth int) (string, error) {
-	value := vars[name]
+	return resolveValue(vars, name, vars[name], depth)
+}
+
+func resolveValue(vars map[string]string, name, value string, depth int) (string, error) {
+	value = strings.TrimSpace(value)
 	inner, ok := strings.CutPrefix(value, "var(")
+	if !ok {
+		return value, nil
+	}
+	inner, ok = strings.CutSuffix(inner, ")")
 	if !ok {
 		return value, nil
 	}
 	if depth > 8 {
 		return "", fmt.Errorf("theme: --%s: var() nests too deep", name)
 	}
-	ref, fallback, _ := strings.Cut(strings.TrimSuffix(inner, ")"), ",")
+	ref, fallback, hasFallback := strings.Cut(inner, ",")
 	ref = strings.TrimPrefix(strings.TrimSpace(ref), "--")
 	if _, ok := vars[ref]; !ok {
-		if fallback = strings.TrimSpace(fallback); fallback != "" {
-			return fallback, nil
+		if hasFallback {
+			if fallback = strings.TrimSpace(fallback); fallback != "" {
+				return resolveValue(vars, name, fallback, depth+1)
+			}
 		}
 		return "", fmt.Errorf("theme: --%s: undefined %s", name, value)
 	}
-	return resolveVar(vars, ref, depth+1)
+	return resolveValue(vars, ref, vars[ref], depth+1)
 }
 
 // collectBlocks calls fn with the selector and body of every innermost
@@ -256,10 +299,14 @@ func parseLength(s string) (float64, error) {
 		}
 	}
 	v, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
-	if err != nil {
+	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || v < 0 {
 		return 0, fmt.Errorf("bad length %q", s)
 	}
-	return v * scale, nil
+	r := v * scale
+	if math.IsInf(r, 0) {
+		return 0, fmt.Errorf("bad length %q", s)
+	}
+	return r, nil
 }
 
 // ParseColor parses a CSS color as shadcn/ui themes write them: #rgb,
@@ -360,7 +407,7 @@ func parseChannel(s string) (channel, error) {
 	s = strings.TrimSuffix(s, "deg")
 	v, percent := strings.CutSuffix(s, "%")
 	f, err := strconv.ParseFloat(v, 64)
-	if err != nil {
+	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
 		return channel{}, fmt.Errorf("bad channel %q", s)
 	}
 	return channel{f, percent}, nil

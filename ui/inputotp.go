@@ -35,8 +35,9 @@ func (InputOTPSeparatorSpec) otpPart()         {}
 func InputOTPSeparator() InputOTPSeparatorSpec { return InputOTPSeparatorSpec{} }
 
 type otpCell struct {
-	index int
-	rect  ggui.Rect
+	index       int
+	rect        ggui.Rect
+	left, right bool // outer visual edges of its group
 }
 type otpGroup struct{ rect ggui.Rect }
 
@@ -232,12 +233,17 @@ func (o *InputOTPWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
 		switch part := part.(type) {
 		case InputOTPGroupSpec:
 			start := x
-			for _, slot := range part.slots {
+			last := len(part.slots) - 1
+			for k, slot := range part.slots {
 				if slot.Index < 0 || slot.Index >= o.maxLength || seen[slot.Index] {
 					panic("ui.InputOTP: each slot index must occur exactly once")
 				}
 				seen[slot.Index] = true
-				o.cells = append(o.cells, otpCell{slot.Index, ggui.Rct(ggui.Pt(x, 0.), ggui.Sz(o.slot, o.slot))})
+				left, right := k == 0, k == last
+				if o.rtl {
+					left, right = right, left
+				}
+				o.cells = append(o.cells, otpCell{slot.Index, ggui.Rct(ggui.Pt(x, 0.), ggui.Sz(o.slot, o.slot)), left, right})
 				x += o.slot
 			}
 			o.groups = append(o.groups, otpGroup{ggui.Rct(ggui.Pt(start, 0.), ggui.Sz(x-start, o.slot))})
@@ -343,7 +349,7 @@ func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state widget.Te
 	}
 	if state.Text != o.lastText {
 		o.lastText = state.Text
-		o.blink = ggui.Now()
+		o.blink = ggui.FrameTime()
 		for i, l := range o.labels {
 			s := ""
 			if i < len(runes) {
@@ -360,17 +366,10 @@ func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state widget.Te
 		at := translate(cell.rect)
 		i := cell.index
 		// Interior borders are straight; only the group's two outer ends are rounded.
-		for _, group := range o.groups {
-			if cell.rect.Origin.X > group.rect.Origin.X+.1 && cell.rect.Origin.X < group.rect.Origin.X+group.rect.Size.W-.1 {
-				d.FillRect(ggui.Rct(at.Origin, ggui.Sz(1, at.Size.H)), border)
-				break
-			}
+		if !cell.left {
+			d.FillRect(ggui.Rct(at.Origin, ggui.Sz(1, at.Size.H)), border)
 		}
-		left, right := false, false
-		for _, group := range o.groups {
-			left = left || cell.rect.Origin.X == group.rect.Origin.X
-			right = right || cell.rect.Origin.X+cell.rect.Size.W == group.rect.Origin.X+group.rect.Size.W
-		}
+		left, right := cell.left, cell.right
 		selected := state.Focused && !o.disabled && (i == active || (i >= start && i < end))
 		// The ring of the slot being typed into eases in and out, as
 		// the slot's transition-all does. An invalid one keeps the
@@ -417,7 +416,8 @@ func (o *InputOTPWidget) caretAlpha() float64 {
 	now := ggui.FrameTime()
 	since := now.Sub(o.blink)
 	if since < 0 {
-		return 1
+		o.blink = now
+		since = 0
 	}
 	phase := since % period
 	cycle := now.Add(-phase)

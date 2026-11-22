@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
@@ -14,6 +15,7 @@ import (
 // PaginationWidget navigates a one-based page binding. It does not slice data.
 // At most five numbered buttons are shown, plus Previous, Next and ellipses for hidden pages.
 type PaginationWidget struct {
+	props property.Owner
 	ggui.Interactive
 	page                     ggui.Binding[int]
 	pages                    ggui.Readable[int]
@@ -65,6 +67,7 @@ const paginationGap = 6.0
 // name them, in place of the Strings' Previous and Next. An empty one keeps
 // the Strings' word.
 func (p *PaginationWidget) Labels(previous, next string) *PaginationWidget {
+	defer property.Watch(&p.props, &p.labels)()
 	p.labels = [2]string{previous, next}
 	p.word()
 	return p
@@ -102,6 +105,7 @@ func (p *PaginationWidget) selectPage(page int) {
 
 // Layout implements ggui.Widget.
 func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer p.props.Layout().EndLayout()
 	p.Sync()
 	p.words = stringsOf(env)
 	p.word()
@@ -120,7 +124,7 @@ func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	p.previousIcon.Rotate(angle)
 	p.nextIcon.Rotate(angle)
 	n := max(p.pages.Get(), 0)
-	current := p.current(n)
+	current := min(max(p.page.Get(), 1), max(n, 1))
 	p.previous.Disabled(p.IsInert() || n == 0 || current == 1)
 	p.next.Disabled(p.IsInert() || n == 0 || current == n)
 	start := max(1, min(current-2, n-4))

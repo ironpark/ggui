@@ -6,6 +6,7 @@ import (
 	"image/color"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -71,6 +72,7 @@ func colorOr(c, fallback color.Color) color.Color {
 
 // Widget is a decorative icon by default. Alt adds an accessible image name.
 type Widget struct {
+	props    property.Owner
 	role     Role
 	asset    *SVG
 	fallback Set
@@ -93,10 +95,28 @@ type Widget struct {
 func Placeholder(role Role) *Widget { return &Widget{role: role, size: 16} }
 
 // New uses an explicit asset independent of the inherited icon set.
-func New(asset *SVG) *Widget                  { return &Widget{asset: asset, size: 16} }
-func (w *Widget) Fallback(set Set) *Widget    { w.fallback, w.resolved = set, nil; return w }
-func (w *Widget) Size(px float64) *Widget     { w.size = max(0, px); return w }
-func (w *Widget) Color(c color.Color) *Widget { w.color = c; w.resolveInk(); return w }
+func New(asset *SVG) *Widget { return &Widget{asset: asset, size: 16} }
+func (w *Widget) Fallback(set Set) *Widget {
+	if !property.Same(w.fallback, set) {
+		w.fallback, w.resolved = set, nil
+		w.props.Changed()
+	}
+	return w
+}
+func (w *Widget) Size(px float64) *Widget {
+	defer property.Watch(&w.props, &w.size)()
+	w.size = max(0, px)
+	return w
+}
+
+// Color sets the icon tint; nil inherits. Changing the color is paint-only
+// (matching widget.TextWidget.Color), so controls like Button can recolor
+// icons during Paint without invalidating an enclosing ggui.Cached layout.
+func (w *Widget) Color(c color.Color) *Widget {
+	w.color = c
+	w.resolveInk()
+	return w
+}
 
 // resolveInk sets ink from Color or, without one, from the inherited
 // color.
@@ -108,9 +128,18 @@ func (w *Widget) resolveInk() {
 }
 
 // Rotate sets clockwise rotation in radians around the icon's center.
-func (w *Widget) Rotate(radians float64) *Widget { w.rotation = radians; return w }
-func (w *Widget) Alt(name string) *Widget        { w.alt = name; return w }
+func (w *Widget) Rotate(radians float64) *Widget {
+	defer property.Watch(&w.props, &w.rotation)()
+	w.rotation = radians
+	return w
+}
+func (w *Widget) Alt(name string) *Widget {
+	defer property.Watch(&w.props, &w.alt)()
+	w.alt = name
+	return w
+}
 func (w *Widget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer w.props.Layout().EndLayout()
 	w.env = env
 	w.resolved = nil
 	if w.asset == nil {

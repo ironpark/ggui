@@ -128,19 +128,27 @@ func (c *CardWidget) Small() *CardWidget {
 // Fill paints the card in c instead of the theme's Card surface; nil goes
 // back to it.
 func (c *CardWidget) Fill(col color.Color) *CardWidget {
-	c.fill = col
+	if !property.Same(c.fill, col) {
+		c.fill = col
+		c.props.Changed()
+	}
 	return c
 }
 
 // Border draws the card's outline w wide in col instead of the theme's; a
 // zero w draws none.
 func (c *CardWidget) Border(w float64, col color.Color) *CardWidget {
-	c.borderWidth, c.border = max(w, 0), col
+	w = max(w, 0)
+	if c.borderWidth != w || !property.Same(c.border, col) {
+		c.borderWidth, c.border = w, col
+		c.props.Changed()
+	}
 	return c
 }
 
 // Radius rounds the card's corners by r instead of the theme's RadiusLg.
 func (c *CardWidget) Radius(r float64) *CardWidget {
+	defer property.Watch(&c.props, &c.radius)()
 	c.radius = max(r, 0)
 	return c
 }
@@ -679,20 +687,23 @@ func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if st.Border != nil {
 		dst.StrokeRoundRect(r, radius, b.theme.BorderWidth, st.Border)
 	}
+	rtl := b.env.Direction() == ggui.DirRTL
 	iconY := r.Origin.Y + (r.Size.H-b.iconSide)/2
 	if b.leads {
-		paintIcon(dst, b.env, b.lead, ggui.Rct(ggui.Pt(r.Origin.X+b.leadAt, iconY), ggui.Sz(b.iconSide, b.iconSide)), label, 0)
+		leadRect := mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+b.leadAt, iconY), ggui.Sz(b.iconSide, b.iconSide)), r, rtl)
+		paintIcon(dst, b.env, b.lead, leadRect, label, 0)
 	}
-	textAt := ggui.Pt(r.Origin.X+b.textAt, r.Origin.Y+(r.Size.H-b.size.H)/2)
-	dst.Paint(b.text, ggui.Rct(textAt, b.size))
+	textRect := mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+b.textAt, r.Origin.Y+(r.Size.H-b.size.H)/2), b.size), r, rtl)
+	dst.Paint(b.text, textRect)
 	if st.Underline && b.hover > 0 {
 		if base, ok := b.text.Baseline(); ok {
 			// shadcn's underline-offset-4, as a link button's.
-			dst.FillRect(ggui.Rct(ggui.Pt(textAt.X, textAt.Y+base+b.theme.Space/2), ggui.Sz(b.size.W, 1)), fade(label, b.hover))
+			dst.FillRect(ggui.Rct(ggui.Pt(textRect.Origin.X, textRect.Origin.Y+base+b.theme.Space/2), ggui.Sz(textRect.Size.W, 1)), fade(label, b.hover))
 		}
 	}
 	if b.trails {
-		paintIcon(dst, b.env, b.trail, ggui.Rct(ggui.Pt(r.Origin.X+b.trailAt, iconY), ggui.Sz(b.iconSide, b.iconSide)), label, 0)
+		trailRect := mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+b.trailAt, iconY), ggui.Sz(b.iconSide, b.iconSide)), r, rtl)
+		paintIcon(dst, b.env, b.trail, trailRect, label, 0)
 	}
 	if b.action != nil {
 		focusRing(dst, &b.Interactive, b.theme, r, radius, b.theme.Ring, b.motion)
@@ -852,16 +863,19 @@ func (p *ProgressWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	v := ease(dst, p.theme, ggui.Anchor{Rect: bar}, progressSlot, target, p.motion)
 	// Assistive technology reports the data, independently of visual easing.
 	node := ggui.Node{Role: ggui.RoleProgress, Name: p.name, Min: 0, Max: 1, Now: target}
+	rtl := p.env.Direction() == ggui.DirRTL
 	if p.label != nil {
-		dst.Paint(p.label, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+(p.head-p.labelSize.H)/2), p.labelSize))
+		labelRect := mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+(p.head-p.labelSize.H)/2), p.labelSize), r, rtl)
+		dst.Paint(p.label, labelRect)
 	}
 	if p.shows && p.reading != nil {
 		p.read(target, false)
-		dst.Paint(p.reading, ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-p.readSize.W, r.Origin.Y+(p.head-p.readSize.H)/2), p.readSize))
+		readRect := mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-p.readSize.W, r.Origin.Y+(p.head-p.readSize.H)/2), p.readSize), r, rtl)
+		dst.Paint(p.reading, readRect)
 	}
 	dst.Leaf(bar, node)
 	dst.FillRoundRect(bar, bar.Size.H/2, t.Muted)
-	if fill := progressFill(bar, v, p.env.Direction() == ggui.DirRTL); fill.Size.W > 0 {
+	if fill := progressFill(bar, v, rtl); fill.Size.W > 0 {
 		// The indicator is square, and the track's round ends cut it:
 		// shadcn's h-full bg-primary inside overflow-hidden rounded-full.
 		dst.Clip(fill).FillRoundRect(bar, bar.Size.H/2, t.Primary)
@@ -885,9 +899,10 @@ type ProgressRingWidget struct {
 	theme        *uitheme.Theme
 	motion       time.Duration
 
-	arc   ggui.Path // the filled part, kept while the ring and value hold
-	arcAt ggui.Rect
-	arcV  float64
+	arc       ggui.Path // the filled part, kept while the ring and value hold
+	arcAt     ggui.Rect
+	arcV      float64
+	arcStroke float64
 }
 
 // ProgressRing creates a ring that shows value, a fraction from 0 to 1,
@@ -949,8 +964,8 @@ func (p *ProgressRingWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if v <= 0 {
 		return
 	}
-	if r != p.arcAt || v != p.arcV {
-		p.arcAt, p.arcV = r, v
+	if r != p.arcAt || v != p.arcV || p.stroke != p.arcStroke {
+		p.arcAt, p.arcV, p.arcStroke = r, v, p.stroke
 		p.arc.Reset()
 		p.arc.Arc(center.X, center.Y, d/2, -math.Pi/2, -math.Pi/2+2*math.Pi*v)
 	}

@@ -697,6 +697,10 @@ func (p *parser) finalize(b *node) {
 				b.lines = b.lines[:len(b.lines)-1]
 			}
 		}
+	case Quote:
+		if len(b.children) > 0 && b.children[len(b.children)-1].end > b.end {
+			b.end = b.children[len(b.children)-1].end
+		}
 	case Item:
 		if len(b.children) > 0 {
 			b.end = b.children[len(b.children)-1].end

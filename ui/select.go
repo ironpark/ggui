@@ -50,6 +50,7 @@ type SelectWidget[T comparable] struct {
 	triggerContent ggui.Widget
 	triggerSize    ggui.Size
 	highlight      int         // the option the keyboard is on while open, or -1
+	selectedIndex  int         // cached index of value in options for the current Layout/Paint
 	sides          JoinedSides // the sides a ButtonGroup joins the field on
 	search         typeahead   // the search by typing under way
 	theme          *uitheme.Theme
@@ -63,7 +64,7 @@ type SelectWidget[T comparable] struct {
 // the open list, and chosen while the list is closed. The options slice is
 // shallow-copied.
 func Select[T comparable](value ggui.Binding[T]) *SelectWidget[T] {
-	s := &SelectWidget[T]{value: value, label: sprint[T], highlight: -1, alignItem: true}
+	s := &SelectWidget[T]{value: value, label: sprint[T], highlight: -1, selectedIndex: -1, alignItem: true}
 	s.Role = ggui.RoleSelect
 	s.AutoKey()
 	s.box = widget.Box()
@@ -173,12 +174,16 @@ func (s *SelectWidget[T]) build() {
 	s.viewport.column = newMenuColumn(rows)
 	s.viewport.column.fill = true
 	s.viewport.scroll = widget.Scroll(s.viewport.column).BindOffset(s.viewport.offset)
-	s.highlight = s.index()
+	s.selectedIndex = s.index()
+	s.highlight = s.selectedIndex
 	s.viewport.reveal = true
 }
 
 // Format sets how each option is shown.
 func (s *SelectWidget[T]) Format(fn func(T) string) *SelectWidget[T] {
+	if fn == nil {
+		fn = sprint[T]
+	}
 	s.label = fn
 	s.build()
 	s.props.Changed()
@@ -394,8 +399,10 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		panelBox(s.list, t)
 	}
 	// A list that opens over its trigger appears at once: it has no side
-	// to come from.
-	index := s.index()
+	// to come from. Read value tracked so Cached layouts invalidate on change.
+	val := s.value.Get()
+	index := s.indexOf(val)
+	s.selectedIndex = index
 	s.popup.Animated(!(s.alignItem && index >= 0))
 	least := t.Space * 18 // the list is never narrower than this
 	// The label is one Text for the field's life, so its shaping survives
@@ -405,7 +412,7 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if index < 0 && s.placeholder != "" {
 		ink, content = t.MutedFg, s.placeholder
 	} else {
-		content = s.label(ggui.Untrack(s.value.Get))
+		content = s.label(val)
 	}
 	if inert {
 		ink = t.Disabled(ink)
@@ -520,7 +527,7 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 		chevron(dst, s.env, t, center, 2, muted)
 	}
 	if !s.shownInvalid && !sides.Any() {
-		controlFocusRing(dst, &s.Interactive, t, r, radius, t.Ring)
+		controlFocusRing(dst, &s.Interactive, t, r, radius, t.Ring, s.motion)
 	}
 }
 
@@ -539,7 +546,7 @@ func (s *SelectWidget[T]) positionList(dst *ggui.Canvas, r ggui.Rect) {
 	if !open {
 		return
 	}
-	index := s.index()
+	index := s.selectedIndex
 	screen := dst.Size()
 	if !s.alignItem || index < 0 || screen.H <= 0 {
 		s.list.MaxHeight(0)
@@ -581,14 +588,14 @@ func (s *SelectWidget[T]) positionList(dst *ggui.Canvas, r ggui.Rect) {
 
 // Paint implements Widget.
 func (s *SelectWidget[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	s.selectedIndex = s.index()
 	for i, it := range s.items {
 		it.active = i == s.highlight
 	}
 	dst.Paint(s.popup, r)
 }
 
-func (s *SelectWidget[T]) index() int {
-	v := ggui.Untrack(s.value.Get)
+func (s *SelectWidget[T]) indexOf(v T) int {
 	for i, o := range s.options {
 		if o == v {
 			return i
@@ -597,11 +604,16 @@ func (s *SelectWidget[T]) index() int {
 	return -1
 }
 
+func (s *SelectWidget[T]) index() int {
+	return s.indexOf(ggui.Untrack(s.value.Get))
+}
+
 func (s *SelectWidget[T]) choose(i int) {
 	if i < 0 || i >= len(s.options) || !s.enabled(i) {
 		return
 	}
 	setChanged(s.value, s.options[i], s.onChange)
+	s.selectedIndex = s.index()
 	s.popup.Hide()
 }
 
@@ -701,7 +713,11 @@ func (s *SelectWidget[T]) typeahead(text string) {
 func (s *SelectWidget[T]) Adopt(prev any) {
 	s.Interactive.Adopt(prev)
 	if p, ok := prev.(*SelectWidget[T]); ok {
-		s.highlight = p.highlight
+		if p.highlight < 0 || len(s.options) == 0 {
+			s.highlight = -1
+		} else {
+			s.highlight = min(p.highlight, len(s.options)-1)
+		}
 		s.search = p.search
 		s.viewport.offset.Set(ggui.Untrack(p.viewport.offset.Get))
 		s.viewport.reveal = p.viewport.reveal
@@ -769,7 +785,7 @@ func (it *selectItem[T]) Describe() ggui.Node {
 	return ggui.Node{
 		Role:     ggui.RoleOption,
 		Name:     it.SemanticName(),
-		Selected: it.index == it.owner.index(),
+		Selected: it.index == it.owner.selectedIndex,
 		Disabled: it.IsInert(),
 		Actions:  ggui.ActionSelect | ggui.ActionPress | ggui.ActionFocus,
 	}
@@ -791,7 +807,7 @@ func (it *selectItem[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	it.text.Color(ink)
 	at := ggui.Pt(r.Origin.X+it.pad.Left, r.Origin.Y+(r.Size.H-it.textSize.H)/2)
 	dst.Clip(r).Paint(it.text, ggui.Rct(at, it.textSize))
-	if it.index == it.owner.index() {
+	if it.index == it.owner.selectedIndex {
 		// The mark is the row's own color, not the theme's accent.
 		center := ggui.Pt(r.Origin.X+r.Size.W-t.Space-t.IconSize/2, r.Origin.Y+r.Size.H/2)
 		paintIconAt(dst, it.owner.env, icons.Check, center, t.IconSize, ink, 0)

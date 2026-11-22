@@ -65,6 +65,7 @@ type MessageScrollerWidget struct {
 	anchor                                                        string
 	rect                                                          ggui.Rect
 	theme                                                         *uitheme.Theme
+	env                                                           ggui.Env
 	duration                                                      time.Duration
 	animFrom, animTo                                              float64
 	animStart                                                     time.Time
@@ -225,11 +226,13 @@ func (s *MessageScrollerWidget) ScrollToStart() {
 	s.clearTargets()
 	s.Pause()
 	s.jump(0, true)
+	ggui.Invalidate(s.env)
 }
 func (s *MessageScrollerWidget) ScrollToEnd() {
 	s.clearTargets()
 	s.following = s.auto
 	s.jump(s.limit(), true)
+	ggui.Invalidate(s.env)
 }
 
 // ScrollToMessage queues a target even before the first layout. A missing ID
@@ -238,6 +241,7 @@ func (s *MessageScrollerWidget) ScrollToMessage(id string, align ScrollAlignment
 	s.Pause()
 	s.clearTargets()
 	s.pendingID, s.pendingAlign = id, align
+	ggui.Invalidate(s.env)
 }
 func (s *MessageScrollerWidget) Save() TranscriptPosition {
 	for i, row := range s.rows {
@@ -251,6 +255,7 @@ func (s *MessageScrollerWidget) Restore(p TranscriptPosition) {
 	s.clearTargets()
 	s.restore = &p
 	s.Pause()
+	ggui.Invalidate(s.env)
 }
 func (s *MessageScrollerWidget) target(i int, align ScrollAlignment) float64 {
 	start, end := s.starts[i], s.starts[i]+s.sizes[i].H
@@ -274,7 +279,7 @@ func (s *MessageScrollerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Si
 	defer s.props.Layout().EndLayout()
 	saved := s.Save()
 	oldRows := s.rows
-	s.theme, s.reduced = uitheme.Of(env), env.ReducedMotion()
+	s.theme, s.env, s.reduced = uitheme.Of(env), env, env.ReducedMotion()
 	s.words = stringsOf(env)
 	s.startButton.Name(s.words.ScrollToStart)
 	s.endButton.Name(s.words.ScrollToEnd)
@@ -412,10 +417,15 @@ func (s *MessageScrollerWidget) paintRows(dst *ggui.Canvas) {
 		if row.Anchor && y <= s.margin+s.peek {
 			v.CurrentAnchorID = row.ID
 		}
-		if y+s.sizes[i].H > 0 && y < r.Size.H {
+		visible := y+s.sizes[i].H > 0 && y < r.Size.H
+		if visible {
 			v.VisibleMessageIDs = append(v.VisibleMessageIDs, row.ID)
 		}
-		dst.Paint(row.Content, ggui.Rct(r.Origin.Add(ggui.Pt(0.0, y)), ggui.Sz(r.Size.W, s.sizes[i].H)))
+		// Cull offscreen rows when drawing to a surface; keep headless paints
+		// (dst.Image == nil) emitting offscreen semantics for ActionScrollIntoView.
+		if visible || dst == nil || dst.Image == nil {
+			dst.Paint(row.Content, ggui.Rct(r.Origin.Add(ggui.Pt(0.0, y)), ggui.Sz(r.Size.W, s.sizes[i].H)))
+		}
 	}
 }
 
@@ -493,18 +503,26 @@ func (s *MessageScrollerWidget) HandleKey(ev ggui.KeyEvent) {
 	if ev.Kind != ggui.KeyPress {
 		return
 	}
-	s.Pause()
-	s.anchor = ""
 	switch ev.Key {
 	case ggui.KeyArrowUp:
+		s.Pause()
+		s.anchor = ""
 		s.jump(s.offset-40, false)
 	case ggui.KeyArrowDown:
+		s.Pause()
+		s.anchor = ""
 		s.jump(s.offset+40, false)
 	case ggui.KeyPageUp:
+		s.Pause()
+		s.anchor = ""
 		s.jump(s.offset-s.viewport*.9, false)
 	case ggui.KeyPageDown:
+		s.Pause()
+		s.anchor = ""
 		s.jump(s.offset+s.viewport*.9, false)
 	case ggui.KeyHome:
+		s.Pause()
+		s.anchor = ""
 		s.jump(0, false)
 	case ggui.KeyEnd:
 		s.ScrollToEnd()
@@ -525,7 +543,9 @@ func (s *MessageScrollerWidget) Reveal(target ggui.Rect) {
 	top, bottom := target.Origin.Y-s.rect.Origin.Y, target.Origin.Y+target.Size.H-s.rect.Origin.Y
 	if top < 0 {
 		s.jump(s.offset+top, false)
+		ggui.Invalidate(s.env)
 	} else if bottom > s.viewport {
 		s.jump(s.offset+bottom-s.viewport, false)
+		ggui.Invalidate(s.env)
 	}
 }

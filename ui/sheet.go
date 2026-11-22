@@ -588,12 +588,12 @@ func (h *drawerHandle) HandlePointer(ev ggui.PointerEvent) bool {
 		s.dragExtent = s.visibleExtent
 	case ggui.PointerDrag:
 		if s.dragging {
-			s.dragExtent = clamp(s.visibleExtent+s.dragStart-ev.Pos.Y, 0, s.rect.Size.H)
+			s.dragExtent = clamp(s.dragExtent+s.dragStart-ev.Pos.Y, 0, s.rect.Size.H)
 			s.dragStart = ev.Pos.Y
 		}
 	case ggui.PointerUp:
 		if s.dragging {
-			s.dragExtent = clamp(s.visibleExtent+s.dragStart-ev.Pos.Y, 0, s.rect.Size.H)
+			s.dragExtent = clamp(s.dragExtent+s.dragStart-ev.Pos.Y, 0, s.rect.Size.H)
 			s.dragging = false
 			// Seed the settling animation at the release position, including a
 			// release that came without an intervening drag frame.

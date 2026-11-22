@@ -375,7 +375,7 @@ func (r *treeRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 		}
 	}
 	dst.ClipReusing(&r.clip, rc).Paint(r.box, rc)
-	controlFocusRing(dst, &r.Interactive, th, rc, th.Radius, th.Ring)
+	controlFocusRing(dst, &r.Interactive, th, rc, th.Radius, th.Ring, r.motion)
 	if t.nav.claim(r.key) {
 		dst.RequestFocus(r)
 	}

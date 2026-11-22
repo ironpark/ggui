@@ -118,6 +118,22 @@ func (c *ComboboxWidget[T]) BindOptions(r ggui.Readable[[]T]) *ComboboxWidget[T]
 	return c
 }
 
+// equalsReader and containsReader are stateless Readable[bool] adapters that
+// check membership on demand without creating owning reactive subscriptions.
+type equalsReader[T comparable] struct {
+	r ggui.Readable[T]
+	v T
+}
+
+func (e equalsReader[T]) Get() bool { return e.r.Get() == e.v }
+
+type containsReader[T comparable] struct {
+	r ggui.Readable[[]T]
+	v T
+}
+
+func (c containsReader[T]) Get() bool { return slices.Contains(c.r.Get(), c.v) }
+
 func (c *ComboboxWidget[T]) setOptions(options []T) bool {
 	if slices.Equal(c.options, options) {
 		return false
@@ -130,13 +146,16 @@ func (c *ComboboxWidget[T]) setOptions(options []T) bool {
 	c.search.setEntries(entries)
 	for i, v := range c.options {
 		c.search.items[i].Role = ggui.RoleOption
-		c.search.items[i].BindChecked(ggui.Map(c.value, func(x T) bool { return x == v }))
+		c.search.items[i].BindChecked(equalsReader[T]{r: c.value, v: v})
 	}
 	return true
 }
 
 // Format formats the options and selected value. Configure it before layout.
 func (c *ComboboxWidget[T]) Format(fn func(T) string) *ComboboxWidget[T] {
+	if fn == nil {
+		fn = sprint[T]
+	}
 	c.label = fn
 	for i, v := range c.options {
 		label := fn(v)
@@ -145,6 +164,7 @@ func (c *ComboboxWidget[T]) Format(fn func(T) string) *ComboboxWidget[T] {
 		c.search.items[i].SetName(label)
 	}
 	c.search.initialized = false
+	c.props.Changed()
 	return c
 }
 
@@ -190,7 +210,10 @@ func (c *ComboboxWidget[T]) Popup() *widget.PopupWidget { return c.popup }
 
 // chosen returns the label of the value when it is among the options.
 func (c *ComboboxWidget[T]) chosen() (string, bool) {
-	v := ggui.Untrack(c.value.Get)
+	return c.chosenValue(ggui.Untrack(c.value.Get))
+}
+
+func (c *ComboboxWidget[T]) chosenValue(v T) (string, bool) {
 	for _, o := range c.options {
 		if o == v {
 			return c.label(o), true
@@ -352,7 +375,7 @@ func (c *ComboboxWidget[T]) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	if c.field.IsInert() {
 		c.popup.Hide()
 	}
-	label, chosen := c.chosen()
+	label, chosen := c.chosenValue(c.value.Get())
 	if !c.typed && ggui.Untrack(c.text.Get) != label {
 		c.text.Set(label)
 	}
@@ -656,6 +679,9 @@ func (c *ComboboxMultipleWidget[T]) BindOptions(v ggui.Readable[[]T]) *ComboboxM
 
 // Format formats options and selected chips.
 func (c *ComboboxMultipleWidget[T]) Format(fn func(T) string) *ComboboxMultipleWidget[T] {
+	if fn == nil {
+		fn = sprint[T]
+	}
 	c.label = fn
 	c.built = false
 	c.props.Changed()
@@ -853,7 +879,7 @@ func (c *ComboboxMultipleWidget[T]) Layout(cs ggui.Constraints, env ggui.Env) gg
 		c.search.Entries(entries...)
 		for j, v := range c.options {
 			c.search.items[j].Role = ggui.RoleOption
-			c.search.items[j].BindChecked(ggui.Map(c.values, func(vs []T) bool { return slices.Contains(vs, v) }))
+			c.search.items[j].BindChecked(containsReader[T]{r: c.values, v: v})
 		}
 	}
 	values := c.values.Get()

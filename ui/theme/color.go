@@ -2,6 +2,7 @@ package theme
 
 import (
 	"image/color"
+	"math"
 	"sync"
 
 	"github.com/ironpark/ggui"
@@ -40,6 +41,9 @@ func Fade(c color.Color, alpha float64) color.Color {
 	if c == nil || alpha == 1 {
 		return c
 	}
+	if math.IsNaN(alpha) {
+		alpha = 0
+	}
 	switch e := c.(type) {
 	case Color:
 		return e.Alpha(alpha)
@@ -53,23 +57,40 @@ func Fade(c color.Color, alpha float64) color.Color {
 	if f, ok := fades[k]; ok {
 		return f
 	}
+	if f, ok := fadesPrev[k]; ok {
+		putFade(k, f)
+		return f
+	}
 	// Every channel scales, alpha included, because a premultiplied color
 	// stays premultiplied only if they all do.
 	scale := func(v uint32) uint8 { return uint8(min(max(float64(v>>8)*alpha, 0), 255)) }
 	var f color.Color = color.RGBA{scale(r), scale(g), scale(b), scale(a)}
-	if len(fades) >= mostFades {
-		clear(fades)
-	}
-	fades[k] = f
+	putFade(k, f)
 	return f
 }
 
 // fades keeps the colors Fade made, boxed: a widget fades the same colors
 // every frame it paints, and each a fresh color.Color is an allocation.
+// Entries live in two generations (matching ggui's envMemo): a color hit in
+// fadesPrev moves back to fades, so animated opacities cycling through the
+// current generation do not wipe static cached colors.
 var (
-	fadesMu sync.Mutex
-	fades   = map[fadeKey]color.Color{}
+	fadesMu   sync.Mutex
+	fades     = map[fadeKey]color.Color{}
+	fadesPrev map[fadeKey]color.Color
 )
+
+func putFade(k fadeKey, f color.Color) {
+	if len(fades) >= mostFades {
+		fadesPrev, fades = fades, fadesPrev
+		if fades == nil {
+			fades = make(map[fadeKey]color.Color, mostFades)
+		} else {
+			clear(fades)
+		}
+	}
+	fades[k] = f
+}
 
 // fadeKey is a color Fade faded, and by how much.
 type fadeKey struct {

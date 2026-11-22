@@ -174,7 +174,7 @@ type ChartWidget struct {
 	textCache                                                      map[chartTextKey]*chartText
 	textLayout                                                     uint64 // counts Layouts, so a cached label re-measures once under each
 	curves                                                         [][]chartCurvePaths
-	curveRect                                                      ggui.Rect
+	curveSize                                                      ggui.Size
 }
 
 // ChartContainer creates a responsive chart. The default height is 240 logical
@@ -407,7 +407,10 @@ func (c *ChartWidget) AnimationDelay(d time.Duration) *ChartWidget {
 }
 
 // Replay restarts the entrance without rebuilding or copying the data.
-func (c *ChartWidget) Replay() { c.started = time.Time{} }
+func (c *ChartWidget) Replay() {
+	c.started = time.Time{}
+	ggui.Invalidate(c.env)
+}
 func (c *ChartWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
 	c.env = env
@@ -628,7 +631,12 @@ func (c *ChartWidget) progress() float64 {
 	if c.started.IsZero() {
 		c.started = now
 	}
-	t := clamp(float64(now.Sub(c.started)-c.delay)/float64(c.duration), 0, 1)
+	elapsed := now.Sub(c.started)
+	if elapsed < c.delay {
+		ggui.WakeAt(c.started.Add(c.delay))
+		return 0
+	}
+	t := clamp(float64(elapsed-c.delay)/float64(c.duration), 0, 1)
 	if t < 1 {
 		ggui.Now() // still entering, so ask for the next frame
 	}

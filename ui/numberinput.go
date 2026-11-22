@@ -22,13 +22,15 @@ import (
 type NumberInputWidget struct {
 	props property.Owner
 	ggui.Interactive
-	value    ggui.Binding[float64]
-	text     *ggui.StateValue[string]
-	input    *widget.TextInputWidget
-	lo, hi   float64
-	step     float64
-	digits   int // decimals shown; -1 follows the step
-	onChange func(float64)
+	value     ggui.Binding[float64]
+	text      *ggui.StateValue[string]
+	syncedVal float64 // last value synced into text
+	synced    bool
+	input     *widget.TextInputWidget
+	lo, hi    float64
+	step      float64
+	digits    int // decimals shown; -1 follows the step
+	onChange  func(float64)
 
 	dec, inc *numberStepper
 	row      *widget.RowWidget
@@ -46,18 +48,14 @@ type NumberInputWidget struct {
 //	ui.Field("Quantity", ui.NumberInput(qty).Range(0, 99))
 func NumberInput(value ggui.Binding[float64]) *NumberInputWidget {
 	n := &NumberInputWidget{value: value, step: 1, digits: -1, lo: math.Inf(-1), hi: math.Inf(1)}
-	n.text = ggui.State(n.format(ggui.Untrack(value.Get)))
+	initVal := ggui.Untrack(value.Get)
+	n.text = ggui.State(n.format(initVal))
+	n.syncedVal, n.synced = initVal, true
 	n.input = widget.TextInput(n.text).MinWidth(64).Filter(numberChars).OnKey(n.key).OnCommit(func(string) { n.commit() }).
 		OnDescribe(n.describe).OnAction(n.act)
 	n.dec = &numberStepper{n: n, dir: -1}
 	n.inc = &numberStepper{n: n, dir: 1}
 	n.dec.Role, n.inc.Role = ggui.RoleButton, ggui.RoleButton
-	// The text follows the value, so a write from outside -- or a commit
-	// that normalised what was typed -- shows at once.
-	ggui.Observe(func() {
-		v := n.value.Get()
-		n.text.Set(ggui.Untrack(func() string { return n.format(v) }))
-	})
 	return n
 }
 
@@ -149,7 +147,9 @@ func (n *NumberInputWidget) format(v float64) string {
 // reformat rewrites the text after the precision changed.
 func (n *NumberInputWidget) reformat() {
 	if n.text != nil {
-		n.text.Set(n.format(ggui.Untrack(n.value.Get)))
+		v := ggui.Untrack(n.value.Get)
+		n.syncedVal, n.synced = v, true
+		n.text.Set(n.format(v))
 	}
 }
 
@@ -190,6 +190,7 @@ func numberChars(s string) string {
 func (n *NumberInputWidget) set(v float64) {
 	v = n.normalize(v)
 	setChanged(n.value, v, n.onChange)
+	n.syncedVal, n.synced = ggui.Untrack(n.value.Get), true
 	n.text.Set(n.format(v))
 }
 
@@ -292,6 +293,12 @@ func (n *NumberInputWidget) act(a ggui.Action) bool {
 func (n *NumberInputWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer n.props.Layout().EndLayout()
 	n.Sync()
+	if v := n.value.Get(); !n.synced || (v != n.syncedVal && !(math.IsNaN(v) && math.IsNaN(n.syncedVal))) {
+		n.syncedVal, n.synced = v, true
+		if formatted := n.format(v); ggui.Untrack(n.text.Get) != formatted {
+			n.text.Set(formatted)
+		}
+	}
 	t := uitheme.Of(env)
 	n.theme = t
 	inherited, _ := env.Get(ggui.InputDisabledKey)
@@ -306,7 +313,7 @@ func (n *NumberInputWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	n.row.Gap(t.Space / 2)
 	// The colors follow the field's state in Paint; see fieldChrome.
 	fieldBoxShape(n.box, t, t.FieldPad)
-	size := n.box.Layout(c, env.With(ggui.InputDisabledKey, n.IsInert()))
+	size := n.box.Layout(c, env.With(ggui.InputDisabledKey, n.disabled))
 	n.disabled = n.disabled || n.input.IsDisabled()
 	return size
 }

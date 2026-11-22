@@ -141,6 +141,9 @@ type radioPart[T comparable] struct {
 
 // Format sets how each option is shown.
 func (g *RadiosWidget[T]) Format(fn func(T) string) *RadiosWidget[T] {
+	if fn == nil {
+		fn = sprint[T]
+	}
 	g.label = fn
 	for _, r := range g.radios {
 		name := fn(r.value)

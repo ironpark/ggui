@@ -77,28 +77,49 @@ func (c *ChartWidget) geometryFor(size ggui.Size) {
 		}
 	} else if g.hi > g.lo {
 		// Four equal, round-number intervals match the reference axes.
-		step := niceChartStep((g.hi - g.lo) / 4)
-		g.lo = math.Floor(g.lo/step) * step
-		g.hi = math.Ceil(g.hi/step) * step
+		step := niceChartStep(g.hi/4 - g.lo/4)
+		lo := math.Floor(g.lo/step) * step
+		hi := math.Ceil(g.hi/step) * step
+		if finite(lo) && finite(hi) && hi > lo {
+			g.lo, g.hi = lo, hi
+		}
 	}
 	if g.hi <= g.lo {
 		g.hi = g.lo + 1
 	}
+	pixels := size.W
+	if c.horizontal {
+		pixels = size.H
+	}
+	buckets := int(max(1, pixels))
+	span := g.hi - g.lo
+	halfSpan := g.hi/2 - g.lo/2
 	for j := range g.series {
 		s := &g.series[j]
 		for i := range s.top {
-			s.top[i].Y = (s.top[i].Y - g.lo) / (g.hi - g.lo)
-			s.base[i].Y = (s.base[i].Y - g.lo) / (g.hi - g.lo)
+			if math.IsInf(span, 0) {
+				s.top[i].Y = (s.top[i].Y/2 - g.lo/2) / halfSpan
+				s.base[i].Y = (s.base[i].Y/2 - g.lo/2) / halfSpan
+			} else {
+				s.top[i].Y = (s.top[i].Y - g.lo) / span
+				s.base[i].Y = (s.base[i].Y - g.lo) / span
+			}
 		}
-		s.indices = chartSamples(s.top, s.valid, int(max(1, size.W)))
+		s.indices = chartSamples(s.top, s.valid, buckets)
 		if c.stack != ChartUnstacked {
-			s.indices = mergeChartSamples(s.indices, chartSamples(s.base, s.valid, int(max(1, size.W))))
+			s.indices = mergeChartSamples(s.indices, chartSamples(s.base, s.valid, buckets))
 		}
 	}
 	c.geometry = g
 }
 func niceChartStep(v float64) float64 {
+	if v <= 0 || math.IsNaN(v) || math.IsInf(v, 0) {
+		return 1
+	}
 	p := math.Pow(10, math.Floor(math.Log10(v)))
+	if p <= 0 || math.IsNaN(p) || math.IsInf(p, 0) {
+		return v
+	}
 	f := v / p
 	switch {
 	case f <= 1:
@@ -110,7 +131,10 @@ func niceChartStep(v float64) float64 {
 	case f <= 5:
 		return 5 * p
 	default:
-		return 10 * p
+		if step := 10 * p; !math.IsInf(step, 0) {
+			return step
+		}
+		return v
 	}
 }
 

@@ -276,7 +276,7 @@ func (b *BubbleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	dst.Paint(b.box, body)
 	if b.action != nil {
-		controlFocusRing(dst, &b.Interactive, b.theme, body, pick(b.variant == "ghost", 0, b.theme.Chat.BubbleRadius), b.theme.Ring)
+		controlFocusRing(dst, &b.Interactive, b.theme, body, pick(b.variant == "ghost", 0, b.theme.Chat.BubbleRadius), b.theme.Ring, b.motion)
 	}
 	if b.reactionBox != nil {
 		x := body.Origin.X + body.Size.W - b.reactionSize.W - 12

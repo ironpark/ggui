@@ -242,7 +242,7 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		if hover > 0 && h.text != nil {
 			a.underline(dst, h, at, hover)
 		}
-		controlFocusRing(dst, &h.Interactive, t, rect, t.Radius, t.Ring)
+		controlFocusRing(dst, &h.Interactive, t, rect, t.Radius, t.Ring, a.env.Motion(t.MotionFast))
 		y += a.heights[i]
 		paintDisclosure(dst, item.content, ggui.Pt(r.Origin.X, y), r.Size.W, a.sizes[i], h.progress, h.open)
 		y += (a.sizes[i].H + 1.25*t.Space) * h.progress

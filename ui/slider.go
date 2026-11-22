@@ -31,6 +31,9 @@ type SliderWidget struct {
 // Slider binds a horizontal slider to value, clamped to [lo, hi]. It fills
 // the width it is given. Step defaults to 1, and LargeStep to 10.
 func Slider(value ggui.Binding[float64], lo, hi float64) *SliderWidget {
+	if lo > hi {
+		lo, hi = hi, lo
+	}
 	s := &SliderWidget{value: value, min: lo, max: hi, step: 1, largeStep: 10}
 	s.Role = ggui.RoleSlider
 	s.AutoKey()
@@ -278,9 +281,6 @@ func (s *SliderWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	}
 	return s.Pointer(ev, nil)
 }
-
-// TextFieldWidget is a widget.TextInput in a themed box: Field background, a
-// border that turns Accent while focused, the theme's padding and radius.
 
 // sliderGeometry keeps pointer mapping, track fill and thumb placement in the
 // same coordinate system, including small constraints and RTL/vertical axes.

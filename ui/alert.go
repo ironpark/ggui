@@ -23,7 +23,8 @@ type AlertWidget struct {
 	icon               *icons.Widget
 	iconBox            *widget.BoxWidget
 	actionSize         ggui.Size
-	inset              float64 // of the action from the top and right edges
+	inset              float64 // of the action from the top and trailing edges
+	rtl                bool
 }
 
 // Alert creates an inline notice. It does not interrupt focus or open a
@@ -99,16 +100,22 @@ func (a *AlertWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	a.column.Gap(t.Space / 4)
 	a.row.Gap(t.Space)
+	a.rtl = env.Direction() == ggui.DirRTL
 	pad := ggui.Insets(t.Space, t.Space*1.25)
 	a.inset, a.actionSize = t.Space, ggui.Size{}
 	if a.action != nil {
-		// The action hangs at the top right, and the text stops short
+		// The action hangs at the top trailing edge, and the text stops short
 		// of it by the action's own width. shadcn reserves a fixed pr-18,
 		// 72px, for an action it places absolutely: an action wider than
 		// 56px runs over the text there, and a narrower one leaves the
 		// text short of room it could have had.
 		a.actionSize = a.action.Layout(ggui.Loose(ggui.Sz(max(0, c.MaxW-2*a.inset), max(0, c.MaxH-2*a.inset))), env)
-		pad.Right = a.inset + a.actionSize.W + t.Space
+		reserve := a.inset + a.actionSize.W + t.Space
+		if a.rtl {
+			pad.Left = reserve
+		} else {
+			pad.Right = reserve
+		}
 	}
 	a.box.Padding(pad).Fill(t.Card).Border(t.BorderWidth, t.Border).Radius(t.Radius)
 	size := a.box.Layout(c, env)
@@ -125,7 +132,8 @@ func (a *AlertWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Node(r, ggui.Node{Role: ggui.RoleStatus}, func(dst *ggui.Canvas) {
 		dst.Paint(a.box, r)
 		if a.action != nil {
-			dst.Paint(a.action, ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-a.inset-a.actionSize.W, r.Origin.Y+a.inset), a.actionSize))
+			at := ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-a.inset-a.actionSize.W, r.Origin.Y+a.inset), a.actionSize)
+			dst.Paint(a.action, mirrorHorizontal(at, r, a.rtl))
 		}
 	})
 }

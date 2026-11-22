@@ -124,7 +124,7 @@ func (c *ContextMenuWidget) Name(name string) *ContextMenuWidget { c.SetName(nam
 func (c *ContextMenuWidget) Disabled(v bool) *ContextMenuWidget {
 	c.SetInert(v)
 	if v {
-		c.menu.popup.Hide()
+		c.menu.hide()
 	}
 	return c
 }
@@ -167,7 +167,7 @@ func (c *ContextMenuWidget) Act(a ggui.Action) bool {
 	case ggui.ActionPress, ggui.ActionExpand:
 		c.open(c.rect.Origin.Add(ggui.Pt(0, c.rect.Size.H)), true)
 	case ggui.ActionCollapse:
-		c.Popup().Hide()
+		c.menu.hide()
 	default:
 		return false
 	}
@@ -178,7 +178,7 @@ func (c *ContextMenuWidget) Act(a ggui.Action) bool {
 func (c *ContextMenuWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.Sync()
 	if c.IsInert() {
-		c.Popup().Hide()
+		c.menu.hide()
 	}
 	if c.Popup().IsOpen() {
 		c.build()
@@ -192,6 +192,9 @@ func (c *ContextMenuWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 
 // Paint implements ggui.Widget.
 func (c *ContextMenuWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	if !c.Popup().IsOpen() && c.menu.sub != nil {
+		c.menu.closeSub()
+	}
 	c.rect = r
 	dst.Describe(r, c)
 	if !c.IsInert() {
@@ -263,7 +266,7 @@ func (c *ContextMenuWidget) HandleKey(ev ggui.KeyEvent) {
 	// The menu takes the keys that move through it and its submenus; an
 	// Escape it leaves, with no submenu open, closes it.
 	if !c.menu.key(ev) && ev.Key == ggui.KeyEscape {
-		c.Popup().Hide()
+		c.menu.hide()
 	}
 }
 

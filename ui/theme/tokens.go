@@ -2,6 +2,7 @@ package theme
 
 import (
 	"image/color"
+	"math"
 	"strconv"
 	"unsafe"
 
@@ -116,6 +117,9 @@ func (c Color) Or(fallback color.Color) Color {
 
 // Alpha is the color at alpha times its opacity, from 0 to 1.
 func (c Color) Alpha(alpha float64) Color {
+	if math.IsNaN(alpha) {
+		alpha = 0
+	}
 	c.fade = 1 - (1-c.fade)*float32(min(max(alpha, 0), 1))
 	return c
 }
@@ -133,11 +137,7 @@ func (c Color) In(t Theme) color.Color {
 		v, _ = t.Get(CSSColor(c.name))
 	}
 	if v == nil && c.or != nil {
-		if fallback, ok := c.or.(Color); ok {
-			v = fallback.In(t)
-		} else {
-			v = c.or
-		}
+		v = resolveIn(c.or, t)
 	}
 	if c.fade != 0 {
 		v = Fade(v, float64(1-c.fade))
@@ -145,8 +145,43 @@ func (c Color) In(t Theme) color.Color {
 	return v
 }
 
+// resolveIn resolves any color fallback against t, including Color tokens,
+// faded/mixed combinations, and arbitrary ggui.EnvColor values.
+func resolveIn(c color.Color, t Theme) color.Color {
+	switch fb := c.(type) {
+	case Color:
+		return fb.In(t)
+	case faded:
+		return Fade(resolveIn(fb.c, t), fb.alpha)
+	case mixed:
+		return Mix(resolveIn(fb.a, t), resolveIn(fb.b, t), fb.amount)
+	case ggui.EnvColor:
+		return fb.Resolve(t.Apply(ggui.Env{}))
+	default:
+		return c
+	}
+}
+
 // Resolve implements ggui.EnvColor: the color the theme env holds has.
-func (c Color) Resolve(env ggui.Env) color.Color { return c.In(From(env)) }
+func (c Color) Resolve(env ggui.Env) color.Color {
+	t := Of(env)
+	var v color.Color
+	if c.field != 0 {
+		if v = t.colorAt(c.field); v == nil {
+			resolved := t.Resolve()
+			v = resolved.colorAt(c.field)
+		}
+	} else {
+		v, _ = t.Get(CSSColor(c.name))
+	}
+	if v == nil && c.or != nil {
+		v = ggui.ResolveColor(c.or, env)
+	}
+	if c.fade != 0 {
+		v = Fade(v, float64(1-c.fade))
+	}
+	return v
+}
 
 // RGBA implements color.Color: the color the application's theme has.
 func (c Color) RGBA() (r, g, b, a uint32) { return rgba(c.Resolve(appEnv())) }
