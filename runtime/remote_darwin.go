@@ -21,10 +21,8 @@ import (
 var (
 	selSetActivationPolicy       = objc.RegisterName("setActivationPolicy:")
 	selActivateIgnoringOtherApps = objc.RegisterName("activateIgnoringOtherApps:")
-	selSharedWorkspace           = objc.RegisterName("sharedWorkspace")
 	selFrontmostApplication      = objc.RegisterName("frontmostApplication")
 	selActivateWithOptions       = objc.RegisterName("activateWithOptions:")
-	selRetain                    = objc.RegisterName("retain")
 
 	classNSWorkspace = objc.ID(objc.GetClass("NSWorkspace"))
 )
@@ -41,10 +39,10 @@ func inFront(fn func()) {
 	}
 	app := cocoa.App()
 	app.Send(selSetActivationPolicy, nsApplicationActivationPolicyAccessory)
-	prev := classNSWorkspace.Send(selSharedWorkspace).Send(selFrontmostApplication)
+	prev := classNSWorkspace.Send(cocoa.SelSharedWorkspace).Send(selFrontmostApplication)
 	if prev != 0 {
-		prev.Send(selRetain)
-		defer prev.Send(selRelease)
+		prev.Send(cocoa.SelRetain)
+		defer prev.Send(cocoa.SelRelease)
 		defer prev.Send(selActivateWithOptions, uint(0))
 	}
 	app.Send(selActivateIgnoringOtherApps, true)

@@ -3,8 +3,6 @@
 package runtime
 
 import (
-	"unsafe"
-
 	"github.com/ebitengine/purego/objc"
 	"github.com/ironpark/ggui/internal/platform/cocoa"
 	"github.com/ironpark/ggwd"
@@ -18,9 +16,6 @@ var (
 	selSetInformativeText  = objc.RegisterName("setInformativeText:")
 	selSetAlertStyle       = objc.RegisterName("setAlertStyle:")
 	selAddButtonWithTitle  = objc.RegisterName("addButtonWithTitle:")
-	selWindow              = objc.RegisterName("window")
-	selNewAlert            = objc.RegisterName("new")
-	selRelease             = objc.RegisterName("release")
 	classNSAlert           = objc.ID(objc.GetClass("NSAlert"))
 	nsAlertFirstButtonCode = 1000 // NSAlertFirstButtonReturn
 )
@@ -41,8 +36,8 @@ func showMessage(m Message, owner uintptr) (i int, err error) {
 
 // runAlert builds and runs one alert. It must run on the main thread.
 func runAlert(m Message, win objc.ID) (int, error) {
-	alert := classNSAlert.Send(selNewAlert)
-	defer alert.Send(selRelease)
+	alert := classNSAlert.Send(cocoa.SelNew)
+	defer alert.Send(cocoa.SelRelease)
 	style := nsAlertStyleInformational
 	switch m.Kind {
 	case MessageWarning:
@@ -61,7 +56,7 @@ func runAlert(m Message, win objc.ID) (int, error) {
 	if win == 0 {
 		resp = objc.Send[int](alert, selRunModal)
 	} else {
-		resp = runSheetModal(alert.Send(selWindow), func(handler unsafe.Pointer) {
+		resp = runSheetModal(alert.Send(cocoa.SelWindow), func(handler objc.Block) {
 			alert.Send(selBeginSheetModal, win, handler)
 		})
 	}

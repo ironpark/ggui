@@ -7,6 +7,7 @@ import (
 	"unsafe"
 
 	"github.com/ironpark/ggui/a11y"
+	"github.com/ironpark/ggui/internal/platform/win32"
 	"golang.org/x/sys/windows"
 )
 
@@ -32,12 +33,12 @@ func winHandOut(base uintptr, k int, ppv uintptr) uintptr {
 		}
 		return ePointer
 	}
-	*(*uintptr)(unsafe.Pointer(ppv)) = 0
+	*win32.Deref[uintptr](ppv) = 0
 	if base == 0 {
 		return sOK
 	}
 	slot := base + uintptr(k)*ptrSize
-	*(*uintptr)(unsafe.Pointer(ppv)) = slot
+	*win32.Deref[uintptr](ppv) = slot
 	return sOK
 }
 
@@ -92,7 +93,7 @@ func winGetProviderOptions(_, pRetVal uintptr) uintptr {
 	if pRetVal == 0 {
 		return ePointer
 	}
-	*(*int32)(unsafe.Pointer(pRetVal)) = uiaProviderOptionsServerSide
+	*win32.Deref[int32](pRetVal) = uiaProviderOptionsServerSide
 	return sOK
 }
 
@@ -166,7 +167,7 @@ func winGetPropertyValue(this, propertyID, pRetVal uintptr) uintptr {
 	if pRetVal == 0 {
 		return ePointer
 	}
-	v := (*winVariant)(unsafe.Pointer(pRetVal))
+	v := win32.Deref[winVariant](pRetVal)
 	varEmpty(v)
 	o, b, n, ok := selfOf(this)
 	if o == nil {
@@ -280,7 +281,7 @@ func winGetHostProvider(this, ppRetVal uintptr) uintptr {
 	if ppRetVal == 0 {
 		return ePointer
 	}
-	*(*uintptr)(unsafe.Pointer(ppRetVal)) = 0
+	*win32.Deref[uintptr](ppRetVal) = 0
 	o, _, ok := objOf(this)
 	if !ok || o.handle != winRootHandle {
 		return sOK
@@ -291,7 +292,7 @@ func winGetHostProvider(this, ppRetVal uintptr) uintptr {
 	}
 	r, _, _ := procUiaHostProviderFromHwnd.Call(h, ppRetVal)
 	if r != sOK {
-		*(*uintptr)(unsafe.Pointer(ppRetVal)) = 0
+		*win32.Deref[uintptr](ppRetVal) = 0
 	}
 	return sOK
 }
@@ -367,12 +368,12 @@ func winGetRuntimeID(this, ppRetVal uintptr) uintptr {
 	if ppRetVal == 0 {
 		return ePointer
 	}
-	*(*uintptr)(unsafe.Pointer(ppRetVal)) = 0
+	*win32.Deref[uintptr](ppRetVal) = 0
 	o, _, ok := objOf(this)
 	if !ok || o.handle == winRootHandle {
 		return sOK
 	}
-	*(*uintptr)(unsafe.Pointer(ppRetVal)) = winRuntimeID(o.handle)
+	*win32.Deref[uintptr](ppRetVal) = winRuntimeID(o.handle)
 	return sOK
 }
 
@@ -389,7 +390,7 @@ func winBoundingRectangle(this, pRetVal uintptr) uintptr {
 	if pRetVal == 0 {
 		return ePointer
 	}
-	r := (*winRect)(unsafe.Pointer(pRetVal))
+	r := win32.Deref[winRect](pRetVal)
 	*r = winRect{}
 	o, b, n, ok := selfOf(this)
 	if o == nil {
@@ -428,7 +429,7 @@ func winGetEmbeddedFragmentRoots(_, ppRetVal uintptr) uintptr {
 	if ppRetVal == 0 {
 		return ePointer
 	}
-	*(*uintptr)(unsafe.Pointer(ppRetVal)) = 0
+	*win32.Deref[uintptr](ppRetVal) = 0
 	return sOK
 }
 
@@ -531,12 +532,12 @@ func winValueGetValue(this, ppRetVal uintptr) uintptr {
 	if ppRetVal == 0 {
 		return ePointer
 	}
-	*(*uintptr)(unsafe.Pointer(ppRetVal)) = 0
+	*win32.Deref[uintptr](ppRetVal) = 0
 	_, _, n, ok := selfOf(this)
 	if !ok {
 		return uiaElementNotAvailable
 	}
-	*(*uintptr)(unsafe.Pointer(ppRetVal)) = winStr(n.Value)
+	*win32.Deref[uintptr](ppRetVal) = winStr(n.Value)
 	return sOK
 }
 
@@ -639,13 +640,13 @@ func winBoolOut(this, pRetVal uintptr, of func(a11y.Node) bool) uintptr {
 	if pRetVal == 0 {
 		return ePointer
 	}
-	*(*int32)(unsafe.Pointer(pRetVal)) = 0
+	*win32.Deref[int32](pRetVal) = 0
 	_, _, n, ok := selfOf(this)
 	if !ok {
 		return uiaElementNotAvailable
 	}
 	if of(n.Node) {
-		*(*int32)(unsafe.Pointer(pRetVal)) = 1
+		*win32.Deref[int32](pRetVal) = 1
 	}
 	return sOK
 }
@@ -655,12 +656,12 @@ func winFloatOut(this, pRetVal uintptr, of func(a11y.Node) float64) uintptr {
 	if pRetVal == 0 {
 		return ePointer
 	}
-	*(*float64)(unsafe.Pointer(pRetVal)) = 0
+	*win32.Deref[float64](pRetVal) = 0
 	_, _, n, ok := selfOf(this)
 	if !ok {
 		return uiaElementNotAvailable
 	}
-	*(*float64)(unsafe.Pointer(pRetVal)) = of(n.Node)
+	*win32.Deref[float64](pRetVal) = of(n.Node)
 	return sOK
 }
 
@@ -670,12 +671,12 @@ func winI32Out(this, pRetVal uintptr, none int32, of func(a11y.Node) int32) uint
 	if pRetVal == 0 {
 		return ePointer
 	}
-	*(*int32)(unsafe.Pointer(pRetVal)) = none
+	*win32.Deref[int32](pRetVal) = none
 	_, _, n, ok := selfOf(this)
 	if !ok {
 		return uiaElementNotAvailable
 	}
-	*(*int32)(unsafe.Pointer(pRetVal)) = of(n.Node)
+	*win32.Deref[int32](pRetVal) = of(n.Node)
 	return sOK
 }
 
@@ -683,7 +684,7 @@ func winI32Out(this, pRetVal uintptr, none int32, of func(a11y.Node) int32) uint
 // length prefix is ignored in favour of the terminator, which a BSTR from
 // SysAllocString always has.
 func winFromBSTR(p uintptr) string {
-	return windows.UTF16PtrToString((*uint16)(unsafe.Pointer(p)))
+	return windows.UTF16PtrToString(win32.Deref[uint16](p))
 }
 
 // --- window geometry ---
@@ -693,10 +694,10 @@ func winFromBSTR(p uintptr) string {
 // and its absence means the process is not per-monitor aware, in which case
 // one is the right answer.
 func winScale(hwnd uintptr) float64 {
-	if procGetDpiForWindow.Find() != nil {
+	if win32.GetDpiForWindow.Find() != nil {
 		return 1
 	}
-	dpi, _, _ := procGetDpiForWindow.Call(hwnd)
+	dpi, _, _ := win32.GetDpiForWindow.Call(hwnd)
 	if dpi == 0 {
 		return 1
 	}

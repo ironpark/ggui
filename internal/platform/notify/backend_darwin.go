@@ -54,22 +54,13 @@ const (
 const payloadKey = "ggui"
 
 var (
-	selAlloc             = objc.RegisterName("alloc")
-	selInit              = objc.RegisterName("init")
-	selRetain            = objc.RegisterName("retain")
-	selRelease           = objc.RegisterName("release")
-	selNew               = objc.RegisterName("new")
-	selDrain             = objc.RegisterName("drain")
 	selMainBundle        = objc.RegisterName("mainBundle")
 	selBundleIdentifier  = objc.RegisterName("bundleIdentifier")
 	selBundlePath        = objc.RegisterName("bundlePath")
-	selUTF8String        = objc.RegisterName("UTF8String")
-	selIsKindOfClass     = objc.RegisterName("isKindOfClass:")
 	selLocalizedDesc     = objc.RegisterName("localizedDescription")
 	selCurrentCenter     = objc.RegisterName("currentNotificationCenter")
 	selSetDelegate       = objc.RegisterName("setDelegate:")
 	selRequestAuth       = objc.RegisterName("requestAuthorizationWithOptions:completionHandler:")
-	selSetTitle          = objc.RegisterName("setTitle:")
 	selSetSubtitle       = objc.RegisterName("setSubtitle:")
 	selSetBody           = objc.RegisterName("setBody:")
 	selSetSound          = objc.RegisterName("setSound:")
@@ -115,7 +106,7 @@ var bundled = sync.OnceValue(func() bool {
 		if b == 0 || b.Send(selBundleIdentifier) == 0 {
 			return
 		}
-		ok = strings.HasSuffix(goString(b.Send(selBundlePath)), ".app") && loadFramework()
+		ok = strings.HasSuffix(cocoa.GoString(b.Send(selBundlePath)), ".app") && loadFramework()
 	})
 	return ok
 })
@@ -188,8 +179,8 @@ func setup() {
 			return
 		}
 		cls = lookupClasses()
-		center = cls.center.Send(selCurrentCenter).Send(selRetain)
-		delegate = objc.ID(class).Send(selAlloc).Send(selInit)
+		center = cls.center.Send(selCurrentCenter).Send(cocoa.SelRetain)
+		delegate = objc.ID(class).Send(cocoa.SelAlloc).Send(cocoa.SelInit)
 		center.Send(selSetDelegate, delegate)
 	})
 }
@@ -239,7 +230,7 @@ func askAuthorization() <-chan bool {
 				// for an app it does not know: one run from a temporary
 				// directory, say. Each post asks again, and fails.
 				auth.Store(authUnknown)
-				Report(errors.New("asking to allow notifications: " + goString(err.Send(selLocalizedDesc))))
+				Report(errors.New("asking to allow notifications: " + cocoa.GoString(err.Send(selLocalizedDesc))))
 			default:
 				auth.Store(authDenied)
 			}
@@ -285,11 +276,11 @@ func post(n Notification) error {
 	}
 	// An autorelease pool belongs to its thread, which the posting
 	// goroutine keeps.
-	pool := objc.ID(objc.GetClass("NSAutoreleasePool")).Send(selNew)
-	defer pool.Send(selDrain)
-	content := cls.content.Send(selAlloc).Send(selInit)
-	defer content.Send(selRelease)
-	content.Send(selSetTitle, cocoa.String(n.Title))
+	pool := objc.ID(objc.GetClass("NSAutoreleasePool")).Send(cocoa.SelNew)
+	defer pool.Send(cocoa.SelDrain)
+	content := cls.content.Send(cocoa.SelAlloc).Send(cocoa.SelInit)
+	defer content.Send(cocoa.SelRelease)
+	content.Send(cocoa.SelSetTitle, cocoa.String(n.Title))
 	if n.Subtitle != "" {
 		content.Send(selSetSubtitle, cocoa.String(n.Subtitle))
 	}
@@ -315,7 +306,7 @@ func post(n Notification) error {
 	block := objc.NewBlock(func(_ objc.Block, err objc.ID) {
 		msg := ""
 		if err != 0 {
-			msg = goString(err.Send(selLocalizedDesc))
+			msg = cocoa.GoString(err.Send(selLocalizedDesc))
 			if msg == "" {
 				msg = "the system did not show the notification"
 			}
@@ -354,7 +345,7 @@ func category(actions []Action) string {
 		buttons[i] = cls.action.Send(selActionWith, cocoa.String(a.ID), cocoa.String(a.Title), opts)
 	}
 	c := cls.category.Send(selCategoryWith, cocoa.String(id), cocoa.Array(buttons), cocoa.Array(nil), uint(0))
-	categories[id] = c.Send(selRetain)
+	categories[id] = c.Send(cocoa.SelRetain)
 	all := make([]objc.ID, 0, len(categories))
 	for _, c := range categories {
 		all = append(all, c)
@@ -375,8 +366,8 @@ func remove(id string) {
 	if !bundled() || center == 0 {
 		return
 	}
-	pool := objc.ID(objc.GetClass("NSAutoreleasePool")).Send(selNew)
-	defer pool.Send(selDrain)
+	pool := objc.ID(objc.GetClass("NSAutoreleasePool")).Send(cocoa.SelNew)
+	defer pool.Send(cocoa.SelDrain)
 	ids := cocoa.StringArray([]string{id})
 	center.Send(selRemoveDelivered, ids)
 	center.Send(selRemovePending, ids)
@@ -436,7 +427,7 @@ func didReceive(_ objc.ID, _ objc.SEL, _, response objc.ID, done objc.Block) {
 // responseOf reads a UNNotificationResponse, and reports false for a
 // dismissal and for a notification that is not the app's.
 func responseOf(response objc.ID) (Response, bool) {
-	action := goString(response.Send(selActionIdentifier))
+	action := cocoa.GoString(response.Send(selActionIdentifier))
 	if action == dismissActionID {
 		return Response{}, false
 	}
@@ -445,10 +436,10 @@ func responseOf(response objc.ID) (Response, bool) {
 		return Response{}, false
 	}
 	v := info.Send(selObjectForKey, cocoa.String(payloadKey))
-	if v == 0 || !objc.Send[bool](v, selIsKindOfClass, objc.GetClass("NSString")) {
+	if v == 0 || !objc.Send[bool](v, cocoa.SelIsKindOfClass, objc.GetClass("NSString")) {
 		return Response{}, false
 	}
-	p, ok := decodePayload(goString(v))
+	p, ok := decodePayload(cocoa.GoString(v))
 	if !ok {
 		return Response{}, false
 	}
@@ -456,22 +447,6 @@ func responseOf(response objc.ID) (Response, bool) {
 		action = ""
 	}
 	return Response{ID: p.ID, Data: p.Data, Action: action, Foreground: action == "" || slices.Contains(p.Foreground, action)}, true
-}
-
-// goString copies an NSString's text.
-func goString(s objc.ID) string {
-	if s == 0 {
-		return ""
-	}
-	p := objc.Send[*byte](s, selUTF8String)
-	if p == nil {
-		return ""
-	}
-	n := 0
-	for *(*byte)(unsafe.Add(unsafe.Pointer(p), n)) != 0 {
-		n++
-	}
-	return string(unsafe.Slice(p, n))
 }
 
 // callBlock calls a block the framework handed over, a completion handler,

@@ -4,9 +4,7 @@ package runtime
 
 import (
 	"sync"
-	"unsafe"
 
-	"github.com/ebitengine/purego/cstrings"
 	"github.com/ebitengine/purego/objc"
 	"github.com/ironpark/ggui/internal/platform/cocoa"
 	"github.com/ironpark/ggwd"
@@ -27,7 +25,6 @@ var (
 	selSetCanCreateDirectories    = objc.RegisterName("setCanCreateDirectories:")
 	selSetAllowsMultipleSelection = objc.RegisterName("setAllowsMultipleSelection:")
 	selSetMessage                 = objc.RegisterName("setMessage:")
-	selSetTitle                   = objc.RegisterName("setTitle:")
 	selSetDirectoryURL            = objc.RegisterName("setDirectoryURL:")
 	selSetNameFieldStringValue    = objc.RegisterName("setNameFieldStringValue:")
 	selSetAllowedFileTypes        = objc.RegisterName("setAllowedFileTypes:")
@@ -61,10 +58,9 @@ var activeSheet *sheetModal
 
 // sheetDone is the sheet's completion handler: the sheet has closed with a
 // response, and the modal loop runSheetModal started is told so. It is made on
-// first use, since a block takes a callback slot for the life of the
-// process and most apps never open a sheet.
-var sheetDone = sync.OnceValue(func() *cocoa.Block {
-	return cocoa.NewBlock(func(_ uintptr, response int) {
+// first use and kept for the life of the process.
+var sheetDone = sync.OnceValue(func() objc.Block {
+	return objc.NewBlock(func(_ objc.Block, response int) {
 		if s := activeSheet; s != nil {
 			s.done = true
 			s.response = response
@@ -76,16 +72,16 @@ var sheetDone = sync.OnceValue(func() *cocoa.Block {
 	})
 })
 
-// runSheetModal presents a sheet via begin (passing sheetDone().Ptr() as the
+// runSheetModal presents a sheet via begin (passing sheetDone() as the
 // completion handler) and runs the modal loop on modalWin unless begin already
 // invoked the completion handler synchronously. Must run on the main thread.
-func runSheetModal(modalWin objc.ID, begin func(handler unsafe.Pointer)) int {
+func runSheetModal(modalWin objc.ID, begin func(handler objc.Block)) int {
 	prev := activeSheet
 	s := &sheetModal{}
 	activeSheet = s
 	defer func() { activeSheet = prev }()
 
-	begin(sheetDone().Ptr())
+	begin(sheetDone())
 	if s.done {
 		return s.response
 	}
@@ -120,7 +116,7 @@ func runPanel(k dialogKind, d FileDialog, owner uintptr) ([]string, error) {
 	if d.Title != "" {
 		// A panel's title bar is empty on modern macOS; the message is the
 		// line above the browser, which is where the caption is read.
-		panel.Send(selSetTitle, cocoa.String(d.Title))
+		panel.Send(cocoa.SelSetTitle, cocoa.String(d.Title))
 		panel.Send(selSetMessage, cocoa.String(d.Title))
 	}
 	if d.Directory != "" {
@@ -155,7 +151,7 @@ func runSheet(panel, win objc.ID) int {
 	if win == 0 {
 		return objc.Send[int](panel, selRunModal)
 	}
-	return runSheetModal(panel, func(handler unsafe.Pointer) {
+	return runSheetModal(panel, func(handler objc.Block) {
 		panel.Send(selBeginSheetModal, win, handler)
 	})
 }
@@ -179,5 +175,5 @@ func extensions(filters []FileFilter) (exts []string, restricted bool) {
 
 // urlPath is the file system path of an NSURL.
 func urlPath(url objc.ID) string {
-	return cstrings.NSStringToString(url.Send(selPath))
+	return cocoa.GoString(url.Send(selPath))
 }

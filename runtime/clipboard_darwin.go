@@ -3,11 +3,9 @@
 package runtime
 
 import (
-	goruntime "runtime"
 	"sync"
 	"unsafe"
 
-	"github.com/ebitengine/purego/cstrings"
 	"github.com/ebitengine/purego/objc"
 
 	"github.com/ironpark/ggui/internal/platform/cocoa"
@@ -32,13 +30,10 @@ var (
 	selImageRepWithData  = objc.RegisterName("imageRepWithData:")
 	selRepresentation    = objc.RegisterName("representationUsingType:properties:")
 	selDictionary        = objc.RegisterName("dictionary")
-	selNew               = objc.RegisterName("new")
-	selDrain             = objc.RegisterName("drain")
 
-	classNSPasteboard      = objc.ID(objc.GetClass("NSPasteboard"))
-	classNSAutoreleasePool = objc.ID(objc.GetClass("NSAutoreleasePool"))
-	classNSBitmapImageRep  = objc.ID(objc.GetClass("NSBitmapImageRep"))
-	classNSDictionary      = objc.ID(objc.GetClass("NSDictionary"))
+	classNSPasteboard     = objc.ID(objc.GetClass("NSPasteboard"))
+	classNSBitmapImageRep = objc.ID(objc.GetClass("NSBitmapImageRep"))
+	classNSDictionary     = objc.ID(objc.GetClass("NSDictionary"))
 )
 
 // The pasteboard types read: NSPasteboardTypeString, NSPasteboardTypePNG
@@ -64,20 +59,14 @@ var pasteboardMu sync.Mutex
 func withPool(fn func()) {
 	pasteboardMu.Lock()
 	defer pasteboardMu.Unlock()
-	goruntime.LockOSThread()
-	defer goruntime.UnlockOSThread()
-	pool := classNSAutoreleasePool.Send(selNew)
-	defer pool.Send(selDrain)
-	fn()
+	cocoa.WithAutoreleasePool(fn)
 }
 
 func (pasteboard) Read() string {
 	var out string
 	withPool(func() {
 		s := classNSPasteboard.Send(selGeneralPasteboard).Send(selStringForType, cocoa.String(pasteboardTypeString))
-		if s != 0 {
-			out = cstrings.NSStringToString(s)
-		}
+		out = cocoa.GoString(s)
 	})
 	return out
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/ironpark/ggui/internal/platform/win32"
 	"golang.org/x/sys/windows"
 )
 
@@ -17,18 +18,11 @@ import (
 // program holds it.
 
 var (
-	dllUser32   = windows.NewLazySystemDLL("user32.dll")
-	dllKernel32 = windows.NewLazySystemDLL("kernel32.dll")
-
-	procOpenClipboard    = dllUser32.NewProc("OpenClipboard")
-	procCloseClipboard   = dllUser32.NewProc("CloseClipboard")
-	procEmptyClipboard   = dllUser32.NewProc("EmptyClipboard")
-	procGetClipboardData = dllUser32.NewProc("GetClipboardData")
-	procSetClipboardData = dllUser32.NewProc("SetClipboardData")
-	procGlobalAlloc      = dllKernel32.NewProc("GlobalAlloc")
-	procGlobalFree       = dllKernel32.NewProc("GlobalFree")
-	procGlobalLock       = dllKernel32.NewProc("GlobalLock")
-	procGlobalUnlock     = dllKernel32.NewProc("GlobalUnlock")
+	procOpenClipboard    = win32.User32.NewProc("OpenClipboard")
+	procCloseClipboard   = win32.User32.NewProc("CloseClipboard")
+	procEmptyClipboard   = win32.User32.NewProc("EmptyClipboard")
+	procGetClipboardData = win32.User32.NewProc("GetClipboardData")
+	procSetClipboardData = win32.User32.NewProc("SetClipboardData")
 )
 
 const (
@@ -68,12 +62,12 @@ func (winClipboard) Read() string {
 	if h == 0 {
 		return ""
 	}
-	p, _, _ := procGlobalLock.Call(h)
+	p, _, _ := win32.GlobalLock.Call(h)
 	if p == 0 {
 		return ""
 	}
-	defer procGlobalUnlock.Call(h)
-	s := windows.UTF16PtrToString((*uint16)(global(p)))
+	defer win32.GlobalUnlock.Call(h)
+	s := windows.UTF16PtrToString(win32.Deref[uint16](p))
 	// Text on the Windows clipboard ends its lines with CRLF; text fields
 	// work in LF.
 	return strings.ReplaceAll(s, "\r\n", "\n")
@@ -96,24 +90,19 @@ func (winClipboard) Write(s string) {
 	defer procCloseClipboard.Call()
 	procEmptyClipboard.Call()
 	size := uintptr(len(u)) * 2
-	h, _, _ := procGlobalAlloc.Call(gmemMoveable, size)
+	h, _, _ := win32.GlobalAlloc.Call(gmemMoveable, size)
 	if h == 0 {
 		return
 	}
-	p, _, _ := procGlobalLock.Call(h)
+	p, _, _ := win32.GlobalLock.Call(h)
 	if p == 0 {
-		procGlobalFree.Call(h)
+		win32.GlobalFree.Call(h)
 		return
 	}
-	copy(unsafe.Slice((*uint16)(global(p)), len(u)), u)
-	procGlobalUnlock.Call(h)
+	copy(unsafe.Slice(win32.Deref[uint16](p), len(u)), u)
+	win32.GlobalUnlock.Call(h)
 	// On success the clipboard owns the memory; otherwise it is still ours.
 	if r, _, _ := procSetClipboardData.Call(cfUnicodeText, h); r == 0 {
-		procGlobalFree.Call(h)
+		win32.GlobalFree.Call(h)
 	}
 }
-
-// global turns what GlobalLock returned into a pointer. The memory is the
-// system's, not Go's, so the garbage collector has no reason to track it;
-// the double conversion only keeps vet from mistaking it for Go memory.
-func global(p uintptr) unsafe.Pointer { return *(*unsafe.Pointer)(unsafe.Pointer(&p)) }

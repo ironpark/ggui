@@ -11,6 +11,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/ironpark/ggui/internal/platform/win32"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
@@ -85,14 +86,12 @@ const (
 
 var (
 	combase                    = windows.NewLazySystemDLL("combase.dll")
-	kernel32                   = windows.NewLazySystemDLL("kernel32.dll")
 	procRoInitialize           = combase.NewProc("RoInitialize")
 	procRoGetActivationFactory = combase.NewProc("RoGetActivationFactory")
 	procRoActivateInstance     = combase.NewProc("RoActivateInstance")
 	procWindowsCreateString    = combase.NewProc("WindowsCreateString")
 	procWindowsDeleteString    = combase.NewProc("WindowsDeleteString")
 	procWindowsGetStringRaw    = combase.NewProc("WindowsGetStringRawBuffer")
-	procGlobalAlloc            = kernel32.NewProc("GlobalAlloc")
 )
 
 // toasts is the state of the app's toasts. The COM objects are touched only
@@ -171,8 +170,8 @@ func hresult(what string, hr uintptr) error {
 
 // call calls the method at index of the COM object obj.
 func call(obj uintptr, index int, args ...uintptr) uintptr {
-	vtbl := *(*uintptr)(unsafe.Pointer(obj))
-	fn := *(*uintptr)(unsafe.Pointer(vtbl + uintptr(index)*unsafe.Sizeof(uintptr(0))))
+	vtbl := *win32.Deref[uintptr](obj)
+	fn := *win32.Deref[uintptr](vtbl + uintptr(index)*unsafe.Sizeof(uintptr(0)))
 	hr, _, _ := syscall.SyscallN(fn, append([]uintptr{obj}, args...)...)
 	return hr
 }
@@ -222,7 +221,7 @@ func goHString(h uintptr) string {
 	if p == 0 || n == 0 {
 		return ""
 	}
-	return windows.UTF16ToString(unsafe.Slice((*uint16)(unsafe.Pointer(p)), n))
+	return windows.UTF16ToString(unsafe.Slice(win32.Deref[uint16](p), n))
 }
 
 // factoryOf is the activation factory of the runtime class name, as the
@@ -461,16 +460,16 @@ func newActivatedHandler() uintptr {
 		syscall.NewCallback(handlerRelease),
 		syscall.NewCallback(handlerInvoke),
 	}
-	copy(unsafe.Slice((*uintptr)(unsafe.Pointer(table)), len(methods)), methods)
+	copy(unsafe.Slice(win32.Deref[uintptr](table), len(methods)), methods)
 	obj := winAlloc(unsafe.Sizeof(handlerObject{}))
-	(*handlerObject)(unsafe.Pointer(obj)).vtbl = table
+	win32.Deref[handlerObject](obj).vtbl = table
 	return obj
 }
 
 // winAlloc takes fixed, zeroed memory outside the Go heap.
 func winAlloc(size uintptr) uintptr {
 	// GMEM_FIXED | GMEM_ZEROINIT.
-	p, _, _ := procGlobalAlloc.Call(0x0040, size)
+	p, _, _ := win32.GlobalAlloc.Call(0x0040, size)
 	if p == 0 {
 		panic("ggui: GlobalAlloc failed")
 	}
@@ -481,12 +480,12 @@ func handlerQueryInterface(this, riid, ppv uintptr) uintptr {
 	if ppv == 0 {
 		return ePointer
 	}
-	id := *(*windows.GUID)(unsafe.Pointer(riid))
+	id := *win32.Deref[windows.GUID](riid)
 	if id != iidUnknown && id != iidAgileObject && id != iidActivatedHandlerType {
-		*(*uintptr)(unsafe.Pointer(ppv)) = 0
+		*win32.Deref[uintptr](ppv) = 0
 		return eNoInterface
 	}
-	*(*uintptr)(unsafe.Pointer(ppv)) = this
+	*win32.Deref[uintptr](ppv) = this
 	return sOK
 }
 

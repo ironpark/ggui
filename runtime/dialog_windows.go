@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/ironpark/ggui/internal/platform/win32"
 	"github.com/ironpark/ggwd"
 	"golang.org/x/sys/windows"
 )
@@ -20,16 +21,13 @@ import (
 
 var (
 	dllComdlg32 = windows.NewLazySystemDLL("comdlg32.dll")
-	dllShell32  = windows.NewLazySystemDLL("shell32.dll")
-	dllOle32    = windows.NewLazySystemDLL("ole32.dll")
 
 	procGetOpenFileNameW     = dllComdlg32.NewProc("GetOpenFileNameW")
 	procGetSaveFileNameW     = dllComdlg32.NewProc("GetSaveFileNameW")
-	procSHBrowseForFolderW   = dllShell32.NewProc("SHBrowseForFolderW")
-	procSHGetPathFromIDListW = dllShell32.NewProc("SHGetPathFromIDListW")
-	procCoInitializeEx       = dllOle32.NewProc("CoInitializeEx")
-	procCoUninitialize       = dllOle32.NewProc("CoUninitialize")
-	procCoTaskMemFree        = dllOle32.NewProc("CoTaskMemFree")
+	procSHBrowseForFolderW   = win32.Shell32.NewProc("SHBrowseForFolderW")
+	procSHGetPathFromIDListW = win32.Shell32.NewProc("SHGetPathFromIDListW")
+	procCoInitializeEx       = win32.Ole32.NewProc("CoInitializeEx")
+	procCoUninitialize       = win32.Ole32.NewProc("CoUninitialize")
 )
 
 // OPENFILENAMEW flags, from commdlg.h.
@@ -201,7 +199,7 @@ func browseFolder(d FileDialog, owner uintptr) ([]string, error) {
 	if pidl == 0 {
 		return nil, ErrCanceled
 	}
-	defer procCoTaskMemFree.Call(pidl)
+	defer win32.CoTaskMemFree.Call(pidl)
 	path := make([]uint16, maxPath)
 	ok, _, _ := procSHGetPathFromIDListW.Call(pidl, uintptr(unsafe.Pointer(&path[0])))
 	if ok == 0 {

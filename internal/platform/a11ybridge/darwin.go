@@ -12,7 +12,6 @@ import (
 	"unsafe"
 
 	"github.com/ebitengine/purego"
-	"github.com/ebitengine/purego/cstrings"
 	"github.com/ebitengine/purego/objc"
 
 	"github.com/ironpark/ggwd"
@@ -28,36 +27,12 @@ import (
 // ggfx owns the native container view. This bridge supplies its tree through
 // per-window callbacks and owns only the accessibility element objects.
 
-type nsPoint struct {
-	_    structs.HostLayout
-	x, y float64
-}
-
-type nsSize struct {
-	_             structs.HostLayout
-	width, height float64
-}
-
-type nsRect struct {
-	_      structs.HostLayout
-	origin nsPoint
-	size   nsSize
-}
-
 var (
-	axSelAlloc               = objc.RegisterName("alloc")
-	axSelInit                = objc.RegisterName("init")
-	axSelRetain              = objc.RegisterName("retain")
-	axSelAutorelease         = objc.RegisterName("autorelease")
-	axSelRelease             = objc.RegisterName("release")
-	axSelBounds              = objc.RegisterName("bounds")
-	axSelWindow              = objc.RegisterName("window")
 	axSelConvertRectToView   = objc.RegisterName("convertRect:toView:")
 	axSelConvertRectFromView = objc.RegisterName("convertRect:fromView:")
 	axSelConvertRectToScreen = objc.RegisterName("convertRectToScreen:")
 	axSelConvertRectFromScr  = objc.RegisterName("convertRectFromScreen:")
 	axSelNumberWithDouble    = objc.RegisterName("numberWithDouble:")
-	axSelSharedWorkspace     = objc.RegisterName("sharedWorkspace")
 	axSelVoiceOverEnabled    = objc.RegisterName("isVoiceOverEnabled")
 
 	axClassNSString     objc.Class
@@ -96,7 +71,7 @@ func newAXPlatform() axPlatform { return &darwinAX{} }
 func (d *darwinAX) active() bool {
 	var on bool
 	ggwd.RunOnMainThread(func() {
-		on = axIDNSWorkspace.Send(axSelSharedWorkspace).Send(axSelVoiceOverEnabled) != 0
+		on = axIDNSWorkspace.Send(cocoa.SelSharedWorkspace).Send(axSelVoiceOverEnabled) != 0
 	})
 	return on
 }
@@ -111,7 +86,7 @@ func (d *darwinAX) setWindow(b *Bridge, w *ggwd.Window) {
 			return uintptr(cocoa.Array(nil))
 		}
 		return uintptr(cocoa.Array(axElements(b, f, f.tree.Roots())))
-	}, func(x, y float64) uintptr { return uintptr(axHitTestAt(b, nsPoint{x: x, y: y})) })
+	}, func(x, y float64) uintptr { return uintptr(axHitTestAt(b, cocoa.Point{X: x, Y: y})) })
 }
 
 func (d *darwinAX) close() {
@@ -124,7 +99,7 @@ func (d *darwinAX) close() {
 
 // element makes the accessibility object for one node, carrying its handle.
 func (d *darwinAX) element(handle int64) uintptr {
-	e := objc.ID(axClassElement).Send(axSelAlloc).Send(axSelInit)
+	e := objc.ID(axClassElement).Send(cocoa.SelAlloc).Send(cocoa.SelInit)
 	e.SetIvar(axHandleIvar, objc.ID(handle))
 	axElementBridges.Store(e, d.bridge)
 	return uintptr(e)
@@ -134,7 +109,7 @@ func (d *darwinAX) element(handle int64) uintptr {
 // current autorelease pool so a concurrent sweep cannot free the element
 // before Cocoa or post finishes using it.
 func (d *darwinAX) retain(e uintptr) {
-	objc.ID(e).Send(axSelRetain).Send(axSelAutorelease)
+	objc.ID(e).Send(cocoa.SelRetain).Send(cocoa.SelAutorelease)
 }
 
 // release drops the bridge's reference to retired elements on the main thread
@@ -150,13 +125,13 @@ func (d *darwinAX) release(elems []uintptr) {
 	ggwd.RunOnMainThread(func() {
 		released = true
 		for _, e := range elems {
-			objc.ID(e).Send(axSelRelease)
+			objc.ID(e).Send(cocoa.SelRelease)
 		}
 	})
 	if !released {
 		// ggwd.Run is not active (e.g. unit tests or post-shutdown); release directly.
 		for _, e := range elems {
-			objc.ID(e).Send(axSelRelease)
+			objc.ID(e).Send(cocoa.SelRelease)
 		}
 	}
 }
@@ -368,45 +343,45 @@ func axElementIdentifier(self objc.ID, _ objc.SEL) objc.ID {
 	return 0
 }
 
-func axElementFrame(self objc.ID, _ objc.SEL) nsRect {
+func axElementFrame(self objc.ID, _ objc.SEL) cocoa.Rect {
 	b, _, n, ok := axSelf(self)
 	if !ok {
-		return nsRect{}
+		return cocoa.Rect{}
 	}
 	d, is := b.plat.(*darwinAX)
 	if !is {
-		return nsRect{}
+		return cocoa.Rect{}
 	}
 	container := objc.ID(d.container.Load())
 	if container == 0 {
-		return nsRect{}
+		return cocoa.Rect{}
 	}
-	x, y, w, h := axBounds(n, objc.Send[nsRect](container, axSelBounds).size.height)
-	return axToScreen(container, nsRect{origin: nsPoint{x: x, y: y}, size: nsSize{width: w, height: h}})
+	x, y, w, h := axBounds(n, objc.Send[cocoa.Rect](container, cocoa.SelBounds).Size.H)
+	return axToScreen(container, cocoa.Rect{Origin: cocoa.Point{X: x, Y: y}, Size: cocoa.Size{W: w, H: h}})
 }
 
 // axToScreen converts a rectangle in the container view's coordinates to
 // the screen coordinates every accessibility frame is in, through the
 // window, so that a content view inset from the window's edge is accounted
 // for rather than assumed away.
-func axToScreen(view objc.ID, r nsRect) nsRect {
-	window := view.Send(axSelWindow)
+func axToScreen(view objc.ID, r cocoa.Rect) cocoa.Rect {
+	window := view.Send(cocoa.SelWindow)
 	if window == 0 {
 		return r
 	}
-	inWindow := objc.Send[nsRect](view, axSelConvertRectToView, r, objc.ID(0))
-	return objc.Send[nsRect](window, axSelConvertRectToScreen, inWindow)
+	inWindow := objc.Send[cocoa.Rect](view, axSelConvertRectToView, r, objc.ID(0))
+	return objc.Send[cocoa.Rect](window, axSelConvertRectToScreen, inWindow)
 }
 
 // axFromScreen is axToScreen backwards, for a hit test, which arrives in
 // screen coordinates.
-func axFromScreen(view objc.ID, r nsRect) nsRect {
-	window := view.Send(axSelWindow)
+func axFromScreen(view objc.ID, r cocoa.Rect) cocoa.Rect {
+	window := view.Send(cocoa.SelWindow)
 	if window == 0 {
 		return r
 	}
-	inWindow := objc.Send[nsRect](window, axSelConvertRectFromScr, r)
-	return objc.Send[nsRect](view, axSelConvertRectFromView, inWindow, objc.ID(0))
+	inWindow := objc.Send[cocoa.Rect](window, axSelConvertRectFromScr, r)
+	return objc.Send[cocoa.Rect](view, axSelConvertRectFromView, inWindow, objc.ID(0))
 }
 
 func axElementParent(self objc.ID, _ objc.SEL) objc.ID {
@@ -468,7 +443,7 @@ func axElementExpanded(self objc.ID, _ objc.SEL) bool {
 	return ok && n.Expanded.Open()
 }
 
-func axElementHitTest(self objc.ID, _ objc.SEL, p nsPoint) objc.ID {
+func axElementHitTest(self objc.ID, _ objc.SEL, p cocoa.Point) objc.ID {
 	b, _, _, ok := axSelf(self)
 	if !ok {
 		return 0
@@ -478,7 +453,7 @@ func axElementHitTest(self objc.ID, _ objc.SEL, p nsPoint) objc.ID {
 
 // axHitTestAt answers a hit test, which arrives in screen coordinates and
 // must come back as the deepest element under the point, or nothing.
-func axHitTestAt(b *Bridge, p nsPoint) objc.ID {
+func axHitTestAt(b *Bridge, p cocoa.Point) objc.ID {
 	f := b.frame()
 	d, is := b.plat.(*darwinAX)
 	if f == nil || !is {
@@ -488,9 +463,9 @@ func axHitTestAt(b *Bridge, p nsPoint) objc.ID {
 	if container == 0 {
 		return 0
 	}
-	local := axFromScreen(container, nsRect{origin: p})
-	h := objc.Send[nsRect](container, axSelBounds).size.height
-	i := axHitTest(f.tree, a11y.Pt(local.origin.x, h-local.origin.y))
+	local := axFromScreen(container, cocoa.Rect{Origin: p})
+	h := objc.Send[cocoa.Rect](container, cocoa.SelBounds).Size.H
+	i := axHitTest(f.tree, a11y.Pt(local.Origin.X, h-local.Origin.Y))
 	if i < 0 {
 		return 0
 	}
@@ -505,7 +480,6 @@ func axHitTestAt(b *Bridge, p nsPoint) objc.ID {
 var (
 	axSelDictionary    = objc.RegisterName("dictionaryWithObjects:forKeys:count:")
 	axSelNumberWithInt = objc.RegisterName("numberWithInt:")
-	axSelIsKindOfClass = objc.RegisterName("isKindOfClass:")
 	axSelDoubleValue   = objc.RegisterName("doubleValue")
 
 	axSelPerformPress     = objc.RegisterName("accessibilityPerformPress")
@@ -565,7 +539,7 @@ func (d *darwinAX) notify(notes []axNote) {
 			if container == 0 {
 				return
 			}
-			container.Send(axSelRetain).Send(axSelAutorelease)
+			container.Send(cocoa.SelRetain).Send(cocoa.SelAutorelease)
 			for _, n := range notes {
 				d.post(b, container, n)
 			}
@@ -592,7 +566,7 @@ func (d *darwinAX) post(b *Bridge, container objc.ID, n axNote) {
 	// An announcement is addressed to the window rather than to an element:
 	// it is not about anything on screen, which is the whole reason a live
 	// region needs one.
-	window := container.Send(axSelWindow)
+	window := container.Send(cocoa.SelWindow)
 	if window == 0 {
 		window = target
 	}
@@ -652,9 +626,9 @@ func axElementSetValue(self objc.ID, _ objc.SEL, v objc.ID) {
 	}
 	var act a11y.Action
 	switch {
-	case v.Send(axSelIsKindOfClass, axClassNSString) != 0:
-		act.Text = cstrings.NSStringToString(v)
-	case v.Send(axSelIsKindOfClass, axClassNSNumber) != 0:
+	case v.Send(cocoa.SelIsKindOfClass, axClassNSString) != 0:
+		act.Text = cocoa.GoString(v)
+	case v.Send(cocoa.SelIsKindOfClass, axClassNSNumber) != 0:
 		act.Num = objc.Send[float64](v, axSelDoubleValue)
 	default:
 		return
@@ -847,24 +821,24 @@ func axElementInsertionLine(self objc.ID, _ objc.SEL) int {
 	return a11y.InsertionLine(n.Node)
 }
 
-func axElementFrameForRange(self objc.ID, _ objc.SEL, r nsRange) nsRect {
+func axElementFrameForRange(self objc.ID, _ objc.SEL, r nsRange) cocoa.Rect {
 	b, n, ok := axText(self)
 	if !ok || r.location >= axNotFound {
-		return nsRect{}
+		return cocoa.Rect{}
 	}
 	d, is := b.plat.(*darwinAX)
 	if !is {
-		return nsRect{}
+		return cocoa.Rect{}
 	}
 	container := objc.ID(d.container.Load())
 	if container == 0 {
-		return nsRect{}
+		return cocoa.Rect{}
 	}
 	box := a11y.RectForRange(n, int(r.location), int(r.length))
-	h := objc.Send[nsRect](container, axSelBounds).size.height
-	return axToScreen(container, nsRect{
-		origin: nsPoint{x: box.Origin.X, y: h - (box.Origin.Y + box.Size.H)},
-		size:   nsSize{width: box.Size.W, height: box.Size.H},
+	h := objc.Send[cocoa.Rect](container, cocoa.SelBounds).Size.H
+	return axToScreen(container, cocoa.Rect{
+		Origin: cocoa.Point{X: box.Origin.X, Y: h - (box.Origin.Y + box.Size.H)},
+		Size:   cocoa.Size{W: box.Size.W, H: box.Size.H},
 	})
 }
 

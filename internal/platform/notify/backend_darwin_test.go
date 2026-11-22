@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ebitengine/purego/objc"
+	"github.com/ironpark/ggui/internal/platform/cocoa"
 )
 
 // The framework opens and every class, selector and protocol the backend
@@ -54,7 +55,7 @@ func TestUserNotificationsResolve(t *testing.T) {
 		}
 	}
 	instance := objc.RegisterName("instancesRespondToSelector:")
-	for _, sel := range []objc.SEL{selSetTitle, selSetSubtitle, selSetBody, selSetSound, selSetUserInfo, selSetThreadID, selSetCategoryID} {
+	for _, sel := range []objc.SEL{cocoa.SelSetTitle, selSetSubtitle, selSetBody, selSetSound, selSetUserInfo, selSetThreadID, selSetCategoryID} {
 		if !objc.Send[bool](c.content, instance, sel) {
 			t.Errorf("UNMutableNotificationContent does not respond to a setter the backend sends")
 		}
