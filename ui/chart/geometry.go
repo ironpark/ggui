@@ -16,6 +16,25 @@ type chartSeriesGeometry struct {
 	indices   []int
 }
 
+// stackLevels is where each category's next stacked value starts, above zero
+// for a positive value and below it for a negative one, and the magnitude an
+// expanded stack divides each category by.
+type stackLevels struct {
+	pos, neg, sums []float64
+}
+
+// push stacks v on category i and returns the level it starts from.
+func (l stackLevels) push(i int, v float64) float64 {
+	if v >= 0 {
+		base := l.pos[i]
+		l.pos[i] += v
+		return base
+	}
+	base := l.neg[i]
+	l.neg[i] += v
+	return base
+}
+
 // geometryFor prepares normalized points once per data/size change. Paint only
 // transforms those points; input lookup never scans Cartesian data.
 func (c *Widget) geometryFor(size ggui.Size) {
@@ -27,72 +46,101 @@ func (c *Widget) geometryFor(size ggui.Size) {
 	c.cacheRevision = c.revision
 	n := len(c.data)
 	g := chartGeometry{lo: 0, hi: 0, series: make([]chartSeriesGeometry, len(c.config))}
-	pos, neg := make([]float64, n), make([]float64, n)
-	sums := make([]float64, n)
+	levels := stackLevels{pos: make([]float64, n), neg: make([]float64, n), sums: make([]float64, n)}
 	if c.stack == StackExpanded {
-		for i := range c.data {
-			for j := range c.config {
-				if v, ok := c.value(i, j); ok {
-					sums[i] += math.Abs(v)
-				}
-			}
-		}
+		c.sumMagnitudes(levels.sums)
 	}
 	for j := range c.config {
-		s := chartSeriesGeometry{top: make([]ggui.Point, n), base: make([]ggui.Point, n), valid: make([]bool, n)}
-		for i := range c.data {
-			v, ok := c.value(i, j)
-			s.valid[i] = ok
-			if !ok {
-				continue
-			}
-			if c.stack == StackExpanded && sums[i] > 0 {
-				v /= sums[i]
-			}
-			base := 0.
-			if c.stack != StackUnstacked {
-				if v >= 0 {
-					base = pos[i]
-					pos[i] += v
-				} else {
-					base = neg[i]
-					neg[i] += v
-				}
-			}
-			g.lo = min(g.lo, base, base+v)
-			g.hi = max(g.hi, base, base+v)
-			x := c.categoryFraction(i)
-			s.top[i] = ggui.Pt(x, base+v)
-			s.base[i] = ggui.Pt(x, base)
-		}
-		g.series[j] = s
+		g.series[j] = c.seriesGeometry(j, levels, &g)
 	}
-	if c.domainSet {
-		g.lo, g.hi = c.domainMin, c.domainMax
-	} else if c.stack == StackExpanded {
-		if g.hi > 0 {
-			g.hi = 1
-		}
-		if g.lo < 0 {
-			g.lo = -1
-		}
-	} else if g.hi > g.lo {
-		// Four equal, round-number intervals match the reference axes.
-		step := niceChartStep(g.hi/4 - g.lo/4)
-		lo := math.Floor(g.lo/step) * step
-		hi := math.Ceil(g.hi/step) * step
-		if finite(lo) && finite(hi) && hi > lo {
-			g.lo, g.hi = lo, hi
-		}
-	}
-	if g.hi <= g.lo {
-		g.hi = g.lo + 1
-	}
+	g.lo, g.hi = c.valueDomain(g.lo, g.hi)
+	g.normalize()
 	pixels := size.W
 	if c.horizontal {
 		pixels = size.H
 	}
 	buckets := int(max(1, pixels))
+	for j := range g.series {
+		s := &g.series[j]
+		s.indices = chartSamples(s.top, s.valid, buckets)
+		if c.stack != StackUnstacked {
+			s.indices = mergeChartSamples(s.indices, chartSamples(s.base, s.valid, buckets))
+		}
+	}
+	c.geometry = g
+}
+
+// sumMagnitudes adds each category's total magnitude across the series to
+// sums, which an expanded stack divides its values by.
+func (c *Widget) sumMagnitudes(sums []float64) {
+	for i := range c.data {
+		for j := range c.config {
+			if v, ok := c.value(i, j); ok {
+				sums[i] += math.Abs(v)
+			}
+		}
+	}
+}
+
+// seriesGeometry places series j's values on their categories, stacked on
+// levels, and widens g's lo and hi to cover them.
+func (c *Widget) seriesGeometry(j int, levels stackLevels, g *chartGeometry) chartSeriesGeometry {
+	n := len(c.data)
+	s := chartSeriesGeometry{top: make([]ggui.Point, n), base: make([]ggui.Point, n), valid: make([]bool, n)}
+	for i := range c.data {
+		v, ok := c.value(i, j)
+		s.valid[i] = ok
+		if !ok {
+			continue
+		}
+		if c.stack == StackExpanded && levels.sums[i] > 0 {
+			v /= levels.sums[i]
+		}
+		base := 0.
+		if c.stack != StackUnstacked {
+			base = levels.push(i, v)
+		}
+		g.lo = min(g.lo, base, base+v)
+		g.hi = max(g.hi, base, base+v)
+		x := c.categoryFraction(i)
+		s.top[i] = ggui.Pt(x, base+v)
+		s.base[i] = ggui.Pt(x, base)
+	}
+	return s
+}
+
+// valueDomain is the value range the plot spans, given the data's lo and hi:
+// the domain set on the chart, the unit range of an expanded stack, or the
+// data's range widened to round steps.
+func (c *Widget) valueDomain(lo, hi float64) (float64, float64) {
+	switch {
+	case c.domainSet:
+		lo, hi = c.domainMin, c.domainMax
+	case c.stack == StackExpanded:
+		if hi > 0 {
+			hi = 1
+		}
+		if lo < 0 {
+			lo = -1
+		}
+	case hi > lo:
+		// Four equal, round-number intervals match the reference axes.
+		step := niceChartStep(hi/4 - lo/4)
+		roundLo := math.Floor(lo/step) * step
+		roundHi := math.Ceil(hi/step) * step
+		if finite(roundLo) && finite(roundHi) && roundHi > roundLo {
+			lo, hi = roundLo, roundHi
+		}
+	}
+	if hi <= lo {
+		hi = lo + 1
+	}
+	return lo, hi
+}
+
+// normalize maps every point's value onto 0..1 across lo..hi, halving both
+// first where the span itself overflows.
+func (g *chartGeometry) normalize() {
 	span := g.hi - g.lo
 	halfSpan := g.hi/2 - g.lo/2
 	for j := range g.series {
@@ -106,12 +154,7 @@ func (c *Widget) geometryFor(size ggui.Size) {
 				s.base[i].Y = (s.base[i].Y - g.lo) / span
 			}
 		}
-		s.indices = chartSamples(s.top, s.valid, buckets)
-		if c.stack != StackUnstacked {
-			s.indices = mergeChartSamples(s.indices, chartSamples(s.base, s.valid, buckets))
-		}
 	}
-	c.geometry = g
 }
 func niceChartStep(v float64) float64 {
 	if v <= 0 || math.IsNaN(v) || math.IsInf(v, 0) {
@@ -158,20 +201,9 @@ func chartSamples(points []ggui.Point, valid []bool, width int) []int {
 		for end < n && int(points[end].X*float64(width)) == bucket && valid[end] == valid[start] {
 			end++
 		}
-		low, high := start, start
-		for i := start + 1; i < end; i++ {
-			if points[i].Y < points[low].Y {
-				low = i
-			}
-			if points[i].Y > points[high].Y {
-				high = i
-			}
-		}
-		if low > high {
-			low, high = high, low
-		}
+		early, late := columnExtrema(points[start:end])
 		last := -1
-		for _, i := range []int{start, low, high, end - 1} {
+		for _, i := range []int{start, start + early, start + late, end - 1} {
 			if i != last {
 				out = append(out, i)
 				last = i
@@ -180,6 +212,21 @@ func chartSamples(points []ggui.Point, valid []bool, width int) []int {
 		start = end
 	}
 	return out
+}
+
+// columnExtrema returns the indices of the lowest and the highest of points,
+// the earlier one first.
+func columnExtrema(points []ggui.Point) (int, int) {
+	low, high := 0, 0
+	for i := 1; i < len(points); i++ {
+		if points[i].Y < points[low].Y {
+			low = i
+		}
+		if points[i].Y > points[high].Y {
+			high = i
+		}
+	}
+	return min(low, high), max(low, high)
 }
 func chartPosition(r ggui.Rect, p ggui.Point) ggui.Point {
 	return ggui.Pt(r.Origin.X+p.X*r.Size.W, r.Origin.Y+(1-p.Y)*r.Size.H)
@@ -239,62 +286,84 @@ func (c *Widget) categoryIndex(f float64) int {
 	return min(n-1, max(0, i))
 }
 
+// polarFrame is the disc a polar chart paints in and hit-tests against: its
+// center and outer radius, and the radius of the hole at its middle.
+type polarFrame struct {
+	center        ggui.Point
+	radius, inner float64
+}
+
 func (c *Widget) polarBounds() (ggui.Point, float64) {
 	return c.plot.Center(), max(0, min(c.plot.Size.W, c.plot.Size.H)/2*c.outer)
+}
+func (c *Widget) polarFrame() polarFrame {
+	center, radius := c.polarBounds()
+	return polarFrame{center: center, radius: radius, inner: radius * c.inner}
 }
 func (c *Widget) hitIndex(p ggui.Point) int {
 	if !c.plot.Contains(p) || len(c.data) == 0 || len(c.config) == 0 {
 		return -1
 	}
-	n := len(c.data)
 	if c.kind.polar() {
-		center, radius := c.polarBounds()
-		dx, dy := p.X-center.X, center.Y-p.Y
-		distance := math.Hypot(dx, dy)
-		if distance > radius+10 {
-			return -1
-		}
-		angle := math.Atan2(dy, dx) * 180 / math.Pi
-		if c.kind == KindRadar {
-			return int(math.Round(math.Mod(90-angle+360, 360)/360*float64(n))) % n
-		}
-		if distance < radius*c.inner {
-			return -1
-		}
-		sweep := c.endAngle - c.startAngle
-		if sweep == 0 {
-			return -1
-		}
-		offset := math.Mod((angle-c.startAngle)*math.Copysign(1, sweep), 360)
-		if offset < 0 {
-			offset += 360
-		}
-		if offset > math.Abs(sweep) {
-			return -1
-		}
-		if c.kind == KindRadial && c.stack == StackUnstacked {
-			return min(n-1, max(0, int((distance-radius*c.inner)/(radius*(1-c.inner))*float64(n))))
-		}
-		total := c.positiveTotal(0)
-		target := offset / math.Abs(sweep) * total
-		sum := 0.
-		for i := range c.data {
-			v, ok := c.value(i, 0)
-			if !ok || v <= 0 {
-				continue
-			}
-			sum += v
-			if target < sum {
-				return i
-			}
-		}
-		return -1
+		return c.polarHitIndex(p)
 	}
 	f := (p.X - c.plot.Origin.X) / c.plot.Size.W
 	if c.horizontal {
 		f = (p.Y - c.plot.Origin.Y) / c.plot.Size.H
 	}
 	return c.categoryIndex(f)
+}
+
+// polarHitIndex is the category under p on a polar chart: a radar's nearest
+// spoke, or the slice or band p falls in, or -1 outside them.
+func (c *Widget) polarHitIndex(p ggui.Point) int {
+	n := len(c.data)
+	frame := c.polarFrame()
+	dx, dy := p.X-frame.center.X, frame.center.Y-p.Y
+	distance := math.Hypot(dx, dy)
+	if distance > frame.radius+10 {
+		return -1
+	}
+	angle := math.Atan2(dy, dx) * 180 / math.Pi
+	if c.kind == KindRadar {
+		return int(math.Round(math.Mod(90-angle+360, 360)/360*float64(n))) % n
+	}
+	if distance < frame.inner {
+		return -1
+	}
+	sweep := c.endAngle - c.startAngle
+	if sweep == 0 {
+		return -1
+	}
+	offset := math.Mod((angle-c.startAngle)*math.Copysign(1, sweep), 360)
+	if offset < 0 {
+		offset += 360
+	}
+	if offset > math.Abs(sweep) {
+		return -1
+	}
+	if c.kind == KindRadial && c.stack == StackUnstacked {
+		return min(n-1, max(0, int((distance-frame.inner)/(frame.radius*(1-c.inner))*float64(n))))
+	}
+	return c.sliceAt(offset / math.Abs(sweep))
+}
+
+// sliceAt is the category whose slice of the first series covers the share f
+// of the series' positive total, or -1.
+func (c *Widget) sliceAt(f float64) int {
+	target := f * c.positiveTotal(0)
+	sum := 0.
+	for i := range c.data {
+		v, ok := c.value(i, 0)
+		if !ok || v <= 0 {
+			continue
+		}
+		sum += v
+		if target < sum {
+			return i
+		}
+	}
+	return -1
 }
 
 func mergeChartSamples(a, b []int) []int {
