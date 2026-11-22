@@ -516,24 +516,24 @@ func (w *Watcher) Run(ctx context.Context, out chan<- Batch) {
 		tick.Reset(w.o.Rescan)
 	}
 	shape := -1
-	rewatch := func() {
-		if src == nil {
-			return
-		}
+	rewatch := func() bool {
 		w.mu.Lock()
 		s := w.shape
 		var dirs []string
-		if s != shape {
+		if s != shape && src != nil {
 			dirs = w.dirs()
 		}
 		w.mu.Unlock()
 		if s == shape {
-			return
+			return false
 		}
 		shape = s
-		if err := src.watch(dirs); err != nil {
-			src = w.fallBack(src, err, tick)
+		if src != nil {
+			if err := src.watch(dirs); err != nil {
+				src = w.fallBack(src, err, tick)
+			}
 		}
+		return true
 	}
 	rewatch()
 
@@ -606,7 +606,11 @@ func (w *Watcher) Run(ctx context.Context, out chan<- Batch) {
 			w.tracef("asked to rescan everything")
 			check(true, nil)
 		case <-w.changed:
-			rewatch()
+			if rewatch() {
+				// Scan once after updating OS watches to close the window
+				// between Add/Set stamping paths and the new watches being live.
+				check(false, nil)
+			}
 		case reply := <-w.syncs:
 			if timer != nil {
 				timer.Stop()

@@ -113,12 +113,9 @@ func (s *rdcw) watch(dirs []string) error {
 	if s.closing {
 		return nil
 	}
-	for r, d := range s.roots {
-		if !slices.Contains(rs, r) {
-			s.drop(d)
-			delete(s.roots, r)
-		}
-	}
+	// Open new roots before dropping old ones so events during a root
+	// transition (such as narrowing from a parent directory to a child
+	// directory) are not missed between cancelling and re-issuing reads.
 	for _, r := range rs {
 		if _, ok := s.roots[r]; ok {
 			continue
@@ -131,6 +128,12 @@ func (s *rdcw) watch(dirs []string) error {
 			return err
 		}
 		s.roots[r] = d
+	}
+	for r, d := range s.roots {
+		if !slices.Contains(rs, r) {
+			s.drop(d)
+			delete(s.roots, r)
+		}
 	}
 	return nil
 }

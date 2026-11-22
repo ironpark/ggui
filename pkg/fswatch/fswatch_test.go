@@ -700,6 +700,52 @@ func TestFingerprintRunExitNoRace(t *testing.T) {
 	}
 }
 
+type blockingWatchSource struct {
+	*fakeSource
+	calls   int
+	inWatch chan struct{}
+	release chan struct{}
+}
+
+func (b *blockingWatchSource) watch(dirs []string) error {
+	b.calls++
+	if b.calls == 2 {
+		close(b.inWatch)
+		<-b.release
+	}
+	return b.fakeSource.watch(dirs)
+}
+
+// A change occurring while Set is reconfiguring OS watches is caught by the
+// post-rewatch scan without waiting for the safety-net rescan.
+func TestSetRewatchCatchesConcurrentChange(t *testing.T) {
+	dir := t.TempDir()
+	main := filepath.Join(dir, "main.go")
+	write(t, main, "package main\n")
+	src := &blockingWatchSource{
+		fakeSource: newFakeSource(),
+		inWatch:    make(chan struct{}),
+		release:    make(chan struct{}),
+	}
+	o := testOptions(t, false)
+	w := New(o)
+	w.newSource = func(bool, func(string) bool) (source, error) { return src, nil }
+	w.Add(dir)
+	out := start(t, w)
+	<-src.dirs
+
+	// Switch to watching only the file, wait until Run is mid-rewatch, then
+	// replace the file without emitting any OS notification from the source.
+	w.Set([]string{main})
+	<-src.inWatch
+	tmp := filepath.Join(dir, "save.tmp")
+	write(t, tmp, "package main // given\n")
+	rename(t, tmp, main)
+	close(src.release)
+	<-src.dirs
+	expect(t, out, "change during Set rewatch", ev(Write, main))
+}
+
 // Duplicate Remove deltas for the same path produce a single Remove event.
 func TestJudgeDeduplicatesRemoves(t *testing.T) {
 	w := New(Options{NoNotify: true, Steady: -1})
