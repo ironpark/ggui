@@ -96,25 +96,28 @@ func (m *scorer) canMatch() bool {
 		if i > 0 {
 			before = ls[i-1]
 		}
-		if m.take(i, hi) > 0 {
-			if hi+1 < qn && (before == lq[hi+1] || (lq[hi+1] == lq[hi] && before != lq[hi])) {
-				hi += 2
-			} else {
+		switch {
+		case m.take(i, hi) > 0:
+			hi++
+			if hi < qn && m.takesPair(before, hi-1) {
 				hi++
 			}
-			if hi >= qn {
-				return true
-			}
-		} else if hi > 0 && m.take(i, hi-1) > 0 {
-			if before == lq[hi] || (lq[hi] == lq[hi-1] && before != lq[hi-1]) {
-				hi++
-				if hi >= qn {
-					return true
-				}
-			}
+		case hi > 0 && m.take(i, hi-1) > 0 && m.takesPair(before, hi-1):
+			hi++
+		}
+		if hi >= qn {
+			return true
 		}
 	}
 	return false
+}
+
+// takesPair reports whether the query's runes j and j+1 can both be taken
+// at a rune of the text preceded by before: typed the wrong way round, or
+// a letter the query doubles.
+func (m *scorer) takesPair(before rune, j int) bool {
+	lq := m.lq
+	return before == lq[j+1] || (lq[j+1] == lq[j] && before != lq[j])
 }
 
 // take is how many runes of the text from at the query's rune qi takes: 1
@@ -165,6 +168,19 @@ func isSpaceBreak(r rune) bool { return r == '-' || unicode.IsSpace(r) }
 
 func isGapBreak(r rune) bool { return strings.ContainsRune(`\/_+.#"@[({&`, r) }
 
+// skipped counts the breaks a jump passes over between the last match and
+// the next: punctuation gaps, and spaces or hyphens.
+type skipped struct{ gaps, spaces int }
+
+func (k *skipped) pass(r rune) {
+	if isGapBreak(r) {
+		k.gaps++
+	}
+	if isSpaceBreak(r) {
+		k.spaces++
+	}
+}
+
 // from scores q[qi:] against s[si:].
 func (m *scorer) from(si, qi int) float64 {
 	s, q, ls, lq := m.s, m.q, m.ls, m.lq
@@ -182,16 +198,10 @@ func (m *scorer) from(si, qi int) float64 {
 		return v
 	}
 	high := 0.0
-	gaps, spaces := 0, 0
+	var k skipped
 	for at := si; at < len(s); at++ {
 		if at >= si+2 {
-			prev := s[at-2]
-			if isGapBreak(prev) {
-				gaps++
-			}
-			if isSpaceBreak(prev) {
-				spaces++
-			}
+			k.pass(s[at-2])
 		}
 		n := m.take(at, qi)
 		if n == 0 {
@@ -202,47 +212,63 @@ func (m *scorer) from(si, qi int) float64 {
 			score *= penaltyJamo
 		}
 		if score > high {
-			switch {
-			case at == si:
-				score *= scoreContinue
-			case isGapBreak(s[at-1]):
-				score *= scoreGapJump
-				if gaps > 0 && si > 0 {
-					score *= math.Pow(penaltySkipped, float64(gaps))
-				}
-			case isSpaceBreak(s[at-1]):
-				score *= scoreSpaceJump
-				if spaces > 0 && si > 0 {
-					score *= math.Pow(penaltySkipped, float64(spaces))
-				}
-			default:
-				score *= scoreLetterJump
-				if si > 0 {
-					score *= math.Pow(penaltySkipped, float64(at-si))
-				}
-			}
-			if s[at] != q[qi] {
-				score *= penaltyCase
-			}
+			score = m.weigh(score, si, at, qi, k)
 		}
-		// Two letters the wrong way round still find the text, for little,
-		// and so does a letter the query doubles. before is the letter
-		// ahead of this one, none at the start of the text, where cmdk
-		// compares an empty string.
-		before := rune(-1)
-		if at > 0 {
-			before = ls[at-1]
-		}
-		if qi+1 < len(q) &&
-			(score < scoreTransposed && before == lq[qi+1] || lq[qi+1] == lq[qi] && before != lq[qi]) {
-			if swapped := m.from(at+1, qi+2) * scoreTransposed; swapped > score {
-				score = swapped
-			}
-		}
-		high = max(high, score)
+		high = max(high, m.transposed(score, at, qi))
 	}
 	m.memo[idx] = high
 	return high
+}
+
+// weigh is score for the query's rune qi taken at at, the last match
+// having ended before si: whole where it carries on from there, most where
+// it jumps to the start of a word and little where into one, less for each
+// break or letter it skips and for a letter in the other case.
+func (m *scorer) weigh(score float64, si, at, qi int, k skipped) float64 {
+	s := m.s
+	switch {
+	case at == si:
+		score *= scoreContinue
+	case isGapBreak(s[at-1]):
+		score *= scoreGapJump
+		if k.gaps > 0 && si > 0 {
+			score *= math.Pow(penaltySkipped, float64(k.gaps))
+		}
+	case isSpaceBreak(s[at-1]):
+		score *= scoreSpaceJump
+		if k.spaces > 0 && si > 0 {
+			score *= math.Pow(penaltySkipped, float64(k.spaces))
+		}
+	default:
+		score *= scoreLetterJump
+		if si > 0 {
+			score *= math.Pow(penaltySkipped, float64(at-si))
+		}
+	}
+	if s[at] != m.q[qi] {
+		score *= penaltyCase
+	}
+	return score
+}
+
+// transposed is score, or more where the query's rune qi taken at at
+// scores better as the second of two letters the wrong way round, for
+// little, or as a letter the query doubles. before is the letter ahead of
+// this one, none at the start of the text, where cmdk compares an empty
+// string.
+func (m *scorer) transposed(score float64, at, qi int) float64 {
+	ls, lq := m.ls, m.lq
+	before := rune(-1)
+	if at > 0 {
+		before = ls[at-1]
+	}
+	if qi+1 < len(lq) &&
+		(score < scoreTransposed && before == lq[qi+1] || lq[qi+1] == lq[qi] && before != lq[qi]) {
+		if swapped := m.from(at+1, qi+2) * scoreTransposed; swapped > score {
+			return swapped
+		}
+	}
+	return score
 }
 
 // rank filters the command's entries by how well query abbreviates each
