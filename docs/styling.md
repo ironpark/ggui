@@ -5,7 +5,7 @@
 Customize local styles, inherited values, semantic colors, geometry, and motion.
 
 Examples use `ggui`, `widget`, `ui`, and `theme` (`github.com/ironpark/ggui/ui/theme`) imports and application-defined placeholders.
-See the [migration guide](../ui/theme/README.md) for the package/API changes.
+See the [theme package](../ui/theme/README.md) for its API.
 See [example conventions](README.md#start-here) before copying snippets.
 
 Choose the scope of a change before setting a style:

@@ -45,18 +45,3 @@ Chat geometry and corner radii follow `theme.Of(env).Chat` (`BubblePadding`,
 `QuestionRadius`, `QuestionChoiceGap`, `QuestionTextGap`,
 `QuestionChoicePadding`, `QuestionInputRadius`). All built-in labels and
 screen-reader descriptions follow `ui.ProvideStrings` and `ui.BindStrings`.
-
-## Migration
-
-Chat widgets moved from `github.com/ironpark/ggui/ui` to
-`github.com/ironpark/ggui/ui/chat` without aliases:
-
-| Before (`ui`) | Now (`chat`) |
-| --- | --- |
-| `ui.Bubble`, `ui.BubbleWidget`, `ui.BubbleGroup` | `chat.Bubble`, `chat.BubbleWidget`, `chat.BubbleGroup` |
-| `ui.Message`, `ui.MessageWidget`, `ui.MessageGroup` | `chat.Message`, `chat.MessageWidget`, `chat.MessageGroup` |
-| `ui.Marker`, `ui.MarkerWidget` | `chat.Marker`, `chat.MarkerWidget` |
-| `ui.Attachment`, `ui.AttachmentWidget`, `ui.AttachmentAction`, `ui.AttachmentState`, `ui.AttachmentSize`, `ui.AttachmentGroup`, `ui.AttachmentGroupWidget` | Same names in `chat` |
-| `ui.MessageScroller`, `ui.MessageScrollerWidget`, `ui.MessageEntry`, `ui.ScrollPosition`, `ui.ScrollAlignment`, `ui.TranscriptPosition`, `ui.TranscriptVisibility` | Same names in `chat` |
-| `ui.Questionnaire`, `ui.QuestionnaireWidget`, `ui.Question`, `ui.QuestionOption`, `ui.QuestionAnswer`, `ui.QuestionAnswers`, `ui.QuestionStatus`, `ui.QuestionnaireShortcuts` | Same names in `chat` |
-| `ui.Trace`, `ui.TraceWidget`, `ui.TraceStep`, `ui.TraceStatus` | Same names in `chat` |

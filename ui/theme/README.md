@@ -280,29 +280,6 @@ the recipe. Building or exporting a configuration has no global theme side
 effect. Applying it uses the existing theme APIs, preserving accessibility
 preferences and layout caches.
 
-## Migration
-
-This move changes public import paths and APIs; the old paths are not aliases.
-
-| Before | Now |
-| --- | --- |
-| `ggui/icons`, `ggui/icons/lucide` (and other sets) | `ggui/ui/icons`, `ggui/ui/icons/lucide` |
-| `ggui.Theme`, `ggui.ChatTokens` | `*theme.Theme`, `theme.ChatTokens` |
-| `ggui.DefaultTheme()`, `ggui.DarkTheme()` | `theme.Default()`, `theme.Dark()` |
-| `ggui.ThemePreset`, `ggui.ThemeStyle` | `theme.Preset`, `theme.Style` |
-| `ggui.BaseColor`, `ggui.AccentColor`, palette/style constants | Same names in `theme` |
-| `ggui.BaseColors()`, `ggui.AccentColors()`, `ggui.ThemeStyles()` | `theme.BaseColors()`, `theme.AccentColors()`, `theme.Styles()` |
-| `ggui.UseTheme()`, `ggui.SetTheme(t)`, `ggui.BindTheme(...)` | `theme.Use()`, `theme.Set(t)`, `theme.Bind(...)` |
-| `env.Theme()`, `env.WithTheme(t)` | `theme.Of(env)` / `theme.From(env)`, `t.Apply(env)` |
-| `ggui.Themed(t, child)` | `theme.With(t, child)` |
-| `ggui.Title(s)`, `ggui.Caption(s)` | `ui.Title(s)`, `ui.Caption(s)` |
-| `text.AsTitle()` | `text.StyleKey(theme.TitleKey, theme.Default().Title).Role(ggui.RoleHeading)` |
-| `text.AsCaption()` | `text.StyleKey(theme.CaptionKey, theme.Default().Caption)` |
-
-Unlike the old `WithTheme`, `Apply` also maps the theme's text, spacing, editor,
-scrollbar and popup settings. See [styling](../../docs/styling.md) for usage and
-[palette sources](#palette-sources) for upstream data and licenses.
-
 ## Palette sources
 
 `shadcn.json` is the theme registry from:
