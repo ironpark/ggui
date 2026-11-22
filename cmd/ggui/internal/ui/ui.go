@@ -236,6 +236,7 @@ func (o *Output) writeLocked(p []byte) (int, error) {
 	draw := drawSeq()
 	if len(region) == 0 {
 		regionTo = nil // erased, and nothing left to draw
+		held = false
 	}
 	if to.w == o.w {
 		b := append(append(clear, p...), draw...)
@@ -334,4 +335,5 @@ func Reset() {
 	steps, region = nil, nil
 	refreshLocked()
 	regionTo = nil
+	held = false
 }

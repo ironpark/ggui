@@ -253,3 +253,17 @@ func TestPush(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 }
+
+func TestPSQuoteSmartQuotesAndUninstallLiteralPath(t *testing.T) {
+	got := psQuote("a'b\u2018c\u2019d\u201ae\u201bf")
+	want := "'a''b\u2018\u2018c\u2019\u2019d\u201a\u201ae\u201b\u201bf'"
+	if got != want {
+		t.Errorf("psQuote = %q, want %q", got, want)
+	}
+	p := pkg()
+	p.Title = "App[1]"
+	un := string(p.UninstallScript())
+	if !strings.Contains(un, "Test-Path -LiteralPath $shortcut") || !strings.Contains(un, "Remove-Item -LiteralPath $shortcut -Force") {
+		t.Errorf("UninstallScript lacks -LiteralPath:\n%s", un)
+	}
+}

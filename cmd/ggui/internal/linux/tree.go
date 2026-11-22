@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -81,11 +82,7 @@ func Assemble(t Tree) (dir string, warnings []string, err error) {
 		return os.Chmod(p, mode)
 	}
 
-	bin, err := os.ReadFile(t.Binary)
-	if err != nil {
-		return "", nil, err
-	}
-	if err := write(binPath(t.App), bin, 0o755); err != nil {
+	if err := copyBinary(t.Binary, filepath.Join(dir, binPath(t.App)), 0o755); err != nil {
 		return "", nil, err
 	}
 
@@ -163,6 +160,7 @@ func scaleIcons(src image.Image) (icons []Icon, skipped []int, err error) {
 	if b.Dx() < MinIconSize {
 		return nil, nil, fmt.Errorf("icon is %d×%d; it must be at least %d×%d, ideally 1024×1024", b.Dx(), b.Dy(), MinIconSize, MinIconSize)
 	}
+	resizer := icns.NewResizer(src)
 	for _, size := range IconSizes {
 		if size > b.Dx() {
 			skipped = append(skipped, size)
@@ -170,10 +168,33 @@ func scaleIcons(src image.Image) (icons []Icon, skipped []int, err error) {
 		}
 		var buf bytes.Buffer
 		enc := png.Encoder{CompressionLevel: png.BestCompression}
-		if err := enc.Encode(&buf, icns.Resize(src, size)); err != nil {
+		if err := enc.Encode(&buf, resizer.Resize(size)); err != nil {
 			return nil, nil, err
 		}
 		icons = append(icons, Icon{Size: size, PNG: buf.Bytes()})
 	}
 	return icons, skipped, nil
+}
+
+func copyBinary(src, dst string, mode fs.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	if err := out.Close(); err != nil {
+		return err
+	}
+	return os.Chmod(dst, mode)
 }

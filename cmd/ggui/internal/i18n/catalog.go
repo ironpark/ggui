@@ -39,9 +39,11 @@ type Catalog struct {
 	// its unused keys are not reported, as they may be the keys it was
 	// thought to lack.
 	Partial bool
-	// dynamic are the keys of a Go catalog whose translations are not
-	// literals, which count as translated and are not checked.
-	dynamic map[string]bool
+	// dynamic and dynamicPlural are the keys of a Go catalog whose
+	// translations are not literals, which count as translated and are not
+	// checked.
+	dynamic       map[string]bool
+	dynamicPlural map[string]bool
 	// rest are a JSON catalog's other members, kept as they were.
 	rest map[string]json.RawMessage
 }

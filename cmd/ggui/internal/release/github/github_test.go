@@ -95,6 +95,15 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/"), "/")
 	switch {
+	case r.Method == "GET" && len(parts) >= 6 && parts[3] == "releases" && parts[4] == "tags":
+		tag := strings.Join(parts[5:], "/")
+		for _, rel := range f.releases {
+			if !rel.Draft && rel.TagName == tag {
+				f.reply(w, 200, rel)
+				return
+			}
+		}
+		f.reply(w, 404, map[string]string{"message": "Not Found"})
 	case key == "GET /repos/alice/hello/releases":
 		f.reply(w, 200, f.releases)
 	case key == "POST /repos/alice/hello/releases":
@@ -216,6 +225,7 @@ func TestCreateUploadPublish(t *testing.T) {
 		t.Error("the release was left a draft")
 	}
 	want := []string{
+		"GET /repos/alice/hello/releases/tags/v1.0.0",
 		"GET /repos/alice/hello/releases?per_page=100&page=1",
 		"POST /repos/alice/hello/releases",
 		"POST /uploads/repos/alice/hello/releases/101/assets?name=hello-1.0.0-windows-amd64.zip",
@@ -241,7 +251,7 @@ func TestCreateUploadPublish(t *testing.T) {
 		}
 	}
 	// Created as a draft: published only by the PATCH at the end.
-	if !strings.Contains(f.log[1], "POST") {
+	if !strings.Contains(f.log[2], "POST") {
 		t.Fatal(f.log)
 	}
 }
@@ -270,6 +280,7 @@ func TestReuseDraft(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
+		"GET /repos/alice/hello/releases/tags/v1.0.0",
 		"GET /repos/alice/hello/releases?per_page=100&page=1",
 		"PATCH /repos/alice/hello/releases/8",
 		"DELETE /repos/alice/hello/releases/assets/50",
@@ -306,7 +317,7 @@ func TestRefusePublished(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
-		"GET /repos/alice/hello/releases?per_page=100&page=1",
+		"GET /repos/alice/hello/releases/tags/v1.0.0",
 		"DELETE /repos/alice/hello/releases/assets/60",
 		"POST /uploads/repos/alice/hello/releases/9/assets?name=a.zip",
 	}
@@ -426,6 +437,12 @@ func TestURLs(t *testing.T) {
 	}
 	if got := DownloadURL("https://github.com", "alice/hello", "v1.0.0", "hello world.zip"); got != "https://github.com/alice/hello/releases/download/v1.0.0/hello%20world.zip" {
 		t.Errorf("DownloadURL = %s", got)
+	}
+	if got := DownloadURL("https://github.com", "alice/hello", "cmd/ggui/v1.0.0", "a.zip"); got != "https://github.com/alice/hello/releases/download/cmd/ggui/v1.0.0/a.zip" {
+		t.Errorf("DownloadURL with slash tag = %s", got)
+	}
+	if got := redact("https://user:pass@api.github.com/repos/a/b?token=secret#frag"); got != "https://api.github.com/repos/a/b" {
+		t.Errorf("redact = %q", got)
 	}
 	plan := Plan("https://api.github.com", publish(assets(t, "a.zip")))
 	if len(plan) != 4 || !strings.Contains(plan[2], "https://uploads.github.com/repos/alice/hello/releases/{id}/assets?name=a.zip") {

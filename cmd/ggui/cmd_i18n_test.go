@@ -66,6 +66,10 @@ func TestI18nCheckAndExtract(t *testing.T) {
 		{"i18n", "translate"},
 		{"i18n", "check", "--lang", "ko"},
 		{"i18n", "extract", "--out", "x.json"},
+		{"i18n", "extract", dir, "--lang", "../evil"},
+		{"i18n", "extract", dir, "--lang", "en/us"},
+		{"i18n", "extract", dir, "--lang", `en\us`},
+		{"i18n", "extract", dir, "--lang", ".."},
 		{"i18n", "check", "--catalog", "[a"},
 	} {
 		code := run(args, &out, &errOut)

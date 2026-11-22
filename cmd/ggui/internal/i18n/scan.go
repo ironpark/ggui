@@ -541,12 +541,12 @@ func (sc *scope) str(e ast.Expr) (string, bool) {
 		if sc.busy == nil {
 			sc.busy = map[string]bool{}
 		}
+		if sc.shadow[e.Name] {
+			return "", false
+		}
 		in := sc
 		x, ok := sc.local[e.Name]
 		if !ok {
-			if sc.shadow[e.Name] {
-				return "", false
-			}
 			// A package's constant sees only the package's.
 			in = &scope{pkg: sc.pkg, busy: sc.busy}
 			x, ok = sc.pkg[e.Name]
@@ -593,7 +593,7 @@ func goCatalog(fset *token.FileSet, path, name string, lit *ast.CompositeLit) *C
 	c := &Catalog{
 		Path: path, Name: name, Line: fset.Position(lit.Pos()).Line, Go: true,
 		Messages: map[string]string{}, Plurals: map[string]Forms{},
-		dynamic: map[string]bool{},
+		dynamic: map[string]bool{}, dynamicPlural: map[string]bool{},
 	}
 	for _, e := range lit.Elts {
 		kv, ok := e.(*ast.KeyValueExpr)
@@ -653,7 +653,7 @@ func goCatalog(fset *token.FileSet, path, name string, lit *ast.CompositeLit) *C
 				}
 				forms, ok := goForms(kv.Value)
 				if !ok {
-					c.dynamic[k] = true
+					c.dynamicPlural[k] = true
 				}
 				c.Plurals[k] = forms
 			}

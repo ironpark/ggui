@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/BurntSushi/toml"
 	"github.com/ironpark/ggui/cmd/ggui/internal/i18n"
@@ -626,12 +627,27 @@ var (
 	tagRE      = regexp.MustCompile(`^[A-Za-z0-9_.]+$`)
 )
 
+func validAppName(s string) bool {
+	if s == "." || strings.ContainsAny(s, `/\`) || strings.Contains(s, "..") {
+		return false
+	}
+	for _, r := range s {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
+}
+
 // validate checks the values the decoder accepted as types but that the
 // build would trip over later, further from where they were written.
 func (c *Config) validate() []problem {
 	var ps []problem
 	add := func(msg string, key ...string) { ps = append(ps, problem{toml.Key(key), msg}) }
 
+	if c.App.Name != "" && !validAppName(c.App.Name) {
+		add(fmt.Sprintf("app.name %q must not contain path separators, \"..\", or control characters", c.App.Name), "app", "name")
+	}
 	if c.App.ID != "" && !bundleID.MatchString(c.App.ID) {
 		add(fmt.Sprintf("app.id %q is not a bundle identifier: use reverse-DNS letters, digits, hyphens and dots, such as com.example.hello", c.App.ID), "app", "id")
 	}

@@ -145,7 +145,7 @@ func (c *Client) once(ctx context.Context, method, u string, b body, contentType
 	}
 	req, err := http.NewRequestWithContext(ctx, method, u, rd)
 	if err != nil {
-		return err
+		return redactErr(err)
 	}
 	if rd != nil {
 		req.ContentLength = size
@@ -159,8 +159,7 @@ func (c *Client) once(ctx context.Context, method, u string, b body, contentType
 	}
 	resp, err := c.httpClient().Do(req)
 	if err != nil {
-		// The URL holds no secret; the error is the transport's.
-		return err
+		return redactErr(err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
@@ -183,15 +182,26 @@ func (c *Client) once(ctx context.Context, method, u string, b body, contentType
 	return nil
 }
 
-// redact drops a URL's query and user information, which ggui never puts
-// a secret in but a configured URL might.
+// redact drops a URL's query, fragment and user information, which ggui never
+// puts a secret in but a configured URL might.
 func redact(u string) string {
 	p, err := url.Parse(u)
 	if err != nil {
 		return "(a URL)"
 	}
 	p.User = nil
+	p.RawQuery = ""
+	p.Fragment = ""
 	return p.String()
+}
+
+func redactErr(err error) error {
+	if ue, ok := errors.AsType[*url.Error](err); ok {
+		cp := *ue
+		cp.URL = redact(cp.URL)
+		return &cp
+	}
+	return err
 }
 
 // message reads GitHub's error reply: its message and the errors it
@@ -252,10 +262,25 @@ func repoPath(repo string) string {
 	return "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(name)
 }
 
+func escapeSegments(s string) string {
+	parts := strings.Split(s, "/")
+	for i, p := range parts {
+		parts[i] = url.PathEscape(p)
+	}
+	return strings.Join(parts, "/")
+}
+
 // FindRelease returns the release of repo made at tag, draft or not, or
-// nil when there is none. A draft has no tag yet, so the releases are
-// listed rather than looked up by tag.
+// nil when there is none. Published releases are looked up directly by tag
+// first; drafts have no tag yet, so a 404 falls back to listing releases.
 func (c *Client) FindRelease(ctx context.Context, repo, tag string) (*Release, error) {
+	var rel Release
+	byTag := repoPath(repo) + "/releases/tags/" + escapeSegments(tag)
+	if err := c.do(ctx, http.MethodGet, byTag, nil, "", &rel); err == nil {
+		return &rel, nil
+	} else if !IsNotFound(err) {
+		return nil, err
+	}
 	for page := 1; page <= 10; page++ {
 		var rs []Release
 		u := repoPath(repo) + "/releases?per_page=100&page=" + strconv.Itoa(page)
@@ -457,5 +482,5 @@ func Host(api string) string {
 
 // DownloadURL is where an asset of the release at tag is downloaded from.
 func DownloadURL(web, repo, tag, name string) string {
-	return strings.TrimRight(web, "/") + "/" + repo + "/releases/download/" + url.PathEscape(tag) + "/" + url.PathEscape(name)
+	return strings.TrimRight(web, "/") + "/" + repo + "/releases/download/" + escapeSegments(tag) + "/" + url.PathEscape(name)
 }

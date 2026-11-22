@@ -34,12 +34,40 @@ type Options struct {
 // Process is a started child and its group.
 type Process struct {
 	cmd  *exec.Cmd
-	grp  group
 	done chan struct{}
 	err  error // the exit status, once done is closed
 
+	mu     sync.Mutex
+	grp    group
+	closed bool
+
 	stopOnce sync.Once
 	stopErr  error
+}
+
+func (p *Process) interruptGroup() {
+	p.mu.Lock()
+	if !p.closed {
+		p.grp.interrupt()
+	}
+	p.mu.Unlock()
+}
+
+func (p *Process) killGroup() {
+	p.mu.Lock()
+	if !p.closed {
+		p.grp.kill()
+	}
+	p.mu.Unlock()
+}
+
+func (p *Process) closeGroup() {
+	p.mu.Lock()
+	if !p.closed {
+		p.closed = true
+		p.grp.close()
+	}
+	p.mu.Unlock()
 }
 
 // Start starts name with args in a group of its own. Its standard input
@@ -66,8 +94,15 @@ func Start(name string, args []string, o Options) (*Process, error) {
 	go func() {
 		p.err = cmd.Wait()
 		// Whatever the app left running goes with it, now, rather than at
-		// the next stop.
-		p.grp.kill()
+		// the next stop. Close the group here as well so callers waiting on
+		// Done without calling Stop do not leak handles.
+		p.mu.Lock()
+		if !p.closed {
+			p.grp.kill()
+			p.closed = true
+			p.grp.close()
+		}
+		p.mu.Unlock()
 		close(p.done)
 	}()
 	return p, nil
@@ -95,16 +130,16 @@ func (p *Process) Stop(timeout time.Duration) error {
 		select {
 		case <-p.done:
 		default:
-			p.grp.interrupt()
+			p.interruptGroup()
 			select {
 			case <-p.done:
 			case <-time.After(timeout):
-				p.grp.kill()
+				p.killGroup()
 				<-p.done
 				p.stopErr = ErrKilled
 			}
 		}
-		p.grp.close()
+		p.closeGroup()
 	})
 	return p.stopErr
 }
@@ -115,7 +150,7 @@ func (p *Process) Kill() {
 	select {
 	case <-p.done:
 	default:
-		p.grp.kill()
+		p.killGroup()
 	}
 }
 

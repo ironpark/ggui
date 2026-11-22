@@ -246,7 +246,8 @@ version = {{.Version}}
 # The platforms to build: "macos", "windows" and "linux". Same as --targets.
 # targets = ["macos", "windows", "linux"]
 # The architectures each is built for where the target has them: "amd64",
-# "arm64", "386" and "riscv64". On a Mac, macOS is one universal build.
+# "arm64", "386" and "riscv64". macOS builds one universal binary when both
+# amd64 and arm64 are built.
 # arches = ["amd64", "arm64"]
 # Where to publish: "github", "homebrew" and "choco". Same as --publish.
 # publish = ["github"]

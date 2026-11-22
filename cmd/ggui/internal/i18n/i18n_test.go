@@ -220,6 +220,10 @@ func TestParseVerbs(t *testing.T) {
 		{"%[3]*.[2]*[1]f", "3* 2* 1f"},
 		{"100%", "1!"},
 		{"%{을/를}", "1!"},
+		{"%[0]s", "1!"},
+		{"%[abc]s", "1!"},
+		{"%[]s", "1!"},
+		{"%[1s", "1!"},
 	} {
 		var got []string
 		for _, v := range ParseVerbs(tc.format) {
@@ -476,5 +480,52 @@ func TestParseFunc(t *testing.T) {
 	}
 	if got := pathName("gopkg.in/yaml.v3") + " " + pathName("example.com/go-ui/v2") + " " + pathName("ui"); got != "yaml ui ui" {
 		t.Errorf("pathName = %q", got)
+	}
+}
+
+func TestShadowedLocalConstAndSeparateDynamicMaps(t *testing.T) {
+	dir := write(t, map[string]string{
+		"main.go": `package main
+
+import "github.com/ironpark/ggui/i18n"
+
+func dyn() string { return "x" }
+
+var ko = i18n.Catalog{
+	Lang:     "ko",
+	Messages: map[string]string{"%d item": dyn()},
+	Plurals:  map[string]i18n.Forms{"%d item": {Other: ""}},
+}
+
+func main() {
+	const k = "const-val"
+	if true {
+		k := dyn()
+		_ = i18n.T(k)
+	}
+	_ = i18n.T("%d item")
+	_ = i18n.N(1, "%d item", "%d items", 1)
+}
+`,
+	})
+	s, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.Messages["const-val"]; ok {
+		t.Error("shadowed local const was resolved as literal")
+	}
+	if len(s.Skipped) != 1 {
+		t.Errorf("skipped = %+v, want 1", s.Skipped)
+	}
+	ps := Check(s.Catalogs[0], s, Options{})
+	foundMissingPlural := false
+	for _, p := range ps {
+		if p.Kind == Missing && p.Key == "%d item" && strings.Contains(p.Detail, "plural") {
+			foundMissingPlural = true
+		}
+	}
+	if !foundMissingPlural {
+		t.Errorf("empty plural was skipped because Messages had same dynamic key: %+v", ps)
 	}
 }

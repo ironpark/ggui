@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/ironpark/ggui/cmd/ggui/internal/shared"
 )
 
 // Options says what goes in a program's signature besides its own pages.
@@ -139,7 +141,7 @@ func replaceFile(path string, data []byte) error {
 		err = os.Chmod(tmp, fi.Mode().Perm())
 	}
 	if err == nil {
-		err = os.Rename(tmp, path)
+		err = shared.Rename(tmp, path)
 	}
 	if err != nil {
 		os.Remove(tmp)

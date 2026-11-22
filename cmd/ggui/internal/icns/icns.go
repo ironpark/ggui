@@ -58,6 +58,7 @@ func Encode(w io.Writer, src image.Image) (skipped []int, err error) {
 	if b.Dx() < MinSize {
 		return nil, fmt.Errorf("icon is %d×%d; it must be at least %d×%d, ideally 1024×1024", b.Dx(), b.Dy(), MinSize, MinSize)
 	}
+	resizer := NewResizer(src)
 	scaled := map[int][]byte{}
 	var family icns.ICNS
 	for _, s := range sizes {
@@ -71,7 +72,7 @@ func Encode(w io.Writer, src image.Image) (skipped []int, err error) {
 		if !ok {
 			var buf bytes.Buffer
 			enc := png.Encoder{CompressionLevel: png.BestCompression}
-			if err := enc.Encode(&buf, Resize(src, s.pixels)); err != nil {
+			if err := enc.Encode(&buf, resizer.Resize(s.pixels)); err != nil {
 				return nil, err
 			}
 			data = buf.Bytes()

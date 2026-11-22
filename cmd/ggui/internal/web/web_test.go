@@ -250,3 +250,80 @@ func TestServer(t *testing.T) {
 		}
 	}
 }
+
+func TestServerSecurityAndRebuild(t *testing.T) {
+	outside := t.TempDir()
+	secretFile := filepath.Join(outside, "secret.txt")
+	if err := os.WriteFile(secretFile, []byte("top-secret"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, ".env"), []byte("SECRET=1\n"), 0o644)
+	os.MkdirAll(filepath.Join(dir, ".git"), 0o755)
+	os.WriteFile(filepath.Join(dir, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "asset.txt"), []byte("ok"), 0o644)
+	_ = os.Symlink(secretFile, filepath.Join(dir, "escape.txt"))
+	_ = os.Symlink(filepath.Join(dir, "main.go"), filepath.Join(dir, "sneaky.txt"))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	s, err := NewServer(ctx, ServerOptions{
+		Build:  BuildOptions{Dir: dir, Package: "."},
+		PkgDir: dir, Base: "/app/", Title: "Sec", Target: ".", Live: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	srv := httptest.NewServer(s)
+	defer srv.Close()
+
+	// Blocked static files: *.go, dotfiles/dotdirs, outside symlink, symlink to .go.
+	for _, p := range []string{"/app/main.go", "/app/.env", "/app/.git/HEAD", "/app/escape.txt", "/app/sneaky.txt"} {
+		resp := get(t, srv, p)
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want 404", p, resp.StatusCode)
+		}
+	}
+	// Normal asset is still served.
+	if resp := get(t, srv, "/app/asset.txt"); resp.StatusCode != http.StatusOK {
+		t.Errorf("GET /app/asset.txt = %d, want 200", resp.StatusCode)
+	}
+
+	// /_rebuild requires POST and same-origin.
+	if resp := get(t, srv, "/app/_rebuild"); resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Errorf("GET /_rebuild = %d, want 405", resp.StatusCode)
+	}
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/app/_rebuild", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
+	if resp, err := srv.Client().Do(req); err != nil {
+		t.Fatal(err)
+	} else {
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("cross-origin POST /_rebuild = %d, want 403", resp.StatusCode)
+		}
+	}
+	req, _ = http.NewRequest(http.MethodPost, srv.URL+"/app/_rebuild", nil)
+	req.Header.Set("Origin", srv.URL)
+	if resp, err := srv.Client().Do(req); err != nil {
+		t.Fatal(err)
+	} else {
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent {
+			t.Errorf("same-origin POST /_rebuild = %d, want 204", resp.StatusCode)
+		}
+	}
+	// Non-browser CLI POST without Origin/Referer is allowed.
+	req, _ = http.NewRequest(http.MethodPost, srv.URL+"/app/_rebuild", nil)
+	if resp, err := srv.Client().Do(req); err != nil {
+		t.Fatal(err)
+	} else {
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent {
+			t.Errorf("CLI POST /_rebuild = %d, want 204", resp.StatusCode)
+		}
+	}
+}

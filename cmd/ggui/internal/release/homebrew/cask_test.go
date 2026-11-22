@@ -75,13 +75,44 @@ func TestCaskGolden(t *testing.T) {
 
 func TestRubyEscaping(t *testing.T) {
 	c := casks()["universal"]
-	c.Name = `Say "Hi" #{system("x")}`
+	c.Name = "Say \"Hi\" #{system(\"x\")} #@ivar #$gvar\r\n"
+	c.Universal.URL = "https://github.com/alice/#{evil}/releases/download/v1.2.0/app-#{pwn}-1.2.0.dmg"
 	got, err := c.Ruby()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(got, `name "Say \"Hi\" \#{system(\"x\")}"`) {
+	if !strings.Contains(got, `name "Say \"Hi\" \#{system(\"x\")} \#@ivar \#$gvar\r\n"`) {
 		t.Errorf("name not escaped:\n%s", got)
+	}
+	wantURL := `url "https://github.com/alice/\#{evil}/releases/download/v#{version}/app-\#{pwn}-#{version}.dmg"`
+	if !strings.Contains(got, wantURL) {
+		t.Errorf("url injection not escaped:\ngot:\n%s\nwant substring:\n%s", got, wantURL)
+	}
+}
+
+func TestVersionedShortVersionPreservesHostOwnerRepo(t *testing.T) {
+	u := "https://github.com/v2/app2/releases/download/v2/app2-2-macos-universal.dmg"
+	got := versioned(u, "2")
+	want := `"https://github.com/v2/app2/releases/download/v#{version}/app2-#{version}-macos-universal.dmg"`
+	if got != want {
+		t.Errorf("versioned = %s, want %s", got, want)
+	}
+	// Empty version does not corrupt URL.
+	if got := versioned(u, ""); got != `"`+u+`"` {
+		t.Errorf("versioned empty = %s", got)
+	}
+}
+
+func TestDescUTF8(t *testing.T) {
+	for in, want := range map[string]string{
+		"A friendly greeter.": "Friendly greeter",
+		"über tool.":          "Über tool",
+		"the école app.":      "École app",
+		"안녕 세상.":              "안녕 세상",
+	} {
+		if got := Desc(in); got != want {
+			t.Errorf("Desc(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/release/github"
 )
@@ -77,30 +79,116 @@ func MacOSName(v string) string {
 	return macOSNames[parts[0]]
 }
 
-// rubyString quotes s as a Ruby double-quoted string, with #{ escaped
-// unless interpolate.
-func rubyString(s string, interpolate bool) string {
-	r := strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`)
-	s = r.Replace(s)
-	if !interpolate {
-		s = strings.ReplaceAll(s, "#{", `\#{`)
-	}
-	return `"` + s + `"`
+var rubyEscaper = strings.NewReplacer(
+	`\`, `\\`,
+	`"`, `\"`,
+	"\r", `\r`,
+	"\n", `\n`,
+	"#{", `\#{`,
+	"#@", `\#@`,
+	"#$", `\#$`,
+)
+
+// rubyString quotes s as a Ruby double-quoted string with interpolation
+// sequences escaped.
+func rubyString(s string) string {
+	return `"` + rubyEscaper.Replace(s) + `"`
 }
 
-// versioned writes u with the version as #{version}, so that the cask's
-// url need not change but for the version stanza.
+// versioned writes u as a Ruby double-quoted string with safe occurrences of
+// version in the download path substituted by #{version}. Pre-existing Ruby
+// interpolation tokens in u are always escaped, and scheme/host/owner/repo
+// prefixes are never substituted.
 func versioned(u, version string) string {
-	return rubyString(strings.ReplaceAll(u, version, "#{version}"), true)
+	return `"` + versionedBody(u, version, -1, 0) + `"`
 }
 
-// replaceLast replaces the last old in s with new.
-func replaceLast(s, old, new string) string {
-	i := strings.LastIndex(s, old)
-	if i < 0 {
-		return s
+// versionedArch is versioned, also substituting the single slice u[archAt:archAt+archLen]
+// with #{arch}.
+func versionedArch(u, version string, archAt, archLen int) string {
+	return `"` + versionedBody(u, version, archAt, archLen) + `"`
+}
+
+func versionedBody(u, version string, archAt, archLen int) string {
+	prefixEnd := versionPrefixEnd(u)
+	var b strings.Builder
+	emitLiteral := func(seg string, allowVersion bool) {
+		if !allowVersion || version == "" {
+			b.WriteString(rubyEscaper.Replace(seg))
+			return
+		}
+		b.WriteString(escapeAndSubVersion(seg, version))
 	}
-	return s[:i] + new + s[i+len(old):]
+	if archAt < 0 {
+		emitLiteral(u[:prefixEnd], false)
+		emitLiteral(u[prefixEnd:], true)
+		return b.String()
+	}
+	archEnd := archAt + archLen
+	if archEnd <= prefixEnd {
+		emitLiteral(u[:archAt], false)
+		b.WriteString("#{arch}")
+		emitLiteral(u[archEnd:prefixEnd], false)
+		emitLiteral(u[prefixEnd:], true)
+	} else if archAt >= prefixEnd {
+		emitLiteral(u[:prefixEnd], false)
+		emitLiteral(u[prefixEnd:archAt], true)
+		b.WriteString("#{arch}")
+		emitLiteral(u[archEnd:], true)
+	} else {
+		emitLiteral(u[:archAt], false)
+		b.WriteString("#{arch}")
+		emitLiteral(u[archEnd:], true)
+	}
+	return b.String()
+}
+
+// versionPrefixEnd returns the byte offset in u after which version
+// substitution is allowed (after /releases/download/, or after scheme://host/).
+func versionPrefixEnd(u string) int {
+	const ghMarker = "/releases/download/"
+	if i := strings.Index(u, ghMarker); i >= 0 {
+		return i + len(ghMarker)
+	}
+	if i := strings.Index(u, "://"); i >= 0 {
+		if j := strings.IndexByte(u[i+3:], '/'); j >= 0 {
+			return i + 3 + j + 1
+		}
+		return len(u)
+	}
+	return 0
+}
+
+func isASCIIAlnum(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+}
+
+// escapeAndSubVersion escapes s for a Ruby double-quoted string while replacing
+// token-bounded occurrences of version with #{version}.
+func escapeAndSubVersion(s, version string) string {
+	var b strings.Builder
+	pos := 0
+	for pos < len(s) {
+		i := strings.Index(s[pos:], version)
+		if i < 0 {
+			b.WriteString(rubyEscaper.Replace(s[pos:]))
+			break
+		}
+		start := pos + i
+		end := start + len(version)
+		leftOK := start == 0 || !isASCIIAlnum(s[start-1]) ||
+			((s[start-1] == 'v' || s[start-1] == 'V') && (start-1 == 0 || !isASCIIAlnum(s[start-2])))
+		rightOK := end == len(s) || !isASCIIAlnum(s[end])
+		if leftOK && rightOK {
+			b.WriteString(rubyEscaper.Replace(s[pos:start]))
+			b.WriteString("#{version}")
+			pos = end
+		} else {
+			b.WriteString(rubyEscaper.Replace(s[pos : start+1]))
+			pos = start + 1
+		}
+	}
+	return b.String()
 }
 
 // Desc tidies a description as Homebrew's style wants one: no article to
@@ -115,7 +203,8 @@ func Desc(s string) string {
 	}
 	s = strings.TrimRight(s, ". ")
 	if s != "" {
-		s = strings.ToUpper(s[:1]) + s[1:]
+		r, size := utf8.DecodeRuneInString(s)
+		s = string(unicode.ToUpper(r)) + s[size:]
 	}
 	return s
 }
@@ -127,32 +216,32 @@ func (c Cask) Ruby() (string, error) {
 	}
 	var b strings.Builder
 	p := func(format string, args ...any) { fmt.Fprintf(&b, format, args...) }
-	p("cask %s do\n", rubyString(c.Token, false))
+	p("cask %s do\n", rubyString(c.Token))
 
 	var dl *File
 	switch {
 	case c.Universal != nil:
 		dl = c.Universal
-		p("  version %s\n", rubyString(c.Version, false))
-		p("  sha256 %s\n\n", rubyString(dl.SHA256, false))
+		p("  version %s\n", rubyString(c.Version))
+		p("  sha256 %s\n\n", rubyString(dl.SHA256))
 		p("  url %s%s\n", versioned(dl.URL, c.Version), verified(dl.URL, c.Homepage, "      "))
 	case c.Arm != nil && c.Intel != nil:
-		arm := replaceLast(c.Arm.URL, "arm64", "#{arch}")
-		intel := replaceLast(c.Intel.URL, "amd64", "#{arch}")
-		if arm == intel {
+		ai := strings.LastIndex(c.Arm.URL, "arm64")
+		ii := strings.LastIndex(c.Intel.URL, "amd64")
+		if ai >= 0 && ii >= 0 && c.Arm.URL[:ai] == c.Intel.URL[:ii] && c.Arm.URL[ai+len("arm64"):] == c.Intel.URL[ii+len("amd64"):] {
 			p("  arch arm: \"arm64\", intel: \"amd64\"\n\n")
-			p("  version %s\n", rubyString(c.Version, false))
-			p("  sha256 arm:   %s,\n", rubyString(c.Arm.SHA256, false))
-			p("         intel: %s\n\n", rubyString(c.Intel.SHA256, false))
-			p("  url %s%s\n", versioned(arm, c.Version), verified(c.Arm.URL, c.Homepage, "      "))
+			p("  version %s\n", rubyString(c.Version))
+			p("  sha256 arm:   %s,\n", rubyString(c.Arm.SHA256))
+			p("         intel: %s\n\n", rubyString(c.Intel.SHA256))
+			p("  url %s%s\n", versionedArch(c.Arm.URL, c.Version, ai, len("arm64")), verified(c.Arm.URL, c.Homepage, "      "))
 		} else {
-			p("  version %s\n\n", rubyString(c.Version, false))
+			p("  version %s\n\n", rubyString(c.Version))
 			for _, a := range []struct {
 				block string
 				f     *File
 			}{{"on_arm", c.Arm}, {"on_intel", c.Intel}} {
 				p("  %s do\n", a.block)
-				p("    sha256 %s\n\n", rubyString(a.f.SHA256, false))
+				p("    sha256 %s\n\n", rubyString(a.f.SHA256))
 				p("    url %s%s\n", versioned(a.f.URL, c.Version), verified(a.f.URL, c.Homepage, "        "))
 				p("  end\n")
 			}
@@ -164,15 +253,15 @@ func (c Cask) Ruby() (string, error) {
 		if dl == nil {
 			dl = c.Intel
 		}
-		p("  version %s\n", rubyString(c.Version, false))
-		p("  sha256 %s\n\n", rubyString(dl.SHA256, false))
+		p("  version %s\n", rubyString(c.Version))
+		p("  sha256 %s\n\n", rubyString(dl.SHA256))
 		p("  url %s%s\n", versioned(dl.URL, c.Version), verified(dl.URL, c.Homepage, "      "))
 	}
-	p("  name %s\n", rubyString(c.Name, false))
+	p("  name %s\n", rubyString(c.Name))
 	if d := Desc(c.Desc); d != "" {
-		p("  desc %s\n", rubyString(d, false))
+		p("  desc %s\n", rubyString(d))
 	}
-	p("  homepage %s\n\n", rubyString(c.Homepage, false))
+	p("  homepage %s\n\n", rubyString(c.Homepage))
 
 	if strings.Contains(dl.URL, "/releases/download/") {
 		p("  livecheck do\n    url :url\n    strategy :github_latest\n  end\n\n")
@@ -194,7 +283,7 @@ func (c Cask) Ruby() (string, error) {
 		b.WriteString("\n")
 	}
 
-	p("  app %s\n", rubyString(c.Name+".app", false))
+	p("  app %s\n", rubyString(c.Name+".app"))
 	if c.ID != "" {
 		p("\n  zap trash: [\n")
 		for _, path := range []string{
@@ -202,7 +291,7 @@ func (c Cask) Ruby() (string, error) {
 			"~/Library/Preferences/" + c.ID + ".plist",
 			"~/Library/Saved Application State/" + c.ID + ".savedState",
 		} {
-			p("    %s,\n", rubyString(path, false))
+			p("    %s,\n", rubyString(path))
 		}
 		p("  ]\n")
 	}
@@ -227,7 +316,7 @@ func verified(download, homepage, indent string) string {
 	if len(parts) >= 2 {
 		v += parts[0] + "/" + parts[1] + "/"
 	}
-	return ",\n" + indent + "verified: " + rubyString(v, false)
+	return ",\n" + indent + "verified: " + rubyString(v)
 }
 
 // Path is where the cask goes in a tap.

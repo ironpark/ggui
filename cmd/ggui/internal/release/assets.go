@@ -220,16 +220,24 @@ func Move(src, dir, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer in.Close()
 	out, err := os.Create(dst)
 	if err != nil {
+		in.Close()
 		return "", err
 	}
 	if _, err := io.Copy(out, in); err != nil {
 		out.Close()
+		in.Close()
+		os.Remove(dst)
 		return "", err
 	}
 	if err := out.Close(); err != nil {
+		in.Close()
+		os.Remove(dst)
+		return "", err
+	}
+	if err := in.Close(); err != nil {
+		os.Remove(dst)
 		return "", err
 	}
 	return dst, os.Remove(src)

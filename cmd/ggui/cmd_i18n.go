@@ -88,6 +88,9 @@ i18n or locales: {"lang": "ko", "messages": {...}, "plurals": {...}}.
 			if *out != "" && *lang == "" {
 				return errors.New("--out names the catalog --lang makes: give --lang too")
 			}
+			if *lang != "" && !validLang(*lang) {
+				return fmt.Errorf("--lang %q must be a language tag using letters, digits, hyphens or underscores", *lang)
+			}
 			for _, g := range globs {
 				if err := i18n.ValidGlob(g); err != nil {
 					return fmt.Errorf("--catalog %w", err)
@@ -268,6 +271,9 @@ func extract(w io.Writer, src *i18n.Sources, lang, out string) error {
 	}
 	keys, pkeys := src.Keys()
 	if lang != "" {
+		if !validLang(lang) {
+			return fmt.Errorf("--lang %q must be a language tag using letters, digits, hyphens or underscores", lang)
+		}
 		if out == "" {
 			out = filepath.Join(src.Root, "locales", lang+".json")
 		} else if abs, err := filepath.Abs(out); err == nil {
@@ -340,4 +346,25 @@ func plural(n int, what string) string {
 		return "1 " + what
 	}
 	return fmt.Sprintf("%d %ss", n, what)
+}
+
+// validLang reports whether s is a safe language tag for filenames like
+// locales/<lang>.json: starts with an ASCII letter and contains only ASCII
+// letters, digits, hyphens, and underscores.
+func validLang(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		letter := c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+		digit := c >= '0' && c <= '9'
+		if i == 0 && !letter {
+			return false
+		}
+		if !letter && !digit && c != '-' && c != '_' {
+			return false
+		}
+	}
+	return true
 }

@@ -105,7 +105,7 @@ func (c *Client) upload(ctx context.Context, p *Publish, rel *Release, a release
 		p.say("Uploading %s (%s)", a.Name, release.HumanSize(a.Size))
 		up, err := c.UploadAsset(ctx, rel, a.Path, a.Name)
 		if err == nil {
-			if a.Size > 0 && up.Size != 0 && up.Size != a.Size {
+			if up.Size != a.Size {
 				return fmt.Errorf("uploading %s: GitHub has %d bytes of %d", a.Name, up.Size, a.Size)
 			}
 			return nil

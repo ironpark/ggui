@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
 	"github.com/ironpark/ggui/cmd/ggui/internal/watch"
@@ -69,6 +68,7 @@ func WatchSet(ctx context.Context, lo gotool.ListOptions, pkg string, extra []st
 // expand returns path and, when it is a directory, every directory and
 // file below it, skipping hidden ones such as .git and those ig ignores.
 func expand(path string, ig *watch.Ignore) []string {
+	path = filepath.Clean(path)
 	fi, err := os.Stat(path)
 	if err != nil || !fi.IsDir() {
 		return []string{path}
@@ -78,25 +78,40 @@ func expand(path string, ig *watch.Ignore) []string {
 		if err != nil {
 			return nil
 		}
-		if p != path && len(d.Name()) > 0 && d.Name()[0] == '.' {
-			if d.IsDir() {
+		if p != path {
+			if len(d.Name()) > 0 && d.Name()[0] == '.' {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if d.IsDir() && ig != nil && ig.Ignored(p) {
 				return filepath.SkipDir
 			}
-			return nil
 		}
 		all = append(all, p)
 		return nil
 	})
+	if len(all) <= 1 {
+		return all
+	}
 	// Asked all at once: git answers for a whole tree in one run.
 	ignored := ig.Filter(all[1:])
 	out := all[:1]
-	var skip []string
+	skip := make(map[string]bool)
 	for i, p := range all[1:] {
 		if ignored[i] {
-			skip = append(skip, p)
+			skip[p] = true
 			continue
 		}
-		if !slices.ContainsFunc(skip, func(d string) bool { return strings.HasPrefix(p, d+string(filepath.Separator)) }) {
+		skipped := false
+		for dir := filepath.Dir(p); dir != path && dir != filepath.Dir(dir); dir = filepath.Dir(dir) {
+			if skip[dir] {
+				skipped = true
+				break
+			}
+		}
+		if !skipped {
 			out = append(out, p)
 		}
 	}

@@ -47,6 +47,12 @@ func TestRecordFlags(t *testing.T) {
 		{"record", "--colors", "300"},
 		{"record", "--dither", "2"},
 		{"record", "--frame", "round"},
+		{"record", "../evil"},
+		{"record", "a/b"},
+		{"record", `a\b`},
+		{"record", ".."},
+		{"record", "."},
+		{"record", ""},
 	} {
 		var stdout, stderr bytes.Buffer
 		if code := run(args, &stdout, &stderr); code == 0 {
