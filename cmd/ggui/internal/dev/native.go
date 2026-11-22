@@ -93,6 +93,7 @@ type Native struct {
 	plan    plan
 	results chan buildResult
 	cancel  context.CancelFunc // the running build's
+	bg      sync.WaitGroup     // watcher, goVer, and in-flight builds
 	goVer   chan string        // go env GOVERSION, once known
 	parse   *bool              // whether this program parses the project's Go
 
@@ -160,17 +161,19 @@ type buildResult struct {
 // change that builds. Without Watch it returns when the app exits. With a
 // Display, it also returns when the viewer's window is closed.
 func (n *Native) Run(ctx context.Context) error {
-	ctx, stopAll := context.WithCancel(ctx)
-	defer stopAll() // the watcher, and a build in flight
 	tmp, err := os.MkdirTemp("", "ggui-dev-")
 	if err != nil {
 		return err
 	}
 	n.tmp = tmp
+	ctx, stopAll := context.WithCancel(ctx)
+	// Defer order (LIFO): cancel ctx, stop app, stop viewer, wait for
+	// watcher and in-flight builds, then remove tmp.
 	defer os.RemoveAll(tmp)
-	// The app stops first, then its viewer.
+	defer n.bg.Wait()
 	defer n.dropViewer()
 	defer n.stop()
+	defer stopAll()
 	n.results = make(chan buildResult)
 	if n.Watch {
 		k, err := newKeeper()
@@ -226,11 +229,17 @@ func (n *Native) Run(ctx context.Context) error {
 			Logf: n.warnf, Tracef: n.Tracef,
 		})
 		changes = make(chan watch.Change)
-		go n.w.Run(ctx, changes)
+		n.bg.Add(1)
+		go func() {
+			defer n.bg.Done()
+			n.w.Run(ctx, changes)
+		}()
 		n.logf("watching %d files", n.w.Len())
 
 		n.goVer = make(chan string, 1)
+		n.bg.Add(1)
 		go func() {
+			defer n.bg.Done()
 			env, _ := gotool.Env(ctx, n.Dir, nil, "GOVERSION")
 			n.goVer <- env["GOVERSION"]
 		}()
@@ -397,7 +406,9 @@ func (n *Native) launch(ctx context.Context, id int, batch []string) {
 	}
 	n.step, n.stepID = n.say().Step("building the app", opts...), id
 	tags := n.Tags // a reload may replace them while this build runs
+	n.bg.Add(1)
 	go func() {
+		defer n.bg.Done()
 		defer cancel()
 		r := buildResult{id: id, batch: batch}
 		if len(check) > 0 {

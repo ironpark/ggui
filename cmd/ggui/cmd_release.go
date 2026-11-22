@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"slices"
 	"strings"
 
@@ -40,8 +39,8 @@ architecture, collects the files in build/release/VERSION, and publishes
 them.
 
   macos    Name.dmg when [macos.dmg] asks for one, else a zip of Name.app;
-           one universal build on a Mac, one for each architecture
-           elsewhere. Signed and notarized as [macos] says.
+           one universal build when both amd64 and arm64 are built.
+           Signed and notarized as [macos] says.
   windows  a zip of Name.exe for each architecture.
   linux    the tarball and packages linux.formats names, for each
            architecture.
@@ -435,8 +434,8 @@ func (p *releasePlan) builds() []releaseArch {
 				ui.Stderr.Note("%s", ui.Stderr.Dim("no "+t+" build for "+a))
 			}
 		}
-		// lipo, which joins the two, is the Mac's.
-		if t == "macos" && runtime.GOOS == "darwin" && slices.Contains(arches, "amd64") && slices.Contains(arches, "arm64") {
+		// Both macOS architectures join into one universal binary via pure-Go lipo.
+		if t == "macos" && slices.Contains(arches, "amd64") && slices.Contains(arches, "arm64") {
 			arches = []string{"universal"}
 		}
 		for _, a := range arches {

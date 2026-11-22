@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -41,6 +42,8 @@ type Server struct {
 	seq    int
 	subs   map[chan event]struct{}
 	cancel context.CancelFunc // the current build's
+	closed bool
+	wg     sync.WaitGroup // active build goroutines
 }
 
 // build is one compilation: in flight until done is closed, then either a
@@ -122,13 +125,15 @@ func NewServer(ctx context.Context, o ServerOptions) (*Server, error) {
 	return s, nil
 }
 
-// Close removes the builds.
+// Close cancels any in-flight build, waits for it to exit, and removes the builds.
 func (s *Server) Close() error {
 	s.mu.Lock()
+	s.closed = true
 	if s.cancel != nil {
 		s.cancel()
 	}
 	s.mu.Unlock()
+	s.wg.Wait()
 	return os.RemoveAll(s.tmp)
 }
 
@@ -144,6 +149,14 @@ func (s *Server) Rebuild() {
 }
 
 func (s *Server) startLocked() *build {
+	if s.closed {
+		if s.cur != nil {
+			return s.cur
+		}
+		done := make(chan struct{})
+		close(done)
+		return &build{done: done, err: context.Canceled}
+	}
 	if s.cancel != nil {
 		s.cancel()
 	}
@@ -157,7 +170,9 @@ func (s *Server) startLocked() *build {
 	dir := filepath.Join(s.tmp, strconv.Itoa(s.seq))
 	prev := filepath.Join(s.tmp, strconv.Itoa(s.seq-2))
 	s.broadcastLocked(b.event())
+	s.wg.Add(1)
 	go func() {
+		defer s.wg.Done()
 		defer cancel()
 		o := s.build
 		o.Out = filepath.Join(dir, WasmName)
@@ -269,19 +284,115 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "_events":
 		s.serveEvents(w, r)
 	case "_rebuild":
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !sameOrigin(r) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
 		s.Rebuild()
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		// Anything else comes from the package's own directory, so it can
 		// ship an asset it fetches at run time. A page request naming no
 		// file is a route the app shows itself.
-		file := filepath.Join(s.pkgDir, filepath.FromSlash(pathClean(rest)))
-		if _, err := os.Stat(file); errors.Is(err, fs.ErrNotExist) && wantsPage(r) {
-			s.serveIndex(w, r)
+		clean := pathClean(rest)
+		if blockedStaticPath(clean) {
+			http.NotFound(w, r)
+			return
+		}
+		file := filepath.Join(s.pkgDir, filepath.FromSlash(clean))
+		if _, err := os.Stat(file); errors.Is(err, fs.ErrNotExist) {
+			// A dangling symlink is not a route.
+			if _, lerr := os.Lstat(file); lerr == nil {
+				http.NotFound(w, r)
+				return
+			}
+			if wantsPage(r) {
+				s.serveIndex(w, r)
+				return
+			}
+			http.NotFound(w, r)
+			return
+		}
+		if !s.containedInPkgDir(file) {
+			http.NotFound(w, r)
 			return
 		}
 		http.ServeFile(w, r, file)
 	}
+}
+
+// sameOrigin rejects cross-origin browser requests while permitting same-origin
+// requests and non-browser CLI requests without Origin/Referer headers.
+func sameOrigin(r *http.Request) bool {
+	if origin := r.Header.Get("Origin"); origin != "" {
+		if origin == "null" {
+			return false
+		}
+		u, err := url.Parse(origin)
+		return err == nil && strings.EqualFold(u.Host, r.Host)
+	}
+	if ref := r.Header.Get("Referer"); ref != "" {
+		u, err := url.Parse(ref)
+		return err == nil && strings.EqualFold(u.Host, r.Host)
+	}
+	if sfs := r.Header.Get("Sec-Fetch-Site"); sfs != "" && sfs != "same-origin" && sfs != "none" {
+		return false
+	}
+	return true
+}
+
+// blockedStaticPath reports whether clean (slash-separated, relative) refers
+// to a Go source file or a dotfile/dotdir such as .env or .git.
+func blockedStaticPath(clean string) bool {
+	if clean == "" {
+		return false
+	}
+	if strings.EqualFold(filepath.Ext(clean), ".go") {
+		return true
+	}
+	for part := range strings.SplitSeq(clean, "/") {
+		if strings.HasPrefix(part, ".") {
+			return true
+		}
+	}
+	return false
+}
+
+// containedInPkgDir verifies that file, after resolving symlinks, remains
+// inside s.pkgDir and does not resolve to a blocked path.
+func (s *Server) containedInPkgDir(file string) bool {
+	root, err := filepath.EvalSymlinks(s.pkgDir)
+	if err != nil {
+		return false
+	}
+	root, err = filepath.Abs(root)
+	if err != nil {
+		return false
+	}
+	resolved, err := filepath.EvalSymlinks(file)
+	if err != nil {
+		return false
+	}
+	resolved, err = filepath.Abs(resolved)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(root, resolved)
+	if err != nil {
+		return false
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+	if rel != "." && blockedStaticPath(filepath.ToSlash(rel)) {
+		return false
+	}
+	return true
 }
 
 // pathClean cleans a URL path below the base so it cannot climb out of
@@ -393,17 +504,23 @@ func (s *Server) serveStatus(w http.ResponseWriter, r *http.Request) {
 // at once, then each change.
 func (s *Server) serveEvents(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
-	s.mu.Lock()
-	live := s.subs != nil
-	s.mu.Unlock()
-	if !ok || !live {
-		// 204 tells EventSource to stop reconnecting.
+	if !ok {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	ch := make(chan event, 1)
-	ch <- s.current().event()
 	s.mu.Lock()
+	if s.subs == nil {
+		s.mu.Unlock()
+		// 204 tells EventSource to stop reconnecting.
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	b := s.cur
+	if b == nil {
+		b = s.startLocked()
+	}
+	ch <- b.event()
 	s.subs[ch] = struct{}{}
 	s.mu.Unlock()
 	defer func() {

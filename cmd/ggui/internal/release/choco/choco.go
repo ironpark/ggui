@@ -98,8 +98,17 @@ func (p Package) Nuspec() []byte {
 	return append([]byte(xml.Header+"<!-- Written by ggui release. -->\n"), append(data, '\n')...)
 }
 
-// psQuote quotes s as a PowerShell single-quoted string.
-func psQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
+var psSingleQuote = strings.NewReplacer(
+	"'", "''",
+	"\u2018", "\u2018\u2018",
+	"\u2019", "\u2019\u2019",
+	"\u201a", "\u201a\u201a",
+	"\u201b", "\u201b\u201b",
+)
+
+// psQuote quotes s as a PowerShell single-quoted string. PowerShell treats
+// Unicode curly single quotes as single-quote delimiters as well.
+func psQuote(s string) string { return "'" + psSingleQuote.Replace(s) + "'" }
 
 // shortcutName is the Start menu shortcut's file name.
 func (p Package) shortcutName() string {
@@ -149,7 +158,7 @@ func (p Package) UninstallScript() []byte {
 	b.WriteString("# Written by ggui release.\n")
 	b.WriteString("$ErrorActionPreference = 'Stop'\n\n")
 	fmt.Fprintf(&b, "$shortcut = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) %s\n", psQuote(p.shortcutName()))
-	b.WriteString("if (Test-Path $shortcut) {\n  Remove-Item $shortcut -Force\n}\n")
+	b.WriteString("if (Test-Path -LiteralPath $shortcut) {\n  Remove-Item -LiteralPath $shortcut -Force\n}\n")
 	return []byte(b.String())
 }
 

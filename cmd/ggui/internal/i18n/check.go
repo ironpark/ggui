@@ -70,7 +70,7 @@ func Check(c *Catalog, s *Sources, o Options) []Problem {
 		case !ok:
 			add(Missing, k, !o.AllowMissing, "missing plural %s, used at %s", strconv.Quote(k), m.Uses[0])
 			continue
-		case c.dynamic[k]:
+		case c.dynamicPlural[k]:
 			continue
 		}
 		translated := false
@@ -178,16 +178,34 @@ func ParseVerbs(format string) []Verb {
 			i++
 			continue
 		}
-		// index reads [n], setting arg.
+		// index reads [n], setting arg, and records malformed indices.
+		badIndex := false
 		index := func() {
 			if i < len(format) && format[i] == '[' {
 				end := strings.IndexByte(format[i:], ']')
-				if end > 0 {
-					if n, err := strconv.Atoi(format[i+1 : i+end]); err == nil && n > 0 {
-						arg = n
-					}
-					i += end + 1
+				if end < 0 {
+					badIndex = true
+					i = len(format)
+					return
 				}
+				idx := format[i+1 : i+end]
+				digits := len(idx) > 0
+				for j := 0; j < len(idx); j++ {
+					if idx[j] < '0' || idx[j] > '9' {
+						digits = false
+						break
+					}
+				}
+				if digits {
+					if n, err := strconv.Atoi(idx); err == nil && n > 0 {
+						arg = n
+					} else {
+						badIndex = true
+					}
+				} else {
+					badIndex = true
+				}
+				i += end + 1
 			}
 		}
 		for i < len(format) && strings.IndexByte("+-# 0", format[i]) >= 0 {
@@ -196,7 +214,12 @@ func ParseVerbs(format string) []Verb {
 		// width
 		index()
 		if i < len(format) && format[i] == '*' {
-			vs = append(vs, Verb{Arg: arg, Verb: '*', Text: format[start : i+1]})
+			v := '*'
+			if badIndex {
+				v = '!'
+				badIndex = false
+			}
+			vs = append(vs, Verb{Arg: arg, Verb: v, Text: format[start : i+1]})
 			arg++
 			i++
 		} else {
@@ -209,7 +232,12 @@ func ParseVerbs(format string) []Verb {
 			i++
 			index()
 			if i < len(format) && format[i] == '*' {
-				vs = append(vs, Verb{Arg: arg, Verb: '*', Text: format[start : i+1]})
+				v := '*'
+				if badIndex {
+					v = '!'
+					badIndex = false
+				}
+				vs = append(vs, Verb{Arg: arg, Verb: v, Text: format[start : i+1]})
 				arg++
 				i++
 			} else {
@@ -225,8 +253,8 @@ func ParseVerbs(format string) []Verb {
 		}
 		r, size := utf8.DecodeRuneInString(format[i:])
 		i += size
-		if !unicode.IsLetter(r) || r > unicode.MaxASCII {
-			// fmt prints %!{(BADVERB)} or the like: a mistake, kept as
+		if badIndex || !unicode.IsLetter(r) || r > unicode.MaxASCII {
+			// fmt prints %!{(BADVERB)} or %!(BADINDEX): a mistake, kept as
 			// one so that it differs from the source.
 			r = '!'
 		}

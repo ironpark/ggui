@@ -186,7 +186,7 @@ const fail = (text) => {
 $('retry').textContent = config.dev ? 'Rebuild and reload' : 'Reload';
 $('retry').onclick = async () => {
   if (config.dev) {
-    try { await fetch('_rebuild', { cache: 'no-store' }); } catch {}
+    try { await fetch('_rebuild', { method: 'POST', cache: 'no-store' }); } catch {}
     keep();
   }
   location.reload();

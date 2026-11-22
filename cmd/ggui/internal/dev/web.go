@@ -101,6 +101,8 @@ func buildStarts(format string, args []any) (gotool.BuildOptions, bool) {
 
 // Run serves until ctx is done.
 func (w *Web) Run(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	var bg sync.WaitGroup
 	w.out = ui.For(w.Log).Prefixed("ggui")
 	defer func() {
 		w.mu.Lock()
@@ -120,9 +122,13 @@ func (w *Web) Run(ctx context.Context) error {
 		Logf:   w.logf,
 	})
 	if err != nil {
+		cancel()
 		return err
 	}
+	// Defer order (LIFO): cancel ctx, wait for wt.Run and w.loop, close srv.
 	defer srv.Close()
+	defer bg.Wait()
+	defer cancel()
 
 	ln, err := net.Listen("tcp", w.Addr)
 	if err != nil {
@@ -152,9 +158,16 @@ func (w *Web) Run(ctx context.Context) error {
 			Logf: w.out.Warn, Tracef: w.Tracef,
 		})
 		changes := make(chan watch.Change)
-		go wt.Run(ctx, changes)
+		bg.Add(2)
+		go func() {
+			defer bg.Done()
+			wt.Run(ctx, changes)
+		}()
 		w.logf("watching %d files; the page reloads itself after each build", wt.Len())
-		go w.loop(ctx, changes, srv)
+		go func() {
+			defer bg.Done()
+			w.loop(ctx, changes, srv)
+		}()
 	} else {
 		w.logf("not watching: request %s_rebuild, or reload the page after a failed build, to build again", srv.Base())
 	}

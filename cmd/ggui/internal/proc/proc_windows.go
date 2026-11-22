@@ -107,8 +107,9 @@ func (g group) kill() {
 	}
 }
 
-func (g group) close() {
+func (g *group) close() {
 	if g.job != 0 {
 		syscall.CloseHandle(g.job)
+		g.job = 0
 	}
 }

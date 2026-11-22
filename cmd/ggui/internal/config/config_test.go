@@ -443,3 +443,22 @@ func TestFind(t *testing.T) {
 		t.Errorf("Find crossed a module root: %q", got)
 	}
 }
+
+func TestAppNameValidation(t *testing.T) {
+	for _, bad := range []string{
+		"../evil",
+		"a/b",
+		`a\b`,
+		"..",
+		".",
+		"foo..bar",
+		"bad\nname",
+		"bad\x00name",
+	} {
+		esc := strings.NewReplacer(`\`, `\\`, "\n", `\n`, "\x00", `\u0000`).Replace(bad)
+		es := errorsOf(t, "[app]\nname = \""+esc+"\"\n")
+		if len(es) != 1 || !strings.HasPrefix(es[0].Msg, "app.name") {
+			t.Errorf("bad name %q: got %v", bad, es)
+		}
+	}
+}

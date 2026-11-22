@@ -99,3 +99,15 @@ func TestModulePath(t *testing.T) {
 		t.Error("a module path with a space was accepted")
 	}
 }
+
+func TestQuoteGoModPath(t *testing.T) {
+	if got := quoteGoModPath("../ggui"); got != "../ggui" {
+		t.Errorf("plain path quoted: %q", got)
+	}
+	if got := quoteGoModPath("/Users/a b/ggui"); got != `"/Users/a b/ggui"` {
+		t.Errorf("spaced path = %q", got)
+	}
+	if got := quoteGoModPath(`../my"dir`); got != `"../my\"dir"` {
+		t.Errorf("quoted char path = %q", got)
+	}
+}

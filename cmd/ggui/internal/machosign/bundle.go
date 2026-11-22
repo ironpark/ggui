@@ -242,6 +242,9 @@ func signNested(p string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(hashes) == 0 {
+		return nil, errors.New("signed binary produced no code directory hash")
+	}
 	if err := replaceFile(p, signed); err != nil {
 		return nil, err
 	}

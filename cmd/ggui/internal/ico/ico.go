@@ -62,12 +62,13 @@ func Images(src image.Image) (imgs []Image, skipped []int, err error) {
 	if b.Dx() < MinSize {
 		return nil, nil, fmt.Errorf("icon is %d×%d; it must be at least %d×%d, ideally 1024×1024", b.Dx(), b.Dy(), MinSize, MinSize)
 	}
+	resizer := icns.NewResizer(src)
 	for _, size := range Sizes {
 		if size > b.Dx() {
 			skipped = append(skipped, size)
 			continue
 		}
-		px := icns.Resize(src, size)
+		px := resizer.Resize(size)
 		var data []byte
 		if size >= pngFrom {
 			var buf bytes.Buffer

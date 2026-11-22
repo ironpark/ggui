@@ -89,7 +89,10 @@ func (ig *Ignore) Reset() {
 
 // Ignored reports whether path is ignored.
 func (ig *Ignore) Ignored(path string) bool {
-	return ig.Filter([]string{path})[0]
+	if ig == nil {
+		return false
+	}
+	return ig.git.Ignored(path)
 }
 
 // Filter reports, for each of paths, whether it is ignored, asking git

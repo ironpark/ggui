@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -33,11 +32,7 @@ func TestReleaseBuilds(t *testing.T) {
 	for _, b := range p.builds() {
 		got = append(got, b.target+"/"+b.arch)
 	}
-	mac := []string{"macos/amd64", "macos/arm64"}
-	if runtime.GOOS == "darwin" {
-		mac = []string{"macos/universal"}
-	}
-	want := append(mac, "windows/amd64", "windows/arm64", "windows/386", "linux/amd64", "linux/arm64", "linux/riscv64")
+	want := []string{"macos/universal", "windows/amd64", "windows/arm64", "windows/386", "linux/amd64", "linux/arm64", "linux/riscv64"}
 	if !slices.Equal(got, want) {
 		t.Errorf("builds %v, want %v", got, want)
 	}

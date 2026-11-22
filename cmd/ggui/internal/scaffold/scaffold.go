@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/template"
 	"unicode"
@@ -158,7 +159,7 @@ func Write(o Options) (*Result, error) {
 		if err != nil {
 			return nil, err
 		}
-		gomod += fmt.Sprintf("\nreplace %s => %s\n", GGUI, rel)
+		gomod += fmt.Sprintf("\nreplace %s => %s\n", GGUI, quoteGoModPath(rel))
 	}
 	files := map[string][]byte{
 		"go.mod":        []byte(gomod),
@@ -197,6 +198,20 @@ func replacePath(dir, target string) (string, error) {
 		}
 	}
 	return filepath.ToSlash(abs), nil
+}
+
+// quoteGoModPath quotes a go.mod path token when it contains spaces,
+// quote/delimiter/comment characters, or non-ASCII characters.
+func quoteGoModPath(s string) string {
+	if s == "" || strings.Contains(s, "//") || strings.Contains(s, "/*") {
+		return strconv.Quote(s)
+	}
+	for _, r := range s {
+		if r <= ' ' || r >= 0x7f || strings.ContainsRune(`"'`+"`"+`,;()`, r) {
+			return strconv.Quote(s)
+		}
+	}
+	return s
 }
 
 // modulePath makes a module path from a directory name: lower case, with

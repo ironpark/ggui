@@ -86,6 +86,8 @@ cursor the tour's pointer steps draw.`,
 				name = pos[0]
 			}
 			switch {
+			case len(pos) == 1 && !validTourName(name):
+				return fmt.Errorf("tour name %q must not be empty, a dot name, or contain path separators or \"..\"", name)
 			case *out != "" && *frames != "":
 				return errors.New("-o writes a GIF and --frames PNG frames: give one")
 			case *colors < 2 || *colors > 256:
@@ -230,6 +232,20 @@ type recordRequest struct {
 // recordFrames are the frames package record draws, as its FrameStyle
 // writes them.
 var recordFrames = []string{"none", "mac", "mac-titleless", "mac-unified", "mac-compact", "mac-expanded", "mac-hidden"}
+
+// validTourName reports whether name is safe to use as a tour identifier and
+// default output filename stem.
+func validTourName(name string) bool {
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) || strings.Contains(name, "..") {
+		return false
+	}
+	for _, r := range name {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
+}
 
 // validBackdrop reports whether s is a backdrop the app reads: #RRGGBB or
 // transparent.

@@ -214,9 +214,16 @@ which keeps running the last build that succeeded.`,
 			sigs := make(chan os.Signal, 2)
 			signal.Notify(sigs, stopSignals...)
 			defer signal.Stop(sigs)
+			sigDone := make(chan struct{})
+			defer close(sigDone)
 			go func() {
-				<-sigs
-				<-sigs
+				for range 2 {
+					select {
+					case <-sigs:
+					case <-sigDone:
+						return
+					}
+				}
 				close(force)
 			}()
 
