@@ -13,7 +13,7 @@ type Item struct {
 	Separator bool
 	Items     []Item
 
-	// ID names the action to the Handle callback. It is ignored for
+	// ID names the action to the OnSelect callback. It is ignored for
 	// separators and submenus.
 	ID int
 	// Key is the key equivalent: a character, or one of the function-key
