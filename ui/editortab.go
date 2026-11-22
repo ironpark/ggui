@@ -8,6 +8,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	"github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -333,7 +334,7 @@ func (b *editorTabBox) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 }
 
 func (b *editorTabBox) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	hover := ease(dst, b.theme, b.button.Anchor(r), editorTabHoverSlot, pick(b.hovered, 1.0, 0.0), b.motion)
+	hover := controlkit.Ease(dst, b.theme, b.button.Anchor(r), editorTabHoverSlot, pick(b.hovered, 1.0, 0.0), b.motion)
 	if b.fill != nil {
 		if b.current {
 			dst.Shadow(r, EditorTabRadius, tabLiftShadow)
@@ -550,7 +551,7 @@ func (g *TabGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	chipAt := ggui.Rct(ggui.Pt(chipX, mid-g.chipSize.H/2), g.chipSize)
 	fill := g.fill
 	if g.button != nil {
-		if h := ease(dst, g.theme, g.button.Anchor(chipAt), tabGroupHoverSlot, pick(g.button.Hovered, 1.0, 0.0), g.motion); h > 0 {
+		if h := controlkit.Ease(dst, g.theme, g.button.Anchor(chipAt), tabGroupHoverSlot, pick(g.button.Hovered, 1.0, 0.0), g.motion); h > 0 {
 			fill = mix(g.fill, g.hoverFill, h)
 		}
 	}

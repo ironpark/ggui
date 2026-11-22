@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -34,7 +35,7 @@ func TestControlTransitionsMoveOnTheThemesCurve(t *testing.T) {
 		w := ggui.FromFuncs(
 			func(cs ggui.Constraints, _ ggui.Env) ggui.Size { return cs.Constrain(ggui.Sz(10, 10)) },
 			func(dst *ggui.Canvas, r ggui.Rect) {
-				got = ease(dst, th, ggui.Anchor{Rect: r}, easingTestSlot, target, 200*time.Millisecond)
+				got = controlkit.Ease(dst, th, ggui.Anchor{Rect: r}, easingTestSlot, target, 200*time.Millisecond)
 			})
 		p := ggui.NewProbe(w, ggui.Sz(100, 100))
 		p.Advance(0)

@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -258,8 +259,8 @@ func (i *NavigationMenuItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// for the current destination and the open dropdown.
 	focused := i.Focused && i.FocusVisible && !i.quiet
 	at := i.Anchor(r)
-	hover := ease(dst, i.theme, at, navigationHoverSlot, pick((i.Hovered || focused) && !inert, 1.0, 0.0), i.motion)
-	on := ease(dst, i.theme, at, navigationActiveSlot, pick((i.selected || i.isOpen()) && !inert, 1.0, 0.0), i.motion)
+	hover := controlkit.Ease(dst, i.theme, at, navigationHoverSlot, pick((i.Hovered || focused) && !inert, 1.0, 0.0), i.motion)
+	on := controlkit.Ease(dst, i.theme, at, navigationActiveSlot, pick((i.selected || i.isOpen()) && !inert, 1.0, 0.0), i.motion)
 	var fill color.Color
 	if alpha := .5*on + (1-.5*on)*hover; alpha > 0 {
 		fill = fade(t.Muted, alpha)
@@ -310,7 +311,7 @@ func (i *NavigationMenuItemWidget) HandleKey(e ggui.KeyEvent) {
 	if i.owner != nil && e.Kind == ggui.KeyPress {
 		n := i.owner
 		cur := slices.Index(n.items, i)
-		if next, ok := navTarget(directionalKey(e, n.rtl).Key, navHorizontal, cur, len(n.items)); ok {
+		if next, ok := navTarget(controlkit.DirectionalKey(e, n.rtl).Key, navHorizontal, cur, len(n.items)); ok {
 			next = max(0, min(next, len(n.items)-1))
 			direction := 1
 			if next < cur {
@@ -814,7 +815,7 @@ func (f *navigationMenuFace) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	// The chevron turns over as the dropdown opens, a pixel below center as
 	// shadcn's top-px sets it.
-	turn := ease(dst, i.theme, i.Anchor(r), navigationTurnSlot, pick(i.isOpen(), math.Pi, 0.0), f.env.Motion(navigationMenuTurn))
+	turn := controlkit.Ease(dst, i.theme, i.Anchor(r), navigationTurnSlot, pick(i.isOpen(), math.Pi, 0.0), f.env.Motion(navigationMenuTurn))
 	cx := pick(f.env.Direction() == ggui.DirRTL, r.Origin.X+navigationMenuChevron/2, r.Origin.X+r.Size.W-navigationMenuChevron/2)
-	paintIconAt(dst, f.env, icons.ChevronDown, ggui.Pt(cx, r.Center().Y+1), navigationMenuChevron, col, turn)
+	controlkit.PaintIconAt(dst, f.env, controlkit.IconMark{Role: icons.ChevronDown, Center: ggui.Pt(cx, r.Center().Y+1), Size: navigationMenuChevron, Color: col, Rotation: turn})
 }

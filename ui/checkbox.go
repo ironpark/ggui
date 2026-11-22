@@ -4,6 +4,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -87,7 +88,7 @@ func (c *CheckboxWidget) Describe() ggui.Node {
 // Layout implements Widget.
 func (c *CheckboxWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
-	return c.layout(cs, env, squareGlyph(uitheme.Of(env)))
+	return c.layout(cs, env, controlkit.SquareGlyph(uitheme.Of(env)))
 }
 
 // checkSlot eases a checkbox's fill between unticked and ticked.
@@ -103,7 +104,7 @@ func (c *CheckboxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	invalid := c.invalidAmount(dst, box)
 	// The surface and the border ease to Primary as shadcn's
 	// transition-colors does; the mark itself appears at once.
-	k := ease(dst, c.theme, c.Anchor(box), checkSlot, pick(on || mixed, 1.0, 0.0), c.motion)
+	k := controlkit.Ease(dst, c.theme, c.Anchor(box), checkSlot, pick(on || mixed, 1.0, 0.0), c.motion)
 	fill := mix(t.Input, t.Primary, k)
 	border := mix(mix(t.InputBorder, invalidBorder(t), invalid), t.Primary, k)
 	mark := t.PrimaryFg
@@ -113,7 +114,7 @@ func (c *CheckboxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.FillRoundRect(box, radius, fill)
 	dst.StrokeRoundRect(box, radius, t.BorderWidth, border)
 	if on || mixed {
-		paintIconAt(dst, c.env, pick(mixed, icons.Minus, icons.Check), box.Center(), t.ControlSize*.875, mark, 0)
+		controlkit.PaintIconAt(dst, c.env, controlkit.IconMark{Role: pick(mixed, icons.Minus, icons.Check), Center: box.Center(), Size: t.ControlSize * .875, Color: mark})
 	}
 	c.stateRing(dst, box, radius, invalid)
 }

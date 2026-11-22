@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -138,7 +139,7 @@ func (c *FieldCardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 func (c *FieldCardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := c.theme
 	inert := c.disabled()
-	dark := isDark(t.Bg)
+	dark := controlkit.IsDark(t.Bg)
 	// The control is painted inside the card's region, so the card is
 	// hovered while the pointer is over it too.
 	hovered := c.Hovered
@@ -154,7 +155,7 @@ func (c *FieldCardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	if focused {
 		border = t.Ring
-		haloStroke(dst, r, t.Radius, t.Halo(t.Ring))
+		controlkit.HaloStroke(dst, r, t.Radius, t.Halo(t.Ring))
 	}
 	if fill != nil {
 		dst.FillRoundRect(r, t.Radius, fill)

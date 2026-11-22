@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -219,7 +220,7 @@ func (r *ResizableWidget) HandleKey(ev ggui.KeyEvent) {
 	if ev.Mods.Shift {
 		step = .1
 	}
-	ev = directionalKey(ev, r.mirrored())
+	ev = controlkit.DirectionalKey(ev, r.mirrored())
 	switch ev.Key {
 	case ggui.KeyHome:
 		r.set(r.lo)

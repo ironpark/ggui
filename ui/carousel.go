@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -695,7 +696,7 @@ func (b *CarouselNavigationWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 	b.Hit(d, r, b, ggui.CursorShapeDefault)
 	t, st := b.theme, b.style
 	fill, col, border := st.Fill, st.Label, st.Border
-	hover := ease(d, b.theme, ggui.Anchor{Rect: r, ID: b.HitID()}, carouselHoverSlot, pick(b.Hovered && !b.IsInert(), 1.0, 0.0), b.motion)
+	hover := controlkit.Ease(d, b.theme, ggui.Anchor{Rect: r, ID: b.HitID()}, carouselHoverSlot, pick(b.Hovered && !b.IsInert(), 1.0, 0.0), b.motion)
 	// An outline Button to shadcn, which sets a pressed one a pixel lower.
 	if b.Pressed && b.Hovered && !b.IsInert() {
 		r.Origin.Y++
@@ -720,7 +721,7 @@ func (b *CarouselNavigationWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 	} else if b.carousel.rtl {
 		angle = math.Pi
 	}
-	paintIconAt(d, b.env, role, r.Center(), t.IconSize, col, angle)
+	controlkit.PaintIconAt(d, b.env, controlkit.IconMark{Role: role, Center: r.Center(), Size: t.IconSize, Color: col, Rotation: angle})
 	FocusRing(d, &b.Interactive, Ring{Theme: t, Rect: r, Radius: min(r.Size.W, r.Size.H) / 2, Color: t.Ring, Motion: b.motion})
 }
 func (b *CarouselNavigationWidget) HandlePointer(e ggui.PointerEvent) bool {

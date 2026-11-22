@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -72,7 +73,7 @@ func (r *RadioWidget[T]) Describe() ggui.Node {
 
 // Layout implements Widget.
 func (r *RadioWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	return r.layout(c, env, squareGlyph(uitheme.Of(env)))
+	return r.layout(c, env, controlkit.SquareGlyph(uitheme.Of(env)))
 }
 
 // Paint implements Widget.
@@ -124,7 +125,7 @@ func (r *RadioWidget[T]) ConsumesKey(ev ggui.KeyEvent) bool {
 func (r *RadioWidget[T]) HandleKey(ev ggui.KeyEvent) {
 	r.toggle.HandleKey(ev)
 	if r.group != nil && !r.IsInert() && r.ConsumesKey(ev) && !ggui.Activates(ev) {
-		r.group.move(r, directionalKey(ev, r.env.Direction() == ggui.DirRTL))
+		r.group.move(r, controlkit.DirectionalKey(ev, r.env.Direction() == ggui.DirRTL))
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -325,7 +326,7 @@ var codeActionsSlot = ggui.NewSlot[*ggui.Motion]("code block actions")
 // Paint implements Widget.
 func (c *CodeBlockWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := c.theme
-	dark := isDark(t.Bg)
+	dark := controlkit.IsDark(t.Bg)
 	if c.copied {
 		// The check turns back into the copy icon by itself.
 		if until := c.copiedAt.Add(codeCopiedFor); ggui.FrameTime().Before(until) {
@@ -338,7 +339,7 @@ func (c *CodeBlockWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	shown := 1.0
 	if c.copyButton && !c.hasHeader {
 		p, ok := dst.Pointer()
-		shown = ease(dst, c.theme, c.Anchor(r), codeActionsSlot, pick(ok && r.Contains(p) || dst.FocusWithin(r), 1.0, 0.0), c.motion)
+		shown = controlkit.Ease(dst, c.theme, c.Anchor(r), codeActionsSlot, pick(ok && r.Contains(p) || dst.FocusWithin(r), 1.0, 0.0), c.motion)
 	}
 	border := t.InputBorder
 	if c.destructive {
@@ -410,7 +411,7 @@ func (c *CodeBlockWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	focused := c.Focused && c.FocusVisible && !c.IsInert()
 	outer.StrokeRoundRect(r, t.Radius, t.BorderWidth, pick(focused && !c.destructive, t.Ring, border))
 	if focused {
-		fieldHalo(outer, t, r, t.Radius, pick(c.destructive, destructiveRing(t), t.Ring))
+		controlkit.FieldHalo(outer, t, r, t.Radius, pick(c.destructive, destructiveRing(t), t.Ring))
 	}
 }
 

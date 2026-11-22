@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -310,7 +311,7 @@ func (a *AttachmentWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	fill, border := t.Card, t.Border
 	if a.trigger != nil {
 		// transition-colors: the hover surface eases in and out.
-		hover := ease(dst, a.theme, a.trigger.Anchor(r), attachmentHoverSlot, pick(a.trigger.Hovered, 1.0, 0.0), a.motion)
+		hover := controlkit.Ease(dst, a.theme, a.trigger.Anchor(r), attachmentHoverSlot, pick(a.trigger.Hovered, 1.0, 0.0), a.motion)
 		fill = mix(fill, fade(t.Muted, .5), hover)
 	}
 	if state == AttachmentError {

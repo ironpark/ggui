@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -334,7 +335,7 @@ func (m *MenuWidget) navigate(ev ggui.KeyEvent) bool {
 
 // jumpFirst puts the highlight on the first enabled item from the top.
 func (m *MenuWidget) jumpFirst() {
-	m.current, m.pointed = stepIndex(-1, 1, len(m.items), m.enabled), false
+	m.current, m.pointed = controlkit.StepIndex(-1, 1, len(m.items), m.enabled), false
 }
 
 // reopen refreshes the items and, when first is set, highlights the first
@@ -618,7 +619,7 @@ type MenuItemWidget struct {
 	shortcut     *widget.TextWidget
 	shortcutSize ggui.Size
 	onHover      func()
-	motion       pointerMotion
+	motion       controlkit.PointerMotion
 
 	icon        ggui.Widget
 	iconSize    ggui.Size
@@ -1108,7 +1109,7 @@ func (it *MenuItemWidget) paintRow(dst *ggui.Canvas, r ggui.Rect) {
 			radius := t.RadiusSm
 			switch {
 			case it.destructive:
-				fill = fade(t.Destructive, pick(isDark(t.Bg), .2, .1))
+				fill = fade(t.Destructive, pick(controlkit.IsDark(t.Bg), .2, .1))
 			case it.style == commandStyle:
 				fill, radius = t.Muted, t.Radius*.6
 			}
@@ -1129,10 +1130,10 @@ func (it *MenuItemWidget) paintRow(dst *ggui.Canvas, r ggui.Rect) {
 		if it.menu != nil && it.menu.checkLeft {
 			x = r.Origin.X + t.ItemPad.Left + t.IconSize/2
 		}
-		paintIconAt(dst, it.env, icons.Check, ggui.Pt(x, r.Origin.Y+r.Size.H/2), t.IconSize, ink, 0)
+		controlkit.PaintIconAt(dst, it.env, controlkit.IconMark{Role: icons.Check, Center: ggui.Pt(x, r.Origin.Y+r.Size.H/2), Size: t.IconSize, Color: ink})
 	}
 	if it.sub != nil {
-		paintIconAt(dst, it.env, icons.ChevronRight, ggui.Pt(right-t.IconSize/2, r.Origin.Y+r.Size.H/2), t.IconSize, ink, 0)
+		controlkit.PaintIconAt(dst, it.env, controlkit.IconMark{Role: icons.ChevronRight, Center: ggui.Pt(right-t.IconSize/2, r.Origin.Y+r.Size.H/2), Size: t.IconSize, Color: ink})
 		right -= t.IconSize + menuGap(t)
 	}
 	if it.shortcut != nil {
@@ -1151,7 +1152,7 @@ func (it *MenuItemWidget) paintRow(dst *ggui.Canvas, r ggui.Rect) {
 
 // HandlePointer implements PointerHandler.
 func (it *MenuItemWidget) HandlePointer(ev ggui.PointerEvent) bool {
-	if ev.Kind == ggui.PointerMove && it.motion.moved(ev.Pos) && !it.IsInert() && it.onHover != nil {
+	if ev.Kind == ggui.PointerMove && it.motion.Moved(ev.Pos) && !it.IsInert() && it.onHover != nil {
 		it.onHover()
 	}
 	if ev.Kind == ggui.PointerExit && it.menu != nil {

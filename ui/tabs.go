@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -145,7 +146,7 @@ func (t *TabsWidget) focusIndex() int {
 	if t.enabled(t.index()) {
 		return t.index()
 	}
-	return stepIndex(-1, 1, len(t.tabs), t.enabled)
+	return controlkit.StepIndex(-1, 1, len(t.tabs), t.enabled)
 }
 
 // Disabled greys the strip out and ignores input while v is true; the
@@ -254,7 +255,7 @@ func (t *TabsWidget) labelColor(i int, k float64) color.Color {
 	th := t.theme
 	fg := th.Fg
 	if k < 1 {
-		rest := pick(isDark(th.Bg), th.MutedFg, fade(th.Fg, .6))
+		rest := pick(controlkit.IsDark(th.Bg), th.MutedFg, fade(th.Fg, .6))
 		fg = rest
 		if k > 0 {
 			fg = mix(rest, th.Fg, k)
@@ -299,11 +300,11 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 	// slides between them.
 	t.shown = t.shown[:0]
 	for i := range t.labelRect {
-		t.shown = append(t.shown, ease(dst, t.theme, ggui.Anchor{Rect: header, ID: i}, tabShownSlot, pick(i == cur, 1.0, 0.0), t.motion))
+		t.shown = append(t.shown, controlkit.Ease(dst, t.theme, ggui.Anchor{Rect: header, ID: i}, tabShownSlot, pick(i == cur, 1.0, 0.0), t.motion))
 	}
 	if !t.line {
 		dst.FillRoundRect(strip, th.Radius, th.Muted)
-		dark := isDark(th.Bg)
+		dark := controlkit.IsDark(th.Bg)
 		for i, lr := range t.labelRect {
 			k := t.shown[i]
 			if k <= 0 {
@@ -329,7 +330,7 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 		if label := t.labels[i]; label != nil {
 			over := i == t.hover && i != cur && !t.IsInert() && t.enabled(i)
-			hover := ease(dst, t.theme, ggui.Anchor{Rect: header, ID: i}, tabHoverSlot, pick(over, 1.0, 0.0), t.motion)
+			hover := controlkit.Ease(dst, t.theme, ggui.Anchor{Rect: header, ID: i}, tabHoverSlot, pick(over, 1.0, 0.0), t.motion)
 			label.Color(t.labelColor(i, max(hover, t.shown[i])))
 		}
 		dst.Paint(t.heads[i], lr)
@@ -382,7 +383,7 @@ func (t *TabsWidget) HandleKey(ev ggui.KeyEvent) {
 		return
 	}
 	axis := pick(t.vertical, navVertical, navBoth)
-	if i, ok := navIndex(directionalKey(ev, t.rtl && !t.vertical), axis, t.focusIndex(), len(t.tabs), t.enabled); ok {
+	if i, ok := navIndex(controlkit.DirectionalKey(ev, t.rtl && !t.vertical), axis, t.focusIndex(), len(t.tabs), t.enabled); ok {
 		t.active = i
 		t.focusPending = true
 		if t.activateOnFocus {

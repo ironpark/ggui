@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -185,7 +186,7 @@ func tintOf(base, c color.Color, target float64) color.Color {
 // colors returns the variant's surface at rest, its text and its border.
 func (b *BubbleWidget) colors() (fill, fg, border color.Color) {
 	t := b.theme
-	dark := isDark(t.Bg)
+	dark := controlkit.IsDark(t.Bg)
 	switch b.variant {
 	case "secondary":
 		return t.Secondary, t.SecondaryFg, nil
@@ -207,7 +208,7 @@ func (b *BubbleWidget) colors() (fill, fg, border color.Color) {
 // an action.
 func (b *BubbleWidget) hoverFill() color.Color {
 	t := b.theme
-	dark := isDark(t.Bg)
+	dark := controlkit.IsDark(t.Bg)
 	switch b.variant {
 	case "secondary":
 		return mix(t.Secondary, t.Fg, .05)
@@ -270,7 +271,7 @@ func (b *BubbleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	fill, fg, border := b.colors()
 	if b.action != nil {
 		// Each variant has its own surface under the pointer, eased into.
-		hover := ease(dst, b.theme, b.Anchor(body), bubbleHoverSlot, pick(b.Hovered && !b.IsInert(), 1.0, 0.0), b.motion)
+		hover := controlkit.Ease(dst, b.theme, b.Anchor(body), bubbleHoverSlot, pick(b.Hovered && !b.IsInert(), 1.0, 0.0), b.motion)
 		if hover > 0 {
 			if over := b.hoverFill(); fill == nil {
 				fill = fade(over, hover)

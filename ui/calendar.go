@@ -10,6 +10,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -447,7 +448,7 @@ func (f *calendarCaptionFace) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	textRect := mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+t.Space/4, r.Origin.Y+(r.Size.H-f.size.H)/2), f.size), r, rtl)
 	dst.Paint(f.text, textRect)
 	chevRect := mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-calendarCaptionChevron, r.Origin.Y+(r.Size.H-calendarCaptionChevron)/2), ggui.Sz(calendarCaptionChevron, calendarCaptionChevron)), r, rtl)
-	paintIconAt(dst, f.env, icons.ChevronDown, chevRect.Center(), calendarCaptionChevron, pick(f.owner.IsInert(), t.Disabled(t.MutedFg), t.MutedFg), 0)
+	controlkit.PaintIconAt(dst, f.env, controlkit.IconMark{Role: icons.ChevronDown, Center: chevRect.Center(), Size: calendarCaptionChevron, Color: pick(f.owner.IsInert(), t.Disabled(t.MutedFg), t.MutedFg)})
 }
 
 // calendarCaptionChevron is the side of a caption dropdown's chevron.
@@ -532,7 +533,7 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 
 	cell := ggui.Loose(ggui.Sz(m.column, m.cell))
 	disabled := fade(t.MutedFg, .5)
-	c.hover = pick[color.Color](isDark(t.Bg), fade(t.Muted, .5), t.Muted)
+	c.hover = pick[color.Color](controlkit.IsDark(t.Bg), fade(t.Muted, .5), t.Muted)
 	c.motion = env.Motion(t.MotionFast)
 	end := c.first.AddDate(0, c.count, 0)
 	m.weekday = 0
@@ -701,7 +702,7 @@ func (c *CalendarWidget) HandleKey(e ggui.KeyEvent) {
 		return
 	}
 	c.syncDate()
-	e = directionalKey(e, c.env.Direction() == ggui.DirRTL)
+	e = controlkit.DirectionalKey(e, c.env.Direction() == ggui.DirRTL)
 	days := func(n int) func(time.Time) time.Time {
 		return func(d time.Time) time.Time { return d.AddDate(0, 0, n) }
 	}
@@ -810,7 +811,7 @@ func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.HitPointer(r, d)
 		dst.HitCursor(r, ggui.CursorShapePointer)
 	}
-	hover := ease(dst, c.theme, d.Anchor(r), calendarDayHoverSlot, pick(d.Hovered && !d.IsInert(), 1.0, 0.0), c.motion)
+	hover := controlkit.Ease(dst, c.theme, d.Anchor(r), calendarDayHoverSlot, pick(d.Hovered && !d.IsInert(), 1.0, 0.0), c.motion)
 	if d.Pressed && d.Hovered && !d.IsInert() {
 		r.Origin.Y++
 	}

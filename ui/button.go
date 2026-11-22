@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -35,7 +36,7 @@ var (
 	// ButtonOutline is a border around the page's background.
 	ButtonOutline = NewVariant("outline", func(t *uitheme.Theme) ButtonStyle {
 		fill, hover, border := t.Bg, t.Muted, t.Border
-		if isDark(t.Bg) {
+		if controlkit.IsDark(t.Bg) {
 			fill, hover, border = fade(t.InputBorder, .3), fade(t.InputBorder, .5), t.InputBorder
 		}
 		return ButtonStyle{Fill: fill, Hover: hover, Label: t.Fg, HoverLabel: t.Fg, Border: border}
@@ -47,7 +48,7 @@ var (
 	// ButtonGhost has no surface until the pointer is over it.
 	ButtonGhost = NewVariant("ghost", func(t *uitheme.Theme) ButtonStyle {
 		hover := t.Muted
-		if isDark(t.Bg) {
+		if controlkit.IsDark(t.Bg) {
 			hover = fade(hover, .5)
 		}
 		return ButtonStyle{Hover: hover, Label: t.Fg, HoverLabel: t.Fg}
@@ -56,7 +57,7 @@ var (
 	// toned down on a dark page as shadcn does.
 	ButtonDestructive = NewVariant("destructive", func(t *uitheme.Theme) ButtonStyle {
 		opacity := .1
-		if isDark(t.Bg) {
+		if controlkit.IsDark(t.Bg) {
 			opacity = .2
 		}
 		return ButtonStyle{Fill: fade(t.Destructive, opacity), Hover: fade(t.Destructive, opacity+.1), Label: t.Destructive, Ring: destructiveRing(t), FocusBorder: fade(t.Destructive, .4)}
@@ -464,11 +465,11 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// keeps its resting surface, as shadcn's aria-expanded:bg-secondary does.
 	expanded := b.expands != nil && b.expands() && (b.variant == ButtonOutline || b.variant == ButtonGhost)
 	anchor := b.Anchor(r)
-	hover := ease(dst, b.theme, anchor, buttonHoverSlot, pick((b.Hovered || expanded) && !inert, 1.0, 0.0), b.motion)
+	hover := controlkit.Ease(dst, b.theme, anchor, buttonHoverSlot, pick((b.Hovered || expanded) && !inert, 1.0, 0.0), b.motion)
 	if hover >= 1 {
 		fill = st.Hover
 	} else if hover > 0 {
-		fill = mix(colorOr(fill, color.Transparent), colorOr(st.Hover, color.Transparent), hover)
+		fill = mix(controlkit.ColorOr(fill, color.Transparent), controlkit.ColorOr(st.Hover, color.Transparent), hover)
 	}
 	if st.HoverLabel != nil && hover > 0 {
 		label = mix(label, st.HoverLabel, hover)
@@ -492,13 +493,13 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// A button has a transparent border to color; a toggle has one only
 	// in its outline variant, and no ring until it is focused.
 	isInvalid := b.invalidProp.Get()
-	invalid := ease(dst, b.theme, anchor, buttonInvalidSlot, pick(isInvalid, 1.0, 0.0), b.motion)
+	invalid := controlkit.Ease(dst, b.theme, anchor, buttonInvalidSlot, pick(isInvalid, 1.0, 0.0), b.motion)
 	if invalid > 0 && (!toggle || border != nil) {
 		line := pick(toggle, t.Destructive, invalidBorder(t))
 		if inert {
 			line = t.Disabled(line)
 		}
-		border = mix(colorOr(border, fade(line, 0)), line, invalid)
+		border = mix(controlkit.ColorOr(border, fade(line, 0)), line, invalid)
 	}
 
 	b.Hit(dst, r, b, pick(b.variant == ButtonLink, ggui.CursorShapePointer, ggui.CursorShapeDefault))
@@ -518,7 +519,7 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		if halo := fade(destructiveRing(t), invalid); sides.Any() {
 			joinedFocusRing(dst, t, r, radius, sides, border, halo)
 		} else {
-			haloStroke(dst, r, radius, t.Halo(halo))
+			controlkit.HaloStroke(dst, r, radius, t.Halo(halo))
 		}
 	}
 	if sides.Any() {
@@ -549,14 +550,14 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// the group draws it, over the children, and the one easing out around
 	// the button that lost the focus beside the one coming in.
 	focused := b.Focused && b.FocusVisible && !inert
-	if k := ease(dst, b.theme, anchor, focusRingSlot, pick(focused, 1.0, 0.0), b.motion); k > 0 {
-		ring := colorOr(st.Ring, t.Ring)
-		line := colorOr(st.FocusBorder, ring)
+	if k := controlkit.Ease(dst, b.theme, anchor, focusRingSlot, pick(focused, 1.0, 0.0), b.motion); k > 0 {
+		ring := controlkit.ColorOr(st.Ring, t.Ring)
+		line := controlkit.ColorOr(st.FocusBorder, ring)
 		// An invalid control keeps its destructive border and ring while
 		// focused: aria-invalid sorts after focus-visible. The button
 		// already wears that ring, and the toggle puts it on here.
 		if isInvalid {
-			ring, line = destructiveRing(t), colorOr(border, t.Destructive)
+			ring, line = destructiveRing(t), controlkit.ColorOr(border, t.Destructive)
 		}
 		if !isInvalid || toggle {
 			joinedFocusRing(dst, t, r, radius, sides, fade(line, k), fade(ring, k))

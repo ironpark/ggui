@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -207,7 +208,7 @@ func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// pointer elsewhere on the track leaves it alone.
 	over := s.Hovered && (g.thumbReach(f, t.Space).Contains(s.pointer) || g.knobReach(f, t.Space).Contains(s.pointer))
 	active := !inert && (over || s.Pressed || (s.Focused && s.FocusVisible))
-	g.paintThumb(dst, t, f, inert, ease(dst, s.theme, s.Anchor(r), sliderHaloSlot, pick(active, 1.0, 0.0), s.motion))
+	g.paintThumb(dst, t, f, inert, controlkit.Ease(dst, s.theme, s.Anchor(r), sliderHaloSlot, pick(active, 1.0, 0.0), s.motion))
 }
 
 // sliderHaloSlot eases the halo of a slider's thumb.
@@ -224,7 +225,7 @@ func (s *SliderWidget) HandleKey(ev ggui.KeyEvent) {
 	if ev.Mods.Shift || ev.Key == ggui.KeyPageUp || ev.Key == ggui.KeyPageDown {
 		step = s.largeStep
 	}
-	ev = directionalKey(ev, s.rtl && !s.vertical)
+	ev = controlkit.DirectionalKey(ev, s.rtl && !s.vertical)
 	switch ev.Key {
 	case ggui.KeyHome:
 		s.set(s.min)
@@ -359,7 +360,7 @@ func (g sliderGeometry) track(from, to float64) ggui.Rect {
 func (g sliderGeometry) paintThumb(dst *ggui.Canvas, t *uitheme.Theme, f float64, inert bool, halo float64) {
 	center, radius := g.point(f), g.knob
 	if halo > 0 && !inert {
-		haloStroke(dst, ggui.Rct(center.Add(ggui.Pt(-radius, -radius)), ggui.Sz(2*radius, 2*radius)), radius, fade(t.Halo(t.Ring), halo))
+		controlkit.HaloStroke(dst, ggui.Rct(center.Add(ggui.Pt(-radius, -radius)), ggui.Sz(2*radius, 2*radius)), radius, fade(t.Halo(t.Ring), halo))
 	}
 	ring, face := t.Ring, color.Color(color.White)
 	if inert {

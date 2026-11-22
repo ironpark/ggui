@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -229,7 +230,7 @@ func (c *Widget) paintTooltipContent(dst *ggui.Canvas, r ggui.Rect, index int, r
 	}
 	t := c.theme
 	// shadcn's rounded-lg border-border/50 bg-background shadow-xl.
-	paintShadows(dst, r, t.Radius, t.PanelShadow, t.PanelContact)
+	controlkit.PaintShadows(dst, r, t.Radius, t.PanelShadow, t.PanelContact)
 	dst.FillRoundRect(r, t.Radius, t.Bg)
 	dst.StrokeRoundRect(r, t.Radius, t.BorderWidth, fade(t.Border, .5))
 	left, right := r.Origin.X+chartTipPadX, r.Origin.X+r.Size.W-chartTipPadX
