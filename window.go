@@ -233,28 +233,7 @@ func (w *Window) handle(ev ggwd.Event) error {
 	case ggwd.FrameEvent:
 		return w.runFrameEvent(ev)
 	case ggwd.KeyEvent:
-		w.keyboard.SyncMods(ev.Modifiers)
-		w.keyboard.Set(ev.Key, ev.Pressed)
-		if ev.Pressed {
-			// The modifiers of this press, from the held keys and from the
-			// event itself, which sees a modifier the OS never reported as a
-			// key. Presses within one frame share the union, so a chord is
-			// not lost when its modifier was released before the frame ran.
-			m := w.keyboard.Mods().Or(ev.Modifiers)
-			w.pending.mods = w.pending.mods.Or(m)
-			if w.cfg.Inspector != "" && (KeyEvent{Kind: KeyPress, Key: ev.Key, Mods: m}).Is(w.inspectChord) {
-				// The inspector's chord is the inspector's: the focused
-				// widget sees neither the press nor its repeats.
-				if !ev.Repeat {
-					w.Inspector(!w.inspect)
-				}
-			} else {
-				w.pending.keys = append(w.pending.keys, ev.Key)
-			}
-		} else {
-			w.pending.released = append(w.pending.released, ev.Key)
-		}
-		w.markDirty(dirtyEvent)
+		w.onKeyEvent(ev)
 	case ggwd.CompositionEvent:
 		textinput.HandleEvent(ev)
 		w.markDirty(dirtyEvent)
@@ -264,64 +243,128 @@ func (w *Window) handle(ev ggwd.Event) error {
 		}
 		w.markDirty(dirtyEvent)
 	case ggwd.MouseMoveEvent:
-		w.pos = Pt(ev.X, ev.Y)
-		if f := w.canvas.fs(); f.pointerRead && f.pointerLost {
-			w.markDirty(dirtyEvent)
-		} else {
-			// What the move reaches is painted again, as hovering it
-			// enters or leaves a region (see deliver), and so are the
-			// widgets that read where the pointer is (see frameOn).
-			w.wakeFrame()
-		}
+		w.onMouseMoveEvent(ev)
 	case ggwd.MouseButtonEvent:
-		w.pos = Pt(ev.X, ev.Y)
-		// A modifier pressed while another window had the focus reached
-		// no KeyEvent here; the click still sees it.
-		w.keyboard.SyncMods(ev.Modifiers)
-		w.pending.mods = w.pending.mods.Or(ev.Modifiers)
-		if ev.Pressed {
-			w.pending.down = append(w.pending.down, ev.Button)
-		} else {
-			w.pending.up = append(w.pending.up, ev.Button)
-		}
-		w.markDirty(dirtyEvent)
+		w.onMouseButtonEvent(ev)
 	case ggwd.ScrollEvent:
-		w.keyboard.SyncMods(ev.Modifiers)
-		w.pending.mods = w.pending.mods.Or(ev.Modifiers)
-		if ev.Precise {
-			// A trackpad's points, as the logical pixels they move.
-			w.pending.wheelPx = w.pending.wheelPx.Add(Pt(ev.X*ggwd.PreciseLine, ev.Y*ggwd.PreciseLine))
-		} else {
-			// A wheel's notches, and how far the platform scrolls for them.
-			w.pending.wheel = w.pending.wheel.Add(Pt(ev.X, ev.Y))
-			w.pending.wheelBy = w.pending.wheelBy.Add(Pt(ev.X*ev.Line, ev.Y*ev.Line))
-		}
-		w.pending.phase = laterPhase(w.pending.phase, ev.Phase)
-		// The wheel is a pointer event: what it reaches is painted again
-		// (see deliver), and what it scrolls through a signal or a layout
-		// marks the frame whole by itself.
-		w.wakeFrame()
+		w.onScrollEvent(ev)
 	case ggwd.TouchEvent:
-		if w.touches == nil {
-			w.touches = map[ggwd.TouchID]Point{}
-		}
-		if ev.Phase == ggwd.TouchPhaseEnded {
-			delete(w.touches, ev.ID)
-		} else {
-			w.touches[ev.ID] = Pt(ev.X, ev.Y)
-		}
-		w.markDirty(dirtyEvent)
+		w.onTouchEvent(ev)
 	case ggwd.DragEvent:
-		switch ev.Phase {
-		case ggwd.DragEntered, ggwd.DragMoved:
-			w.dragOver, w.dragAt = true, Pt(ev.X, ev.Y)
-		case ggwd.DragExited, ggwd.DragEnded:
-			w.dragOver = false
-		}
-		w.markDirty(dirtyEvent)
+		w.onDragEvent(ev)
 	case ggwd.DropEvent:
 		w.pending.drop = append(w.pending.drop, droppedFiles(ev.Files)...)
 		w.markDirty(dirtyEvent)
+	case ggwd.CloseEvent, ggwd.FocusEvent, ggwd.WindowStateEvent, ggwd.MoveEvent, ggwd.ResizeEvent:
+		w.onWindowEvent(ev)
+	}
+	return nil
+}
+
+// onKeyEvent notes a key going down or up for the next frame, and turns
+// the inspector on or off at its chord.
+func (w *Window) onKeyEvent(ev ggwd.KeyEvent) {
+	w.keyboard.SyncMods(ev.Modifiers)
+	w.keyboard.Set(ev.Key, ev.Pressed)
+	if ev.Pressed {
+		// The modifiers of this press, from the held keys and from the
+		// event itself, which sees a modifier the OS never reported as a
+		// key. Presses within one frame share the union, so a chord is
+		// not lost when its modifier was released before the frame ran.
+		m := w.keyboard.Mods().Or(ev.Modifiers)
+		w.pending.mods = w.pending.mods.Or(m)
+		if w.cfg.Inspector != "" && (KeyEvent{Kind: KeyPress, Key: ev.Key, Mods: m}).Is(w.inspectChord) {
+			// The inspector's chord is the inspector's: the focused
+			// widget sees neither the press nor its repeats.
+			if !ev.Repeat {
+				w.Inspector(!w.inspect)
+			}
+		} else {
+			w.pending.keys = append(w.pending.keys, ev.Key)
+		}
+	} else {
+		w.pending.released = append(w.pending.released, ev.Key)
+	}
+	w.markDirty(dirtyEvent)
+}
+
+// onMouseMoveEvent notes where the pointer is and asks for the frame that
+// shows what it reaches.
+func (w *Window) onMouseMoveEvent(ev ggwd.MouseMoveEvent) {
+	w.pos = Pt(ev.X, ev.Y)
+	if f := w.canvas.fs(); f.pointerRead && f.pointerLost {
+		w.markDirty(dirtyEvent)
+	} else {
+		// What the move reaches is painted again, as hovering it
+		// enters or leaves a region (see deliver), and so are the
+		// widgets that read where the pointer is (see frameOn).
+		w.wakeFrame()
+	}
+}
+
+// onMouseButtonEvent notes a button going down or up for the next frame.
+func (w *Window) onMouseButtonEvent(ev ggwd.MouseButtonEvent) {
+	w.pos = Pt(ev.X, ev.Y)
+	// A modifier pressed while another window had the focus reached
+	// no KeyEvent here; the click still sees it.
+	w.keyboard.SyncMods(ev.Modifiers)
+	w.pending.mods = w.pending.mods.Or(ev.Modifiers)
+	if ev.Pressed {
+		w.pending.down = append(w.pending.down, ev.Button)
+	} else {
+		w.pending.up = append(w.pending.up, ev.Button)
+	}
+	w.markDirty(dirtyEvent)
+}
+
+// onScrollEvent adds a wheel's or a trackpad's scroll to what the next
+// frame scrolls by.
+func (w *Window) onScrollEvent(ev ggwd.ScrollEvent) {
+	w.keyboard.SyncMods(ev.Modifiers)
+	w.pending.mods = w.pending.mods.Or(ev.Modifiers)
+	if ev.Precise {
+		// A trackpad's points, as the logical pixels they move.
+		w.pending.wheelPx = w.pending.wheelPx.Add(Pt(ev.X*ggwd.PreciseLine, ev.Y*ggwd.PreciseLine))
+	} else {
+		// A wheel's notches, and how far the platform scrolls for them.
+		w.pending.wheel = w.pending.wheel.Add(Pt(ev.X, ev.Y))
+		w.pending.wheelBy = w.pending.wheelBy.Add(Pt(ev.X*ev.Line, ev.Y*ev.Line))
+	}
+	w.pending.phase = laterPhase(w.pending.phase, ev.Phase)
+	// The wheel is a pointer event: what it reaches is painted again
+	// (see deliver), and what it scrolls through a signal or a layout
+	// marks the frame whole by itself.
+	w.wakeFrame()
+}
+
+// onTouchEvent keeps where each finger down is, and forgets one lifted.
+func (w *Window) onTouchEvent(ev ggwd.TouchEvent) {
+	if w.touches == nil {
+		w.touches = map[ggwd.TouchID]Point{}
+	}
+	if ev.Phase == ggwd.TouchPhaseEnded {
+		delete(w.touches, ev.ID)
+	} else {
+		w.touches[ev.ID] = Pt(ev.X, ev.Y)
+	}
+	w.markDirty(dirtyEvent)
+}
+
+// onDragEvent follows files dragged from the desktop over the window.
+func (w *Window) onDragEvent(ev ggwd.DragEvent) {
+	switch ev.Phase {
+	case ggwd.DragEntered, ggwd.DragMoved:
+		w.dragOver, w.dragAt = true, Pt(ev.X, ev.Y)
+	case ggwd.DragExited, ggwd.DragEnded:
+		w.dragOver = false
+	}
+	w.markDirty(dirtyEvent)
+}
+
+// onWindowEvent follows what happens to the native window itself: a
+// request to close it, its focus, its state and its placement.
+func (w *Window) onWindowEvent(ev ggwd.Event) {
+	switch ev := ev.(type) {
 	case ggwd.CloseEvent:
 		if len(w.closeRequests) > 0 {
 			// The handlers decide in a frame, where they may put up a
@@ -358,7 +401,6 @@ func (w *Window) handle(ev ggwd.Event) error {
 		// only the window can say for the same moment.
 		w.notePlacement()
 	}
-	return nil
 }
 
 // markDirty notes that something asked for the window to be painted whole,
@@ -613,42 +655,57 @@ func (w *Window) wantsFrame(f frameInput) bool {
 	// until the next input. The frame is painted whole unless every such
 	// request was held within a scroll's viewport, which is then noted as
 	// contained; see Invalidate.
-	relayout := w.root != nil && layoutGen() != w.laidGen
-	anim := wd.anims.active()
-	cb := len(w.frame) > 0
-	input := f.drag || w.touch.active || w.touch.waiting || w.input.touchMotion.target != nil
-	if relayout && (freeGen() != w.laidFree || len(w.frameLoop.contained) == 0) {
-		w.dirty.Or(uint32(dirtyLayout))
+	wants := frameWants{
+		relayout: w.root != nil && layoutGen() != w.laidGen,
+		anim:     wd.anims.active(),
+		callback: len(w.frame) > 0,
+		input:    f.drag || w.touch.active || w.touch.waiting || w.input.touchMotion.target != nil,
 	}
-	if anim {
-		w.dirty.Or(uint32(dirtyAnim))
-		wd.anims.noteDirtiers()
-	}
-	if cb {
-		w.dirty.Or(uint32(dirtyCallback))
-	}
-	if input {
-		w.dirty.Or(uint32(dirtyInput))
-	}
+	w.markWanted(wants, &wd.anims)
 	switch {
-	case relayout:
+	case wants.relayout:
 		framestats.For(framestats.Layout)
-	case anim:
+	case wants.anim:
 		framestats.For(framestats.Animation)
 	case wd.frame.timeRead():
 		// Only what read the time changes: the frame may be painted in
 		// part. What else changes by then marks it dirty itself.
 		framestats.For(framestats.Time)
-	case cb:
+	case wants.callback:
 		framestats.For(framestats.Callback)
 	case w.hasPosted():
 		framestats.For(framestats.Posted)
-	case input:
+	case wants.input:
 		framestats.For(framestats.Input)
 	default:
 		return false
 	}
 	return true
+}
+
+// frameWants is what, besides time read and posted work, wants the next
+// frame to run without waiting for input: a layout, an animation, work
+// run every frame, a touch or a drag in progress.
+type frameWants struct {
+	relayout, anim, callback, input bool
+}
+
+// markWanted marks the window dirty for each of wants, a layout only when
+// a request for it was not held within a scroll's viewport.
+func (w *Window) markWanted(wants frameWants, anims *animator) {
+	if wants.relayout && (freeGen() != w.laidFree || len(w.frameLoop.contained) == 0) {
+		w.dirty.Or(uint32(dirtyLayout))
+	}
+	if wants.anim {
+		w.dirty.Or(uint32(dirtyAnim))
+		anims.noteDirtiers()
+	}
+	if wants.callback {
+		w.dirty.Or(uint32(dirtyCallback))
+	}
+	if wants.input {
+		w.dirty.Or(uint32(dirtyInput))
+	}
 }
 
 // dispatchInput lets an existing app drag finish before the overlay can

@@ -61,25 +61,11 @@ func (w *Window) frameOn(screen *ggfx.Image, scale float64, kept bool, setDamage
 // pixels per logical pixel, so that a HiDPI monitor gets a sharp image while
 // widgets keep working in logical pixels.
 func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage func([]image.Rectangle)) {
-	dirtyBits := dirtyReason(w.dirty.Swap(0))
-	if scale > 0 {
-		if scale != w.canvas.scale {
-			dirtyBits |= dirtyScale
-			w.canvas.scale = scale
-		}
-	}
-	if w.canvas.fs().semOff && (w.performs.Load() > 0 || w.semWanted.Load() || w.ax.Listening()) {
-		dirtyBits |= dirtyOther
-	}
+	dirtyBits := w.takeDirty(scale)
 	asked := w.takeRepaints()
 	pointer := w.pointerAsked
 	w.pointerAsked = false
-	if kept && dirtyBits == 0 && len(asked) == 0 && len(w.motion) == 0 && !w.motionLost && len(w.frameLoop.contained) == 0 &&
-		!w.stateChanged() {
-		// Nothing changed: work was posted that wrote nothing, say. The
-		// screen keeps the last frame, and untouched, nothing is presented.
-		framestats.CountSkipped()
-		w.drew = FrameSkipped
+	if w.skipFrame(kept, dirtyBits, asked) {
 		return
 	}
 	target, kept := w.paintTarget(screen, kept)
@@ -97,6 +83,42 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 	} else if wanted && w.drawPartial(screen, target, kept, asked, pointer, setDamage) {
 		return
 	}
+	w.drawWhole(screen, target, within, setDamage)
+}
+
+// takeDirty takes what marked the window dirty since the last frame, a
+// change of scale and semantics someone now wants among it.
+func (w *Window) takeDirty(scale float64) dirtyReason {
+	dirtyBits := dirtyReason(w.dirty.Swap(0))
+	if scale > 0 {
+		if scale != w.canvas.scale {
+			dirtyBits |= dirtyScale
+			w.canvas.scale = scale
+		}
+	}
+	if w.canvas.fs().semOff && (w.performs.Load() > 0 || w.semWanted.Load() || w.ax.Listening()) {
+		dirtyBits |= dirtyOther
+	}
+	return dirtyBits
+}
+
+// skipFrame reports, counting the frame skipped, whether nothing changed
+// since the last frame, which the screen kept.
+func (w *Window) skipFrame(kept bool, dirtyBits dirtyReason, asked []Rect) bool {
+	if !kept || dirtyBits != 0 || len(asked) != 0 || len(w.motion) != 0 || w.motionLost || len(w.frameLoop.contained) != 0 ||
+		w.stateChanged() {
+		return false
+	}
+	// Nothing changed: work was posted that wrote nothing, say. The
+	// screen keeps the last frame, and untouched, nothing is presented.
+	framestats.CountSkipped()
+	w.drew = FrameSkipped
+	return true
+}
+
+// drawWhole paints the whole tree into target, or the part of it within
+// when that is not empty, and presents it on screen.
+func (w *Window) drawWhole(screen, target *ggfx.Image, within image.Rectangle, setDamage func([]image.Rectangle)) {
 	d := &w.drawing
 	*d = windowDraw{w: w, screen: screen, target: target, dst: target, setDamage: setDamage}
 	w.drew = FrameWhole
