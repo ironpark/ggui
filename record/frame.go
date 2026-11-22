@@ -328,9 +328,10 @@ func newFramer(l layout, title, subtitle string, o *settings) *framer {
 // windowCov returns how much of the pixel at (x, y) the window covers,
 // moved down dy pixels.
 func (f *framer) windowCov(x, y int, dy float64) float32 {
-	w := f.l.window
-	return roundRectCov(float64(x)+0.5, float64(y)+0.5,
-		float64(w.Min.X), float64(w.Min.Y)+dy, float64(w.Max.X), float64(w.Max.Y)+dy, f.l.radius)
+	w := boundsOf(f.l.window)
+	w.y0 += dy
+	w.y1 += dy
+	return roundRectCov(float64(x)+0.5, float64(y)+0.5, w, f.l.radius)
 }
 
 // drawUnder draws the backdrop and the shadow.
@@ -389,28 +390,49 @@ func (f *framer) draw(content *image.RGBA, bg color.Color, text ggui.TextStyle) 
 // drawBase draws all of the frame, in ch's colors, and works out the
 // pixels where it meets the content.
 func (f *framer) drawBase(ch chrome, text ggui.TextStyle) {
-	l := f.l
-	s := l.scale
 	base := image.NewRGBA(f.under.Rect)
 	copy(base.Pix, f.under.Pix)
-	w := l.window
+	f.drawBar(base, ch)
+	f.drawTitle(base, ch, text)
+	top := f.drawTrim(ch)
+	for i := 0; i < len(base.Pix); i += 4 {
+		over(base.Pix, i, top.Pix[i:i+4])
+	}
+	f.collectEdges(top)
+	f.base = base
+}
+
+// drawBar blends the window's bar, and the separator under it, into
+// base.
+func (f *framer) drawBar(base *image.RGBA, ch chrome) {
+	w := f.l.window
 	for y := w.Min.Y; y < w.Max.Y; y++ {
 		for x := w.Min.X; x < w.Max.X; x++ {
 			blend(base.Pix, base.PixOffset(x, y), ch.bar, f.windowCov(x, y, 0))
 		}
 	}
-	if l.separator {
-		y := l.content.Min.Y - 1
+	if f.l.separator {
+		y := f.l.content.Min.Y - 1
 		for x := w.Min.X; x < w.Max.X; x++ {
 			blend(base.Pix, base.PixOffset(x, y), ch.separator, f.windowCov(x, y, 0))
 		}
 	}
-	f.drawTitle(base, ch, text)
+}
 
-	// What is drawn over the content as well as the bar: the buttons,
-	// and the border.
-	top := image.NewRGBA(base.Rect)
-	centres, r := l.buttons()
+// drawTrim draws what lies over the content as well as the bar, the
+// buttons and the border, and returns it.
+func (f *framer) drawTrim(ch chrome) *image.RGBA {
+	l := f.l
+	s := l.scale
+	top := image.NewRGBA(f.under.Rect)
+	f.drawButtons(top, s)
+	f.drawBorder(top, ch, s)
+	return top
+}
+
+// drawButtons blends the window buttons into top.
+func (f *framer) drawButtons(top *image.RGBA, s float64) {
+	centres, r := f.l.buttons()
 	rim := macRim * s
 	for i, c := range centres {
 		b := image.Rect(int(c.x-r)-1, int(c.y-r)-1, int(c.x+r)+2, int(c.y+r)+2).Intersect(top.Rect)
@@ -423,15 +445,22 @@ func (f *framer) drawBase(ch chrome, text ggui.TextStyle) {
 			}
 		}
 	}
+}
+
+// drawBorder blends the window's border, and its highlight on a dark
+// frame, into top.
+func (f *framer) drawBorder(top *image.RGBA, ch chrome, s float64) {
+	w := f.l.window
 	bw := max(math.Round(s/2), 1)
+	win := boundsOf(w)
 	ring := func(x, y int, in float64) float32 {
 		px, py := float64(x)+0.5, float64(y)+0.5
-		a := roundRectCov(px, py, float64(w.Min.X)+in, float64(w.Min.Y)+in, float64(w.Max.X)-in, float64(w.Max.Y)-in, l.radius-in)
-		b := roundRectCov(px, py, float64(w.Min.X)+in+bw, float64(w.Min.Y)+in+bw, float64(w.Max.X)-in-bw, float64(w.Max.Y)-in-bw, l.radius-in-bw)
+		a := roundRectCov(px, py, win.inset(in), f.l.radius-in)
+		b := roundRectCov(px, py, win.inset(in+bw), f.l.radius-in-bw)
 		return max(a-b, 0)
 	}
 	// The border lies within a corner's reach of the window's edge.
-	reach := int(math.Ceil(max(l.radius, 2*bw))) + 2
+	reach := int(math.Ceil(max(f.l.radius, 2*bw))) + 2
 	for y := w.Min.Y; y < w.Max.Y; y++ {
 		for x := w.Min.X; x < w.Max.X; x++ {
 			if x >= w.Min.X+reach && x < w.Max.X-reach && y >= w.Min.Y+reach && y < w.Max.Y-reach {
@@ -444,13 +473,13 @@ func (f *framer) drawBase(ch chrome, text ggui.TextStyle) {
 			}
 		}
 	}
-	for i := 0; i < len(base.Pix); i += 4 {
-		over(base.Pix, i, top.Pix[i:i+4])
-	}
+}
 
-	// The content's pixels the frame changes.
+// collectEdges records the content's pixels the frame changes, where it
+// blends over what the content draws.
+func (f *framer) collectEdges(top *image.RGBA) {
 	f.edges = f.edges[:0]
-	c := l.content
+	c := f.l.content
 	for y := c.Min.Y; y < c.Max.Y; y++ {
 		for x := c.Min.X; x < c.Max.X; x++ {
 			m := f.windowCov(x, y, 0)
@@ -468,7 +497,6 @@ func (f *framer) drawBase(ch chrome, text ggui.TextStyle) {
 			f.edges = append(f.edges, e)
 		}
 	}
-	f.base = base
 }
 
 // drawTitle sets the title where the bar's style has it, in the theme's
