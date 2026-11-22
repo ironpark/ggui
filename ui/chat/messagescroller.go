@@ -1,4 +1,4 @@
-package ui
+package chat
 
 import (
 	"image/color"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
+	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
@@ -55,7 +56,7 @@ type TranscriptVisibility struct {
 type MessageScrollerWidget struct {
 	props property.Owner
 	ggui.Interactive
-	words                                                         *Strings // the Strings of the last layout
+	words                                                         *ui.Strings // the Strings of the last layout
 	source                                                        ggui.Readable[[]MessageEntry]
 	rows                                                          []MessageEntry
 	starts                                                        []float64
@@ -80,7 +81,7 @@ type MessageScrollerWidget struct {
 	restore                *TranscriptPosition
 	visibility             TranscriptVisibility
 	onVisibility           func(TranscriptVisibility)
-	startButton, endButton *ButtonWidget
+	startButton, endButton *ui.ButtonWidget
 	pause                  func()
 	// The scroll-to-edge buttons: their sizes, how far each has eased in,
 	// and how long easing in and out takes.
@@ -104,15 +105,15 @@ func MessageScroller(items ggui.Readable[[]MessageEntry]) *MessageScrollerWidget
 	s.AutoKey()
 	s.pause = s.Pause
 	s.paintRowsFn = s.paintRows
-	s.startButton = ButtonOf(&scrollEdgeGlyph{up: true}, func() { s.ScrollToStart() }).Variant(scrollEdgeButton).Size(ButtonIconSmall)
-	s.endButton = ButtonOf(&scrollEdgeGlyph{}, func() { s.ScrollToEnd() }).Variant(scrollEdgeButton).Size(ButtonIconSmall)
+	s.startButton = ui.ButtonOf(&scrollEdgeGlyph{up: true}, func() { s.ScrollToStart() }).Variant(scrollEdgeButton).Size(ui.ButtonIconSmall)
+	s.endButton = ui.ButtonOf(&scrollEdgeGlyph{}, func() { s.ScrollToEnd() }).Variant(scrollEdgeButton).Size(ui.ButtonIconSmall)
 	return s
 }
 
 // scrollEdgeButton is the look of a transcript's scroll-to-edge button: the
 // page's background inside a border, and the muted surface under the pointer.
-var scrollEdgeButton = NewVariant("message-scroller", func(t *uitheme.Theme) ButtonStyle {
-	return ButtonStyle{Fill: t.Bg, Hover: t.Muted, Label: t.Fg, HoverLabel: t.Fg, Border: t.Border}
+var scrollEdgeButton = ui.NewVariant("message-scroller", func(t *uitheme.Theme) ui.ButtonStyle {
+	return ui.ButtonStyle{Fill: t.Bg, Hover: t.Muted, Label: t.Fg, HoverLabel: t.Fg, Border: t.Border}
 })
 
 // The curves a scroll-to-edge button eases in and out along.
@@ -136,11 +137,21 @@ func (g *scrollEdgeGlyph) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 }
 
 func (g *scrollEdgeGlyph) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	paintIcon(dst, g.env, icons.ArrowDown, r, g.ink, pick(g.up, math.Pi, 0))
+	ui.PaintIcon(dst, g.env, icons.ArrowDown, r, g.ink, pick(g.up, math.Pi, 0))
 }
+
+// Key assigns this control an input identity. Configure it before mount.
+func (s *MessageScrollerWidget) Key(k any) *MessageScrollerWidget { s.Interactive.SetKey(k); return s }
 
 // Name names the transcript for assistive technology.
 func (s *MessageScrollerWidget) Name(v string) *MessageScrollerWidget { s.SetName(v); return s }
+
+// BindName follows a non-nil accessible-name reader.
+func (s *MessageScrollerWidget) BindName(r ggui.Readable[string]) *MessageScrollerWidget {
+	s.Interactive.BindName(r)
+	return s
+}
+
 func (s *MessageScrollerWidget) Height(v float64) *MessageScrollerWidget {
 	defer property.Watch(&s.props, &s.height)()
 	s.height = max(0, v)
@@ -281,7 +292,7 @@ func (s *MessageScrollerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Si
 	saved := s.Save()
 	oldRows := s.rows
 	s.theme, s.env, s.reduced = uitheme.Of(env), env, env.ReducedMotion()
-	s.words = stringsOf(env)
+	s.words = ui.StringsOf(env)
 	s.startButton.Name(s.words.ScrollToStart)
 	s.endButton.Name(s.words.ScrollToEnd)
 	t := s.theme
@@ -301,11 +312,11 @@ func (s *MessageScrollerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Si
 	lastOld := -1
 	for i, row := range rows {
 		if row.ID == "" || seen[row.ID] {
-			panic("ui.MessageScroller: message IDs must be nonempty and unique")
+			panic("chat.MessageScroller: message IDs must be nonempty and unique")
 		}
 		seen[row.ID] = true
 		if row.Content == nil {
-			panic("ui.MessageScroller: nil content")
+			panic("chat.MessageScroller: nil content")
 		}
 		if i > 0 {
 			s.total += gap
@@ -435,7 +446,7 @@ func (s *MessageScrollerWidget) paintRows(dst *ggui.Canvas) {
 // and out, twice as slowly, when the reader is back at the edge: fading,
 // shrinking a little and sliding its own height toward the edge, taking no
 // input on its way out.
-func (s *MessageScrollerWidget) paintEdgeButton(dst *ggui.Canvas, r ggui.Rect, b *ButtonWidget, shown *ggui.Motion, size ggui.Size, active bool, side float64) {
+func (s *MessageScrollerWidget) paintEdgeButton(dst *ggui.Canvas, r ggui.Rect, b *ui.ButtonWidget, shown *ggui.Motion, size ggui.Size, active bool, side float64) {
 	shown.Easing(pick(active, scrollButtonIn, scrollButtonOut))
 	v := shown.Toggle(active, ggui.FrameTime(), pick(active, s.buttonIn, s.buttonOut))
 	if v <= 0 {
@@ -459,7 +470,7 @@ func (s *MessageScrollerWidget) paintEdgeButton(dst *ggui.Canvas, r ggui.Rect, b
 }
 
 func (s *MessageScrollerWidget) name() string {
-	return pick(s.SemanticName() != "", s.SemanticName(), s.words.orDefault().ConversationName)
+	return pick(s.SemanticName() != "", s.SemanticName(), s.words.OrDefault().ConversationName)
 }
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.

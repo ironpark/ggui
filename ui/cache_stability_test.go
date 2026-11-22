@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/chat"
 	"github.com/ironpark/ggui/widget"
 )
 
@@ -32,7 +33,7 @@ func TestControlsLeaveACachedParentHeld(t *testing.T) {
 		"Popover":             ui.Popover("p", widget.Text("x")),
 		"NavigationMenu":      ui.NavigationMenu(ui.NavigationMenuItem("a", widget.Text("x")), ui.NavigationMenuLink("b", nil)),
 		"CodeBlock":           ui.CodeBlock("a\nb\nc").LineNumbers(true),
-		"Trace":               ui.Trace(ui.TraceStep{ID: "a", Title: "A"}),
+		"Trace":               chat.Trace(chat.TraceStep{ID: "a", Title: "A"}),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

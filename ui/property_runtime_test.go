@@ -207,12 +207,11 @@ func TestUIBindingsRejectNilAndTypedNil(t *testing.T) {
 	var options *ggui.StateValue[[]string]
 	var text *ggui.StateValue[string]
 	var invalid *ggui.StateValue[bool]
-	var state *ggui.StateValue[AttachmentState]
 	runs := []func(){
 		func() { Select(ggui.State("")).BindOptions(nil) }, func() { Combobox(ggui.State("")).BindOptions(options) },
 		func() { Radios(ggui.State("")).BindOptions(options) }, func() { ToggleGroup(ggui.State("")).BindOptions(options) },
 		func() { Field("label", widget.Text("value")).BindError(text) }, func() { InputOTP(ggui.State(""), 4).BindInvalid(invalid) },
-		func() { Attachment("file", "").BindState(state) }, func() { Button("x", nil).BindName(text) },
+		func() { Button("x", nil).BindName(text) },
 	}
 	for i, run := range runs {
 		func() {

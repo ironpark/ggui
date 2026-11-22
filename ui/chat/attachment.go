@@ -1,14 +1,14 @@
-package ui
+package chat
 
 import (
 	"image/color"
-	"math"
 	"strings"
 	"time"
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
+	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -47,9 +47,9 @@ type AttachmentWidget struct {
 	image                                *ggfx.Image
 	imageAlt                             string
 	actions                              []ggui.Widget
-	trigger                              *ButtonWidget
+	trigger                              *ui.ButtonWidget
 	state                                AttachmentState
-	words                                *Strings // the Strings of the last layout
+	words                                *ui.Strings // the Strings of the last layout
 	stateReader                          ggui.Readable[AttachmentState]
 	size                                 AttachmentSize
 	vertical                             bool
@@ -101,7 +101,7 @@ func (a *AttachmentWidget) Trigger(name string, fn func()) *AttachmentWidget {
 	if fn == nil {
 		a.trigger = nil
 	} else {
-		a.trigger = ButtonOf(widget.Box(), fn).Name(name).Ghost().Pad(0)
+		a.trigger = ui.ButtonOf(widget.Box(), fn).Name(name).Ghost().Pad(0)
 	}
 	return a
 }
@@ -143,8 +143,8 @@ func (a *AttachmentWidget) Width(px float64) *AttachmentWidget {
 
 // AttachmentAction is a 24px ghost action with an explicit accessible name.
 // content is usually an icon. Button setters can customize its style or state.
-func AttachmentAction(name string, content ggui.Widget, fn func()) *ButtonWidget {
-	return ButtonOf(widget.Box(widget.Center(content)).Width(24).Height(24), fn).Name(name).Ghost().Pad(0)
+func AttachmentAction(name string, content ggui.Widget, fn func()) *ui.ButtonWidget {
+	return ui.ButtonOf(widget.Box(widget.Center(content)).Width(24).Height(24), fn).Name(name).Ghost().Pad(0)
 }
 
 func (a *AttachmentWidget) uploadState() AttachmentState {
@@ -162,7 +162,7 @@ func (a *AttachmentWidget) uploadState() AttachmentState {
 func (a *AttachmentWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer a.props.Layout().EndLayout()
 	a.theme, a.reduced, a.current = uitheme.Of(env), env.ReducedMotion(), a.uploadState()
-	a.words = stringsOf(env)
+	a.words = ui.StringsOf(env)
 	a.motion = env.Motion(a.theme.MotionFast)
 	a.padX, a.padY, a.gap, a.mediaSide = 10, 8, 8, 40
 	a.radius = a.theme.Chat.AttachmentRadius
@@ -318,11 +318,11 @@ func (a *AttachmentWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	dst.FillRoundRect(r, a.radius, fill)
 	if state == AttachmentIdle {
-		attachmentDashedBorder(dst, r, a.radius, t.BorderWidth, border)
+		ui.DashedBorder(dst, r, a.radius, t.BorderWidth, border)
 	} else {
 		dst.StrokeRoundRect(r, a.radius, t.BorderWidth, border)
 	}
-	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Name: a.title, Description: a.words.orDefault().attachmentState(state)}, func(dst *ggui.Canvas) {
+	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Name: a.title, Description: attachmentState(a.words, state)}, func(dst *ggui.Canvas) {
 		// Register the full-card trigger before painting the independent actions.
 		if a.trigger != nil {
 			a.trigger.Hit(dst, r, a.trigger, ggui.CursorShapePointer)
@@ -400,53 +400,4 @@ func (t *attachmentText) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	dst.Leaf(r, ggui.Node{Role: ggui.RoleText, Name: t.value})
 	dst.Clip(r).Inert().Paint(t.text, r)
-}
-
-// The idle treatment is a dashed rounded border, including the corners.
-func attachmentDashedBorder(dst *ggui.Canvas, r ggui.Rect, radius, width float64, col color.Color) {
-	inset := width / 2
-	x, y := r.Origin.X+inset, r.Origin.Y+inset
-	w, h := max(0, r.Size.W-width), max(0, r.Size.H-width)
-	radius = max(0, min(radius-inset, min(w, h)/2))
-	straightX, straightY := w-2*radius, h-2*radius
-	arc := math.Pi * radius / 2
-	lengths := []float64{straightX, arc, straightY, arc, straightX, arc, straightY, arc}
-	point := func(d float64) ggui.Point {
-		segment := 0
-		for segment < 7 && d > lengths[segment] {
-			d -= lengths[segment]
-			segment++
-		}
-		switch segment {
-		case 0:
-			return ggui.Pt(x+radius+d, y)
-		case 2:
-			return ggui.Pt(x+w, y+radius+d)
-		case 4:
-			return ggui.Pt(x+w-radius-d, y+h)
-		case 6:
-			return ggui.Pt(x, y+h-radius-d)
-		}
-		theta := float64(segment-1)*math.Pi/4 - math.Pi/2
-		if radius > 0 {
-			theta += d / radius
-		}
-		cx, cy := x+w-radius, y+radius
-		if segment >= 3 {
-			cy = y + h - radius
-		}
-		if segment >= 5 {
-			cx = x + radius
-		}
-		if segment == 7 {
-			cy = y + radius
-		}
-		return ggui.Pt(cx+radius*math.Cos(theta), cy+radius*math.Sin(theta))
-	}
-	total := 2*(straightX+straightY) + 4*arc
-	for d := 0.0; d < total; d += 7 {
-		if end := min(d+4, total); end > d {
-			dst.StrokeLine(point(d), point(end), width, col)
-		}
-	}
 }

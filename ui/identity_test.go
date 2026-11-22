@@ -7,6 +7,8 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/chart"
+	"github.com/ironpark/ggui/ui/chat"
 	"github.com/ironpark/ggui/widget"
 )
 
@@ -137,10 +139,10 @@ var keyedControls = []struct {
 		return keyed(ui.Accordion(ggui.State([]string(nil)), ui.AccordionItem("a", "Section", widget.Text("body"))), k, n)
 	}},
 	{name: "AttachmentGroup", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
-		return keyed(ui.AttachmentGroup(ui.Attachment("a.txt", "1 KB"), ui.Attachment("b.txt", "2 KB")), k, n)
+		return keyed(chat.AttachmentGroup(chat.Attachment("a.txt", "1 KB"), chat.Attachment("b.txt", "2 KB")), k, n)
 	}},
 	{name: "Bubble", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
-		return keyed(ui.Bubble(widget.Text("hello")).Action("Reply", func() {}), k, n)
+		return keyed(chat.Bubble(widget.Text("hello")).Action("Reply", func() {}), k, n)
 	}},
 	{name: "Button", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
 		return keyed(ui.Button("Go", nil), k, n)
@@ -160,8 +162,8 @@ var keyedControls = []struct {
 		return widget.Column(c, w), w, ok
 	}},
 	{name: "Chart", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
-		data := []ui.ChartDatum{{Label: "a", Values: map[string]float64{"v": 1}}, {Label: "b", Values: map[string]float64{"v": 2}}}
-		return keyed(ui.BarChart(data, ui.ChartConfig{{Key: "v"}}).Height(120), k, n)
+		data := []chart.Datum{{Label: "a", Values: map[string]float64{"v": 1}}, {Label: "b", Values: map[string]float64{"v": 2}}}
+		return keyed(chart.Bar(data, chart.Config{{Key: "v"}}).Height(120), k, n)
 	}},
 	{name: "Checkbox", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
 		return keyed(ui.Checkbox(ggui.State(false), "Check"), k, n)
@@ -188,15 +190,15 @@ var keyedControls = []struct {
 		return keyed(ui.Menubar(ui.Menu("File", ui.MenuItem("Open", nil))), k, n)
 	}},
 	{name: "MessageScroller", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
-		items := ggui.State([]ui.MessageEntry{{ID: "1", Content: widget.Text("hi")}})
-		return keyed(ui.MessageScroller(items).Height(100), k, n)
+		items := ggui.State([]chat.MessageEntry{{ID: "1", Content: widget.Text("hi")}})
+		return keyed(chat.MessageScroller(items).Height(100), k, n)
 	}},
 	{name: "Pagination", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
 		return keyed(ui.Pagination(ggui.State(1), ggui.State(5)), k, n)
 	}, unfocused: "its group node takes no focus"},
 	{name: "Questionnaire", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
-		q := ui.Question{Name: "q", Title: "Pick", Choices: []ui.QuestionOption{{Value: "a", Label: "A"}}}
-		return keyed(ui.Questionnaire(ggui.State(ui.QuestionAnswers{}), q), k, n)
+		q := chat.Question{Name: "q", Title: "Pick", Choices: []chat.QuestionOption{{Value: "a", Label: "A"}}}
+		return keyed(chat.Questionnaire(ggui.State(chat.QuestionAnswers{}), q), k, n)
 	}, unfocused: "BUG: choice keys hold the widget pointer"},
 	{name: "Radio", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
 		return keyed(ui.Radio(ggui.State("a"), "b", "B"), k, n)
@@ -377,13 +379,13 @@ func TestRadiosKeepFocusedOptionAcrossRebuild(t *testing.T) {
 
 func TestQuestionnaireKeyKeepsChoiceFocusAcrossRebuild(t *testing.T) {
 	t.Parallel()
-	answers := ggui.State(ui.QuestionAnswers{})
+	answers := ggui.State(chat.QuestionAnswers{})
 	tick := ggui.State(0)
-	q := ui.Question{Name: "q", Title: "Pick", Choices: []ui.QuestionOption{{Value: "a", Label: "A"}, {Value: "b", Label: "B"}}}
+	q := chat.Question{Name: "q", Title: "Pick", Choices: []chat.QuestionOption{{Value: "a", Label: "A"}, {Value: "b", Label: "B"}}}
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		return ggui.Reactive(func() ggui.Widget {
 			tick.Get()
-			return ui.Questionnaire(answers, q).Key("questionnaire")
+			return chat.Questionnaire(answers, q).Key("questionnaire")
 		})
 	}, ggui.Sz(400, 400))
 	defer p.Close()
@@ -433,11 +435,11 @@ func TestNameSettersReachSemantics(t *testing.T) {
 			return w, w.Name(name) == w
 		}},
 		{"AttachmentGroup", func(name string) (ggui.Widget, bool) {
-			w := ui.AttachmentGroup(ui.Attachment("a.txt", "1 KB"))
+			w := chat.AttachmentGroup(chat.Attachment("a.txt", "1 KB"))
 			return w, w.Name(name) == w
 		}},
 		{"Bubble", func(name string) (ggui.Widget, bool) {
-			w := ui.Bubble(widget.Text("hi")).Action("Reply", func() {})
+			w := chat.Bubble(widget.Text("hi")).Action("Reply", func() {})
 			return w, w.Name(name) == w
 		}},
 		{"CarouselNavigation", func(name string) (ggui.Widget, bool) {

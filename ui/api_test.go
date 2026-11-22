@@ -46,81 +46,83 @@ func receiverType(fn *ast.FuncDecl) string {
 // their own fluent Key rather than only the implementation-level SetKey.
 func TestPublicKeySettersReturnTheirOwnControl(t *testing.T) {
 	t.Parallel()
-	fset := token.NewFileSet()
-	types := map[string]*ast.StructType{}
-	keys := map[string]*ast.FuncDecl{}
-	for _, file := range parseSources(t, fset, 0, false) {
-		for _, decl := range file.Decls {
-			switch d := decl.(type) {
-			case *ast.FuncDecl:
-				if d.Name.Name == "Key" && receiverType(d) != "" {
-					keys[receiverType(d)] = d
-				}
-			case *ast.GenDecl:
-				for _, spec := range d.Specs {
-					if ts, ok := spec.(*ast.TypeSpec); ok {
-						if st, ok := ts.Type.(*ast.StructType); ok {
-							types[ts.Name.Name] = st
+	checked := 0
+	for _, dir := range controlDirs {
+		fset := token.NewFileSet()
+		types := map[string]*ast.StructType{}
+		keys := map[string]*ast.FuncDecl{}
+		for _, file := range parseSourcesIn(t, dir, fset, 0, false) {
+			for _, decl := range file.Decls {
+				switch d := decl.(type) {
+				case *ast.FuncDecl:
+					if d.Name.Name == "Key" && receiverType(d) != "" {
+						keys[receiverType(d)] = d
+					}
+				case *ast.GenDecl:
+					for _, spec := range d.Specs {
+						if ts, ok := spec.(*ast.TypeSpec); ok {
+							if st, ok := ts.Type.(*ast.StructType); ok {
+								types[ts.Name.Name] = st
+							}
 						}
 					}
 				}
 			}
 		}
-	}
-	var base func(ast.Expr) string
-	base = func(e ast.Expr) string {
-		switch e := e.(type) {
-		case *ast.Ident:
-			return e.Name
-		case *ast.StarExpr:
-			return base(e.X)
-		case *ast.IndexExpr:
-			return base(e.X)
-		case *ast.IndexListExpr:
-			return base(e.X)
-		case *ast.SelectorExpr:
-			return base(e.X) + "." + e.Sel.Name
+		var base func(ast.Expr) string
+		base = func(e ast.Expr) string {
+			switch e := e.(type) {
+			case *ast.Ident:
+				return e.Name
+			case *ast.StarExpr:
+				return base(e.X)
+			case *ast.IndexExpr:
+				return base(e.X)
+			case *ast.IndexListExpr:
+				return base(e.X)
+			case *ast.SelectorExpr:
+				return base(e.X) + "." + e.Sel.Name
+			}
+			return ""
 		}
-		return ""
-	}
-	var hasKey func(string, map[string]bool) bool
-	hasKey = func(name string, visiting map[string]bool) bool {
-		if name == "ggui.Interactive" || keys[name] != nil {
-			return true
-		}
-		if visiting[name] || types[name] == nil {
-			return false
-		}
-		visiting[name] = true
-		defer delete(visiting, name)
-		for _, f := range types[name].Fields.List {
-			if len(f.Names) == 0 && hasKey(base(f.Type), visiting) {
+		var hasKey func(string, map[string]bool) bool
+		hasKey = func(name string, visiting map[string]bool) bool {
+			if name == "ggui.Interactive" || keys[name] != nil {
 				return true
 			}
+			if visiting[name] || types[name] == nil {
+				return false
+			}
+			visiting[name] = true
+			defer delete(visiting, name)
+			for _, f := range types[name].Fields.List {
+				if len(f.Names) == 0 && hasKey(base(f.Type), visiting) {
+					return true
+				}
+			}
+			return false
 		}
-		return false
-	}
-	printed := func(e ast.Expr) string {
-		var b bytes.Buffer
-		if err := format.Node(&b, fset, e); err != nil {
-			t.Fatal(err)
+		printed := func(e ast.Expr) string {
+			var b bytes.Buffer
+			if err := format.Node(&b, fset, e); err != nil {
+				t.Fatal(err)
+			}
+			return b.String()
 		}
-		return b.String()
-	}
-	checked := 0
-	for name := range types {
-		if !ast.IsExported(name) || !hasKey(name, map[string]bool{}) {
-			continue
-		}
-		checked++
-		method := keys[name]
-		if method == nil {
-			t.Errorf("%s inherits Key without returning its own pointer type", name)
-			continue
-		}
-		if method.Type.Results == nil || len(method.Type.Results.List) != 1 ||
-			printed(method.Type.Results.List[0].Type) != printed(method.Recv.List[0].Type) {
-			t.Errorf("%s.Key must return its receiver type", name)
+		for name := range types {
+			if !ast.IsExported(name) || !hasKey(name, map[string]bool{}) {
+				continue
+			}
+			checked++
+			method := keys[name]
+			if method == nil {
+				t.Errorf("%s/%s inherits Key without returning its own pointer type", dir, name)
+				continue
+			}
+			if method.Type.Results == nil || len(method.Type.Results.List) != 1 ||
+				printed(method.Type.Results.List[0].Type) != printed(method.Recv.List[0].Type) {
+				t.Errorf("%s/%s.Key must return its receiver type", dir, name)
+			}
 		}
 	}
 	if checked == 0 {
@@ -134,42 +136,45 @@ func TestPublicKeySettersReturnTheirOwnControl(t *testing.T) {
 // receivers and intentionally keep their static Disabled option.
 func TestDisabledSettersComeInPairs(t *testing.T) {
 	t.Parallel()
-	fset := token.NewFileSet()
-	setters := map[string]map[string]*ast.FuncDecl{}
-	for _, file := range parseSources(t, fset, 0, false) {
-		for _, decl := range file.Decls {
-			switch d := decl.(type) {
-			case *ast.FuncDecl:
-				if d.Name.Name != "Disabled" && d.Name.Name != "BindDisabled" {
-					continue
+	checked := 0
+	for _, dir := range controlDirs {
+		fset := token.NewFileSet()
+		setters := map[string]map[string]*ast.FuncDecl{}
+		for _, file := range parseSourcesIn(t, dir, fset, 0, false) {
+			for _, decl := range file.Decls {
+				switch d := decl.(type) {
+				case *ast.FuncDecl:
+					if d.Name.Name != "Disabled" && d.Name.Name != "BindDisabled" {
+						continue
+					}
+					recv := receiverType(d)
+					if recv == "" {
+						continue
+					}
+					if _, pointer := d.Recv.List[0].Type.(*ast.StarExpr); !pointer || !ast.IsExported(recv) {
+						continue
+					}
+					if setters[recv] == nil {
+						setters[recv] = map[string]*ast.FuncDecl{}
+					}
+					setters[recv][d.Name.Name] = d
 				}
-				recv := receiverType(d)
-				if recv == "" {
-					continue
-				}
-				if _, pointer := d.Recv.List[0].Type.(*ast.StarExpr); !pointer || !ast.IsExported(recv) {
-					continue
-				}
-				if setters[recv] == nil {
-					setters[recv] = map[string]*ast.FuncDecl{}
-				}
-				setters[recv][d.Name.Name] = d
+			}
+		}
+		checked += len(setters)
+		for name, got := range setters {
+			_, hasSet := got["Disabled"]
+			_, hasBind := got["BindDisabled"]
+			switch {
+			case hasSet && !hasBind:
+				t.Errorf("%s/%s has Disabled but no BindDisabled: a caller cannot follow a signal without rebuilding it", dir, name)
+			case hasBind && !hasSet:
+				t.Errorf("%s/%s has BindDisabled but no Disabled: a caller cannot set the state outright", dir, name)
 			}
 		}
 	}
-	if len(setters) == 0 {
+	if checked == 0 {
 		t.Fatal("no controls found; the scan is broken, not the package")
-	}
-
-	for name, got := range setters {
-		_, hasSet := got["Disabled"]
-		_, hasBind := got["BindDisabled"]
-		switch {
-		case hasSet && !hasBind:
-			t.Errorf("%s has Disabled but no BindDisabled: a caller cannot follow a signal without rebuilding it", name)
-		case hasBind && !hasSet:
-			t.Errorf("%s has BindDisabled but no Disabled: a caller cannot set the state outright", name)
-		}
 	}
 }
 
@@ -177,47 +182,49 @@ func TestDisabledSettersComeInPairs(t *testing.T) {
 // on the concrete widget. The literal counterpart uses the same value type.
 func TestBindingSettersHaveTypedFluentCounterparts(t *testing.T) {
 	t.Parallel()
-	fset := token.NewFileSet()
-	methods := map[string]map[string]*ast.FuncDecl{}
-	print := func(n ast.Node) string { var b bytes.Buffer; format.Node(&b, fset, n); return b.String() }
-	for _, file := range parseSources(t, fset, 0, false) {
-		for _, decl := range file.Decls {
-			f, ok := decl.(*ast.FuncDecl)
-			if !ok || f.Recv == nil {
-				continue
-			}
-			typ := receiverType(f)
-			if methods[typ] == nil {
-				methods[typ] = map[string]*ast.FuncDecl{}
-			}
-			methods[typ][f.Name.Name] = f
-		}
-	}
 	checked := 0
-	for typ, ms := range methods {
-		for name, f := range ms {
-			if !strings.HasPrefix(name, "Bind") || f.Type.Params == nil || len(f.Type.Params.List) != 1 {
-				continue
+	for _, dir := range controlDirs {
+		fset := token.NewFileSet()
+		methods := map[string]map[string]*ast.FuncDecl{}
+		print := func(n ast.Node) string { var b bytes.Buffer; format.Node(&b, fset, n); return b.String() }
+		for _, file := range parseSourcesIn(t, dir, fset, 0, false) {
+			for _, decl := range file.Decls {
+				f, ok := decl.(*ast.FuncDecl)
+				if !ok || f.Recv == nil {
+					continue
+				}
+				typ := receiverType(f)
+				if methods[typ] == nil {
+					methods[typ] = map[string]*ast.FuncDecl{}
+				}
+				methods[typ][f.Name.Name] = f
 			}
-			arg, ok := f.Type.Params.List[0].Type.(*ast.IndexExpr)
-			if !ok {
-				continue
-			}
-			base := print(arg.X)
-			if base != "ggui.Readable" && base != "ggui.Binding" {
-				continue
-			}
-			checked++
-			if f.Type.Results == nil || len(f.Type.Results.List) != 1 || print(f.Type.Results.List[0].Type) != print(f.Recv.List[0].Type) {
-				t.Errorf("%s.%s must return its concrete receiver", typ, name)
-			}
-			literal := ms[strings.TrimPrefix(name, "Bind")]
-			if literal == nil || literal.Type.Params == nil || len(literal.Type.Params.List) != 1 {
-				t.Errorf("%s.%s has no literal counterpart", typ, name)
-				continue
-			}
-			if print(literal.Type.Params.List[0].Type) != print(arg.Index) {
-				t.Errorf("%s.%s literal type mismatch", typ, name)
+		}
+		for typ, ms := range methods {
+			for name, f := range ms {
+				if !strings.HasPrefix(name, "Bind") || f.Type.Params == nil || len(f.Type.Params.List) != 1 {
+					continue
+				}
+				arg, ok := f.Type.Params.List[0].Type.(*ast.IndexExpr)
+				if !ok {
+					continue
+				}
+				base := print(arg.X)
+				if base != "ggui.Readable" && base != "ggui.Binding" {
+					continue
+				}
+				checked++
+				if f.Type.Results == nil || len(f.Type.Results.List) != 1 || print(f.Type.Results.List[0].Type) != print(f.Recv.List[0].Type) {
+					t.Errorf("%s/%s.%s must return its concrete receiver", dir, typ, name)
+				}
+				literal := ms[strings.TrimPrefix(name, "Bind")]
+				if literal == nil || literal.Type.Params == nil || len(literal.Type.Params.List) != 1 {
+					t.Errorf("%s/%s.%s has no literal counterpart", dir, typ, name)
+					continue
+				}
+				if print(literal.Type.Params.List[0].Type) != print(arg.Index) {
+					t.Errorf("%s/%s.%s literal type mismatch", dir, typ, name)
+				}
 			}
 		}
 	}
@@ -226,12 +233,18 @@ func TestBindingSettersHaveTypedFluentCounterparts(t *testing.T) {
 	}
 }
 
-// parseSources parses the Go files in this directory, the tests among them
-// only when tests is set, keyed by name. It reads every file whatever its
+var controlDirs = []string{".", "chart", "chat"}
+
+// parseSourcesIn parses the Go files in dir, the tests among them only when
+// tests is set, keyed by path relative to ui. It reads every file whatever its
 // build constraints, as a check of the source's shape wants.
-func parseSources(t *testing.T, fset *token.FileSet, mode parser.Mode, tests bool) map[string]*ast.File {
+func parseSourcesIn(t *testing.T, dir string, fset *token.FileSet, mode parser.Mode, tests bool) map[string]*ast.File {
 	t.Helper()
-	names, err := filepath.Glob("*.go")
+	pattern := "*.go"
+	if dir != "." {
+		pattern = filepath.Join(dir, "*.go")
+	}
+	names, err := filepath.Glob(pattern)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,6 +258,18 @@ func parseSources(t *testing.T, fset *token.FileSet, mode parser.Mode, tests boo
 			t.Fatal(err)
 		}
 		files[name] = f
+	}
+	return files
+}
+
+// parseControlSources parses the Go files across ui, ui/chart and ui/chat.
+func parseControlSources(t *testing.T, fset *token.FileSet, mode parser.Mode, tests bool) map[string]*ast.File {
+	t.Helper()
+	files := map[string]*ast.File{}
+	for _, dir := range controlDirs {
+		for name, f := range parseSourcesIn(t, dir, fset, mode, tests) {
+			files[name] = f
+		}
 	}
 	return files
 }

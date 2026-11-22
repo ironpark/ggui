@@ -1,4 +1,4 @@
-package ui_test
+package chat_test
 
 import (
 	"fmt"
@@ -9,16 +9,17 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/chat"
 	"github.com/ironpark/ggui/widget"
 )
 
 // buttonTranscript is n 80px rows ten apart, each holding a button named
 // "Row i", so a test can focus or reveal a row.
-func buttonTranscript(n int) []ui.MessageEntry {
-	out := make([]ui.MessageEntry, n)
+func buttonTranscript(n int) []chat.MessageEntry {
+	out := make([]chat.MessageEntry, n)
 	for i := range out {
 		name := fmt.Sprintf("Row %d", i)
-		out[i] = ui.MessageEntry{ID: fmt.Sprint(i), Content: widget.Box(ui.Button(name, func() {})).Height(80)}
+		out[i] = chat.MessageEntry{ID: fmt.Sprint(i), Content: widget.Box(ui.Button(name, func() {})).Height(80)}
 	}
 	return out
 }
@@ -26,14 +27,14 @@ func buttonTranscript(n int) []ui.MessageEntry {
 func TestMessageScrollerKeyboardScrollsAndClamps(t *testing.T) {
 	t.Parallel()
 	// Six 80px rows ten apart are 530 tall: 330 past a 200px viewport.
-	s := ui.MessageScroller(ggui.State(transcript(6))).Height(200).Gap(10).Animation(0).Name("Chat")
+	s := chat.MessageScroller(ggui.State(transcript(6))).Height(200).Gap(10).Animation(0).Name("Chat")
 	p := ggui.NewProbe(s, ggui.Sz(300, 200))
 	defer p.Close()
-	chat, ok := p.Semantics().Find(ggui.RoleGroup, "Chat")
+	chatNode, ok := p.Semantics().Find(ggui.RoleGroup, "Chat")
 	if !ok {
 		t.Fatalf("no group named Chat:\n%s", p.Semantics())
 	}
-	p.Perform(chat.ID, ggui.Action{Kind: ggui.ActionFocus})
+	p.Perform(chatNode.ID, ggui.Action{Kind: ggui.ActionFocus})
 	for _, step := range []struct {
 		key  ggui.KeyboardKey
 		want float64
@@ -59,24 +60,24 @@ func TestMessageScrollerKeyboardScrollsAndClamps(t *testing.T) {
 
 func TestMessageScrollerScrollMarginOffsetsMessageTargets(t *testing.T) {
 	t.Parallel()
-	s := ui.MessageScroller(ggui.State(transcript(8))).Height(200).Gap(10).Animation(0).ScrollMargin(20).Opening(ui.ScrollStart)
+	s := chat.MessageScroller(ggui.State(transcript(8))).Height(200).Gap(10).Animation(0).ScrollMargin(20).Opening(chat.ScrollStart)
 	p := ggui.NewProbe(s, ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
-	s.ScrollToMessage("3", ui.ScrollAlignStart)
+	s.ScrollToMessage("3", chat.ScrollAlignStart)
 	p.Frame()
 	// Row 3 starts at 270; the margin keeps 20px above it.
 	if got := s.Position(); got != 250 {
 		t.Fatalf("ScrollToMessage start with a 20px margin went to %v, want 250", got)
 	}
-	s.ScrollToMessage("5", ui.ScrollAlignEnd)
+	s.ScrollToMessage("5", chat.ScrollAlignEnd)
 	p.Frame()
 	// Row 5 ends at 530; its bottom sits 20px above the viewport's.
 	if got := s.Position(); got != 530-200+20 {
 		t.Fatalf("ScrollToMessage end with a 20px margin went to %v, want 350", got)
 	}
 	s.ScrollMargin(-5)
-	s.ScrollToMessage("1", ui.ScrollAlignStart)
+	s.ScrollToMessage("1", chat.ScrollAlignStart)
 	p.Frame()
 	if got := s.Position(); got != 90 {
 		t.Fatalf("a negative margin was not treated as none: %v, want 90", got)
@@ -86,11 +87,11 @@ func TestMessageScrollerScrollMarginOffsetsMessageTargets(t *testing.T) {
 func TestMessageScrollerNewAnchorLeavesAPeekOfThePreviousMessage(t *testing.T) {
 	t.Parallel()
 	rows := ggui.State(transcript(3))
-	s := ui.MessageScroller(rows).Height(200).Gap(10).Animation(0).PreviousPeek(30)
+	s := chat.MessageScroller(rows).Height(200).Gap(10).Animation(0).PreviousPeek(30)
 	p := ggui.NewProbe(s, ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
-	more := append(transcript(3), ui.MessageEntry{ID: "q", Anchor: true, Content: widget.Box(widget.Text("question")).Height(80)})
+	more := append(transcript(3), chat.MessageEntry{ID: "q", Anchor: true, Content: widget.Box(widget.Text("question")).Height(80)})
 	rows.Set(more)
 	p.Frame()
 	// The new anchor starts at 270; 30px of the message before it stay in view.
@@ -104,23 +105,23 @@ func TestMessageScrollerNewAnchorLeavesAPeekOfThePreviousMessage(t *testing.T) {
 
 func TestMessageScrollerEdgeThresholdAndVisibilityCallback(t *testing.T) {
 	t.Parallel()
-	var seen []ui.TranscriptVisibility
-	s := ui.MessageScroller(ggui.State(transcript(6))).Height(200).Gap(10).Animation(0).
-		Opening(ui.ScrollStart).EdgeThreshold(50).OnVisibility(func(v ui.TranscriptVisibility) { seen = append(seen, v) })
+	var seen []chat.TranscriptVisibility
+	s := chat.MessageScroller(ggui.State(transcript(6))).Height(200).Gap(10).Animation(0).
+		Opening(chat.ScrollStart).EdgeThreshold(50).OnVisibility(func(v chat.TranscriptVisibility) { seen = append(seen, v) })
 	p := ggui.NewProbe(s, ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
 	if len(seen) != 1 || !slices.Equal(seen[0].VisibleMessageIDs, []string{"0", "1", "2"}) || seen[0].CanScrollStart || !seen[0].CanScrollEnd {
 		t.Fatalf("first visibility = %+v, want rows 0-2 and only CanScrollEnd", seen)
 	}
-	s.ScrollToMessage("0", ui.ScrollAlignStart)
+	s.ScrollToMessage("0", chat.ScrollAlignStart)
 	p.Frame()
 	p.Frame()
 	if len(seen) != 1 {
 		t.Fatalf("OnVisibility ran again with nothing changed: %+v", seen)
 	}
-	chat, _ := p.Semantics().Find(ggui.RoleGroup, "Conversation")
-	p.Perform(chat.ID, ggui.Action{Kind: ggui.ActionFocus})
+	chatNode, _ := p.Semantics().Find(ggui.RoleGroup, "Conversation")
+	p.Perform(chatNode.ID, ggui.Action{Kind: ggui.ActionFocus})
 	p.Type(ggui.Mods{}, ggui.KeyArrowDown)
 	p.Frame() // visibility is measured where rows paint
 	if v := s.Visibility(); v.CanScrollStart {
@@ -138,7 +139,7 @@ func TestMessageScrollerEdgeThresholdAndVisibilityCallback(t *testing.T) {
 
 func TestMessageScrollerRevealsARowScrolledIntoView(t *testing.T) {
 	t.Parallel()
-	s := ui.MessageScroller(ggui.State(buttonTranscript(6))).Height(200).Gap(10).Animation(0)
+	s := chat.MessageScroller(ggui.State(buttonTranscript(6))).Height(200).Gap(10).Animation(0)
 	p := ggui.NewProbe(s, ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
@@ -159,7 +160,7 @@ func TestMessageScrollerRevealsARowScrolledIntoView(t *testing.T) {
 func TestMessageScrollerEdgeButtonEasesInAndOut(t *testing.T) {
 	t.Parallel()
 	// Six 80px rows a default 24 apart are 600 tall: 400 past a 200px viewport.
-	s := ui.MessageScroller(ggui.State(transcript(6))).Height(200).Opening(ui.ScrollStart).Animation(0)
+	s := chat.MessageScroller(ggui.State(transcript(6))).Height(200).Opening(chat.ScrollStart).Animation(0)
 	p := ggui.NewProbe(s, ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()

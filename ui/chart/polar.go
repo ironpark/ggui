@@ -1,4 +1,4 @@
-package ui
+package chart
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui"
 )
 
 func chartSector(dst *ggui.Canvas, center ggui.Point, inner, outer, start, end float64, col color.Color, separator color.Color, rounded float64) {
@@ -42,19 +43,18 @@ func chartSector(dst *ggui.Canvas, center ggui.Point, inner, outer, start, end f
 	quad(polarPoint(center, outer, start), first)
 	path.Close()
 	chartDrawPath(dst, &path, col, separator, 2)
-
 }
-func (c *ChartWidget) paintPolar(dst *ggui.Canvas, progress float64) {
+func (c *Widget) paintPolar(dst *ggui.Canvas, progress float64) {
 	center, radius := c.polarBounds()
 	if radius <= 0 {
 		return
 	}
 	switch c.kind {
-	case ChartRadar:
+	case KindRadar:
 		c.paintRadar(dst, center, radius, progress)
-	case ChartPie:
+	case KindPie:
 		c.paintPie(dst, center, radius, progress)
-	case ChartRadial:
+	case KindRadial:
 		c.paintRadial(dst, center, radius, progress)
 	}
 	if c.centerValue != "" {
@@ -62,7 +62,7 @@ func (c *ChartWidget) paintPolar(dst *ggui.Canvas, progress float64) {
 		c.text(dst, c.centerLabel, center.Add(ggui.Pt(0., 12.)), 12, c.theme.MutedFg, .5)
 	}
 }
-func (c *ChartWidget) paintPie(dst *ggui.Canvas, center ggui.Point, radius, progress float64) {
+func (c *Widget) paintPie(dst *ggui.Canvas, center ggui.Point, radius, progress float64) {
 	rings := len(c.config)
 	for j := range c.config {
 		total := c.positiveTotal(j)
@@ -115,7 +115,7 @@ func (c *ChartWidget) paintPie(dst *ggui.Canvas, center ggui.Point, radius, prog
 		}
 	}
 }
-func (c *ChartWidget) paintRadial(dst *ggui.Canvas, center ggui.Point, radius, progress float64) {
+func (c *Widget) paintRadial(dst *ggui.Canvas, center ggui.Point, radius, progress float64) {
 	inner := radius * c.inner
 	n := len(c.data)
 	if c.grid {
@@ -124,7 +124,7 @@ func (c *ChartWidget) paintRadial(dst *ggui.Canvas, center ggui.Point, radius, p
 		}
 	}
 
-	if c.stack != ChartUnstacked {
+	if c.stack != StackUnstacked {
 		band := (radius - inner) / float64(n)
 		for i := range c.data {
 			total := 0.
@@ -197,7 +197,7 @@ func (c *ChartWidget) paintRadial(dst *ggui.Canvas, center ggui.Point, radius, p
 		}
 	}
 }
-func (c *ChartWidget) paintRadar(dst *ggui.Canvas, center ggui.Point, radius, progress float64) {
+func (c *Widget) paintRadar(dst *ggui.Canvas, center ggui.Point, radius, progress float64) {
 	n := len(c.data)
 	if n < 3 {
 		return
@@ -241,7 +241,7 @@ func (c *ChartWidget) paintRadar(dst *ggui.Canvas, center ggui.Point, radius, pr
 		if c.tickPaint != nil {
 			c.tickPaint(dst, c.context(i, 0, p))
 		} else if d.Icon != "" {
-			paintIcon(dst, c.env, d.Icon, ggui.Rct(p.Add(ggui.Pt(-8., -8.)), ggui.Sz(16., 16.)), c.theme.MutedFg, 0)
+			ui.PaintIcon(dst, c.env, d.Icon, ggui.Rct(p.Add(ggui.Pt(-8., -8.)), ggui.Sz(16., 16.)), c.theme.MutedFg, 0)
 		} else {
 			c.text(dst, label, p.Add(ggui.Pt(0., -6.)), 12, c.theme.MutedFg, .5)
 		}
@@ -283,7 +283,7 @@ func (c *ChartWidget) paintRadar(dst *ggui.Canvas, center ggui.Point, radius, pr
 	}
 }
 
-func (c *ChartWidget) arcLabel(dst *ggui.Canvas, label string, center ggui.Point, radius, start float64, col color.Color) {
+func (c *Widget) arcLabel(dst *ggui.Canvas, label string, center ggui.Point, radius, start float64, col color.Color) {
 	angle := start + 4
 	for _, r := range label {
 		text := c.measuredText(string(r), 10, col)

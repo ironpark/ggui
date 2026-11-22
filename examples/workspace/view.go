@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/chart"
 	"github.com/ironpark/ggui/widget"
 )
 
@@ -171,12 +172,12 @@ func taskEditor(m *model, save func()) ggui.Widget {
 }
 
 func insights(m *model) ggui.Widget {
-	chart := ggui.View(m.Summary, func(s summary) ggui.Widget {
-		return ui.BarChart([]ui.ChartDatum{
+	bars := ggui.View(m.Summary, func(s summary) ggui.Widget {
+		return chart.Bar([]chart.Datum{
 			{Label: "Planned", Values: map[string]float64{"tasks": float64(s.Total - s.Active - s.Done)}},
 			{Label: "In progress", Values: map[string]float64{"tasks": float64(s.Active)}},
 			{Label: "Done", Values: map[string]float64{"tasks": float64(s.Done)}},
-		}, ui.ChartConfig{{Key: "tasks", Label: "Tasks"}}).Height(220)
+		}, chart.Config{{Key: "tasks", Label: "Tasks"}}).Height(220)
 	})
 	activity := ggui.View(m.Activity, func(entries []string) ggui.Widget {
 		return widget.List(entries, func(entry string) ggui.Widget {
@@ -187,7 +188,7 @@ func insights(m *model) ggui.Widget {
 		ui.Card(widget.Column(
 			ui.Title("Work by status").Size(20),
 			ui.Caption("All tasks in this workspace, independent of the current filter."),
-			chart,
+			bars,
 		).Gap(12).Stretch()),
 		ui.Card(ui.Collapsible(ggui.State(true), "Recent activity", activity)),
 	).Gap(16).Stretch()

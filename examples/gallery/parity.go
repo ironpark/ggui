@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/chat"
 	"github.com/ironpark/ggui/ui/icons"
 	"github.com/ironpark/ggui/widget"
 )
@@ -34,13 +35,13 @@ func newParityPreviews() func() []ggui.Widget {
 		).Gap(4).Stretch()),
 		ui.NavigationMenuLink("Settings", func() { destination.Set("Settings selected") }),
 	).Name("Main navigation")
-	trace := ui.Trace(
-		ui.TraceStep{ID: "fetch", Title: "Fetched repository", Icon: icons.Download, Status: ui.TraceCompleted, Duration: 240 * time.Millisecond},
-		ui.TraceStep{ID: "build", Title: "Build application", Icon: icons.File, Status: ui.TraceRunning, Details: ui.CodeBlock("go build ./...\n").Language("shell"), Children: []ui.TraceStep{
-			{ID: "compile", Title: "Compile packages", Status: ui.TraceCompleted, Duration: 120 * time.Millisecond},
-			{ID: "bundle", Title: "Bundle assets", Status: ui.TracePending},
+	trace := chat.Trace(
+		chat.TraceStep{ID: "fetch", Title: "Fetched repository", Icon: icons.Download, Status: chat.TraceCompleted, Duration: 240 * time.Millisecond},
+		chat.TraceStep{ID: "build", Title: "Build application", Icon: icons.File, Status: chat.TraceRunning, Details: ui.CodeBlock("go build ./...\n").Language("shell"), Children: []chat.TraceStep{
+			{ID: "compile", Title: "Compile packages", Status: chat.TraceCompleted, Duration: 120 * time.Millisecond},
+			{ID: "bundle", Title: "Bundle assets", Status: chat.TracePending},
 		}},
-		ui.TraceStep{ID: "publish", Title: "Publish release", Status: ui.TracePending},
+		chat.TraceStep{ID: "publish", Title: "Publish release", Status: chat.TracePending},
 	)
 	code := ui.CodeBlock("package main\n\nimport \"fmt\"\n\nfunc main() {\n    fmt.Println(\"Hello, GGUI\")\n}\n").Header("main.go").Language("go").LineNumbers(true).LineStyles(map[int]ui.CodeLineStyle{3: ui.CodeLineHighlighted, 6: ui.CodeLineAdded})
 	drawerOpen := ggui.State(false)

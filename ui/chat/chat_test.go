@@ -1,4 +1,4 @@
-package ui_test
+package chat_test
 
 import (
 	"fmt"
@@ -10,15 +10,18 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/chat"
+	"github.com/ironpark/ggui/ui/icons"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
 
 func TestAttachmentIndependentActionsAndStates(t *testing.T) {
 	t.Parallel()
-	state := ggui.State(ui.AttachmentIdle)
+	state := ggui.State(chat.AttachmentIdle)
 	opened, removed := 0, 0
-	file := ui.Attachment("report.pdf", "PDF · 2.4 MB").Media(widget.Text("PDF")).BindState(state).
-		Trigger("Preview report", func() { opened++ }).Actions(ui.AttachmentAction("Remove report", widget.Text("×"), func() { removed++ }))
+	file := chat.Attachment("report.pdf", "PDF · 2.4 MB").Media(widget.Text("PDF")).BindState(state).
+		Trigger("Preview report", func() { opened++ }).Actions(chat.AttachmentAction("Remove report", widget.Text("×"), func() { removed++ }))
 	p := ggui.NewProbe(widget.Column(file), ggui.Sz(300, 120))
 	defer p.Close()
 	p.Tap("Remove report")
@@ -34,7 +37,7 @@ func TestAttachmentIndependentActionsAndStates(t *testing.T) {
 	if removed != 2 {
 		t.Fatal("action not independently focusable")
 	}
-	for _, s := range []ui.AttachmentState{ui.AttachmentIdle, ui.AttachmentUploading, ui.AttachmentProcessing, ui.AttachmentError, ui.AttachmentDone} {
+	for _, s := range []chat.AttachmentState{chat.AttachmentIdle, chat.AttachmentUploading, chat.AttachmentProcessing, chat.AttachmentError, chat.AttachmentDone} {
 		state.Set(s)
 		n := node(t, p.Semantics(), ggui.RoleGroup, "report.pdf")
 		if n.Description != string(s) {
@@ -42,8 +45,8 @@ func TestAttachmentIndependentActionsAndStates(t *testing.T) {
 		}
 		node(t, p.Semantics(), ggui.RoleText, "PDF · 2.4 MB")
 	}
-	file.State(ui.AttachmentDone)
-	state.Set(ui.AttachmentError)
+	file.State(chat.AttachmentDone)
+	state.Set(chat.AttachmentError)
 	if node(t, p.Semantics(), ggui.RoleGroup, "report.pdf").Description != "done" {
 		t.Fatal("State did not replace reader")
 	}
@@ -52,8 +55,8 @@ func TestAttachmentSizesLongNamesAndGroup(t *testing.T) {
 	t.Parallel()
 	name := strings.Repeat("긴파일명", 30) + ".pdf"
 	heights := []float64{}
-	for _, size := range []ui.AttachmentSize{ui.AttachmentDefault, ui.AttachmentSmall, ui.AttachmentExtraSmall} {
-		a := ui.Attachment(name, "Long description").Media(widget.Text("F")).Size(size).Width(180)
+	for _, size := range []chat.AttachmentSize{chat.AttachmentDefault, chat.AttachmentSmall, chat.AttachmentExtraSmall} {
+		a := chat.Attachment(name, "Long description").Media(widget.Text("F")).Size(size).Width(180)
 		heights = append(heights, a.Layout(ggui.Loose(ggui.Sz(180, 400)), ggui.Env{}).H)
 		p := ggui.NewProbe(widget.Column(a), ggui.Sz(180, 150))
 		node(t, p.Semantics(), ggui.RoleText, name)
@@ -62,11 +65,11 @@ func TestAttachmentSizesLongNamesAndGroup(t *testing.T) {
 	if !(heights[0] > heights[1] && heights[1] > heights[2]) {
 		t.Fatal("size scale", heights)
 	}
-	cards := []*ui.AttachmentWidget{}
+	cards := []*chat.AttachmentWidget{}
 	for i := range 4 {
-		cards = append(cards, ui.Attachment(fmt.Sprintf("File %d", i), "PDF").Width(180).Trigger(fmt.Sprintf("Open %d", i), func() {}))
+		cards = append(cards, chat.Attachment(fmt.Sprintf("File %d", i), "PDF").Width(180).Trigger(fmt.Sprintf("Open %d", i), func() {}))
 	}
-	group := ui.AttachmentGroup(cards...)
+	group := chat.AttachmentGroup(cards...)
 	p := ggui.NewProbe(widget.Column(group), ggui.Sz(230, 140))
 	defer p.Close()
 	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyArrowRight)
@@ -92,12 +95,31 @@ func TestAttachmentSizesLongNamesAndGroup(t *testing.T) {
 		t.Fatal("resize did not clamp offset")
 	}
 }
+
+// A vertical attachment is shadcn's w-24, 96 across, and
+// has-data-[slot=attachment-content]:w-30, 120, once it has a title or a
+// description: media alone is a square card with nothing kept under it.
+func TestVerticalAttachmentIsNarrowerWithNoText(t *testing.T) {
+	t.Parallel()
+	env := uitheme.Default().Apply(ggui.Env{})
+	c := ggui.Loose(ggui.Sz(400, 400))
+	icon := func() ggui.Widget { return ui.Icon(icons.File) }
+	named := chat.Attachment("report.pdf", "2 MB").Media(icon()).Vertical().Layout(c, env)
+	bare := chat.Attachment("", "").Media(icon()).Vertical().Layout(c, env)
+	if named.W != 120 || bare.W != 96 {
+		t.Fatalf("a vertical attachment is %v wide with text and %v without, want 120 and 96", named.W, bare.W)
+	}
+	if bare.H != bare.W {
+		t.Fatalf("media alone makes a card %v, want it square", bare)
+	}
+}
+
 func TestBubbleMessageAndMarkerComposition(t *testing.T) {
 	t.Parallel()
 	pressed, reactions := 0, 0
-	b := ui.Bubble(widget.Text("Choose this reply")).End().Outline().Action("Reply", func() { pressed++ }).Reactions(ui.Button("Like", func() { reactions++ }).Ghost()).ReactionsTop()
-	msg := ui.Message(b).Avatar(ui.Avatar("Ada").Size(32)).Header(widget.Text("Ada")).Footer(ui.Button("Retry", func() {}).Ghost()).End()
-	p := ggui.NewProbe(widget.Padding(widget.Column(msg, ui.Marker(widget.Text("Today")).Separator(), ui.Marker(widget.Text("Saved")).Border()).Gap(30), 24), ggui.Sz(500, 300))
+	b := chat.Bubble(widget.Text("Choose this reply")).End().Outline().Action("Reply", func() { pressed++ }).Reactions(ui.Button("Like", func() { reactions++ }).Ghost()).ReactionsTop()
+	msg := chat.Message(b).Avatar(ui.Avatar("Ada").Size(32)).Header(widget.Text("Ada")).Footer(ui.Button("Retry", func() {}).Ghost()).End()
+	p := ggui.NewProbe(widget.Padding(widget.Column(msg, chat.Marker(widget.Text("Today")).Separator(), chat.Marker(widget.Text("Saved")).Border()).Gap(30), 24), ggui.Sz(500, 300))
 	defer p.Close()
 	p.Tap("Reply")
 	p.Tap("Like")
@@ -115,17 +137,17 @@ func TestBubbleMessageAndMarkerComposition(t *testing.T) {
 	node(t, tree, ggui.RoleText, "Saved")
 }
 
-func transcript(n int) []ui.MessageEntry {
-	out := []ui.MessageEntry{}
+func transcript(n int) []chat.MessageEntry {
+	out := []chat.MessageEntry{}
 	for i := range n {
-		out = append(out, ui.MessageEntry{ID: fmt.Sprint(i), Content: widget.Box(widget.Text(fmt.Sprint(i))).Height(80)})
+		out = append(out, chat.MessageEntry{ID: fmt.Sprint(i), Content: widget.Box(widget.Text(fmt.Sprint(i))).Height(80)})
 	}
 	return out
 }
 func TestMessageScrollerOpeningFollowingAndReaderIntent(t *testing.T) {
 	t.Parallel()
 	rows := ggui.State(transcript(6))
-	s := ui.MessageScroller(rows).Height(200).Gap(10).AutoScroll(true).Animation(0)
+	s := chat.MessageScroller(rows).Height(200).Gap(10).AutoScroll(true).Animation(0)
 	p := ggui.NewProbe(s, ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
@@ -169,14 +191,14 @@ func TestMessageScrollerOpeningFollowingAndReaderIntent(t *testing.T) {
 func TestMessageScrollerHistoryAnchorsAndRestore(t *testing.T) {
 	t.Parallel()
 	rows := ggui.State(transcript(6))
-	s := ui.MessageScroller(rows).Height(200).Gap(10).Opening(ui.ScrollStart).Animation(0)
+	s := chat.MessageScroller(rows).Height(200).Gap(10).Opening(chat.ScrollStart).Animation(0)
 	p := ggui.NewProbe(s, ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
-	s.ScrollToMessage("2", ui.ScrollAlignStart)
+	s.ScrollToMessage("2", chat.ScrollAlignStart)
 	p.Frame()
 	saved := s.Save()
-	data := append([]ui.MessageEntry{{ID: "older", Content: widget.Box().Height(100)}}, ggui.Untrack(rows.Get)...)
+	data := append([]chat.MessageEntry{{ID: "older", Content: widget.Box().Height(100)}}, ggui.Untrack(rows.Get)...)
 	rows.Set(data)
 	p.Frame()
 	if got := s.Save(); got.MessageID != saved.MessageID || got.Offset != saved.Offset {
@@ -189,15 +211,15 @@ func TestMessageScrollerHistoryAnchorsAndRestore(t *testing.T) {
 	if s.Save().MessageID != saved.MessageID {
 		t.Fatal("restore lost row")
 	}
-	data = append(data, ui.MessageEntry{ID: "turn", Content: widget.Box(widget.Text("new turn")).Height(40), Anchor: true})
+	data = append(data, chat.MessageEntry{ID: "turn", Content: widget.Box(widget.Text("new turn")).Height(40), Anchor: true})
 	rows.Set(data)
 	p.Frame()
 	v := s.Visibility()
 	if v.CurrentAnchorID != "turn" {
 		t.Fatal("new turn not anchored", v)
 	}
-	s.ScrollToMessage("missing", ui.ScrollAlignCenter)
-	data = append(data, ui.MessageEntry{ID: "missing", Content: widget.Box().Height(60)})
+	s.ScrollToMessage("missing", chat.ScrollAlignCenter)
+	data = append(data, chat.MessageEntry{ID: "missing", Content: widget.Box().Height(60)})
 	rows.Set(data)
 	p.Frame()
 	if !slicesContains(s.Visibility().VisibleMessageIDs, "missing") {
@@ -215,13 +237,13 @@ func slicesContains(xs []string, s string) bool {
 
 func TestQuestionnaireValidationSkipSubmissionAndReset(t *testing.T) {
 	t.Parallel()
-	answers := ggui.State(ui.QuestionAnswers{})
+	answers := ggui.State(chat.QuestionAnswers{})
 	submits := 0
-	q := ui.Questionnaire(answers,
-		ui.Question{Name: "one", Title: "Choose a task", Required: true, Choices: []ui.QuestionOption{{Value: "a", Label: "Task A"}, {Value: "x", Label: "Unavailable", Disabled: true}}},
-		ui.Question{Name: "two", Title: "Choose extras", Multiple: true, Choices: []ui.QuestionOption{{Value: "b", Label: "Extra B"}, {Value: "c", Label: "Extra C"}}},
-		ui.Question{Name: "three", Title: "Add context", Required: true, InputLabel: "Context", Placeholder: "Details"},
-	).OnSubmit(func(a ui.QuestionAnswers) {
+	q := chat.Questionnaire(answers,
+		chat.Question{Name: "one", Title: "Choose a task", Required: true, Choices: []chat.QuestionOption{{Value: "a", Label: "Task A"}, {Value: "x", Label: "Unavailable", Disabled: true}}},
+		chat.Question{Name: "two", Title: "Choose extras", Multiple: true, Choices: []chat.QuestionOption{{Value: "b", Label: "Extra B"}, {Value: "c", Label: "Extra C"}}},
+		chat.Question{Name: "three", Title: "Add context", Required: true, InputLabel: "Context", Placeholder: "Details"},
+	).OnSubmit(func(a chat.QuestionAnswers) {
 		submits++
 		if len(a) != 2 || a["one"].Values[0] != "a" || a["three"].Text != "A useful answer" {
 			t.Fatal("serialized answers", a)
@@ -240,7 +262,7 @@ func TestQuestionnaireValidationSkipSubmissionAndReset(t *testing.T) {
 	p.Tap("Task A")
 	p.Tap("Next")
 	p.Tap("Skip")
-	if q.Status("two") != ui.QuestionSkipped {
+	if q.Status("two") != chat.QuestionSkipped {
 		t.Fatal("skip not recorded")
 	}
 	p.Tap("Submit")
@@ -265,10 +287,10 @@ func TestQuestionnaireValidationSkipSubmissionAndReset(t *testing.T) {
 }
 func TestQuestionnaireKeyboardMultipleControlledAndDisabled(t *testing.T) {
 	t.Parallel()
-	answers := ggui.State(ui.QuestionAnswers{})
+	answers := ggui.State(chat.QuestionAnswers{})
 	active := ggui.State("multi")
-	items := []ui.Question{{Name: "single", Title: "Single", Required: true, Choices: []ui.QuestionOption{{Value: "a", Label: "A"}}}, {Name: "multi", Title: "Multiple", Required: true, Multiple: true, Choices: []ui.QuestionOption{{Value: "b", Label: "B"}, {Value: "off", Label: "Off", Disabled: true}, {Value: "c", Label: "C"}}}, {Name: "disabled", Title: "Hidden", Disabled: true}}
-	q := ui.Questionnaire(answers, items...).BindActive(active).Shortcuts(ui.QuestionNumbers)
+	items := []chat.Question{{Name: "single", Title: "Single", Required: true, Choices: []chat.QuestionOption{{Value: "a", Label: "A"}}}, {Name: "multi", Title: "Multiple", Required: true, Multiple: true, Choices: []chat.QuestionOption{{Value: "b", Label: "B"}, {Value: "off", Label: "Off", Disabled: true}, {Value: "c", Label: "C"}}}, {Name: "disabled", Title: "Hidden", Disabled: true}}
+	q := chat.Questionnaire(answers, items...).BindActive(active).Shortcuts(chat.QuestionNumbers)
 	p := ggui.NewProbe(q, ggui.Sz(400, 400))
 	defer p.Close()
 	p.Tap("B")
@@ -302,9 +324,9 @@ func TestQuestionnaireKeyboardMultipleControlledAndDisabled(t *testing.T) {
 
 func TestQuestionnaireFreeformDefaultsAndExternalErrors(t *testing.T) {
 	t.Parallel()
-	answers := ggui.State(ui.QuestionAnswers{"one": {Values: []string{"a"}}})
+	answers := ggui.State(chat.QuestionAnswers{"one": {Values: []string{"a"}}})
 	submits := 0
-	q := ui.Questionnaire(answers, ui.Question{Name: "one", Title: "Answer", Required: true, Choices: []ui.QuestionOption{{Value: "a", Label: "Fixed"}}, InputLabel: "Custom"}).OnSubmit(func(ui.QuestionAnswers) { submits++ })
+	q := chat.Questionnaire(answers, chat.Question{Name: "one", Title: "Answer", Required: true, Choices: []chat.QuestionOption{{Value: "a", Label: "Fixed"}}, InputLabel: "Custom"}).OnSubmit(func(chat.QuestionAnswers) { submits++ })
 	p := ggui.NewProbe(q, ggui.Sz(360, 360))
 	defer p.Close()
 	p.Frame()
@@ -333,7 +355,7 @@ func TestQuestionnaireFreeformDefaultsAndExternalErrors(t *testing.T) {
 func TestMessageScrollerNoImplicitFollowAndReducedMotion(t *testing.T) {
 	t.Parallel()
 	rows := ggui.State(transcript(6))
-	s := ui.MessageScroller(rows).Gap(10)
+	s := chat.MessageScroller(rows).Gap(10)
 	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, s), ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
@@ -348,9 +370,9 @@ func TestMessageScrollerNoImplicitFollowAndReducedMotion(t *testing.T) {
 	if s.Position() != 0 {
 		t.Fatal("reduced motion did not jump")
 	}
-	s.ScrollToMessage("future", ui.ScrollAlignStart)
+	s.ScrollToMessage("future", chat.ScrollAlignStart)
 	s.ScrollToEnd()
-	rows.Set(append(transcript(7), ui.MessageEntry{ID: "future", Content: widget.Box().Height(40)}))
+	rows.Set(append(transcript(7), chat.MessageEntry{ID: "future", Content: widget.Box().Height(40)}))
 	p.Frame()
 	// The later edge command must cancel a pending missing-message command.
 	if s.Position() != 420 {
@@ -361,16 +383,16 @@ func TestMessageScrollerNoImplicitFollowAndReducedMotion(t *testing.T) {
 func TestMessageScrollerRestoreReplacesQueuedJump(t *testing.T) {
 	t.Parallel()
 	rows := ggui.State(transcript(8))
-	s := ui.MessageScroller(rows).Gap(10).Animation(0)
+	s := chat.MessageScroller(rows).Gap(10).Animation(0)
 	p := ggui.NewProbe(s, ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
 	s.ScrollToStart()
 	p.Frame()
 	saved := s.Save()
-	s.ScrollToMessage("future", ui.ScrollAlignStart)
+	s.ScrollToMessage("future", chat.ScrollAlignStart)
 	s.Restore(saved)
-	rows.Set(append(transcript(8), ui.MessageEntry{ID: "future", Content: widget.Box().Height(40)}))
+	rows.Set(append(transcript(8), chat.MessageEntry{ID: "future", Content: widget.Box().Height(40)}))
 	p.Frame()
 	if s.Position() != 0 {
 		t.Fatal("queued jump overrode restored position", s.Position())
@@ -379,10 +401,10 @@ func TestMessageScrollerRestoreReplacesQueuedJump(t *testing.T) {
 
 func TestAttachmentGroupTouchPixelsAndMomentum(t *testing.T) {
 	t.Parallel()
-	group := ui.AttachmentGroup(
-		ui.Attachment("One", "PDF").Width(180),
-		ui.Attachment("Two", "PDF").Width(180),
-		ui.Attachment("Three", "PDF").Width(180),
+	group := chat.AttachmentGroup(
+		chat.Attachment("One", "PDF").Width(180),
+		chat.Attachment("Two", "PDF").Width(180),
+		chat.Attachment("Three", "PDF").Width(180),
 	)
 	p := ggui.NewProbe(widget.Column(group), ggui.Sz(230, 140))
 	defer p.Close()
@@ -414,4 +436,69 @@ func TestAttachmentGroupTouchPixelsAndMomentum(t *testing.T) {
 	if group.Position() != end {
 		t.Fatal("momentum scheduled a wheel snap")
 	}
+}
+
+func TestChatWidgetsFollowStringsLocalization(t *testing.T) {
+	t.Parallel()
+	ko := ui.Strings{
+		AttachmentsName:      "첨부 파일",
+		AttachmentStatusDone: "완료",
+		ConversationName:     "대화",
+		TraceName:            "실행 추적",
+		TraceStatusRunning:   "실행 중",
+		NoQuestions:          "질문 없음",
+		NoQuestionsDetail:    "활성화된 질문이 없습니다.",
+	}
+	lang := ggui.State(ko)
+	root := ui.BindStrings(lang, widget.Column(
+		chat.AttachmentGroup(chat.Attachment("a.txt", "")),
+		chat.MessageScroller(ggui.State([]chat.MessageEntry{{ID: "1", Content: widget.Text("hi")}})).Height(80),
+		chat.Trace(chat.TraceStep{ID: "run", Title: "Run", Status: chat.TraceRunning}),
+		chat.Questionnaire(ggui.State(chat.QuestionAnswers{})),
+	))
+	p := ggui.NewProbe(root, ggui.Sz(600, 600))
+	defer p.Close()
+	p.Frame()
+	tree := p.Semantics()
+	node(t, tree, ggui.RoleGroup, "첨부 파일")
+	if n := node(t, tree, ggui.RoleGroup, "a.txt"); n.Description != "완료" {
+		t.Fatalf("attachment state description = %q, want 완료", n.Description)
+	}
+	node(t, tree, ggui.RoleGroup, "대화")
+	node(t, tree, ggui.RoleList, "실행 추적")
+	node(t, tree, ggui.RoleStatus, "Run: 실행 중")
+	node(t, tree, ggui.RoleText, "질문 없음")
+	node(t, tree, ggui.RoleText, "활성화된 질문이 없습니다.")
+
+	lang.Set(ui.DefaultStrings())
+	p.Frame()
+	tree = p.Semantics()
+	node(t, tree, ggui.RoleText, "No questions")
+	node(t, tree, ggui.RoleText, "There are no enabled questions.")
+}
+
+func TestChatIdentityAndNilBindingRejection(t *testing.T) {
+	t.Parallel()
+	name := ggui.State("First")
+	b := chat.Bubble(widget.Text("hello")).Action("First", func() {}).Key("bubble-1").BindName(name)
+	ag := chat.AttachmentGroup(chat.Attachment("a.txt", "1 KB")).Key("group-1").BindName(name)
+	ms := chat.MessageScroller(ggui.State([]chat.MessageEntry{{ID: "1", Content: widget.Text("hi")}})).Height(60).Key("scroll-1").BindName(name)
+	q := chat.Questionnaire(ggui.State(chat.QuestionAnswers{}), chat.Question{Name: "q", Title: "Pick", Choices: []chat.QuestionOption{{Value: "a", Label: "A"}}}).Key("q-1").BindName(name)
+
+	p := ggui.NewProbe(widget.Column(b, ag, ms, q), ggui.Sz(400, 500))
+	defer p.Close()
+	p.Frame()
+	name.Set("Second")
+	p.Frame()
+	node(t, p.Semantics(), ggui.RoleButton, "Second")
+
+	var nilState *ggui.StateValue[chat.AttachmentState]
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("BindState accepted typed nil")
+			}
+		}()
+		chat.Attachment("file", "").BindState(nilState)
+	}()
 }

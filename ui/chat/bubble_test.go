@@ -1,10 +1,11 @@
-package ui
+package chat
 
 import (
 	"image/color"
 	"testing"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -98,7 +99,7 @@ func TestBubbleDisabledFollowsItsBindingAndIgnoresInput(t *testing.T) {
 func TestBubbleReactionsStartSitsAtTheLeadingEdge(t *testing.T) {
 	t.Parallel()
 	body := func(start bool) ggui.Rect {
-		b := Bubble(widget.Text("a long enough message")).Reactions(Button("Like", nil).Ghost())
+		b := Bubble(widget.Text("a long enough message")).Reactions(ui.Button("Like", nil).Ghost())
 		if start {
 			b.ReactionsStart()
 		}

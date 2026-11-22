@@ -1,4 +1,4 @@
-package ui
+package chart
 
 import (
 	"encoding/binary"
@@ -8,20 +8,25 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/gfxtest"
+	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
 
-func chartTestData() []ChartDatum {
-	return []ChartDatum{{Label: "Jan", Values: map[string]float64{"a": 10, "b": 5}}, {Label: "Feb", Values: map[string]float64{"a": -4, "b": -6}}, {Label: "Mar", Values: map[string]float64{"a": 20, "b": 8}}}
+// The tests paint with no renderer: see gfxtest.MainHeadless.
+func TestMain(m *testing.M) { gfxtest.MainHeadless(m) }
+
+func chartTestData() []Datum {
+	return []Datum{{Label: "Jan", Values: map[string]float64{"a": 10, "b": 5}}, {Label: "Feb", Values: map[string]float64{"a": -4, "b": -6}}, {Label: "Mar", Values: map[string]float64{"a": 20, "b": 8}}}
 }
 
-var chartTestConfig = ChartConfig{{Key: "a", Label: "Desktop"}, {Key: "b", Label: "Mobile"}}
+var chartTestConfig = Config{{Key: "a", Label: "Desktop"}, {Key: "b", Label: "Mobile"}}
 
 func TestChartStackDomainAndSnapshot(t *testing.T) {
 	t.Parallel()
 	data := chartTestData()
-	c := BarChart(data, chartTestConfig).Stack(ChartStacked)
+	c := Bar(data, chartTestConfig).Stack(StackStacked)
 	data[0].Values["a"] = 900
 	c.geometryFor(ggui.Sz(400, 240))
 	if c.geometry.lo != -10 || c.geometry.hi != 30 {
@@ -31,7 +36,7 @@ func TestChartStackDomainAndSnapshot(t *testing.T) {
 	if got := s.top[0].Y; math.Abs(got-.625) > 1e-9 {
 		t.Fatalf("stack top %v", got)
 	}
-	c.Stack(ChartExpanded)
+	c.Stack(StackExpanded)
 	c.geometryFor(ggui.Sz(400, 240))
 	if c.geometry.lo != -1 || c.geometry.hi != 1 {
 		t.Fatal("expanded domain")
@@ -42,9 +47,9 @@ func TestChartStackDomainAndSnapshot(t *testing.T) {
 }
 func TestChartEmptyMissingInvalidAndNarrow(t *testing.T) {
 	t.Parallel()
-	for kind := ChartArea; kind <= ChartRadial; kind++ {
-		for _, data := range [][]ChartDatum{nil, {{Label: "only", Values: map[string]float64{"a": 0}}}, {{Values: map[string]float64{"a": math.NaN()}}, {Values: map[string]float64{"b": math.Inf(1)}}}} {
-			c := ChartContainer(kind, data, chartTestConfig)
+	for kind := KindArea; kind <= KindRadial; kind++ {
+		for _, data := range [][]Datum{nil, {{Label: "only", Values: map[string]float64{"a": 0}}}, {{Values: map[string]float64{"a": math.NaN()}}, {Values: map[string]float64{"b": math.Inf(1)}}}} {
+			c := Container(kind, data, chartTestConfig)
 			p := ggui.NewProbe(c, ggui.Sz(1, 1))
 			p.Frame()
 			p.Resize(ggui.Sz(400, 240))
@@ -65,7 +70,7 @@ func TestChartEmptyMissingInvalidAndNarrow(t *testing.T) {
 func TestChartKeyboardPointerSelection(t *testing.T) {
 	t.Parallel()
 	selected := -1
-	c := BarChart(chartTestData(), chartTestConfig).Animation(0).OnSelect(func(i int, _ ChartDatum) { selected = i })
+	c := Bar(chartTestData(), chartTestConfig).Animation(0).OnSelect(func(i int, _ Datum) { selected = i })
 	p := ggui.NewProbe(c, ggui.Sz(400, 240))
 	defer p.Close()
 	p.Frame()
@@ -95,7 +100,7 @@ func TestChartKeyboardPointerSelection(t *testing.T) {
 }
 func TestChartMotionAndReducedMotion(t *testing.T) {
 	t.Parallel()
-	c := AreaChart(chartTestData(), chartTestConfig)
+	c := Area(chartTestData(), chartTestConfig)
 	now := time.Unix(100, 0)
 	restore := ggui.SetClock(func() time.Time { return now })
 	defer restore()
@@ -151,7 +156,7 @@ func TestChartDownsamplePreservesSpikesAndGaps(t *testing.T) {
 }
 func TestChartGeometryAndCurveCaches(t *testing.T) {
 	t.Parallel()
-	c := AreaChart(chartTestData(), chartTestConfig)
+	c := Area(chartTestData(), chartTestConfig)
 	p := ggui.NewProbe(c, ggui.Sz(400, 240))
 	defer p.Close()
 	p.Frame()
@@ -163,7 +168,7 @@ func TestChartGeometryAndCurveCaches(t *testing.T) {
 	if old != &c.geometry.series[0].top[0] || curve != &c.curves[0][0] {
 		t.Fatal("unchanged frame rebuilt geometry")
 	}
-	c.Data([]ChartDatum{{Values: map[string]float64{"a": 2}}, {Values: map[string]float64{"a": 3}}})
+	c.Data([]Datum{{Values: map[string]float64{"a": 2}}, {Values: map[string]float64{"a": 3}}})
 	p.Frame()
 	if c.geometry.hi < 3 || old == &c.geometry.series[0].top[0] {
 		t.Fatal("data invalidation")
@@ -176,7 +181,7 @@ func TestChartGeometryAndCurveCaches(t *testing.T) {
 }
 func TestChartPolarHitTesting(t *testing.T) {
 	t.Parallel()
-	c := PieChart([]ChartDatum{{Values: map[string]float64{"a": 1}}, {Values: map[string]float64{"a": 1}}}, chartTestConfig[:1]).InnerRadius(.5).Animation(0)
+	c := Pie([]Datum{{Values: map[string]float64{"a": 1}}, {Values: map[string]float64{"a": 1}}}, chartTestConfig[:1]).InnerRadius(.5).Animation(0)
 	p := ggui.NewProbe(c, ggui.Sz(300, 300))
 	defer p.Close()
 	p.Frame()
@@ -193,11 +198,11 @@ func TestChartPolarHitTesting(t *testing.T) {
 	}
 }
 func BenchmarkChartCachedGeometry100K(b *testing.B) {
-	data := make([]ChartDatum, 100000)
+	data := make([]Datum, 100000)
 	for i := range data {
-		data[i] = ChartDatum{Values: map[string]float64{"a": math.Sin(float64(i))}}
+		data[i] = Datum{Values: map[string]float64{"a": math.Sin(float64(i))}}
 	}
-	c := LineChart(data, chartTestConfig[:1])
+	c := Line(data, chartTestConfig[:1])
 	size := ggui.Sz(800, 240)
 	c.geometryFor(size)
 	b.ReportAllocs()
@@ -207,11 +212,11 @@ func BenchmarkChartCachedGeometry100K(b *testing.B) {
 	}
 }
 func BenchmarkChartCachedPaint100K(b *testing.B) {
-	data := make([]ChartDatum, 100000)
+	data := make([]Datum, 100000)
 	for i := range data {
-		data[i] = ChartDatum{Values: map[string]float64{"a": math.Sin(float64(i))}}
+		data[i] = Datum{Values: map[string]float64{"a": math.Sin(float64(i))}}
 	}
-	c := LineChart(data, chartTestConfig[:1]).Animation(0).Axes(false, false)
+	c := Line(data, chartTestConfig[:1]).Animation(0).Axes(false, false)
 	p := ggui.NewProbe(c, ggui.Sz(800, 240))
 	defer p.Close()
 	p.Frame()
@@ -224,7 +229,7 @@ func BenchmarkChartCachedPaint100K(b *testing.B) {
 
 func TestChartTooltipFormatsTotalAndLegendWrap(t *testing.T) {
 	t.Parallel()
-	c := BarChart(chartTestData(), chartTestConfig).Tooltip(ChartTooltipOptions{ShowTotal: true, Label: "Total visits in the selected month", FormatValue: func(v float64, _ ChartSeries, _ ChartDatum) string { return fmt.Sprintf("%.0f visitors", v) }})
+	c := Bar(chartTestData(), chartTestConfig).Tooltip(TooltipOptions{ShowTotal: true, Label: "Total visits in the selected month", FormatValue: func(v float64, _ Series, _ Datum) string { return fmt.Sprintf("%.0f visitors", v) }})
 	c.Layout(ggui.Loose(ggui.Sz(400, 240)), uitheme.Default().Apply(ggui.Env{}))
 	rows, size := c.tooltipRows(0)
 	if len(rows) != 2 || rows[0].value != "10 visitors" || size.H != 88 || size.W < 128 {
@@ -233,7 +238,7 @@ func TestChartTooltipFormatsTotalAndLegendWrap(t *testing.T) {
 	if c.legendHeight(70) <= c.legendHeight(400) {
 		t.Fatal("legend did not wrap")
 	}
-	standalone := ChartTooltipContent(c, 0)
+	standalone := TooltipContent(c, 0)
 	dark := uitheme.Dark()
 	standalone.Layout(ggui.Loose(ggui.Sz(400, 240)), dark.Apply(ggui.Env{}))
 	if c.theme.Bg == dark.Bg {
@@ -242,7 +247,7 @@ func TestChartTooltipFormatsTotalAndLegendWrap(t *testing.T) {
 }
 func TestChartMotionThroughProbe(t *testing.T) {
 	t.Parallel()
-	c := LineChart(chartTestData(), chartTestConfig)
+	c := Line(chartTestData(), chartTestConfig)
 	p := ggui.NewProbe(c, ggui.Sz(400, 240))
 	defer p.Close()
 	p.Frame()
@@ -254,7 +259,7 @@ func TestChartMotionThroughProbe(t *testing.T) {
 	if !(early > 0 && early < middle && middle < 1 && c.progress() == 1) {
 		t.Fatalf("motion %v %v %v", early, middle, c.progress())
 	}
-	reduced := AreaChart(chartTestData(), chartTestConfig)
+	reduced := Area(chartTestData(), chartTestConfig)
 	r := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, reduced), ggui.Sz(400, 240))
 	defer r.Close()
 	r.Frame()
@@ -264,17 +269,17 @@ func TestChartMotionThroughProbe(t *testing.T) {
 }
 func TestChartTooltipAndLegendEmpty(t *testing.T) {
 	t.Parallel()
-	c := PieChart(nil, nil)
-	p := ggui.NewProbe(widget.Column(ChartLegend(c), ChartTooltip(c, 99)), ggui.Sz(300, 200))
+	c := Pie(nil, nil)
+	p := ggui.NewProbe(widget.Column(Legend(c), Tooltip(c, 99)), ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
 }
 func BenchmarkChartPrepare100K(b *testing.B) {
-	data := make([]ChartDatum, 100000)
+	data := make([]Datum, 100000)
 	for i := range data {
-		data[i] = ChartDatum{Values: map[string]float64{"a": math.Sin(float64(i))}}
+		data[i] = Datum{Values: map[string]float64{"a": math.Sin(float64(i))}}
 	}
-	c := LineChart(data, chartTestConfig[:1])
+	c := Line(data, chartTestConfig[:1])
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
@@ -285,7 +290,7 @@ func BenchmarkChartPrepare100K(b *testing.B) {
 
 func TestChartAssistiveActions(t *testing.T) {
 	t.Parallel()
-	c := LineChart(chartTestData(), chartTestConfig)
+	c := Line(chartTestData(), chartTestConfig)
 	if !c.Act(ggui.Action{Kind: ggui.ActionIncrement}) || c.active != 0 {
 		t.Fatal("increment")
 	}
@@ -302,13 +307,13 @@ func TestChartAssistiveActions(t *testing.T) {
 
 func TestChartStackSamplingPreservesBaselineSpikes(t *testing.T) {
 	t.Parallel()
-	data := make([]ChartDatum, 10000)
+	data := make([]Datum, 10000)
 	for i := range data {
-		data[i] = ChartDatum{Values: map[string]float64{"a": 1, "b": 9}}
+		data[i] = Datum{Values: map[string]float64{"a": 1, "b": 9}}
 	}
 	data[4567].Values["a"] = 9
 	data[4567].Values["b"] = 1
-	c := AreaChart(data, chartTestConfig).Stack(ChartStacked)
+	c := Area(data, chartTestConfig).Stack(StackStacked)
 	c.geometryFor(ggui.Sz(300, 240))
 	found := false
 	for _, i := range c.geometry.series[1].indices {
@@ -322,8 +327,8 @@ func TestChartStackSamplingPreservesBaselineSpikes(t *testing.T) {
 }
 func TestChartReferenceAnimationTimings(t *testing.T) {
 	t.Parallel()
-	bar := BarChart(chartTestData(), chartTestConfig)
-	pie := PieChart(chartTestData(), chartTestConfig[:1])
+	bar := Bar(chartTestData(), chartTestConfig)
+	pie := Pie(chartTestData(), chartTestConfig[:1])
 	if bar.duration != 400*time.Millisecond || pie.delay != 400*time.Millisecond {
 		t.Fatal("reference timing defaults")
 	}
@@ -342,7 +347,7 @@ func TestChartReferenceAnimationTimings(t *testing.T) {
 }
 
 // settledChart mounts c at size and runs its entrance to the end.
-func settledChart(t *testing.T, c *ChartWidget, size ggui.Size) *ggui.Probe {
+func settledChart(t *testing.T, c *Widget, size ggui.Size) *ggui.Probe {
 	t.Helper()
 	p := ggui.NewProbe(c, size)
 	t.Cleanup(p.Close)
@@ -361,8 +366,8 @@ func within(r ggui.Rect, p ggui.Point) bool {
 func TestChartDotPainterSeesEveryValuePlacedInThePlot(t *testing.T) {
 	t.Parallel()
 	data := chartTestData()
-	seen := map[[2]int]ChartPointContext{}
-	c := LineChart(data, chartTestConfig).Animation(0).ActiveIndex(1).DotPainter(func(_ *ggui.Canvas, ctx ChartPointContext) {
+	seen := map[[2]int]PointContext{}
+	c := Line(data, chartTestConfig).Animation(0).ActiveIndex(1).DotPainter(func(_ *ggui.Canvas, ctx PointContext) {
 		seen[[2]int{ctx.Index, ctx.SeriesIndex}] = ctx
 	})
 	settledChart(t, c, ggui.Sz(400, 240))
@@ -390,8 +395,8 @@ func TestChartDotPainterSeesEveryValuePlacedInThePlot(t *testing.T) {
 func TestChartLabelPainterOverridesLabelFormatter(t *testing.T) {
 	t.Parallel()
 	var formatted, painted int
-	format := func(ctx ChartPointContext) string { formatted++; return fmt.Sprintf("%.0f!", ctx.Value) }
-	c := BarChart(chartTestData(), chartTestConfig).Animation(0).LabelFormatter(format)
+	format := func(ctx PointContext) string { formatted++; return fmt.Sprintf("%.0f!", ctx.Value) }
+	c := Bar(chartTestData(), chartTestConfig).Animation(0).LabelFormatter(format)
 	settledChart(t, c, ggui.Sz(400, 240))
 	formatted = 0
 	c.Paint(nil, ggui.Rct(ggui.Point{}, ggui.Sz(400, 240)))
@@ -399,7 +404,7 @@ func TestChartLabelPainterOverridesLabelFormatter(t *testing.T) {
 		t.Fatalf("LabelFormatter ran %d times, want once per value (6)", formatted)
 	}
 	formatted = 0
-	c.LabelPainter(func(*ggui.Canvas, ChartPointContext) { painted++ })
+	c.LabelPainter(func(*ggui.Canvas, PointContext) { painted++ })
 	c.Paint(nil, ggui.Rct(ggui.Point{}, ggui.Sz(400, 240)))
 	if painted != 6 || formatted != 0 {
 		t.Fatalf("with a LabelPainter: painter ran %d times and formatter %d, want 6 and 0", painted, formatted)
@@ -409,7 +414,7 @@ func TestChartLabelPainterOverridesLabelFormatter(t *testing.T) {
 func TestChartTickFormatterRewritesCategoryTicks(t *testing.T) {
 	t.Parallel()
 	var got []string
-	c := AreaChart(chartTestData(), chartTestConfig).Animation(0).TickFormatter(func(s string) string {
+	c := Area(chartTestData(), chartTestConfig).Animation(0).TickFormatter(func(s string) string {
 		got = append(got, s)
 		return s[:1]
 	})
@@ -429,10 +434,10 @@ func TestChartTickFormatterRewritesCategoryTicks(t *testing.T) {
 
 func TestChartRadarTickPainterRunsOncePerCategoryAroundTheRim(t *testing.T) {
 	t.Parallel()
-	data := append(chartTestData(), ChartDatum{Label: "Apr", Values: map[string]float64{"a": 3}})
-	var ticks []ChartPointContext
-	c := RadarChart(data, chartTestConfig).Animation(0).PolarGrid(ChartPolarGrid{Circle: true, Fill: true, Rings: 3}).
-		TickPainter(func(_ *ggui.Canvas, ctx ChartPointContext) { ticks = append(ticks, ctx) })
+	data := append(chartTestData(), Datum{Label: "Apr", Values: map[string]float64{"a": 3}})
+	var ticks []PointContext
+	c := Radar(data, chartTestConfig).Animation(0).PolarGrid(PolarGrid{Circle: true, Fill: true, Rings: 3}).
+		TickPainter(func(_ *ggui.Canvas, ctx PointContext) { ticks = append(ticks, ctx) })
 	settledChart(t, c, ggui.Sz(300, 300))
 	ticks = nil
 	c.Paint(nil, ggui.Rct(ggui.Point{}, ggui.Sz(300, 300)))
@@ -456,7 +461,7 @@ func TestChartRadarTickPainterRunsOncePerCategoryAroundTheRim(t *testing.T) {
 func TestChartHorizontalBarsHitTestAlongTheVerticalAxis(t *testing.T) {
 	t.Parallel()
 	selected := -1
-	c := BarChart(chartTestData(), chartTestConfig).Animation(0).Horizontal(true).OnSelect(func(i int, _ ChartDatum) { selected = i })
+	c := Bar(chartTestData(), chartTestConfig).Animation(0).Horizontal(true).OnSelect(func(i int, _ Datum) { selected = i })
 	p := settledChart(t, c, ggui.Sz(400, 300))
 	band := c.plot.Size.H / 3
 	for i := range 3 {
@@ -473,7 +478,7 @@ func TestChartHorizontalBarsHitTestAlongTheVerticalAxis(t *testing.T) {
 
 func TestChartDomainOverridesTheDataRangeOnlyWhenValid(t *testing.T) {
 	t.Parallel()
-	c := LineChart(chartTestData(), chartTestConfig).Domain(0, 100)
+	c := Line(chartTestData(), chartTestConfig).Domain(0, 100)
 	c.geometryFor(ggui.Sz(400, 240))
 	if c.geometry.lo != 0 || c.geometry.hi != 100 {
 		t.Fatalf("Domain(0, 100) gave %v..%v", c.geometry.lo, c.geometry.hi)
@@ -493,7 +498,7 @@ func TestChartDomainOverridesTheDataRangeOnlyWhenValid(t *testing.T) {
 
 func TestChartSettersClampOutOfRangeValues(t *testing.T) {
 	t.Parallel()
-	c := PieChart(chartTestData(), chartTestConfig).OuterRadius(3).FillOpacity(2).CornerRadius(-4).StrokeWidth(-1).Height(-10)
+	c := Pie(chartTestData(), chartTestConfig).OuterRadius(3).FillOpacity(2).CornerRadius(-4).StrokeWidth(-1).Height(-10)
 	settledChart(t, c, ggui.Sz(300, 300))
 	if _, radius := c.polarBounds(); radius != 150 {
 		t.Fatalf("OuterRadius(3) gave radius %v, want the full 150", radius)
@@ -516,8 +521,8 @@ func TestChartSettersClampOutOfRangeValues(t *testing.T) {
 
 func TestChartLegendTakesRoomFromThePlot(t *testing.T) {
 	t.Parallel()
-	plain := BarChart(chartTestData(), chartTestConfig).Animation(0)
-	legend := BarChart(chartTestData(), chartTestConfig).Animation(0).Legend(true)
+	plain := Bar(chartTestData(), chartTestConfig).Animation(0)
+	legend := Bar(chartTestData(), chartTestConfig).Animation(0).Legend(true)
 	settledChart(t, plain, ggui.Sz(400, 240))
 	settledChart(t, legend, ggui.Sz(400, 240))
 	if legend.plot.Size.H >= plain.plot.Size.H {
@@ -527,7 +532,7 @@ func TestChartLegendTakesRoomFromThePlot(t *testing.T) {
 
 func TestChartAnimationDelayHoldsTheEntrance(t *testing.T) {
 	t.Parallel()
-	c := LineChart(chartTestData(), chartTestConfig).Animation(time.Second).AnimationDelay(500 * time.Millisecond)
+	c := Line(chartTestData(), chartTestConfig).Animation(time.Second).AnimationDelay(500 * time.Millisecond)
 	now := time.Unix(100, 0)
 	restore := ggui.SetClock(func() time.Time { return now })
 	defer restore()
@@ -554,7 +559,7 @@ func TestChartAnimationDelayHoldsTheEntrance(t *testing.T) {
 func TestChartDefaultTooltipIndexDescribesWithoutSelecting(t *testing.T) {
 	t.Parallel()
 	selected := -1
-	c := BarChart(chartTestData(), chartTestConfig).Animation(0).DefaultTooltipIndex(2).OnSelect(func(i int, _ ChartDatum) { selected = i })
+	c := Bar(chartTestData(), chartTestConfig).Animation(0).DefaultTooltipIndex(2).OnSelect(func(i int, _ Datum) { selected = i })
 	settledChart(t, c, ggui.Sz(400, 240))
 	d := c.Describe()
 	if d.Now != 2 || d.Value != "Mar, Desktop: 20, Mobile: 8" {
@@ -567,7 +572,7 @@ func TestChartDefaultTooltipIndexDescribesWithoutSelecting(t *testing.T) {
 
 func TestChartEmptyChartIgnoresAssistiveActions(t *testing.T) {
 	t.Parallel()
-	c := LineChart(nil, chartTestConfig)
+	c := Line(nil, chartTestConfig)
 	for _, kind := range []ggui.ActionSet{ggui.ActionIncrement, ggui.ActionDecrement, ggui.ActionSetValue} {
 		if c.Act(ggui.Action{Kind: kind, Num: 0}) {
 			t.Errorf("empty chart accepted %v", kind)
@@ -580,10 +585,30 @@ func TestChartEmptyChartIgnoresAssistiveActions(t *testing.T) {
 
 func TestChartNameReachesSemantics(t *testing.T) {
 	t.Parallel()
-	c := AreaChart(chartTestData(), chartTestConfig).Name("Visitors")
+	c := Area(chartTestData(), chartTestConfig).Name("Visitors")
 	p := settledChart(t, c, ggui.Sz(400, 240))
 	if _, ok := p.Semantics().Find(ggui.RoleGroup, "Visitors"); !ok {
 		t.Fatalf("no group named Visitors:\n%s", p.Semantics())
+	}
+}
+
+func TestChartKeyAndBindName(t *testing.T) {
+	t.Parallel()
+	name := ggui.State("Initial")
+	c := Bar(chartTestData(), chartTestConfig).Key("chart-key").BindName(name).Animation(0)
+	if c.HitID() != "chart-key" {
+		t.Fatalf("HitID = %v, want chart-key", c.HitID())
+	}
+	p := ggui.NewProbe(c, ggui.Sz(400, 240))
+	defer p.Close()
+	p.Frame()
+	if _, ok := p.Semantics().Find(ggui.RoleGroup, "Initial"); !ok {
+		t.Fatalf("initial bound name not found:\n%s", p.Semantics())
+	}
+	name.Set("Updated")
+	p.Frame()
+	if _, ok := p.Semantics().Find(ggui.RoleGroup, "Updated"); !ok {
+		t.Fatalf("updated bound name not found:\n%s", p.Semantics())
 	}
 }
 
@@ -592,15 +617,15 @@ func TestChartNameReachesSemantics(t *testing.T) {
 // and an active category, and checks the geometry stays finite.
 func TestChartEveryOptionPaintsFiniteGeometry(t *testing.T) {
 	t.Parallel()
-	data := append(chartTestData(), ChartDatum{Label: "Apr", Values: map[string]float64{"a": 7, "b": math.NaN()}}, ChartDatum{Label: "May", Icon: "star", Values: map[string]float64{"a": 12, "b": 2}})
-	for kind := ChartArea; kind <= ChartRadial; kind++ {
-		for _, curve := range []ChartCurve{ChartNatural, ChartLinear, ChartStep, ChartMonotone} {
-			for _, stack := range []ChartStack{ChartUnstacked, ChartStacked, ChartExpanded} {
-				c := ChartContainer(kind, data, chartTestConfig).Curve(curve).Stack(stack).
+	data := append(chartTestData(), Datum{Label: "Apr", Values: map[string]float64{"a": 7, "b": math.NaN()}}, Datum{Label: "May", Icon: "star", Values: map[string]float64{"a": 12, "b": 2}})
+	for kind := KindArea; kind <= KindRadial; kind++ {
+		for _, curve := range []Curve{CurveNatural, CurveLinear, CurveStep, CurveMonotone} {
+			for _, stack := range []Stack{StackUnstacked, StackStacked, StackExpanded} {
+				c := Container(kind, data, chartTestConfig).Curve(curve).Stack(stack).
 					Grid(false).Axes(true, true).Legend(true).Dots(true).Labels(true).Gradient(true).
 					Separators(false).TooltipCursor(false).CenterText("42", "total").ActiveRing(true).
 					RadialTrack(false).InsideLabels(true).ActiveIndex(1).DefaultTooltipIndex(3).
-					PolarGrid(ChartPolarGrid{HideSpokes: true, HideRings: true})
+					PolarGrid(PolarGrid{HideSpokes: true, HideRings: true})
 				settledChart(t, c, ggui.Sz(420, 300))
 				c.Grid(true).Horizontal(true).Separators(true).RadialTrack(true).InsideLabels(false)
 				c.Paint(nil, ggui.Rct(ggui.Point{}, ggui.Sz(420, 300)))
@@ -644,14 +669,14 @@ func FuzzChartDomainCoversData(f *testing.F) {
 	f.Add([]byte{3, 0}, uint8(1), int8(-9))
 	f.Fuzz(func(t *testing.T, raw []byte, stack uint8, exp int8) {
 		values := fuzzChartValues(raw, exp)
-		data := make([]ChartDatum, (len(values)+1)/2)
+		data := make([]Datum, (len(values)+1)/2)
 		for i, v := range values {
 			if data[i/2].Values == nil {
 				data[i/2].Values = map[string]float64{}
 			}
 			data[i/2].Values[chartTestConfig[i%2].Key] = v
 		}
-		c := LineChart(data, chartTestConfig).Stack(ChartStack(stack % 3))
+		c := Line(data, chartTestConfig).Stack(Stack(stack % 3))
 		c.geometryFor(ggui.Sz(300, 200))
 		g := c.geometry
 		if !finite(g.lo) || !finite(g.hi) || g.lo >= g.hi {
@@ -674,11 +699,11 @@ func FuzzChartDomainCoversData(f *testing.F) {
 				if !ok {
 					continue
 				}
-				if c.stack == ChartExpanded && sum > 0 {
+				if c.stack == StackExpanded && sum > 0 {
 					v /= sum
 				}
 				switch {
-				case c.stack == ChartUnstacked:
+				case c.stack == StackUnstacked:
 					lo, hi = min(lo, v), max(hi, v)
 				case v >= 0:
 					pos += v
@@ -689,7 +714,7 @@ func FuzzChartDomainCoversData(f *testing.F) {
 				}
 			}
 		}
-		if c.stack != ChartExpanded && hi > lo && g.hi-g.lo > 2*(hi-lo)*(1+1e-9) {
+		if c.stack != StackExpanded && hi > lo && g.hi-g.lo > 2*(hi-lo)*(1+1e-9) {
 			t.Fatalf("domain %v..%v is more than twice the data's %v..%v", g.lo, g.hi, lo, hi)
 		}
 		for j, s := range g.series {
@@ -866,7 +891,7 @@ func FuzzChartMonotoneCurveNeverOvershoots(f *testing.F) {
 		}
 		var path ggui.Path
 		var traced []ggui.Point
-		curvePath(&path, points, ChartMonotone, true, func(p ggui.Point) { traced = append(traced, p) })
+		curvePath(&path, points, CurveMonotone, true, func(p ggui.Point) { traced = append(traced, p) })
 		segment := 0
 		for _, p := range traced {
 			if !finite(p.X) || !finite(p.Y) {
@@ -895,16 +920,16 @@ func FuzzChartPolarHitMatchesPaint(f *testing.F) {
 		if len(raw) == 0 || len(raw) > 48 {
 			t.Skip()
 		}
-		data := make([]ChartDatum, len(raw))
+		data := make([]Datum, len(raw))
 		for i, b := range raw {
 			v := float64(b)
 			if b >= 200 {
 				v = -v // a non-positive value takes no sector
 			}
-			data[i] = ChartDatum{Values: map[string]float64{"a": v}}
+			data[i] = Datum{Values: map[string]float64{"a": v}}
 		}
 		config := chartTestConfig[:1]
-		pie := PieChart(data, config).Angles(float64(start), float64(end)).InnerRadius(float64(inner%95) / 100)
+		pie := Pie(data, config).Angles(float64(start), float64(end)).InnerRadius(float64(inner%95) / 100)
 		pie.plot = ggui.Rct(ggui.Point{}, ggui.Sz(300, 300))
 		center, radius := pie.polarBounds()
 		mid := radius * (1 + pie.inner) / 2
@@ -923,7 +948,7 @@ func FuzzChartPolarHitMatchesPaint(f *testing.F) {
 			}
 			angle += sweep
 		}
-		radar := RadarChart(data, config)
+		radar := Radar(data, config)
 		radar.plot = pie.plot
 		for i := range data {
 			if got := radar.hitIndex(polarPoint(center, radius/2, radarAngle(i, len(data)))); got != i {
@@ -935,8 +960,8 @@ func FuzzChartPolarHitMatchesPaint(f *testing.F) {
 
 func TestChartPieHitTestAcceptsAnyStartAngle(t *testing.T) {
 	t.Parallel()
-	data := []ChartDatum{{Values: map[string]float64{"a": 1}}, {Values: map[string]float64{"a": 1}}}
-	c := PieChart(data, chartTestConfig[:1]).Angles(900, 1260)
+	data := []Datum{{Values: map[string]float64{"a": 1}}, {Values: map[string]float64{"a": 1}}}
+	c := Pie(data, chartTestConfig[:1]).Angles(900, 1260)
 	c.plot = ggui.Rct(ggui.Point{}, ggui.Sz(300, 300))
 	center, radius := c.polarBounds()
 	// The second sector spans 1080..1260 degrees; its middle, 1170, points straight up.
@@ -947,13 +972,13 @@ func TestChartPieHitTestAcceptsAnyStartAngle(t *testing.T) {
 
 func TestChartTooltipAndLegendUseShadcnMetrics(t *testing.T) {
 	t.Parallel()
-	c := BarChart(chartTestData(), chartTestConfig)
+	c := Bar(chartTestData(), chartTestConfig)
 	c.Layout(ggui.Loose(ggui.Sz(400, 240)), uitheme.Default().Apply(ggui.Env{}))
 	// A 16px heading and two 12px rows, 6px apart, inside 6px of padding.
 	if rows, size := c.tooltipRows(0); len(rows) != 2 || size.H != 6+16+6+12+6+12+6 || size.W < 128 {
 		t.Fatalf("tooltip %v for %d rows, want 64 tall and at least 128 wide", size, len(rows))
 	}
-	c.Tooltip(ChartTooltipOptions{HideLabel: true})
+	c.Tooltip(TooltipOptions{HideLabel: true})
 	if _, size := c.tooltipRows(0); size.H != 6+12+6+12+6 {
 		t.Fatalf("tooltip without a heading is %v tall, want 42", size.H)
 	}
@@ -964,5 +989,77 @@ func TestChartTooltipAndLegendUseShadcnMetrics(t *testing.T) {
 	// The grid is drawn at half the border.
 	if _, _, _, a := c.gridLine.RGBA(); a == 0 || a == 0xffff {
 		t.Fatalf("grid line alpha %#x, want the border at half strength", a)
+	}
+}
+
+func TestChartCachedLabelsRemeasureUnderANewEnv(t *testing.T) {
+	t.Parallel()
+	c := Line(chartTestData(), chartTestConfig)
+	cs := ggui.Loose(ggui.Sz(400, 240))
+	env := uitheme.Default().Apply(ggui.Env{})
+	c.Layout(cs, env)
+	first := c.measuredText("Jan", 12, c.theme.Fg)
+	small := first.size
+	c.Layout(cs, env)
+	if c.measuredText("Jan", 12, c.theme.Fg) != first {
+		t.Fatal("a relayout dropped the measured label")
+	}
+	c.Layout(cs, env.With(ggui.TextScaleKey, 2.))
+	if got := c.measuredText("Jan", 12, c.theme.Fg).size; got.W < small.W*1.5 || got.H < small.H*1.5 {
+		t.Fatalf("label kept its measurement under a larger text scale: %v, was %v", got, small)
+	}
+	dark := uitheme.Dark().Apply(ggui.Env{})
+	c.Layout(cs, dark)
+	if got := c.measuredText("Jan", 12, c.theme.Fg).size; got != small {
+		t.Fatalf("label after a theme switch measured %v, want %v", got, small)
+	}
+}
+
+func TestChartTooltipContentRemeasuresUnderANewEnv(t *testing.T) {
+	t.Parallel()
+	w := TooltipContent(Line(chartTestData(), chartTestConfig), 0)
+	env := uitheme.Default().Apply(ggui.Env{})
+	cs := ggui.Loose(ggui.Sz(1000, 1000))
+	small := w.Layout(cs, env)
+	if big := w.Layout(cs, env.With(ggui.TextScaleKey, 2.)); big.W <= small.W {
+		t.Fatalf("tooltip kept its measurement under a larger text scale: %v, was %v", big, small)
+	}
+	if again := w.Layout(cs, env); again != small {
+		t.Fatalf("tooltip %v, want %v", again, small)
+	}
+}
+
+func TestChartStringsLocalization(t *testing.T) {
+	t.Parallel()
+	words := ui.Strings{
+		ChartName:   "Diagram",
+		ChartHelp:   "Explore values with arrows",
+		ChartTotal:  "Sum",
+		ChartNoData: "Empty",
+	}
+	c := Bar([]Datum{{Label: "a", Values: map[string]float64{"v": 1}}}, Config{{Key: "v"}})
+	p := ggui.NewProbe(ui.ProvideStrings(words, c), ggui.Sz(400, 240))
+	defer p.Close()
+	p.Frame()
+	if _, ok := p.Semantics().Find(ggui.RoleGroup, "Diagram"); !ok {
+		t.Fatalf("localized chart name not found:\n%s", p.Semantics())
+	}
+	if got := c.Describe().Description; got != words.ChartHelp {
+		t.Fatalf("description = %q, want %q", got, words.ChartHelp)
+	}
+}
+
+// A chart laid out again at a width one pixel apart, as a window resize does:
+// what keeping its labels across layouts saves.
+func BenchmarkRelayoutChart(b *testing.B) {
+	p := ggui.NewProbe(uitheme.With(uitheme.Default(), Line(chartTestData(), chartTestConfig).Animation(0)), ggui.Sz(800, 240))
+	defer p.Close()
+	p.Frame()
+	b.ReportAllocs()
+	i := 0
+	for b.Loop() {
+		i++
+		p.Resize(ggui.Sz(800+float64(i%2), 240))
+		p.Frame()
 	}
 }

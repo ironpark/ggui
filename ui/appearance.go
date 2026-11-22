@@ -237,6 +237,13 @@ func colorOr(value, fallback color.Color) color.Color {
 // Shared hover timing for disclosure headers, independent of their opening motion.
 var disclosureHoverSlot = ggui.NewSlot[*ggui.Motion]("disclosure hover")
 
+// FocusRing draws the keyboard focus indicator for a control: a border stroke
+// in ring and a soft three-pixel halo outside r, easing in and out over motion
+// (typically env.Motion(t.MotionFast)).
+func FocusRing(dst *ggui.Canvas, state *ggui.Interactive, t *uitheme.Theme, r ggui.Rect, radius float64, ring color.Color, motion time.Duration) {
+	focusRing(dst, state, t, r, radius, ring, motion)
+}
+
 // controlFocusRing draws the keyboard focus of a control: the ring color on
 // its border and the three-pixel soft halo around it. The ring eases in and
 // out over motion (typically env.Motion(t.MotionFast), which lands at once
@@ -255,4 +262,54 @@ func focusRing(dst *ggui.Canvas, state *ggui.Interactive, t *uitheme.Theme, r gg
 	}
 	dst.StrokeRoundRect(r, radius, t.BorderWidth, fade(ring, k))
 	haloStroke(dst, r, radius, fade(t.Halo(ring), k))
+}
+
+// DashedBorder strokes a rounded dashed outline inside r with the given corner
+// radius, stroke width, and color.
+func DashedBorder(dst *ggui.Canvas, r ggui.Rect, radius, width float64, col color.Color) {
+	inset := width / 2
+	x, y := r.Origin.X+inset, r.Origin.Y+inset
+	w, h := max(0, r.Size.W-width), max(0, r.Size.H-width)
+	radius = max(0, min(radius-inset, min(w, h)/2))
+	straightX, straightY := w-2*radius, h-2*radius
+	arc := math.Pi * radius / 2
+	lengths := []float64{straightX, arc, straightY, arc, straightX, arc, straightY, arc}
+	point := func(d float64) ggui.Point {
+		segment := 0
+		for segment < 7 && d > lengths[segment] {
+			d -= lengths[segment]
+			segment++
+		}
+		switch segment {
+		case 0:
+			return ggui.Pt(x+radius+d, y)
+		case 2:
+			return ggui.Pt(x+w, y+radius+d)
+		case 4:
+			return ggui.Pt(x+w-radius-d, y+h)
+		case 6:
+			return ggui.Pt(x, y+h-radius-d)
+		}
+		theta := float64(segment-1)*math.Pi/4 - math.Pi/2
+		if radius > 0 {
+			theta += d / radius
+		}
+		cx, cy := x+w-radius, y+radius
+		if segment >= 3 {
+			cy = y + h - radius
+		}
+		if segment >= 5 {
+			cx = x + radius
+		}
+		if segment == 7 {
+			cy = y + radius
+		}
+		return ggui.Pt(cx+radius*math.Cos(theta), cy+radius*math.Sin(theta))
+	}
+	total := 2*(straightX+straightY) + 4*arc
+	for d := 0.0; d < total; d += 7 {
+		if end := min(d+4, total); end > d {
+			dst.StrokeLine(point(d), point(end), width, col)
+		}
+	}
 }

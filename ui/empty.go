@@ -121,7 +121,7 @@ func (e *EmptyWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements ggui.Widget.
 func (e *EmptyWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if e.outline {
-		attachmentDashedBorder(dst, r, e.theme.RadiusLg, e.theme.BorderWidth, e.theme.Border)
+		DashedBorder(dst, r, e.theme.RadiusLg, e.theme.BorderWidth, e.theme.Border)
 	}
 	dst.Paint(e.box, r)
 }

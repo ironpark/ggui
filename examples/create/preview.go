@@ -8,6 +8,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/chart"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
@@ -241,21 +242,21 @@ func previewMoney(currency string, value float64) string {
 func (p *previewModel) contributionsCard() ggui.Widget {
 	months := []string{"Dec", "Jan", "Feb", "Mar", "Apr", "May"}
 	values := []float64{1700, 2350, 1925, 2775, 1600, 3000}
-	data := make([]ui.ChartDatum, len(months))
+	data := make([]chart.Datum, len(months))
 	for i, month := range months {
-		data[i] = ui.ChartDatum{Label: month, Values: map[string]float64{"contributions": values[i]}}
+		data[i] = chart.Datum{Label: month, Values: map[string]float64{"contributions": values[i]}}
 	}
-	chart := ui.BarChart(data, ui.ChartConfig{{Key: "contributions", Label: "Contributions", ColorIndex: 2}}).
+	bars := chart.Bar(data, chart.Config{{Key: "contributions", Label: "Contributions", ColorIndex: 2}}).
 		Name("Monthly contributions").Key(p.key("contributions-chart")).Height(172).Grid(true).Axes(false, false).Domain(0, 3000).CornerRadius(5).
-		Tooltip(ui.ChartTooltipOptions{FormatValue: func(value float64, _ ui.ChartSeries, _ ui.ChartDatum) string { return previewMoney("USD", value) }}).
-		OnSelect(func(_ int, datum ui.ChartDatum) {
+		Tooltip(chart.TooltipOptions{FormatValue: func(value float64, _ chart.Series, _ chart.Datum) string { return previewMoney("USD", value) }}).
+		OnSelect(func(_ int, datum chart.Datum) {
 			p.announce(p.chartFeedback, datum.Label+" contribution: "+previewMoney("USD", datum.Values["contributions"]))
 		})
 	labels := make([]ggui.Widget, len(months))
 	for i, month := range months {
 		labels[i] = widget.Expanded(widget.Center(ui.Caption(month).Size(12)))
 	}
-	chartWithLabels := widget.Column(chart, widget.Padding(widget.Row(labels...), 0, 12)).Gap(0).Stretch()
+	chartWithLabels := widget.Column(bars, widget.Padding(widget.Row(labels...), 0, 12)).Gap(0).Stretch()
 	tile := func(label, title, description string) ggui.Widget {
 		return previewTile(widget.Column(ui.Caption(label).Size(12), widget.Text(title).Size(16).Weight(ggui.WeightMedium), ui.Caption(description).Size(14)).Gap(8).Stretch())
 	}

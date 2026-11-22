@@ -1,8 +1,10 @@
 // Package ui is the standard control set for ggui: inputs (Button,
 // Checkbox, Switch, Slider, TextField, Select, Combobox, DatePicker),
 // navigation (Tabs, Sidebar, Menu, Breadcrumb, Pagination), feedback
-// (Dialog, Sheet, Toast, Tooltip, Alert), data (Table, charts) and chat
-// (Message, Bubble, Attachment, MessageScroller). A control that holds a
+// (Dialog, Sheet, Toast, Tooltip, Alert), data (Table) and Markdown.
+// Native charts live in [github.com/ironpark/ggui/ui/chart], and chat
+// components, questionnaires and execution traces live in
+// [github.com/ironpark/ggui/ui/chat]. A control that holds a
 // value binds to a StateValue the way Svelte's bind: does, takes its look from the Theme in its Env at layout
 // time, and keeps hover and press state in the widget itself, so nothing
 // rebuilds for a hover. Reading a bound signal happens in Paint, which runs

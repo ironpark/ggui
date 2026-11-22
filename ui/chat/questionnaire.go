@@ -1,4 +1,4 @@
-package ui
+package chat
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
+	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
@@ -67,14 +68,14 @@ type QuestionnaireWidget struct {
 	externalErrors map[string]string
 	view           ggui.Widget
 	choices        []*questionChoice
-	input          *TextFieldWidget
+	input          *ui.TextFieldWidget
 	inputItem      string
 	rtl            bool
 	pendingFocus   bool
 	focusChoice    int
 	shortcuts      QuestionnaireShortcuts
-	submitLabel    string   // as SubmitLabel set it; empty is the Strings' Submit
-	words          *Strings // the Strings of the last layout
+	submitLabel    string      // as SubmitLabel set it; empty is the Strings' Submit
+	words          *ui.Strings // the Strings of the last layout
 	onSubmit       func(QuestionAnswers)
 	onItem         func(string)
 	onStatus       func(string, QuestionStatus)
@@ -106,7 +107,17 @@ func cloneAnswers(src QuestionAnswers) QuestionAnswers {
 	}
 	return dst
 }
+
+// Key assigns this control an input identity. Configure it before mount.
+func (q *QuestionnaireWidget) Key(k any) *QuestionnaireWidget { q.Interactive.SetKey(k); return q }
+
 func (q *QuestionnaireWidget) Name(s string) *QuestionnaireWidget { q.SetName(s); return q }
+
+// BindName follows a non-nil accessible-name reader.
+func (q *QuestionnaireWidget) BindName(r ggui.Readable[string]) *QuestionnaireWidget {
+	q.Interactive.BindName(r)
+	return q
+}
 
 // BindActive binds navigation to a stable question name for resume and host control.
 func (q *QuestionnaireWidget) BindActive(v ggui.Binding[string]) *QuestionnaireWidget {
@@ -156,13 +167,13 @@ func (q *QuestionnaireWidget) SetItems(items ...Question) {
 	seen := map[string]bool{}
 	for _, item := range items {
 		if item.Name == "" || seen[item.Name] {
-			panic("ui.Questionnaire: question names must be nonempty and unique")
+			panic("chat.Questionnaire: question names must be nonempty and unique")
 		}
 		seen[item.Name] = true
 		values := map[string]bool{}
 		for _, choice := range item.Choices {
 			if choice.Value == "" || values[choice.Value] {
-				panic("ui.Questionnaire: choice values must be nonempty and unique")
+				panic("chat.Questionnaire: choice values must be nonempty and unique")
 			}
 			values[choice.Value] = true
 		}
@@ -390,7 +401,7 @@ func (q *QuestionnaireWidget) SetError(name, message string) {
 
 // Error returns the message the question named name shows, or "" for none.
 func (q *QuestionnaireWidget) Error(name string) string {
-	return q.errorText(name, q.words.orDefault())
+	return q.errorText(name, q.words.OrDefault())
 }
 
 // unansweredError is what errors holds for a question left unanswered,
@@ -399,7 +410,7 @@ func (q *QuestionnaireWidget) Error(name string) string {
 const unansweredError = "\x00unanswered"
 
 // errorText is the message of the question named name in words.
-func (q *QuestionnaireWidget) errorText(name string, words *Strings) string {
+func (q *QuestionnaireWidget) errorText(name string, words *ui.Strings) string {
 	err := q.errors[name]
 	if err != unansweredError {
 		return err
@@ -416,6 +427,28 @@ func (q *QuestionnaireWidget) Progress() (current, total int) {
 	return slices.Index(indices, q.current()) + 1, len(indices)
 }
 
+// questionEmpty shows a localized ui.Empty when no questions are enabled,
+// rebuilding the EmptyWidget only when the Strings' no-questions words change.
+type questionEmpty struct {
+	title, detail string
+	empty         *ui.EmptyWidget
+}
+
+func (e *questionEmpty) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	s := ui.StringsOf(env)
+	if e.empty == nil || e.title != s.NoQuestions || e.detail != s.NoQuestionsDetail {
+		e.title, e.detail = s.NoQuestions, s.NoQuestionsDetail
+		e.empty = ui.Empty(e.title, e.detail)
+	}
+	return e.empty.Layout(c, env)
+}
+
+func (e *questionEmpty) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	if e.empty != nil {
+		dst.Paint(e.empty, r)
+	}
+}
+
 func (q *QuestionnaireWidget) build() ggui.Widget {
 	q.revision.Get()
 	q.answers.Get()
@@ -425,17 +458,13 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	q.inputItem = ""
 	i := q.current()
 	if i < 0 {
-		empty := Empty(english().NoQuestions, english().NoQuestionsDetail)
-		return localize(empty, func(s *Strings) {
-			empty.title.Content(s.NoQuestions)
-			empty.description.Content(s.NoQuestionsDetail)
-		})
+		return &questionEmpty{}
 	}
 	item := q.items[i]
 	current, total := q.Progress()
 	// The title in the heading style, the description at the text size in
 	// the muted color, and the progress a medium-weight caption.
-	heading := []ggui.Widget{Heading(item.Title)}
+	heading := []ggui.Widget{ui.Heading(item.Title)}
 	if item.Description != "" {
 		heading = append(heading, widget.Text(item.Description).Color(uitheme.MutedFg))
 	}
@@ -447,7 +476,7 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	// the same thing.
 	// The words are put on the parts at layout, in the Strings the
 	// questionnaire is laid out under: see the localize below.
-	progress := Caption("").Weight(ggui.WeightMedium)
+	progress := ui.Caption("").Weight(ggui.WeightMedium)
 	body := []ggui.Widget{
 		&questionProgress{Widget: progress, current: current, total: total},
 		widget.Column(heading...).Gap(0).Align(widget.AlignStretch),
@@ -472,7 +501,7 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 		rows = append(rows, c)
 	}
 	if item.InputLabel != "" {
-		q.input = TextField(questionTextBinding{q, item}).Name(item.InputLabel).Placeholder(item.Placeholder)
+		q.input = ui.TextField(questionTextBinding{q, item}).Name(item.InputLabel).Placeholder(item.Placeholder)
 		q.inputItem = item.Name
 		q.input.Input().Key(childKey{ownerOf(&q.Interactive, q), questionInputKey(item.Name)})
 		q.input.OnKey(func(ev ggui.KeyEvent) bool {
@@ -508,24 +537,24 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	next := q.button(func() { q.Next() }, false)
 	actions = append(actions, next)
 	body = append(body, &questionActions{children: actions, previous: current > 1})
-	return localize(&questionStack{widget.Column(body...).Align(widget.AlignStretch)}, func(s *Strings) {
+	return localize(&questionStack{widget.Column(body...).Align(widget.AlignStretch)}, func(s *ui.Strings) {
 		progress.Content(fmt.Sprintf(s.QuestionFormat, current, total))
 		if message != nil {
 			message.Content(q.errorText(item.Name, s))
 		}
 		if previous != nil {
-			previous.relabel(s.Previous)
+			previous.Relabel(s.Previous)
 		}
 		if skip != nil {
-			skip.relabel(s.Skip)
+			skip.Relabel(s.Skip)
 		}
-		next.relabel(pick(current == total, pick(q.submitLabel != "", q.submitLabel, s.Submit), s.Next))
+		next.Relabel(pick(current == total, pick(q.submitLabel != "", q.submitLabel, s.Submit), s.Next))
 	})
 }
 
 // button makes an action button, worded at layout.
 func (q *QuestionnaireWidget) button(fn func(), outline bool) *questionButton {
-	b := Button("", fn)
+	b := ui.Button("", fn)
 	if outline {
 		b.Outline()
 	}
@@ -572,7 +601,7 @@ func (q *QuestionnaireWidget) shortcut(ev ggui.KeyEvent) bool {
 }
 func (q *QuestionnaireWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer q.props.Layout().EndLayout()
-	q.words = stringsOf(env)
+	q.words = ui.StringsOf(env)
 	q.rtl = env.Direction() == ggui.DirRTL
 	size := q.view.Layout(c, env)
 	// The choices and input are built before a Key given after Questionnaire,
@@ -613,7 +642,7 @@ func (q *QuestionnaireWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 }
 func (q *QuestionnaireWidget) name() string {
-	return pick(q.SemanticName() != "", q.SemanticName(), q.words.orDefault().QuestionnaireName)
+	return pick(q.SemanticName() != "", q.SemanticName(), q.words.OrDefault().QuestionnaireName)
 }
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.
@@ -642,20 +671,20 @@ func (b questionTextBinding) Set(s string) {
 type questionProgress struct {
 	ggui.Widget
 	current, total int
-	words          *Strings // the Strings of the last layout
+	words          *ui.Strings // the Strings of the last layout
 }
 
 func (p *questionProgress) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	p.words = stringsOf(env)
+	p.words = ui.StringsOf(env)
 	return p.Widget.Layout(c, env)
 }
 
 func (p *questionProgress) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	dst.Node(r, ggui.Node{Role: ggui.RoleProgress, Name: p.words.orDefault().QuestionnaireProgress, Min: 0, Max: float64(p.total), Now: float64(p.current)}, func(dst *ggui.Canvas) { dst.Paint(p.Widget, r) })
+	dst.Node(r, ggui.Node{Role: ggui.RoleProgress, Name: p.words.OrDefault().QuestionnaireProgress, Min: 0, Max: float64(p.total), Now: float64(p.current)}, func(dst *ggui.Canvas) { dst.Paint(p.Widget, r) })
 }
 
 type questionButton struct {
-	*ButtonWidget
+	*ui.ButtonWidget
 	q *QuestionnaireWidget
 }
 
@@ -800,7 +829,7 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	} else if selected {
 		dst.FillCircle(glyph.Center(), 4, t.PrimaryFg)
 	}
-	controlFocusRing(dst, &c.Interactive, t, r, tokens.QuestionRadius, t.Ring, motion)
+	ui.FocusRing(dst, &c.Interactive, t, r, tokens.QuestionRadius, t.Ring, motion)
 }
 func (c *questionChoice) HandlePointer(ev ggui.PointerEvent) bool {
 	if c.IsInert() {
@@ -900,7 +929,7 @@ func (a *questionActions) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(a.bod
 
 // The questionnaire input uses the compact 32px chrome from its reference,
 // while preserving the editor's normal focus, IME and clipboard handling.
-type questionInput struct{ *TextFieldWidget }
+type questionInput struct{ *ui.TextFieldWidget }
 
 func (f *questionInput) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := *uitheme.Of(env)
