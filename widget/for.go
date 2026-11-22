@@ -137,77 +137,96 @@ func each[T any, K comparable](items ggui.Readable[[]T], key func(int, T) K, bui
 			f.leaving = nil
 			f.leaveKeys = nil
 		})
-		reactive.Observe(func() {
-			list := items.Get()
-			seen := make(map[K]bool, len(list))
-			keys := make([]K, len(list))
-			// Validate before mutating any row, so duplicate keys cannot partially apply.
-			for i, value := range list {
-				k := key(i, value)
-				if seen[k] {
-					panic("ggui: EachKeyed saw the same key twice")
-				}
-				seen[k], keys[i] = true, k
-			}
-			// Where each removed row was is looked up in one map of the
-			// last list, made only when a row is removed with a
-			// Transition: searching the list for every removed key made
-			// clearing a long list quadratic.
-			var was map[K]int
-			leaving := len(f.leaving)
-			for k, e := range f.entries {
-				if seen[k] {
-					continue
-				}
-				if was == nil && f.leaves(e) {
-					was = make(map[K]int, len(f.keys))
-					for i, k := range f.keys {
-						was[k] = i
-					}
-				}
-				f.remove(k, e, was)
-			}
-			if len(f.leaving) > leaving {
-				f.sortLeaving()
-			}
-			// Rows whose items came back return from leaving, in one pass
-			// over the rows on their way out.
-			kept := 0
-			for i, e := range f.leaving {
-				k := f.leaveKeys[i]
-				if seen[k] {
-					f.entries[k] = e
-					e.transition().drive(1, false)
-					continue
-				}
-				f.leaving[kept], f.leaveKeys[kept] = e, k
-				kept++
-			}
-			clear(f.leaving[kept:])
-			clear(f.leaveKeys[kept:])
-			f.leaving, f.leaveKeys = f.leaving[:kept], f.leaveKeys[:kept]
-			for i, k := range keys {
-				if e := f.entries[k]; e != nil {
-					e.item.Set(list[i])
-					e.position.Set(i)
-				}
-			}
-			if len(list) != 0 && f.emptyDispose != nil {
-				f.emptyDispose()
-				f.emptyDispose, f.empty = nil, nil
-			}
-			if len(list) == 0 && f.emptyBuild != nil && f.emptyDispose == nil {
-				f.empty, f.emptyDispose = f.scope.Mount(f.emptyBuild)
-			}
-			f.items, f.keys, f.stale = list, keys, true
-			f.itemsGen++
-			// A whole layout, not one the Scroll around holds: Invalidate
-			// would have that Scroll check its size by it.
-			ggui.Relayout(f.env)
-		})
+		reactive.Observe(func() { f.setItems(items.Get()) })
 		return nil
 	})
 	return f
+}
+
+// setItems takes the list the items now are: rows whose keys are gone are
+// removed, rows on their way out whose keys came back return, every row
+// is told its item and place, and the empty branch follows the list.
+func (f *EachWidget[T, K]) setItems(list []T) {
+	keys, seen := f.keysOf(list)
+	f.removeGone(seen)
+	f.returnLeaving(seen)
+	for i, k := range keys {
+		if e := f.entries[k]; e != nil {
+			e.item.Set(list[i])
+			e.position.Set(i)
+		}
+	}
+	if len(list) != 0 && f.emptyDispose != nil {
+		f.emptyDispose()
+		f.emptyDispose, f.empty = nil, nil
+	}
+	if len(list) == 0 && f.emptyBuild != nil && f.emptyDispose == nil {
+		f.empty, f.emptyDispose = f.scope.Mount(f.emptyBuild)
+	}
+	f.items, f.keys, f.stale = list, keys, true
+	f.itemsGen++
+	// A whole layout, not one the Scroll around holds: Invalidate
+	// would have that Scroll check its size by it.
+	ggui.Relayout(f.env)
+}
+
+// keysOf returns the key of each item of list, and the set of them. It
+// validates before any row changes, so duplicate keys cannot partially
+// apply.
+func (f *EachWidget[T, K]) keysOf(list []T) ([]K, map[K]bool) {
+	seen := make(map[K]bool, len(list))
+	keys := make([]K, len(list))
+	for i, value := range list {
+		k := f.key(i, value)
+		if seen[k] {
+			panic("ggui: EachKeyed saw the same key twice")
+		}
+		seen[k], keys[i] = true, k
+	}
+	return keys, seen
+}
+
+// removeGone removes the rows whose keys are not in seen. Where each
+// removed row was is looked up in one map of the last list, made only
+// when a row is removed with a Transition: searching the list for every
+// removed key made clearing a long list quadratic.
+func (f *EachWidget[T, K]) removeGone(seen map[K]bool) {
+	var was map[K]int
+	leaving := len(f.leaving)
+	for k, e := range f.entries {
+		if seen[k] {
+			continue
+		}
+		if was == nil && f.leaves(e) {
+			was = make(map[K]int, len(f.keys))
+			for i, k := range f.keys {
+				was[k] = i
+			}
+		}
+		f.remove(k, e, was)
+	}
+	if len(f.leaving) > leaving {
+		f.sortLeaving()
+	}
+}
+
+// returnLeaving brings back the rows on their way out whose keys are in
+// seen again, in one pass over the rows leaving.
+func (f *EachWidget[T, K]) returnLeaving(seen map[K]bool) {
+	kept := 0
+	for i, e := range f.leaving {
+		k := f.leaveKeys[i]
+		if seen[k] {
+			f.entries[k] = e
+			e.transition().drive(1, false)
+			continue
+		}
+		f.leaving[kept], f.leaveKeys[kept] = e, k
+		kept++
+	}
+	clear(f.leaving[kept:])
+	clear(f.leaveKeys[kept:])
+	f.leaving, f.leaveKeys = f.leaving[:kept], f.leaveKeys[:kept]
 }
 
 // Else mounts an empty-list branch. Configure it before the first layout.
@@ -386,30 +405,41 @@ func (f *EachWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		return f.empty.Layout(c, env)
 	}
 	f.reduced = env.ReducedMotion()
-	n := len(f.items)
 	if f.estimated() {
 		return f.layoutEstimated(c, env)
 	}
 	if f.extent <= 0 {
-		if f.stale || len(f.leaving) > 0 {
-			clear(f.childEntries)
-			f.childEntries = resize(f.childEntries, n)
-			f.children = resize(f.children, n)
-			f.childItem = resize(f.childItem, n)
-			for i := range n {
-				e := f.entry(i)
-				f.children[i], f.childEntries[i], f.childItem[i] = e.widget, e, i
-			}
-			f.stale = false
-			f.placeLeaving(env)
-		}
-		if n == 0 && len(f.leaving) == 0 && f.empty != nil {
-			return f.empty.Layout(c, env)
-		}
-		return f.layout(c, env)
+		return f.layoutEvery(c, env)
 	}
+	return f.layoutFixed(c, env)
+}
 
-	// Fixed extents: size from the count, lay out only what a Scroll shows.
+// layoutEvery lays every row out, rows leaving among them, filling the
+// children again when the items or the rows leaving have changed.
+func (f *EachWidget[T, K]) layoutEvery(c ggui.Constraints, env ggui.Env) ggui.Size {
+	n := len(f.items)
+	if f.stale || len(f.leaving) > 0 {
+		clear(f.childEntries)
+		f.childEntries = resize(f.childEntries, n)
+		f.children = resize(f.children, n)
+		f.childItem = resize(f.childItem, n)
+		for i := range n {
+			e := f.entry(i)
+			f.children[i], f.childEntries[i], f.childItem[i] = e.widget, e, i
+		}
+		f.stale = false
+		f.placeLeaving(env)
+	}
+	if n == 0 && len(f.leaving) == 0 && f.empty != nil {
+		return f.empty.Layout(c, env)
+	}
+	return f.layout(c, env)
+}
+
+// layoutFixed lays out rows of a fixed extent: it sizes the list from the
+// count and lays out only what a Scroll shows.
+func (f *EachWidget[T, K]) layoutFixed(c ggui.Constraints, env ggui.Env) ggui.Size {
+	n := len(f.items)
 	gap := f.gapFor(env)
 	pitch := f.extent + gap
 	total := max(float64(n)*pitch-gap, 0)
