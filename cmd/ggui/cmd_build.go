@@ -853,18 +853,6 @@ func (b *builder) depends(format string) []string {
 	return b.proj.Config.Linux.DependsRPM
 }
 
-// linuxPackage is the package name, and the program's name in /usr/bin:
-// made from the app's name, else the main package's, else the last part
-// of the ID.
-func linuxPackage(m *project.Main) string {
-	for _, s := range []string{m.Name, m.Executable, m.ID[strings.LastIndexByte(m.ID, '.')+1:]} {
-		if p := linux.PackageName(s); p != "" {
-			return p
-		}
-	}
-	return "app"
-}
-
 // linux builds the install tree Package-linux-Arch: the program for
 // linux/arch without cgo, as ggwd and ggfx load the system's libraries
 // at run time, with its desktop entry, icons and AppStream metadata; and
