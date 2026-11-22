@@ -137,7 +137,7 @@ scheme. Without it, http, https and mailto links open with
 blocks as on a page. A short reply is as wide as its text; one holding
 code, a quote, a table or a rule fills the width it is given.
 
-The parser is the [`markdown`](../pkg/markdown/markdown.go) package, which
+The parser is the [`markdown`](../ui/internal/markdown/markdown.go) package, which
 depends on nothing of ggui: `markdown.Parse` returns the blocks and inline
 spans, `ParseStream` reads a source cut off mid-stream, and `Reparse`
 parses a grown source again from its last blocks.
