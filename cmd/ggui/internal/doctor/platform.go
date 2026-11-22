@@ -99,6 +99,15 @@ func checkUnix(ctx context.Context, r *Report) {
 	}
 
 	libs := newLibIndex(ctx)
+	checkRequiredLibraries(r, libs)
+	checkGLVersion(ctx, r, display)
+	checkXExtensions(r, libs)
+	checkFeaturePrograms(r)
+}
+
+// checkRequiredLibraries checks for the libraries no window opens
+// without: libX11, libGLESv2 or libGL, and GLX or EGL for the context.
+func checkRequiredLibraries(r *Report, libs *libIndex) {
 	if p := libs.find("libX11.so.6", "libX11.so"); p != "" {
 		r.ok("libX11", p)
 	} else {
@@ -129,8 +138,11 @@ func checkUnix(ctx context.Context, r *Report) {
 	default:
 		r.ok("context", strings.Trim(strings.Join([]string{glx, egl}, ", "), ", "))
 	}
-	checkGLVersion(ctx, r, display)
+}
 
+// checkXExtensions checks for the optional X extensions input,
+// monitors, cursors and transparency need.
+func checkXExtensions(r *Report, libs *libIndex) {
 	var missing []string
 	for _, l := range [][]string{
 		{"libXi.so.6", "libXi.so"},
@@ -150,9 +162,11 @@ func checkUnix(ctx context.Context, r *Report) {
 	} else {
 		r.ok("X extensions", "Xi, Xrandr, Xcursor, Xinerama, Xrender and Xext found")
 	}
+}
 
-	// Programs ggui runs for a feature; without one only that feature is
-	// missing.
+// checkFeaturePrograms checks for the programs ggui runs for a feature;
+// without one only that feature is missing.
+func checkFeaturePrograms(r *Report) {
 	tools := []struct{ names, what, fix string }{
 		{"fc-match", "ggui finds the system's UI fonts with it, and finds none without it", installHint("fontconfig", "fontconfig")},
 		{"zenity kdialog", "native file and message dialogs; without either they report ErrUnsupported", installHint("zenity", "zenity")},
