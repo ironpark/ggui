@@ -39,11 +39,6 @@ func TestOnlyImageWidgetsImportGgfx(t *testing.T) {
 	}
 }
 
-// rasterizesIcons is the one file under ui that reaches into ggui's
-// internals: the SVG rasterizer, which uploads its masks as the image cache
-// does and reports them to the same memory accounting.
-var rasterizesIcons = []string{"icons/svg.go"}
-
 // TestUIIsWrittenOnThePublicAPI keeps the themed library, its themes and its
 // icon sets on what a module outside ggui can import: a control here is what
 // another design system could have written, and what it needs and cannot
@@ -55,9 +50,6 @@ func TestUIIsWrittenOnThePublicAPI(t *testing.T) {
 	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return err
-		}
-		if slices.Contains(rasterizesIcons, filepath.ToSlash(path)) {
-			return nil
 		}
 		f, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
 		if err != nil {
