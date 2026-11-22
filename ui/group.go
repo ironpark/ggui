@@ -144,9 +144,14 @@ func (g *ButtonGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		}
 	}
 	out := c.Constrain(pick(g.vertical, ggui.Sz(cross, main), ggui.Sz(main, cross)))
-	cross = pick(g.vertical, out.W, out.H)
-	// The children are stretched across the strip, as align-items: stretch
-	// does, so one that came out shorter is laid out again at its height.
+	g.stretch(c, env, pick(g.vertical, out.W, out.H), nested)
+	return out
+}
+
+// stretch stretches the children across the strip, as align-items:
+// stretch does, so one that came out shorter than cross is laid out again
+// at it.
+func (g *ButtonGroupWidget) stretch(c ggui.Constraints, env ggui.Env, cross float64, nested bool) {
 	for i, child := range g.children {
 		s := g.sizes[i]
 		if pick(g.vertical, s.W, s.H) == cross {
@@ -161,7 +166,6 @@ func (g *ButtonGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		}
 		g.sizes[i] = child.Layout(tight, env.With(JoinedSidesKey, g.sidesAt(i, nested)))
 	}
-	return out
 }
 
 // grows reports whether child takes the width the others leave: a text
@@ -776,15 +780,7 @@ func (g *ToggleGroupWidget[T]) paint(dst *ggui.Canvas, r ggui.Rect) {
 			fill = t.Disabled(fill)
 		}
 		paintJoinedBox(dst, joinedBox{rect: seg, radius: g.radius, sides: g.sidesAt(i)}, fill, t.BorderWidth, border)
-		// The icon and the label, centred together and each on the line.
-		p, x := g.parts[i], seg.Origin.X+(seg.Size.W-s.W)/2
-		if ic := g.iconAt(i); ic != nil {
-			dst.Paint(ic, g.middle(seg, x, p.icon))
-			x += p.icon.W + g.iconGap
-		}
-		if p.label.W > 0 {
-			dst.Paint(g.labels[i], g.middle(seg, x, p.label))
-		}
+		g.paintContent(dst, i, seg)
 		if i < len(g.tips) {
 			if g.tips[i].disabled != inert {
 				g.tips[i].Disabled(inert)
@@ -797,10 +793,29 @@ func (g *ToggleGroupWidget[T]) paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.RequestFocus(g.segment(cur))
 		g.focusPending = false
 	}
-	// The ring is drawn after every segment, so in a joined strip its halo
-	// lies over the neighbours rather than under the one painted next.
-	// It eases in and out over the group's motion, as a Toggle's does.
-	focused := cur >= 0 && g.Focused && g.FocusVisible && !inert
+	g.paintFocusRing(dst, r)
+}
+
+// paintContent paints segment i's icon and label in seg, centred together
+// and each on the line.
+func (g *ToggleGroupWidget[T]) paintContent(dst *ggui.Canvas, i int, seg ggui.Rect) {
+	p, x := g.parts[i], seg.Origin.X+(seg.Size.W-g.sizes[i].W)/2
+	if ic := g.iconAt(i); ic != nil {
+		dst.Paint(ic, g.middle(seg, x, p.icon))
+		x += p.icon.W + g.iconGap
+	}
+	if p.label.W > 0 {
+		dst.Paint(g.labels[i], g.middle(seg, x, p.label))
+	}
+}
+
+// paintFocusRing draws the ring around the segment the keyboard is on
+// after every segment, so in a joined strip its halo lies over the
+// neighbours rather than under the one painted next. It eases in and out
+// over the group's motion, as a Toggle's does.
+func (g *ToggleGroupWidget[T]) paintFocusRing(dst *ggui.Canvas, r ggui.Rect) {
+	t, st, cur := g.theme, g.style, g.cur
+	focused := cur >= 0 && g.Focused && g.FocusVisible && !g.IsInert()
 	if k := controlkit.Ease(dst, g.theme, g.Anchor(r), focusRingSlot, pick(focused, 1.0, 0.0), g.motion); k > 0 && cur >= 0 {
 		ring := controlkit.ColorOr(st.Ring, t.Ring)
 		f := joinedFocus{rect: g.rects[cur], radius: g.radius, sides: g.sidesAt(cur), width: t.BorderWidth, line: fade(controlkit.ColorOr(st.FocusBorder, ring), k), halo: fade(t.Halo(ring), k)}
