@@ -102,7 +102,7 @@ func Sheet(open ggui.Binding[bool], content ggui.Widget) *SheetWidget {
 // Drawer is a Sheet that rises from the bottom edge with its top corners
 // rounded. It is as tall as its content, up to 96px short of the window,
 // until Size or SnapPoints say otherwise. Drag it down by the middle of its
-// top edge to dismiss it, or configure SnapPoints; Handle draws the bar
+// top edge to dismiss it, or configure SnapPoints; HandleBar draws the bar
 // that says it can be dragged. Content keeps its own pointer and scrolling
 // behavior. It has no close button, as shadcn's Drawer has none, until
 // CloseButton(true) asks for one: Escape, the scrim, the drag and whatever
@@ -113,10 +113,10 @@ func Drawer(open ggui.Binding[bool], content ggui.Widget) *SheetWidget {
 	return s
 }
 
-// Handle shows or hides a Drawer's swipe handle, the short bar centered
+// HandleBar shows or hides a Drawer's swipe handle, the short bar centered
 // above its content. It is hidden by default; the drawer drags by the same
 // place either way. A Sheet has none.
-func (s *SheetWidget) Handle(show bool) *SheetWidget {
+func (s *SheetWidget) HandleBar(show bool) *SheetWidget {
 	defer property.Watch(&s.props, &s.handle)()
 	s.handle = show
 	return s
