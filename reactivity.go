@@ -248,8 +248,7 @@ func Remember[K comparable, T any](key K, init func() T) T {
 		}
 		m.entries[k] = e
 	}
-	if e.by != b || e.seen != b.gen {
-		e.by, e.seen = b, b.gen
+	if e.hold(b) {
 		b.asked = append(b.asked, k)
 	}
 	return e.value.(T)
@@ -271,8 +270,40 @@ type memoKey struct {
 type memoEntry struct {
 	value   any
 	dispose func()
-	by      *boundary // the builder that asked for it last
-	seen    uint64    // by's build that did
+	holders map[*boundary]uint64 // live boundaries holding this entry → boundary.gen last asked
+}
+
+// hold records that b asked for e during b.gen, reporting whether this is the
+// first time b asked in this build.
+func (e *memoEntry) hold(b *boundary) bool {
+	if e.holders == nil {
+		e.holders = map[*boundary]uint64{b: b.gen}
+		return true
+	}
+	if seen, ok := e.holders[b]; ok && seen == b.gen {
+		return false
+	}
+	e.holders[b] = b.gen
+	return true
+}
+
+// release drops b's hold when b did not re-ask for e in gen, and reports
+// whether no live holders remain.
+func (e *memoEntry) release(b *boundary, gen uint64) bool {
+	if seen, ok := e.holders[b]; ok && seen != gen {
+		delete(e.holders, b)
+	}
+	return e.pruneDisposed()
+}
+
+// pruneDisposed removes disposed holders and reports whether none remain.
+func (e *memoEntry) pruneDisposed() bool {
+	for h := range e.holders {
+		if h.disposed {
+			delete(e.holders, h)
+		}
+	}
+	return len(e.holders) == 0
 }
 
 // boundary is a builder Remember is asked in: a View or Reactive, which
@@ -309,6 +340,7 @@ func newBoundary() *boundary {
 		OnCleanup(func() {
 			b.disposed = true
 			b.mem.orphans = append(b.mem.orphans, b.asked...)
+			b.asked = nil
 		})
 	}
 	return b
@@ -325,21 +357,22 @@ func (b *boundary) build(fn func() Widget) Widget {
 	last := b.asked
 	b.asked = nil
 	prev := reactive.SwapMemory(b)
-	defer reactive.SwapMemory(prev)
-	w := fn()
-	b.mem.drop(last, func(e *memoEntry) bool { return e.by == b && e.seen != b.gen })
-	orphans := b.mem.orphans
-	b.mem.orphans = nil
-	b.mem.drop(orphans, func(e *memoEntry) bool { return e.by.disposed })
-	return w
+	defer func() {
+		reactive.SwapMemory(prev)
+		b.mem.drop(last, func(e *memoEntry) bool { return e.release(b, b.gen) })
+		orphans := b.mem.orphans
+		b.mem.orphans = nil
+		b.mem.drop(orphans, func(e *memoEntry) bool { return e.pruneDisposed() })
+	}()
+	return fn()
 }
 
 // drop disposes the entries of keys that gone reports gone.
 func (m *memory) drop(keys []memoKey, gone func(*memoEntry) bool) {
 	for _, k := range keys {
 		if e := m.entries[k]; e != nil && gone(e) {
-			e.dispose()
 			delete(m.entries, k)
+			e.dispose()
 		}
 	}
 }
@@ -682,13 +715,34 @@ func Debounced[T any](r Readable[T], d time.Duration) *DebouncedValue[T] {
 	w := l.world()
 	dv := &DebouncedValue[T]{value: State(Untrack(r.Get)), pending: State(false)}
 	var (
-		next T
-		real *time.Timer
+		next     T
+		real     *time.Timer
+		disposed bool
 	)
 	t := &clockTimer{fire: func() {
 		dv.value.Set(next)
 		dv.pending.Set(false)
 	}}
+	var arm func(time.Duration)
+	arm = func(wait time.Duration) {
+		if real != nil {
+			real.Stop()
+		}
+		real = time.AfterFunc(wait, func() {
+			l.post(func() {
+				if disposed {
+					return
+				}
+				now := w.frame.raw()
+				w.fireTimers(now)
+				// If the timer woke slightly early (or t.due moved later),
+				// reschedule for the remaining wait so an idle window never stalls.
+				if slices.Contains(w.timers, t) && now.Before(t.due) {
+					arm(t.due.Sub(now))
+				}
+			})
+		})
+	}
 	first := true
 	Observe(func() {
 		v := r.Get()
@@ -706,14 +760,10 @@ func Debounced[T any](r Readable[T], d time.Duration) *DebouncedValue[T] {
 		// The frame clock moves only while frames run, and a window that
 		// shows nothing new runs none: a timer of the process's own posts
 		// the check for the time d is up. It writes nothing itself.
-		if real != nil {
-			real.Stop()
-		}
-		real = time.AfterFunc(d, func() {
-			l.post(func() { w.fireTimers(w.frame.raw()) })
-		})
+		arm(d)
 	})
 	OnCleanup(func() {
+		disposed = true
 		if real != nil {
 			real.Stop()
 		}

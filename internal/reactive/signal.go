@@ -237,6 +237,25 @@ func (e *Computation) detach() {
 // reset undoes everything the last run set up: child effects, cleanups and
 // subscriptions. It runs before each re-run and on dispose.
 func (e *Computation) reset() {
+	var cleanups []func()
+	defer func() {
+		for _, s := range e.sources {
+			s.unsubscribe(e)
+		}
+		clear(cleanups)
+		clear(e.sources)
+		if e.disposed {
+			e.sources = nil
+			clear(e.cleanups)
+			e.cleanups = nil
+			return
+		}
+		if e.cleanups == nil && cleanups != nil {
+			e.cleanups = cleanups[:0]
+		}
+		e.sources = e.sources[:0]
+	}()
+
 	var children []*Computation
 	for child := e.firstChild; child != nil; child = child.nextSibling {
 		if e.disposed || !child.persistent {
@@ -252,7 +271,7 @@ func (e *Computation) reset() {
 	// it reads: every re-run used to grow both afresh. The cleanups are
 	// taken first, so that one which somehow registers another sees an
 	// empty list rather than the one being run.
-	cleanups := e.cleanups
+	cleanups = e.cleanups
 	e.cleanups = nil
 	if len(cleanups) > 0 {
 		WithOwner(nil, func() {
@@ -261,19 +280,6 @@ func (e *Computation) reset() {
 			}
 		})
 	}
-	for _, s := range e.sources {
-		s.unsubscribe(e)
-	}
-	if e.disposed {
-		e.sources = nil
-		return
-	}
-	clear(cleanups)
-	if e.cleanups == nil {
-		e.cleanups = cleanups[:0]
-	}
-	clear(e.sources)
-	e.sources = e.sources[:0]
 }
 
 func (e *Computation) dispose() {
@@ -282,8 +288,8 @@ func (e *Computation) dispose() {
 	}
 	e.disposed = true
 	e.detach()
+	defer e.rt.effects.remove(e)
 	e.reset()
-	e.rt.effects.remove(e)
 }
 
 // Readable is the read side of a reactive value. *StateValue and *DerivedValue both
@@ -417,27 +423,55 @@ func State[T any](v T) *StateValue[T] {
 type equaler[T any] interface{ Equal(T) bool }
 
 // ComparableEqual returns the test Set uses to drop redundant writes: the
-// type's own Equal method, else == for comparable T, else nil. Interfaces
-// are excluded from ==: they compare fine until a dynamic value that does
-// not, at which point == panics.
+// type's own Equal method, else == for comparable T containing no interface
+// fields, else nil. Interfaces are excluded from ==: they compare fine until
+// holding a dynamic value that does not, at which point == panics.
 func ComparableEqual[T any]() func(a, b T) bool {
 	t := reflect.TypeFor[T]()
 	if t.Implements(reflect.TypeFor[equaler[T]]()) {
-		return func(a, b T) bool {
-			// A nil pointer or interface has no receiver to ask.
-			av := reflect.ValueOf(&a).Elem()
-			if av.Kind() == reflect.Pointer || av.Kind() == reflect.Interface {
+		if k := t.Kind(); k == reflect.Pointer || k == reflect.Interface {
+			return func(a, b T) bool {
+				// A nil pointer or interface has no receiver to ask.
+				av := reflect.ValueOf(&a).Elem()
 				if av.IsNil() {
 					return reflect.ValueOf(&b).Elem().IsNil()
 				}
+				return any(a).(equaler[T]).Equal(b)
 			}
+		}
+		return func(a, b T) bool {
 			return any(a).(equaler[T]).Equal(b)
 		}
 	}
-	if t.Kind() == reflect.Interface || !t.Comparable() {
+	if !safeComparable(t) {
 		return nil
 	}
 	return func(a, b T) bool { return any(a) == any(b) }
+}
+
+// safeComparable reports whether == on two values of t can never panic at
+// runtime: t is comparable and contains no interface type, directly or inside
+// structs or arrays.
+func safeComparable(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128,
+		reflect.String, reflect.Pointer, reflect.UnsafePointer, reflect.Chan:
+		return true
+	case reflect.Array:
+		return safeComparable(t.Elem())
+	case reflect.Struct:
+		for field := range t.Fields() {
+			if !safeComparable(field.Type) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
 }
 
 // WithEqual sets the test Set uses to drop redundant writes, and returns s so
@@ -516,41 +550,56 @@ func (s *StateValue[T]) Set(v T) {
 	s.store(sc, v)
 }
 
-// store is Set without the Derived check, for a memo storing its value; sc
-// is the running goroutine's scope.
-func (s *StateValue[T]) store(sc *scope, v T) {
-	s.checkThread("StateValue.Set")
+// swapLocked replaces s.val under s.mu and snapshots subscribers, using
+// defer Unlock so a panicking s.eq never leaves s.mu locked.
+func (s *StateValue[T]) swapLocked(sc *scope, v T) (subs []*Computation, changed bool) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.eq != nil && s.eq(s.val, v) {
-		s.mu.Unlock()
-		return
+		return nil, false
 	}
 	s.val = v
-	sc.stateGen = genSeq.Add(1)
-	if sc.writes != nil {
-		noteWrite(sc.writes)
-	}
 	s.version++
-	sc.layoutGen = sc.stateGen
-	if sc.contained == 0 {
-		sc.freeGen = sc.stateGen
-		if sc.onFree != nil {
-			sc.onFree()
-		}
-	}
 	// The copy goes into the scope's scratch buffer, taken for the length
 	// of the marking, so a write reaching a thousand readers allocates
 	// nothing. Marking runs no user code, but a write it somehow led to
 	// would find the buffer gone and make its own.
-	subs := s.copySubs(sc.subsScratch[:0])
+	subs = s.copySubs(sc.subsScratch[:0])
 	sc.subsScratch = nil
-	s.mu.Unlock()
+	return subs, true
+}
+
+// store is Set without the Derived check, for a memo storing its value; sc
+// is the running goroutine's scope.
+func (s *StateValue[T]) store(sc *scope, v T) {
+	s.checkThread("StateValue.Set")
+	subs, changed := s.swapLocked(sc, v)
+	if !changed {
+		return
+	}
+	var onFree func()
+	// Lazy Derived recomputation derives from upstream StateValues that
+	// already bumped stateGen/layoutGen/freeGen and triggered onFree/noteWrite.
+	if s.memo == nil {
+		sc.stateGen = genSeq.Add(1)
+		if sc.writes != nil {
+			noteWrite(sc.writes)
+		}
+		sc.layoutGen = sc.stateGen
+		if sc.contained == 0 {
+			sc.freeGen = sc.stateGen
+			onFree = sc.onFree
+		}
+	}
 
 	for _, e := range subs {
 		markDirty(e)
 	}
 	clear(subs)
 	sc.subsScratch = subs[:0]
+	if onFree != nil {
+		onFree()
+	}
 }
 
 // Update applies fn to the current value and stores the result. Like Set
@@ -692,6 +741,9 @@ func Effect(fn func() Cleanup) Cleanup {
 			OnCleanup(cleanup)
 		}
 	}, true)
+	if e.disposed {
+		return e.dispose
+	}
 	e.rt.effects.userPending = true
 	e.rt.effects.dirtyGen++
 	e.mark(stateDirty)
@@ -707,12 +759,16 @@ func newComputation(fn func(), user bool) *Computation {
 	}
 	e := &Computation{fn: fn, user: user, origin: effectOrigin(), region: sc.region}
 	if owner := sc.owner; owner != nil {
-		e.attach(owner)
-		e.place(owner, "")
 		e.loop, e.rt = owner.loop, owner.rt
 		if e.region == nil {
 			e.region = owner.region
 		}
+		if owner.disposed {
+			e.disposed = true
+			return e
+		}
+		e.attach(owner)
+		e.place(owner, "")
 	} else {
 		e.rt = sc.baseRuntime()
 	}
@@ -724,6 +780,9 @@ func newComputation(fn func(), user bool) *Computation {
 // separate post-layout phase and never drive widget construction.
 func EffectWith(fn func()) (*Computation, func()) {
 	e := newComputation(fn, false)
+	if e.disposed {
+		return e, e.dispose
+	}
 	ok := false
 	defer func() {
 		if !ok {
@@ -762,14 +821,17 @@ func (rt *Runtime) Root(fn func()) (dispose func()) {
 func rootIn(rt *Runtime, identity any, elem string, persistent bool, fn func()) (dispose func()) {
 	r := &Computation{keyRoot: identity, origin: effectOrigin(), persistent: persistent}
 	sc, prevListener, prevOwner := enter(nil, r)
-	r.owner = prevOwner
 	r.region = sc.region
-	if r.owner != nil {
-		r.attach(r.owner)
-		r.loop, r.rt = r.owner.loop, r.owner.rt
-		r.place(r.owner, elem)
+	if prevOwner != nil {
+		r.loop, r.rt = prevOwner.loop, prevOwner.rt
 		if r.region == nil {
-			r.region = r.owner.region
+			r.region = prevOwner.region
+		}
+		if prevOwner.disposed {
+			r.disposed = true
+		} else {
+			r.attach(prevOwner)
+			r.place(prevOwner, elem)
 		}
 	}
 	switch {
@@ -893,29 +955,42 @@ func Refresh(e *Computation) (ran bool) {
 	if e.state == stateCheck {
 		for _, src := range e.sources {
 			if p := src.producer(); p != nil {
+				if p.running && e.cell != nil {
+					panic("ggui: cyclic Derived")
+				}
 				Refresh(p)
+				if e.disposed || e.state == stateClean {
+					return false
+				}
 				if e.state == stateDirty {
 					break
 				}
 			}
 		}
 	}
+	if e.disposed {
+		return false
+	}
 	if e.state == stateDirty {
-		runEffect(e)
-		return true
+		return runEffect(e)
 	}
 	e.state = stateClean
 	return false
 }
 
-func runEffect(e *Computation) {
+func runEffect(e *Computation) bool {
 	e.reset()
+	if e.disposed {
+		return false
+	}
 	e.seq = 0
 
 	sc, prevListener, prevOwner := enter(e, e)
-	building := sc.building
-	sc.building = false
-	defer func() { sc.listener, sc.owner, sc.building = prevListener, prevOwner, building }()
+	building, prevMeasuring := sc.building, sc.measuring
+	sc.building, sc.measuring = false, nil
+	defer func() {
+		sc.listener, sc.owner, sc.building, sc.measuring = prevListener, prevOwner, building, prevMeasuring
+	}()
 
 	e.state, e.running = stateClean, true
 	completed := false
@@ -925,12 +1000,13 @@ func runEffect(e *Computation) {
 	}
 	defer func() {
 		e.running = false
-		if !completed {
+		if !completed && !e.disposed {
 			e.mark(stateDirty)
 		}
 	}()
 	e.fn()
 	completed = true
+	return true
 }
 
 type effectSet struct {
@@ -1066,6 +1142,7 @@ func (s *effectSet) enqueue(e *Computation) {
 	}
 	e.queued = true
 	if e.user {
+		s.userPending = true
 		s.userQueue = append(s.userQueue, e)
 	} else {
 		s.queue = append(s.queue, e)
@@ -1101,16 +1178,45 @@ func (h *orderHeap) Pop() any {
 func (s *effectSet) runPass() (ran bool) {
 	pass := append(s.passBuf[:0], s.queue...)
 	s.passBuf = nil
-	defer func() {
-		clear(pass)
-		s.passBuf = pass[:0]
-	}()
 	clear(s.queue)
 	s.queue = s.queue[:0]
 	slices.SortFunc(pass, func(a, b *Computation) int { return cmp.Compare(a.order, b.order) })
 	var marked orderHeap
 	var later []*Computation
-	for i := 0; i < len(pass) || marked.Len() > 0; {
+	var cur *Computation
+	i := 0
+	defer func() {
+		if cur != nil && !cur.disposed && cur.state != stateClean {
+			s.enqueue(cur)
+		}
+		for _, e := range pass[i:] {
+			if !e.disposed && e.state != stateClean {
+				e.queued = true
+				s.queue = append(s.queue, e)
+			} else {
+				e.queued = false
+			}
+		}
+		for _, e := range marked {
+			if !e.disposed && e.state != stateClean {
+				e.queued = true
+				s.queue = append(s.queue, e)
+			} else {
+				e.queued = false
+			}
+		}
+		for _, e := range later {
+			if !e.disposed && e.state != stateClean {
+				e.queued = true
+				s.queue = append(s.queue, e)
+			} else {
+				e.queued = false
+			}
+		}
+		clear(pass)
+		s.passBuf = pass[:0]
+	}()
+	for i < len(pass) || marked.Len() > 0 {
 		var e *Computation
 		if marked.Len() > 0 && (i == len(pass) || marked[0].order < pass[i].order) {
 			e = heap.Pop(&marked).(*Computation)
@@ -1119,10 +1225,12 @@ func (s *effectSet) runPass() (ran bool) {
 			i++
 		}
 		e.queued = false
+		cur = e
 		if Refresh(e) {
 			ran = true
 			s.lastPass = append(s.lastPass, e)
 		}
+		cur = nil
 		for _, n := range s.queue {
 			if n.order > e.order {
 				heap.Push(&marked, n)
@@ -1133,7 +1241,6 @@ func (s *effectSet) runPass() (ran bool) {
 		clear(s.queue)
 		s.queue = s.queue[:0]
 	}
-	s.queue = append(s.queue, later...)
 	return ran
 }
 
@@ -1153,6 +1260,7 @@ func (rt *Runtime) Flush() (settled bool) {
 				continue
 			}
 			s := &x.effects
+			clear(s.lastPass)
 			s.lastPass = s.lastPass[:0]
 			if s.settled() {
 				// Every mark bumps dirtyGen, so a set with none since the
@@ -1198,32 +1306,51 @@ func (rt *Runtime) FlushUsers(loop any) bool {
 		if x == nil || !x.effects.userPending {
 			continue
 		}
-		s := &x.effects
-		s.userPending = false
-		var pending []*Computation
-		kept := s.userQueue[:0]
-		for _, e := range s.userQueue {
-			switch {
-			case e.disposed || e.state == stateClean:
-				e.queued = false
-			case e.loop == nil || e.loop == loop:
-				e.queued = false
-				pending = append(pending, e)
-			default:
-				kept = append(kept, e)
+		if x.effects.flushUsers(loop) {
+			ran = true
+		}
+	}
+	return ran
+}
+
+func (s *effectSet) flushUsers(loop any) (ran bool) {
+	s.userPending = false
+	var pending []*Computation
+	kept := s.userQueue[:0]
+	for _, e := range s.userQueue {
+		switch {
+		case e.disposed || e.state == stateClean:
+			e.queued = false
+		case e.loop == nil || e.loop == loop:
+			e.queued = false
+			pending = append(pending, e)
+		default:
+			kept = append(kept, e)
+			s.userPending = true
+		}
+	}
+	clear(s.userQueue[len(kept):])
+	s.userQueue = kept
+	slices.SortFunc(pending, func(a, b *Computation) int { return cmp.Compare(a.order, b.order) })
+	clear(s.lastPass)
+	s.lastPass = s.lastPass[:0]
+	i := 0
+	defer func() {
+		for _, e := range pending[i:] {
+			if !e.disposed && e.state != stateClean {
 				s.userPending = true
+				s.enqueue(e)
 			}
 		}
-		clear(s.userQueue[len(kept):])
-		s.userQueue = kept
-		slices.SortFunc(pending, func(a, b *Computation) int { return cmp.Compare(a.order, b.order) })
-		s.lastPass = s.lastPass[:0]
-		for _, e := range pending {
-			if Refresh(e) {
-				ran = true
-				s.lastPass = append(s.lastPass, e)
-			}
+		clear(pending)
+	}()
+	for i < len(pending) {
+		e := pending[i]
+		if Refresh(e) {
+			ran = true
+			s.lastPass = append(s.lastPass, e)
 		}
+		i++
 	}
 	return ran
 }

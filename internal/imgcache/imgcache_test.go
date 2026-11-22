@@ -466,3 +466,166 @@ func BenchmarkRGBAFromYCbCr(b *testing.B) {
 		RGBA(img)
 	}
 }
+
+func TestWaitersDuringUploadAreNotifiedAfterReady(t *testing.T) {
+	t.Parallel()
+	inUpload := make(chan struct{})
+	releaseUpload := make(chan struct{})
+	c := New(1<<20, func(img image.Image) (*tex, int64) {
+		close(inUpload)
+		<-releaseUpload
+		b := img.Bounds()
+		return &tex{w: b.Dx(), h: b.Dy()}, int64(b.Dx() * b.Dy() * 4)
+	}, func(*tex) {})
+
+	loadDone := make(chan struct{})
+	load := func(context.Context, string) (image.Image, error) {
+		<-loadDone
+		return image.NewRGBA(image.Rect(0, 0, 4, 4)), nil
+	}
+
+	var u1, u2, u3 ui
+	var n1, n2, n3 atomic.Int32
+	var h1, h2, h3 Handle[*tex]
+	k := Key{Src: "slow-upload"}
+
+	h1.Acquire(c, k, load, Waiter{Post: u1.post, Notify: func() { n1.Add(1) }})
+	h2.Acquire(c, k, load, Waiter{Post: u2.post, Notify: func() { n2.Add(1) }})
+	close(loadDone)
+
+	// Wait until run() posts to both u1 and u2.
+	deadline := time.After(time.Second)
+	for {
+		u1.mu.Lock()
+		j1 := len(u1.jobs)
+		u1.mu.Unlock()
+		u2.mu.Lock()
+		j2 := len(u2.jobs)
+		u2.mu.Unlock()
+		if j1 > 0 && j2 > 0 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for load to finish")
+		case <-time.After(time.Millisecond):
+		}
+	}
+
+	// Start u1 pumping in a goroutine; it blocks inside c.upload.
+	u1Done := make(chan struct{})
+	go func() {
+		u1.pump()
+		close(u1Done)
+	}()
+	<-inUpload
+
+	// While u1 is uploading, u2 pumps its posted job and h3 acquires mid-upload.
+	u2.pump()
+	h3.Acquire(c, k, load, Waiter{Post: u3.post, Notify: func() { n3.Add(1) }})
+	if n2.Load() != 0 {
+		t.Fatalf("second waiter notified prematurely while upload in progress: n2=%d", n2.Load())
+	}
+	if n3.Load() != 0 {
+		t.Fatalf("third waiter notified prematurely: n3=%d", n3.Load())
+	}
+
+	// Finish upload; u1 notifies itself and posts notifications for u2 and u3.
+	close(releaseUpload)
+	<-u1Done
+	u2.pump()
+	u3.pump()
+
+	if n1.Load() != 1 || n2.Load() != 1 || n3.Load() != 1 {
+		t.Fatalf("notifications = (%d, %d, %d), want (1, 1, 1)", n1.Load(), n2.Load(), n3.Load())
+	}
+	for i, h := range []*Handle[*tex]{&h1, &h2, &h3} {
+		if st, tx, _, ok := h.Get(c, k); !ok || st != Ready || tx == nil {
+			t.Fatalf("holder %d: ok=%v st=%v tx=%v, want Ready", i+1, ok, st, tx)
+		}
+		h.Release()
+	}
+}
+
+func TestUploadPanicMarksDeadAndRemovesEntry(t *testing.T) {
+	t.Parallel()
+	shouldPanic := atomic.Bool{}
+	shouldPanic.Store(true)
+	c := New(1<<20, func(img image.Image) (*tex, int64) {
+		if shouldPanic.Load() {
+			panic("gpu upload failed")
+		}
+		b := img.Bounds()
+		return &tex{w: b.Dx(), h: b.Dy()}, int64(b.Dx() * b.Dy() * 4)
+	}, func(*tex) {})
+
+	var u ui
+	var h Handle[*tex]
+	var calls atomic.Int32
+	k := Key{Src: "panic-img"}
+	h.Acquire(c, k, sized(4, 4, &calls), Waiter{Post: u.post, Notify: func() {}})
+	deadline := time.After(time.Second)
+	for {
+		u.mu.Lock()
+		n := len(u.jobs)
+		u.mu.Unlock()
+		if n > 0 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for load")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	var recovered any
+	func() {
+		defer func() { recovered = recover() }()
+		u.pump()
+	}()
+	if recovered != "gpu upload failed" {
+		t.Fatalf("recovered = %v, want gpu upload failed", recovered)
+	}
+	if c.Has(k) || c.Len() != 0 {
+		t.Fatalf("cache kept panicked entry: has=%v len=%d", c.Has(k), c.Len())
+	}
+	// Subsequent acquire retries cleanly.
+	shouldPanic.Store(false)
+	tx := ready(t, c, &h, k, sized(4, 4, &calls), &u)
+	if tx == nil || tx.w != 4 {
+		t.Fatalf("retry after panic gave %+v, want 4x4", tx)
+	}
+	h.Release()
+}
+
+func TestReleasePendingClearsWaitersAndDecodedAndFitSizeGuardsZero(t *testing.T) {
+	t.Parallel()
+	c, _ := newCache(1 << 20)
+	var u ui
+	var h Handle[*tex]
+	block := make(chan struct{})
+	h.Acquire(c, Key{Src: "drop"}, func(ctx context.Context, _ string) (image.Image, error) {
+		<-block
+		return image.NewRGBA(image.Rect(0, 0, 4, 4)), nil
+	}, Waiter{Post: u.post, Notify: func() {}})
+	e := h.entry
+	h.Release()
+	c.mu.Lock()
+	wLen := len(e.waiters)
+	dec := e.decoded
+	c.mu.Unlock()
+	close(block)
+	if wLen != 0 || dec != nil {
+		t.Fatalf("abandoned pending entry kept waiters=%d decoded=%v", wLen, dec)
+	}
+
+	if w, h := FitSize(0, 100, 50, 50, false); w != 0 || h != 0 {
+		t.Fatalf("FitSize(0, 100) = (%d, %d), want (0, 0)", w, h)
+	}
+	if w, h := FitSize(100, 0, 50, 50, true); w != 0 || h != 0 {
+		t.Fatalf("FitSize(100, 0) = (%d, %d), want (0, 0)", w, h)
+	}
+	if w, h := FitSize(-5, 10, 50, 50, false); w != 0 || h != 0 {
+		t.Fatalf("FitSize(-5, 10) = (%d, %d), want (0, 0)", w, h)
+	}
+}

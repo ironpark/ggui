@@ -70,6 +70,7 @@ type Entry[T any] struct {
 	// toward the front, the most recently released.
 	newer, older *Entry[T]
 	idle         bool
+	uploading    bool // upload is running on a UI thread
 	dead         bool // evicted or abandoned; a holder must ask again
 }
 
@@ -140,7 +141,7 @@ func (c *Cache[T]) acquire(k Key, load Loader, w Waiter) *Entry[T] {
 	decoded := e.decoded != nil
 	c.mu.Unlock()
 	if decoded { // loaded while nothing waited on its UI thread
-		c.uploadEntry(e)
+		c.uploadEntry(e, w)
 	}
 	return e
 }
@@ -162,6 +163,8 @@ func (c *Cache[T]) release(e *Entry[T]) {
 			victims = c.evictLocked()
 		} else {
 			e.dead = true
+			e.decoded = nil
+			e.waiters = nil
 			e.cancel()
 			c.forget(e)
 		}
@@ -197,28 +200,67 @@ func (c *Cache[T]) run(ctx context.Context, e *Entry[T], load Loader) {
 	c.mu.Unlock()
 	for _, w := range waiters {
 		w.Post(func() {
-			c.uploadEntry(e)
-			w.Notify()
+			if c.uploadEntry(e, w) && w.Notify != nil {
+				w.Notify()
+			}
 		})
 	}
 }
 
-// uploadEntry turns a decoded image into a texture, on the UI thread.
-func (c *Cache[T]) uploadEntry(e *Entry[T]) {
-	c.mu.Lock()
-	if e.dead || e.decoded == nil {
-		c.mu.Unlock()
-		return
-	}
-	src := e.decoded
-	e.decoded = nil
-	c.mu.Unlock()
-	tex, bytes := c.upload(src)
+// uploadEntry turns a decoded image into a texture, on the UI thread. It
+// returns false when another UI thread is currently uploading e and w has been
+// queued to be notified once that upload completes.
+func (c *Cache[T]) uploadEntry(e *Entry[T], w Waiter) bool {
 	c.mu.Lock()
 	if e.dead {
 		c.mu.Unlock()
+		return true
+	}
+	if e.decoded == nil {
+		if e.uploading {
+			if w.Post != nil && w.Notify != nil {
+				e.waiters = append(e.waiters, w)
+			}
+			c.mu.Unlock()
+			return false
+		}
+		c.mu.Unlock()
+		return true
+	}
+	src := e.decoded
+	e.decoded = nil
+	e.uploading = true
+	c.mu.Unlock()
+
+	done := false
+	defer func() {
+		if done {
+			return
+		}
+		c.mu.Lock()
+		e.uploading = false
+		if !e.dead {
+			e.dead = true
+			c.forget(e)
+		}
+		waiters := e.waiters
+		e.waiters = nil
+		c.mu.Unlock()
+		notifyWaiters(waiters)
+	}()
+
+	tex, bytes := c.upload(src)
+
+	c.mu.Lock()
+	done = true
+	e.uploading = false
+	waiters := e.waiters
+	e.waiters = nil
+	if e.dead {
+		c.mu.Unlock()
 		c.free(tex)
-		return
+		notifyWaiters(waiters)
+		return true
 	}
 	e.tex, e.status, e.bytes = tex, Ready, bytes
 	if e.refs == 0 && !e.idle {
@@ -226,7 +268,18 @@ func (c *Cache[T]) uploadEntry(e *Entry[T]) {
 	}
 	victims := c.evictLocked()
 	c.mu.Unlock()
+
 	c.freeAll(victims)
+	notifyWaiters(waiters)
+	return true
+}
+
+func notifyWaiters(waiters []Waiter) {
+	for _, w := range waiters {
+		if w.Post != nil && w.Notify != nil {
+			w.Post(w.Notify)
+		}
+	}
 }
 
 // evictLocked drops idle entries, oldest first, until the idle ones fit
@@ -405,7 +458,7 @@ func (h *Handle[T]) Release() {
 func Fit(img image.Image, w, h int, cover bool) image.Image {
 	b := img.Bounds()
 	dw, dh := FitSize(b.Dx(), b.Dy(), w, h, cover)
-	if dw == b.Dx() && dh == b.Dy() {
+	if dw <= 0 || dh <= 0 || (dw == b.Dx() && dh == b.Dy()) {
 		return img
 	}
 	if b.Dx() > 4*dw && b.Dy() > 4*dh {
@@ -420,6 +473,9 @@ func Fit(img image.Image, w, h int, cover bool) image.Image {
 
 // FitSize is the size Fit scales an iw×ih image to.
 func FitSize(iw, ih, w, h int, cover bool) (int, int) {
+	if iw <= 0 || ih <= 0 {
+		return 0, 0
+	}
 	// The image is scaled by w/iw, to the box's width, or by h/ih, to its
 	// height: for a box to fit inside, the smaller of the two; to cover,
 	// the larger. A side of 0 does not take part.

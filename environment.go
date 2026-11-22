@@ -2,6 +2,8 @@ package ggui
 
 import (
 	"image/color"
+	"reflect"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -357,21 +359,51 @@ type TextStyle struct {
 	Italic bool
 }
 
+// equalColor compares two colors: EnvColors compare by token identity rather
+// than root-theme RGBA, and concrete colors compare by RGBA channels with nil
+// and typed-nil guards.
+func equalColor(a, b color.Color) bool {
+	aNil, bNil := isNilColor(a), isNilColor(b)
+	if aNil || bNil {
+		return aNil && bNil
+	}
+	if IsEnvColor(a) || IsEnvColor(b) {
+		return gem.Same(a, b)
+	}
+	ar, ag, ab, aa := a.RGBA()
+	br, bg, bb, ba := b.RGBA()
+	return ar == br && ag == bg && ab == bb && aa == ba
+}
+
+func isNilColor(c color.Color) bool {
+	if c == nil {
+		return true
+	}
+	switch c.(type) {
+	case color.RGBA, color.NRGBA, color.RGBA64, color.NRGBA64, color.Gray, color.Gray16, color.Alpha, color.Alpha16:
+		return false
+	}
+	v := reflect.ValueOf(c)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return v.IsNil()
+	}
+	return false
+}
+
 // Equal reports whether s and o draw the same: the same Font, size, line
 // height, weight, tracking and slant, and colors that draw alike.
 func (s TextStyle) Equal(o TextStyle) bool {
 	if s.Font != o.Font || s.Size != o.Size || s.LineHeight != o.LineHeight || s.Weight != o.Weight || s.Tracking != o.Tracking || s.Italic != o.Italic {
 		return false
 	}
-	if s.Color == nil || o.Color == nil {
-		return s.Color == nil && o.Color == nil
-	}
-	ar, ag, ab, aa := s.Color.RGBA()
-	br, bg, bb, ba := o.Color.RGBA()
-	return ar == br && ag == bg && ab == bb && aa == ba
+	return equalColor(s.Color, o.Color)
 }
 
-func init() { property.RegisterEqual(TextStyle.Equal) }
+func init() {
+	property.RegisterEqual(TextStyle.Equal)
+	property.RegisterEqual(equalColor)
+}
 
 // Merge returns s with every set field of o laid over it.
 func (s TextStyle) Merge(o TextStyle) TextStyle {
@@ -520,13 +552,20 @@ func (e Env) Motion(d time.Duration) time.Duration {
 // EnvKey names a value that can travel down the tree in an Env. Make one per
 // concept with NewEnvKey; the type parameter keeps reads and writes in step.
 type EnvKey[T any] struct {
-	id   *byte
-	name string
-	same *envSame[T] // what equal means for With; nil is ==
+	id       *byte
+	name     string
+	same     *envSame[T] // what equal means for With; nil is ==
+	safeHash bool        // T is always safely comparable as a map key without runtime inspection
 }
 
 // NewEnvKey creates a distinct EnvKey; name is for messages only.
-func NewEnvKey[T any](name string) EnvKey[T] { return EnvKey[T]{id: new(byte), name: name} }
+func NewEnvKey[T any](name string) EnvKey[T] {
+	return EnvKey[T]{
+		id:       new(byte),
+		name:     name,
+		safeHash: safeComparableType(reflect.TypeFor[T]()),
+	}
+}
 
 // NewEnvKeyFunc is NewEnvKey for values whose == is not what equal means,
 // as for a pointer to a value that is the same as another when what they
@@ -580,7 +619,7 @@ func (e Env) With[T any](k EnvKey[T], v T) Env {
 			return last
 		}
 	}
-	out := e.derive(k.id, v, exists)
+	out := e.derive(k.id, v, exists, k.safeHash)
 	m.put(lastKey, out)
 	return out
 }
@@ -592,8 +631,15 @@ type envLastDerived struct{}
 // derive returns e with val stored under key: the Env derived the same
 // way before, if the memo has it. exists says whether e stores a value
 // under key already.
-func (e Env) derive(key *byte, val any, exists bool) Env {
-	out, ok, hashable := e.memo(key, val)
+func (e Env) derive(key *byte, val any, exists, safeHash bool) Env {
+	var out Env
+	var ok, hashable bool
+	if safeHash {
+		out, ok = activeWorld().envMemo.get(derivedKey{e.rev, key, val})
+		hashable = true
+	} else {
+		out, ok, hashable = e.memo(key, val)
+	}
 	if ok {
 		return out
 	}
@@ -741,7 +787,7 @@ func (m *envMemo) put(k derivedKey, e Env) {
 	if m.cur == nil {
 		m.cur = map[derivedKey]Env{}
 	}
-	if len(m.cur) >= max(envMemoMin, len(m.prev)) {
+	if _, ok := m.cur[k]; !ok && len(m.cur) >= max(envMemoMin, len(m.prev)) {
 		m.prev, m.cur = m.cur, m.prev
 		if m.cur == nil {
 			m.cur = map[derivedKey]Env{}
@@ -754,13 +800,114 @@ func (m *envMemo) put(k derivedKey, e Env) {
 // memo returns the Env derived from e with key and val before, if one
 // was. A val a map cannot hash is never memoized: hashable reports it.
 func (e Env) memo(key, val any) (out Env, ok, hashable bool) {
-	defer func() {
-		if recover() != nil {
-			hashable = false
-		}
-	}()
+	if !isHashable(val) {
+		return Env{}, false, false
+	}
 	out, ok = activeWorld().envMemo.get(derivedKey{e.rev, key, val})
 	return out, ok, true
+}
+
+// isHashable reports whether val can be used inside a map key without panicking.
+func isHashable(val any) bool {
+	if val == nil {
+		return true
+	}
+	switch v := val.(type) {
+	case bool, int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64, uintptr,
+		float32, float64, complex64, complex128,
+		string, time.Duration, TextDirection,
+		color.RGBA, color.NRGBA, color.Gray, envLastDerived:
+		return true
+	case TextStyle:
+		return isHashable(v.Color)
+	}
+	t := reflect.TypeOf(val)
+	if !t.Comparable() {
+		return false
+	}
+	if safeComparableType(t) {
+		return true
+	}
+	return isHashableValue(reflect.ValueOf(val))
+}
+
+var safeComparableTypes sync.Map // reflect.Type -> bool
+
+func safeComparableType(t reflect.Type) bool {
+	if t == nil {
+		return false
+	}
+	if v, ok := safeComparableTypes.Load(t); ok {
+		return v.(bool)
+	}
+	var safe bool
+	switch t.Kind() {
+	case reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128,
+		reflect.String, reflect.Pointer, reflect.UnsafePointer, reflect.Chan:
+		safe = true
+	case reflect.Array:
+		safe = safeComparableType(t.Elem())
+	case reflect.Struct:
+		safe = true
+		for i := range t.NumField() {
+			if !safeComparableType(t.Field(i).Type) {
+				safe = false
+				break
+			}
+		}
+	}
+	safeComparableTypes.Store(t, safe)
+	return safe
+}
+
+func isHashableValue(v reflect.Value) bool {
+	if !v.IsValid() {
+		return true
+	}
+	switch v.Kind() {
+	case reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128,
+		reflect.String, reflect.Pointer, reflect.UnsafePointer, reflect.Chan:
+		return true
+	case reflect.Interface:
+		return v.IsNil() || isHashableValue(v.Elem())
+	case reflect.Array:
+		t := v.Type()
+		if !t.Comparable() {
+			return false
+		}
+		if safeComparableType(t.Elem()) {
+			return true
+		}
+		for i := range v.Len() {
+			if !isHashableValue(v.Index(i)) {
+				return false
+			}
+		}
+		return true
+	case reflect.Struct:
+		t := v.Type()
+		if !t.Comparable() {
+			return false
+		}
+		if safeComparableType(t) {
+			return true
+		}
+		for i := range v.NumField() {
+			if !isHashableValue(v.Field(i)) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
 }
 
 // remember keeps out as the Env derived from e with key and val, for the

@@ -207,6 +207,7 @@ func (v *inputView) note(r *hitRegion, i int) {
 type retained struct {
 	keeps        map[retainKey]any
 	prevKeeps    map[retainKey]any
+	staged       map[retainKey]any // partial-frame writes, committed only on partial completion
 	read, stored map[retainKey]struct{}
 }
 
@@ -216,14 +217,28 @@ func (r *retained) next() {
 	clear(r.keeps)
 }
 
-// endPartial drops, at the end of a frame painted in part, the slots read
-// in it and not stored again.
+// endPartial commits staged writes from a completed partial frame and drops
+// slots read in it and not stored again.
 func (r *retained) endPartial() {
 	for k := range r.read {
 		if _, ok := r.stored[k]; !ok {
 			delete(r.keeps, k)
 		}
 	}
+	if len(r.staged) > 0 {
+		if r.keeps == nil {
+			r.keeps = make(map[retainKey]any, len(r.staged))
+		}
+		for k, v := range r.staged {
+			r.keeps[k] = v
+		}
+	}
+	r.abortPartial()
+}
+
+// abortPartial discards staged partial-frame writes without modifying keeps.
+func (r *retained) abortPartial() {
+	clear(r.staged)
 	clear(r.read)
 	clear(r.stored)
 }
@@ -330,17 +345,22 @@ func (c *Canvas) Retain[T any](at Anchor, s Slot[T], v T) {
 		return
 	}
 	f := c.fs()
-	if f.keeps == nil {
-		f.keeps = make(map[retainKey]any)
-	}
 	k := at.key(s.id)
-	f.keeps[k] = v
 	if f.partial {
+		if f.staged == nil {
+			f.staged = make(map[retainKey]any)
+		}
 		if f.stored == nil {
 			f.stored = make(map[retainKey]struct{})
 		}
+		f.staged[k] = v
 		f.stored[k] = struct{}{}
+		return
 	}
+	if f.keeps == nil {
+		f.keeps = make(map[retainKey]any)
+	}
+	f.keeps[k] = v
 }
 
 // Retained returns what Retain stored under at and s last frame.
@@ -399,7 +419,9 @@ func (c *Canvas) EaseWith(at Anchor, s Slot[*Motion], target float64, d time.Dur
 // clears the current slots, ready for a paint.
 func (c *Canvas) nextFrame() {
 	f := c.fs()
+	clear(f.inputObservers)
 	f.inputObservers = f.inputObservers[:0]
+	clear(f.shortcuts)
 	f.shortcuts = f.shortcuts[:0]
 	f.retained.next()
 	// prev is a different slice now, so what adopt knew about it is stale.
@@ -736,6 +758,7 @@ func (c *Canvas) paintOverlays() {
 		paintOverlay(c, o)
 	}
 	f.cur = saved
+	clear(f.overlays)
 	f.overlays = f.overlays[:0]
 }
 
@@ -805,9 +828,17 @@ func (c *Canvas) Geo(at Point) ggfx.GeoM {
 
 // physical returns the Image pixels r covers, rounded outwards.
 func (c *Canvas) physical(r Rect) image.Rectangle {
+	if !(r.Size.W > 0) || !(r.Size.H > 0) {
+		return image.Rectangle{}
+	}
+	x0, y0 := c.px(r.Origin.X), c.px(r.Origin.Y)
+	x1, y1 := c.px(r.Origin.X+r.Size.W), c.px(r.Origin.Y+r.Size.H)
+	if !isFinite(x0) || !isFinite(y0) || !isFinite(x1) || !isFinite(y1) {
+		return image.Rectangle{}
+	}
 	return image.Rect(
-		int(math.Floor(c.px(r.Origin.X))), int(math.Floor(c.px(r.Origin.Y))),
-		int(math.Ceil(c.px(r.Origin.X+r.Size.W))), int(math.Ceil(c.px(r.Origin.Y+r.Size.H))),
+		int(math.Floor(x0)), int(math.Floor(y0)),
+		int(math.Ceil(x1)), int(math.Ceil(y1)),
 	)
 }
 
@@ -1054,7 +1085,7 @@ func (f *frameState) indexPrev() {
 // comparableID reports whether id may be used as a map key. A map operation
 // on a key the language cannot compare panics where == only would have if
 // the dynamic types matched, so both sides of the index check first.
-func comparableID(id any) bool { return reflect.TypeOf(id).Comparable() }
+func comparableID(id any) bool { return isHashable(id) }
 
 // Group paints fn with every hit region it registers marked as belonging
 // to g, so that GroupBusy can tell, frames later, whether g holds the focus

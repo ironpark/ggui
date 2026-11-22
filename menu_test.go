@@ -190,4 +190,32 @@ func TestContextMenuWithoutNativeWindow(t *testing.T) {
 	if w.ShowContextMenu(Point{}) {
 		t.Fatal("nil window opened a menu")
 	}
+	// Standalone window with nil app must not panic.
+	standalone := newWindow(nil, nil, Config{}, func() Widget { return sized(0, 0) })
+	defer standalone.Close()
+	if standalone.ShowContextMenu(Pt(1, 1), MenuAction("Run", "", func() {})) {
+		t.Fatal("window with nil app opened a context menu")
+	}
+}
+
+func TestEmptySubmenuIsNotActionAndMenuSetUsesAppRuntime(t *testing.T) {
+	t.Parallel()
+	a := New(Config{}, func() Widget { return sized(0, 0) })
+	defer a.Close()
+	enabled := State(true)
+	a.SetMenu(
+		Menu("File",
+			Menu("Recent"), // empty submenu must not allocate an action
+			MenuAction("Save", "cmd+s", func() {}).BindEnabled(enabled),
+		),
+	)
+	if len(a.actions) != 1 {
+		t.Fatalf("actions = %d, want 1 (empty submenu must not be an action)", len(a.actions))
+	}
+	if len(a.menu.native) != 1 || len(a.menu.native[0].Items) != 2 || a.menu.native[0].Items[0].ID != 0 {
+		t.Fatalf("unexpected native menu structure: %+v", a.menu.native)
+	}
+	if a.rt.Count() == 0 {
+		t.Fatal("menu watchers were not registered in app runtime")
+	}
 }

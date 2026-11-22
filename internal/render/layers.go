@@ -66,8 +66,6 @@ func (p *LayerPool[T]) Borrow(whole, area image.Rectangle, alloc func(image.Rect
 		area = whole
 	}
 	i := p.depth
-	p.depth++
-	p.peak = max(p.peak, p.depth)
 	if len(p.depths) == i { // depths open one at a time
 		p.depths = append(p.depths, nil)
 	}
@@ -97,9 +95,12 @@ func (p *LayerPool[T]) Borrow(whole, area image.Rectangle, alloc func(image.Rect
 		if 4*need > bestPx {
 			pool[best].idle = 0
 		}
+		p.depth++
+		p.peak = max(p.peak, p.depth)
 		return pool[best].img
 	}
-	// What the new image holds, it replaces.
+	// What the new image holds, it replaces. Save the compacted slice before
+	// alloc so a panic in alloc cannot leave freed textures in p.depths[i].
 	pool = slices.DeleteFunc(pool, func(l pooled[T]) bool {
 		if l.img.Bounds().In(b) {
 			p.free(l.img)
@@ -107,11 +108,14 @@ func (p *LayerPool[T]) Borrow(whole, area image.Rectangle, alloc func(image.Rect
 		}
 		return false
 	})
+	p.depths[i] = pool
 	img := alloc(b)
 	if p.Gauge != nil {
 		p.Gauge(textureBytes(img))
 	}
 	p.depths[i] = append(pool, pooled[T]{img: img, used: true})
+	p.depth++
+	p.peak = max(p.peak, p.depth)
 	return img
 }
 

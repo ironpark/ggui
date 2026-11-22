@@ -390,10 +390,73 @@ func TestFadeEdgesLayerCoversR(t *testing.T) {
 		t.Fatalf("painted into %v; want r, %v", in, c.physical(r))
 	}
 	c.freeLayers()
-	// Outside what c holds, it paints straight onto c, through no layer.
+	// Outside what c holds, it paints into an invisible canvas (nil Image)
+	// through no layer so nothing escapes unfaded onto c.Image.
 	var onto *ggfx.Image
 	c.FadeEdges(Rct(Pt(2000, 0), Sz(10, 10)), false, 0, 20, func(dst *Canvas) { onto = dst.Image })
-	if onto != img || layerCount(c) != 0 {
-		t.Fatalf("outside the canvas: painted into its image %v, %d layers", onto == img, layerCount(c))
+	if onto != nil || layerCount(c) != 0 {
+		t.Fatalf("outside the canvas: painted into image %v, %d layers; want nil and 0", onto != nil, layerCount(c))
 	}
+}
+
+func TestEffectsEmptyAreaSingularTransformAndPartialBackdrop(t *testing.T) {
+	t.Parallel()
+	img := ggfx.NewImage(100, 100)
+	defer img.Deallocate()
+	c := &Canvas{Image: img}
+
+	// Blur with empty area paints with nil Image and borrows no layer.
+	var blurImg *ggfx.Image = img
+	c.Blur(Rct(Pt(500, 500), Sz(10, 10)), 2, func(dst *Canvas) { blurImg = dst.Image })
+	if blurImg != nil || layerCount(c) != 0 {
+		t.Fatalf("offscreen Blur: img=%v layers=%d, want nil and 0", blurImg != nil, layerCount(c))
+	}
+
+	// Singular Transform paints with nil Image, inert, and borrows no layer.
+	var singImg *ggfx.Image = img
+	var singInert bool
+	c.Transform(Affine{}.Scale(0, 0), func(dst *Canvas) {
+		singImg = dst.Image
+		singInert = dst.inert
+	})
+	if singImg != nil || !singInert || layerCount(c) != 0 {
+		t.Fatalf("singular Transform: img=%v inert=%v layers=%d", singImg != nil, singInert, layerCount(c))
+	}
+
+	// Transform records transformed bounds in parent scope, and unplaced local
+	// child bounds do not pollute the placed parent scope.
+	f := c.fs()
+	f.startMotion()
+	child := FromFuncs(func(Constraints, Env) Size { return Sz(10, 10) }, func(dst *Canvas, r Rect) {
+		dst.FillRect(r, color.White)
+	})
+	host := FromFuncs(func(Constraints, Env) Size { return Sz(10, 10) }, func(dst *Canvas, _ Rect) {
+		dst.Transform(Affine{}.Translate(40, 50), func(tDst *Canvas) {
+			tDst.Paint(child, Rct(Pt(0, 0), Sz(10, 10)))
+		})
+	})
+	f.openScope(c, Rct(Pt(40, 50), Sz(10, 10)), 0)
+	host.Paint(c, Rct(Pt(40, 50), Sz(10, 10)))
+	bounds := f.scopes[len(f.scopes)-1].bounds
+	f.closeScope(host, 0)
+	if bounds.Origin.X < 30 || bounds.Origin.Y < 40 {
+		t.Fatalf("parent scope bounds polluted by local coords: %+v", bounds)
+	}
+	c.freeLayers()
+
+	// Partial frame without backdrop must not decrement backdropTTL.
+	screen := ggfx.NewImage(40, 30)
+	defer screen.Deallocate()
+	w := &Window{}
+	w.canvas.fs().backdrop = true
+	unreadable := &ggfx.Image{}
+	w.presentBackdrop(unreadable, unreadable)
+	ttl := w.backdropTTL
+	w.canvas.fs().backdrop = false
+	back, _ := w.paintTarget(screen, false)
+	w.finishBackdrop(screen, back, true)
+	if w.backdropTTL != ttl {
+		t.Fatalf("partial frame decremented backdropTTL from %d to %d", ttl, w.backdropTTL)
+	}
+	w.freeBackbuf()
 }

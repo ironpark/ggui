@@ -210,7 +210,7 @@ func (c *Canvas) StrokeLine(a, b Point, w float64, col color.Color) {
 // FillRoundRect fills the logical Rect r with col, with corners rounded by
 // radius. A zero radius is FillRect.
 func (c *Canvas) FillRoundRect(r Rect, radius float64, col color.Color) {
-	if c == nil || c.Image == nil || col == nil {
+	if c == nil || c.Image == nil || col == nil || !(r.Size.W > 0) || !(r.Size.H > 0) {
 		return
 	}
 	if !c.visiblePaintBounds(r, 0) {
@@ -419,6 +419,10 @@ func (c *Canvas) shadeImage(img *ggfx.Image, r, at Rect, o ImageOptions) {
 	if at.Size.W <= 0 || at.Size.H <= 0 || !c.visiblePaintBounds(r, reach) {
 		return
 	}
+	vis := r.Intersect(at)
+	if vis.Empty() {
+		return
+	}
 	b := img.Bounds()
 	kx, ky := float64(b.Dx())/at.Size.W, float64(b.Dy())/at.Size.H
 	centre := r.Center()
@@ -433,10 +437,27 @@ func (c *Canvas) shadeImage(img *ggfx.Image, r, at Rect, o ImageOptions) {
 		red, green, blue, alpha = red*k, green*k, blue*k, alpha*k
 	}
 	e := 1 / scale // one device pixel of edge to antialias into
+	// Pad by e only on edges where the placed image reaches r's boundary;
+	// letterbox edges strictly inside r stay exact so edge texels do not smear
+	// across the empty letterbox region.
+	x0, y0 := vis.Origin.X, vis.Origin.Y
+	x1, y1 := vis.Origin.X+vis.Size.W, vis.Origin.Y+vis.Size.H
+	if at.Origin.X <= r.Origin.X {
+		x0 -= e
+	}
+	if at.Origin.Y <= r.Origin.Y {
+		y0 -= e
+	}
+	if at.Origin.X+at.Size.W >= r.Origin.X+r.Size.W {
+		x1 += e
+	}
+	if at.Origin.Y+at.Size.H >= r.Origin.Y+r.Size.H {
+		y1 += e
+	}
 	var vs [4]ggfx.Vertex
 	for i, p := range [4]Point{
-		{X: r.Origin.X - e, Y: r.Origin.Y - e}, {X: r.Origin.X + r.Size.W + e, Y: r.Origin.Y - e},
-		{X: r.Origin.X - e, Y: r.Origin.Y + r.Size.H + e}, {X: r.Origin.X + r.Size.W + e, Y: r.Origin.Y + r.Size.H + e},
+		{X: x0, Y: y0}, {X: x1, Y: y0},
+		{X: x0, Y: y1}, {X: x1, Y: y1},
 	} {
 		d := Pt(p.X-centre.X, p.Y-centre.Y)
 		turned := centre.Add(Pt(d.X*cos-d.Y*sin, d.X*sin+d.Y*cos))
@@ -979,7 +1000,7 @@ func (c *Canvas) FillGradientRoundRect(r Rect, radius float64, g Gradient) {
 // FillPathGradient it fills through a coverage mask kept on the path, rebuilt
 // only when the path, bounds or scale change.
 func (c *Canvas) FillGradientPath(path *Path, bounds Rect, g Gradient) {
-	if c == nil || c.Image == nil || path == nil || g.IsZero() || bounds.Empty() {
+	if c == nil || c.Image == nil || path == nil || g.IsZero() || bounds.Empty() || !c.visiblePaintBounds(bounds, 0) {
 		return
 	}
 	mask, at, ok := path.coverage(c, bounds)
@@ -1101,7 +1122,7 @@ func (c *Canvas) freeLayers() {
 // that wraps, selects or is read by a screen reader is a Text painted with
 // Canvas.Paint.
 func (c *Canvas) DrawText(s string, font *Font, size float64, at Point, col color.Color) {
-	if c == nil || c.Image == nil {
+	if c == nil || c.Image == nil || col == nil {
 		return
 	}
 	if font == nil {

@@ -574,3 +574,44 @@ func TestScopeLetsGoOfWhatItsCleanupDisposed(t *testing.T) {
 		t.Fatalf("the scope's owner holds %d subtrees, %d alive; want the %d kept", held, mounted-cleaned, len(kept))
 	}
 }
+
+func TestFocusRefFocusFromPostNotSkippedAndCachedWidgetManyKids(t *testing.T) {
+	t.Parallel()
+	var ref FocusRef
+	field := &editField{value: State("hi")}
+	p := NewWindowProbe(func() Widget { return stack(ref.Attach(field)) }, Sz(100, 40))
+	defer p.Close()
+	p.Step(0)
+	if field.Focused {
+		t.Fatal("field focused before FocusRef.Focus")
+	}
+	p.w.Post(func() { ref.Focus() })
+	fr := p.Step(0)
+	if fr.Painted == FrameSkipped {
+		t.Fatal("frame after FocusRef.Focus() in Post was skipped")
+	}
+	if !field.Focused {
+		t.Fatal("FocusRef.Focus() in Post did not focus the widget")
+	}
+
+	// CachedWidget with > 32 child CachedWidgets exercises kidIdx lookup/update.
+	kids := make([]Widget, 48)
+	vals := make([]*StateValue[int], 48)
+	for i := range kids {
+		vals[i] = State(i)
+		s := vals[i]
+		kids[i] = Cached(FromFuncs(func(c Constraints, _ Env) Size {
+			return c.Constrain(Sz(10, float64(s.Get()+1)))
+		}, func(*Canvas, Rect) {}))
+	}
+	outer := Cached(column(kids...))
+	outer.Layout(Loose(Sz(200, 5000)), Env{})
+	if len(outer.kids) != 48 || len(outer.kidIdx) != 48 {
+		t.Fatalf("kids=%d kidIdx=%d, want 48 and 48", len(outer.kids), len(outer.kidIdx))
+	}
+	vals[40].Set(100)
+	sz := outer.Layout(Loose(Sz(200, 5000)), Env{})
+	if sz.H <= 100 || len(outer.kids) != 48 || len(outer.kidIdx) != 48 {
+		t.Fatalf("after update: sz=%v kids=%d kidIdx=%d", sz, len(outer.kids), len(outer.kidIdx))
+	}
+}

@@ -470,12 +470,15 @@ func (w *Window) Perform(id NodeID, act Action) {
 		if w.canvas.fs().semOff {
 			// The last frame built no tree. The one about to run does,
 			// since this Perform is pending, so try again after it.
+			w.markDirty(dirtyOther)
 			w.Post(run)
 			return
 		}
 		w.performs.Add(-1)
 		perform(&w.canvas, &w.input, id, act)
+		w.markDirty(dirtyOther)
 	}
+	w.markDirty(dirtyOther)
 	w.Post(run)
 }
 

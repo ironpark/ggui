@@ -594,3 +594,22 @@ func TestStrokeLineAxisAlignedUniformThickness(t *testing.T) {
 	c.StrokeLine(Pt(5, 5), Pt(5, 5), 1, color.White)
 	c.StrokeLine(Pt(0, 5), Pt(10, 5), math.NaN(), color.White)
 }
+
+func TestFillRoundRectEmptyAndDrawTextNilColorAndDrawImageLetterbox(t *testing.T) {
+	t.Parallel()
+	img := ggfx.NewImage(40, 40)
+	defer img.Deallocate()
+	c := &Canvas{Image: img}
+
+	// Zero/negative size FillRoundRect and nil-color DrawText must not panic.
+	c.FillRoundRect(Rct(Pt(5, 5), Sz(0, 10)), 4, color.White)
+	c.FillRoundRect(Rct(Pt(5, 5), Sz(-5, 10)), 4, color.White)
+	c.DrawText("hello", nil, 14, Pt(0, 0), nil)
+
+	// FitContain with Radius > 0 must not panic and keeps visible bounds inside r.
+	src := ggfx.NewImage(40, 20)
+	defer src.Deallocate()
+	src.Fill(color.White)
+	c.DrawImage(src, Rct(Pt(0, 0), Sz(40, 40)), ImageOptions{Fit: FitContain, Radius: 6})
+	c.DrawImage(src, Rct(Pt(0, 0), Sz(40, 40)), ImageOptions{Fit: FitNone, Radius: 6})
+}

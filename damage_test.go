@@ -435,3 +435,100 @@ func TestAHoveredRegionAroundIsPaintedAgain(t *testing.T) {
 		t.Fatalf("touched %v: the region that passed the move was painted again", got)
 	}
 }
+
+func TestPartialAbortPreservesRetainedAndSemanticsNotSkipped(t *testing.T) {
+	t.Parallel()
+	slot := NewSlot[int]("partial-abort")
+	openOverlay := false
+	var sawInWhole int
+	w := newWindow(nil, nil, Config{}, func() Widget {
+		return stack(FromFuncs(func(c Constraints, _ Env) Size { return c.Constrain(Sz(20, 20)) }, func(dst *Canvas, r Rect) {
+			Now()
+			prev, _ := dst.Retained(Anchor{Rect: r}, slot)
+			if !dst.fs().partial {
+				sawInWhole = prev
+			}
+			dst.Retain(Anchor{Rect: r}, slot, prev+1)
+			if openOverlay && dst.fs().partial {
+				dst.Overlay(func(*Canvas) {})
+			}
+			dst.FillRect(r, color.White)
+		}))
+	})
+	w.start()
+	defer w.Close()
+	setRunning(&w.frameLoop)
+	screen := ggfx.NewImage(100, 100)
+	defer screen.Deallocate()
+
+	// Whole frame 1 stores 1.
+	w.draw(screen, 1, false, nil)
+	w.endFrame(frameInput{})
+	// Frame 2: partial aborts because an overlay opens, falling back to whole.
+	// Retained value in the fallback whole frame must still be 1 (not 2!).
+	openOverlay = true
+	w.draw(screen, 1, true, nil)
+	w.endFrame(frameInput{})
+	if sawInWhole != 1 {
+		t.Fatalf("aborted partial corrupted retained keeps: whole frame saw %d, want 1", sawInWhole)
+	}
+	if w.canvas.fs().partial {
+		t.Fatal("f.partial remained true after drawPartial abort")
+	}
+
+	// Semantics() and Perform() must not be skipped when semOff is true on an idle window.
+	btn := &target{size: Sz(20, 20)}
+	p := NewWindowProbe(func() Widget {
+		return stack(FromFuncs(btn.Layout, func(dst *Canvas, r Rect) {
+			dst.HitPointer(r, btn)
+			dst.Describe(r, btn)
+		}))
+	}, Sz(60, 60))
+	defer p.Close()
+	p.Step(0) // initial frame with semOff=true
+	if !p.w.canvas.fs().semOff {
+		t.Fatal("expected initial frame to have semOff=true")
+	}
+	_ = p.w.Semantics()
+	fr := p.Step(0)
+	if fr.Painted == FrameSkipped {
+		t.Fatal("frame after Semantics() was skipped while semOff was true")
+	}
+	if _, ok := p.w.Semantics().Find(RoleButton, "target"); !ok {
+		t.Fatal("Semantics() did not build tree on next frame")
+	}
+
+	// Perform() while semOff is true builds tree and executes action without skipping.
+	btn2 := &target{size: Sz(20, 20)}
+	p2 := NewWindowProbe(func() Widget {
+		return stack(FromFuncs(btn2.Layout, func(dst *Canvas, r Rect) {
+			dst.HitPointer(r, btn2)
+			dst.Describe(r, btn2)
+		}))
+	}, Sz(60, 60))
+	defer p2.Close()
+	p2.Step(0) // initial frame with semOff=true
+	p2.w.Perform(NodeID{Role: RoleButton, Rect: Rct(Pt(0, 0), Sz(20, 20))}, Action{Kind: ActionPress})
+	f1 := p2.Step(0)
+	if f1.Painted == FrameSkipped {
+		t.Fatal("first frame after Perform() with semOff=true was skipped")
+	}
+	p2.Step(0)
+	if len(btn2.taps()) != 1 {
+		t.Fatalf("Perform() taps = %d, want 1", len(btn2.taps()))
+	}
+
+	// wantsFrame sets dirtyCallback even when timeRead() is true.
+	w3 := newWindow(nil, nil, Config{}, func() Widget { return sized(10, 10) })
+	w3.start()
+	defer w3.Close()
+	w3.OnFrame(func() {})
+	w3.world().frame.animate()
+	w3.dirty.Store(0)
+	if !w3.wantsFrame(frameInput{}) {
+		t.Fatal("wantsFrame returned false")
+	}
+	if dirtyReason(w3.dirty.Load())&dirtyCallback == 0 {
+		t.Fatal("timeRead() shadowed dirtyCallback in wantsFrame")
+	}
+}

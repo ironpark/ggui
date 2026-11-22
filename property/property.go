@@ -108,19 +108,23 @@ func (o *Owner) EndLayout() {
 // their rendered channels; equal NaNs must not turn a still frame into a loop.
 func Equal[T any](a, b T) bool {
 	t := reflect.TypeFor[T]()
+	// A type that registered what equal is, as a style holding a color or a
+	// plain struct with custom semantics does, takes precedence over plain ==.
+	if eq, ok := equals.Load(t); ok {
+		return eq.(func(a, b T) bool)(a, b)
+	}
 	if t.Kind() != reflect.Float64 && t.Kind() != reflect.Float32 && plain(t) {
 		// == is DeepEqual for these, and the values, boxed only to be
 		// compared, stay on the stack. A float alone is below, where a NaN
 		// is the same as another.
 		return any(a) == any(b)
 	}
-	// A type that registered what equal is, as a style holding a color
-	// does, compares with no boxing or reflection.
-	if eq, ok := equals.Load(t); ok {
-		return eq.(func(a, b T) bool)(a, b)
-	}
 	if ca, ok := any(a).(color.Color); ok {
 		if cb, ok := any(b).(color.Color); ok {
+			aNil, bNil := isNilColor(ca), isNilColor(cb)
+			if aNil || bNil {
+				return aNil && bNil
+			}
 			ar, ag, ab, aa := ca.RGBA()
 			br, bg, bb, ba := cb.RGBA()
 			return ar == br && ag == bg && ab == bb && aa == ba
@@ -134,10 +138,38 @@ func Equal[T any](a, b T) bool {
 		bv, ok := any(b).(float32)
 		return ok && (av == bv || math.IsNaN(float64(av)) && math.IsNaN(float64(bv)))
 	}
+	if k := t.Kind(); k == reflect.Float64 || k == reflect.Float32 {
+		av := reflect.ValueOf(a).Float()
+		bv := reflect.ValueOf(b).Float()
+		return av == bv || math.IsNaN(av) && math.IsNaN(bv)
+	}
+	if t.Kind() == reflect.Interface && any(a) != nil && any(b) != nil {
+		ra, rb := reflect.ValueOf(a), reflect.ValueOf(b)
+		if ra.Type() == rb.Type() && (ra.Kind() == reflect.Float64 || ra.Kind() == reflect.Float32) {
+			av, bv := ra.Float(), rb.Float()
+			return av == bv || math.IsNaN(av) && math.IsNaN(bv)
+		}
+	}
 	if Same(a, b) {
 		return true
 	}
 	return reflect.DeepEqual(a, b)
+}
+
+func isNilColor(c color.Color) bool {
+	if c == nil {
+		return true
+	}
+	switch c.(type) {
+	case color.RGBA, color.NRGBA, color.RGBA64, color.NRGBA64, color.Gray, color.Gray16, color.Alpha, color.Alpha16:
+		return false
+	}
+	v := reflect.ValueOf(c)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return v.IsNil()
+	}
+	return false
 }
 
 // equals are the comparisons RegisterEqual registered, by type.
