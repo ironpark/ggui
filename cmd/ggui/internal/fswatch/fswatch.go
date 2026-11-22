@@ -141,6 +141,28 @@ func sortEvents(es []Event) {
 	slices.SortFunc(es, func(a, b Event) int { return strings.Compare(a.Path, b.Path) })
 }
 
+// dedupEvents folds in sorted order what one path said twice into the
+// event the pair amounts to: a remove repeated is one remove, a path
+// made and removed again is nothing, and the rest is what then says.
+func dedupEvents(evs []Event) []Event {
+	dedup := evs[:0]
+	for _, e := range evs {
+		if n := len(dedup); n > 0 && dedup[n-1].Path == e.Path {
+			if dedup[n-1].Op == Remove && e.Op == Remove {
+				continue
+			}
+			if m, keep := then(dedup[n-1], e); keep {
+				dedup[n-1] = m
+			} else {
+				dedup = dedup[:n-1]
+			}
+			continue
+		}
+		dedup = append(dedup, e)
+	}
+	return dedup
+}
+
 // Content lets the caller judge what an edit to a file changed. It is
 // asked only about the files Match picks, so that the watcher reads no
 // others.
@@ -394,29 +416,48 @@ func (w *Watcher) Sync(ctx context.Context) Batch {
 		case stateBusy:
 			ch := w.stateCh
 			w.runMu.Unlock()
-			select {
-			case <-ch:
-			case <-ctx.Done():
+			if w.awaitBusy(ctx, ch) {
 				return Batch{}
 			}
 		case stateRunning:
 			ch := w.stateCh
 			w.runMu.Unlock()
-			reply := make(chan Batch, 1)
-			select {
-			case w.syncs <- reply:
-			case <-ch:
+			b, retry := w.askRun(ctx, ch)
+			if retry {
 				continue
-			case <-ctx.Done():
-				return Batch{}
 			}
-			select {
-			case b := <-reply:
-				return b
-			case <-ctx.Done():
-				return Batch{}
-			}
+			return b
 		}
+	}
+}
+
+// awaitBusy waits for the scan that holds the watcher to end, and
+// reports whether Sync gave up because ctx ended first.
+func (w *Watcher) awaitBusy(ctx context.Context, ch <-chan struct{}) bool {
+	select {
+	case <-ch:
+		return false
+	case <-ctx.Done():
+		return true
+	}
+}
+
+// askRun asks a running Run for its next batch. It says to try again
+// when the run ended before the ask was taken.
+func (w *Watcher) askRun(ctx context.Context, ch <-chan struct{}) (Batch, bool) {
+	reply := make(chan Batch, 1)
+	select {
+	case w.syncs <- reply:
+	case <-ch:
+		return Batch{}, true
+	case <-ctx.Done():
+		return Batch{}, false
+	}
+	select {
+	case b := <-reply:
+		return b, false
+	case <-ctx.Done():
+		return Batch{}, false
 	}
 }
 
@@ -432,159 +473,225 @@ func (w *Watcher) scanIdle() Batch {
 func (w *Watcher) Run(ctx context.Context, out chan<- Batch) {
 	w.run.Lock()
 	defer w.run.Unlock()
+	l := w.startRun(out)
+	defer w.setState(stateIdle)
+	defer w.waitBG()
+	defer l.stop()
+	l.rewatch()
+	w.setState(stateRunning)
+	defer w.setState(stateBusy)
+	for {
+		send, b := l.pending()
+		wake := l.notices()
+		select {
+		case <-ctx.Done():
+			return
+		case send <- b:
+			l.outbox = nil
+		case <-wake:
+			l.woken()
+		case <-l.settle:
+			l.onSettle()
+		case <-l.tick.C:
+			l.check(false, nil)
+		case <-w.changed:
+			l.onChanged()
+		case reply := <-w.syncs:
+			l.serve(reply)
+		}
+	}
+}
+
+// runLoop is the state of one Run: the watcher it serves, the system
+// source it takes notices from (nil to poll), the shape of the set the
+// watches were made for, the polling ticker, and the batch waiting to
+// be sent, with the timer that lets changes landing close together
+// settle before a scan.
+type runLoop struct {
+	w      *Watcher
+	out    chan<- Batch
+	src    source
+	shape  int
+	tick   *time.Ticker
+	outbox *Batch
+	settle <-chan time.Time
+	timer  *time.Timer
+}
+
+// startRun waits for any other Run to end, marks the watcher busy, and
+// assembles a run loop: a ticker for polling, and the system source, if
+// there is one.
+func (w *Watcher) startRun(out chan<- Batch) *runLoop {
+	w.claimRun()
+	l := &runLoop{w: w, out: out, shape: -1, tick: time.NewTicker(w.o.Poll)}
+	l.src = w.openSource()
+	if l.src != nil {
+		l.tick.Reset(w.o.Rescan)
+	}
+	return l
+}
+
+// claimRun waits for any other Run to end and marks the watcher busy.
+// w.run is held.
+func (w *Watcher) claimRun() {
 	for {
 		w.runMu.Lock()
 		if w.state == stateIdle {
 			w.state = stateBusy
 			w.stateCh = make(chan struct{})
 			w.runMu.Unlock()
-			break
+			return
 		}
 		ch := w.stateCh
 		w.runMu.Unlock()
 		<-ch
 	}
-	defer w.setState(stateIdle)
-	defer w.waitBG()
+}
 
-	tick := time.NewTicker(w.o.Poll)
-	defer tick.Stop()
-	src := w.openSource()
-	defer func() {
-		if src != nil {
-			src.close()
-		}
-	}()
-	if src != nil {
-		tick.Reset(w.o.Rescan)
+// stop releases what the run holds: the settle timer, the system
+// source, and the ticker.
+func (l *runLoop) stop() {
+	if l.timer != nil {
+		l.timer.Stop()
 	}
-	shape := -1
-	rewatch := func() bool {
-		w.mu.Lock()
-		s := w.shape
-		var dirs []string
-		if s != shape && src != nil {
-			dirs = w.dirs()
-		}
-		w.mu.Unlock()
-		if s == shape {
-			return false
-		}
-		shape = s
-		if src != nil {
-			if err := src.watch(dirs); err != nil {
-				w.fallBack(src, err, tick)
-				src = nil
-			}
-		}
-		return true
+	if l.src != nil {
+		l.src.close()
 	}
-	rewatch()
+	l.tick.Stop()
+}
 
-	var (
-		outbox *Batch
-		settle <-chan time.Time
-		timer  *time.Timer
-	)
-	defer func() {
-		if timer != nil {
-			timer.Stop()
-		}
-	}()
-	check := func(full bool, relist map[string]bool) {
-		if b := w.check(full, relist); len(b.Changes) > 0 {
-			if outbox == nil {
-				outbox = &b
-			} else {
-				outbox.merge(b)
-			}
-		}
-		rewatch()
+// rewatch updates the system's watches after the set's shape changed,
+// and reports whether it did: the shape is read under w.mu, together
+// with the directories to watch.
+func (l *runLoop) rewatch() bool {
+	w := l.w
+	w.mu.Lock()
+	s := w.shape
+	var dirs []string
+	if s != l.shape && l.src != nil {
+		dirs = w.dirs()
 	}
-	w.setState(stateRunning)
-	defer w.setState(stateBusy)
-	for {
-		var send chan<- Batch
-		var b Batch
-		if outbox != nil {
-			send, b = out, *outbox
+	w.mu.Unlock()
+	if s == l.shape {
+		return false
+	}
+	l.shape = s
+	if l.src != nil {
+		if err := l.src.watch(dirs); err != nil {
+			w.fallBack(l.src, err, l.tick)
+			l.src = nil
 		}
-		var wake <-chan struct{}
-		if src != nil {
-			wake = src.wake()
+	}
+	return true
+}
+
+// check scans and holds on to what changed, for the loop to send.
+func (l *runLoop) check(full bool, relist map[string]bool) {
+	if b := l.w.check(full, relist); len(b.Changes) > 0 {
+		if l.outbox == nil {
+			l.outbox = &b
+		} else {
+			l.outbox.merge(b)
 		}
+	}
+	l.rewatch()
+}
+
+// pending says what the loop may send: the batch found and not sent
+// yet, or nothing, for a nil channel whose case is never ready.
+func (l *runLoop) pending() (chan<- Batch, Batch) {
+	if l.outbox == nil {
+		return nil, Batch{}
+	}
+	return l.out, *l.outbox
+}
+
+// notices is the channel the system's notices arrive on, or nil while
+// polling.
+func (l *runLoop) notices() <-chan struct{} {
+	if l.src == nil {
+		return nil
+	}
+	return l.src.wake()
+}
+
+// woken arms the settle timer, if none runs: the system reported
+// changes, which are given Settle to finish landing before a scan.
+func (l *runLoop) woken() {
+	if l.settle == nil {
+		l.timer = time.NewTimer(l.w.o.Settle)
+		l.settle = l.timer.C
+	}
+}
+
+// onSettle takes what the system gathered in the settle time: a lost
+// source or a lost notice means everything is scanned, otherwise only
+// what is relevant.
+func (l *runLoop) onSettle() {
+	l.settle, l.timer = nil, nil
+	if l.src == nil {
+		return
+	}
+	paths, all, err := l.src.take()
+	if err != nil {
+		l.w.fallBack(l.src, err, l.tick)
+		l.src = nil
+		l.check(true, nil)
+		return
+	}
+	if all {
+		l.w.tracef("the system lost events: rescanning everything")
+		l.check(true, nil)
+		return
+	}
+	scan, relist := l.w.relevant(paths)
+	l.w.tracef("notified of %d paths: scan %v", len(paths), scan)
+	if scan {
+		l.check(false, relist)
+	}
+}
+
+// onChanged rewatched after Set changed the paths, and scans once, to
+// close the window between Set stamping paths and the new watches
+// being live.
+func (l *runLoop) onChanged() {
+	if l.rewatch() {
+		l.check(false, nil)
+	}
+}
+
+// serve answers a Sync: it takes what the system has gathered, scans
+// now, and hands the waiting batch to the asker.
+func (l *runLoop) serve(reply chan<- Batch) {
+	if l.timer != nil {
+		l.timer.Stop()
+		l.settle, l.timer = nil, nil
+	}
+	var full bool
+	var relist map[string]bool
+	if l.src != nil {
 		select {
-		case <-ctx.Done():
-			return
-		case send <- b:
-			outbox = nil
-		case <-wake:
-			if settle == nil {
-				timer = time.NewTimer(w.o.Settle)
-				settle = timer.C
-			}
-		case <-settle:
-			settle, timer = nil, nil
-			if src == nil {
-				continue
-			}
-			paths, all, err := src.take()
-			if err != nil {
-				w.fallBack(src, err, tick)
-				src = nil
-				check(true, nil)
-				continue
-			}
-			if all {
-				w.tracef("the system lost events: rescanning everything")
-				check(true, nil)
-				continue
-			}
-			scan, relist := w.relevant(paths)
-			w.tracef("notified of %d paths: scan %v", len(paths), scan)
-			if scan {
-				check(false, relist)
-			}
-		case <-tick.C:
-			check(false, nil)
-		case <-w.changed:
-			if rewatch() {
-				// Scan once after updating OS watches to close the window
-				// between Set stamping paths and the new watches being live.
-				check(false, nil)
-			}
-		case reply := <-w.syncs:
-			if timer != nil {
-				timer.Stop()
-				settle, timer = nil, nil
-			}
-			var full bool
-			var relist map[string]bool
-			if src != nil {
-				select {
-				case <-src.wake():
-				default:
-				}
-				paths, all, err := src.take()
-				if err != nil {
-					w.fallBack(src, err, tick)
-					src = nil
-					full = true
-				} else if all {
-					w.tracef("the system lost events: rescanning everything")
-					full = true
-				} else if len(paths) > 0 {
-					_, relist = w.relevant(paths)
-				}
-			}
-			check(full, relist)
-			var b Batch
-			if outbox != nil {
-				b, outbox = *outbox, nil
-			}
-			reply <- b
+		case <-l.src.wake():
+		default:
+		}
+		paths, all, err := l.src.take()
+		if err != nil {
+			l.w.fallBack(l.src, err, l.tick)
+			l.src = nil
+			full = true
+		} else if all {
+			l.w.tracef("the system lost events: rescanning everything")
+			full = true
+		} else if len(paths) > 0 {
+			_, relist = l.w.relevant(paths)
 		}
 	}
+	l.check(full, relist)
+	var b Batch
+	if l.outbox != nil {
+		b, l.outbox = *l.outbox, nil
+	}
+	reply <- b
 }
 
 // openSource returns the system's source watching the set's directories,
