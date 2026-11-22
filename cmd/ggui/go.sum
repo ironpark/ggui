@@ -71,8 +71,6 @@ github.com/goreleaser/nfpm/v2 v2.48.0 h1:Yvd07lX8YqDD+rtTwVqyeQiDX+7cnun/jFbZD50
 github.com/goreleaser/nfpm/v2 v2.48.0/go.mod h1:6fjcqbb3diRwI2Za+/s1QSc9QoeWGbYvV2GQZ2yVdEo=
 github.com/huandu/xstrings v1.5.0 h1:2ag3IFq9ZDANvthTwTiqSSZLjDc+BedvHPAp5tJy2TI=
 github.com/huandu/xstrings v1.5.0/go.mod h1:y5/lhBue+AyNmUVz9RLU9xbLR0o4KIIExikq4ovT0aE=
-github.com/ironpark/ggui/pkg/fswatch v0.2.2 h1:PblSVd1VIAkDm8OuLqSx0oks/HQWq+L8hV1nbJkjfa4=
-github.com/ironpark/ggui/pkg/fswatch v0.2.2/go.mod h1:TE/ZXm4sRMn9MuhUrZ7XDNellQ9n0j1FWouO4awnxaw=
 github.com/ironpark/zapp v1.7.1 h1:X1ErLTnm6j2FQKyGGznsAP5UDXTB/8dHzU6q8zMIhag=
 github.com/ironpark/zapp v1.7.1/go.mod h1:hMchPx9AbI2ZxyBscXjjG9N0ICBi9hiY9tb7UZ/GHxg=
 github.com/ironpark/zapp/pkg/signing/rcodesign/lib v1.0.1 h1:pqIolpkwjzaBdqnj2Bu1K94YSz31jhzfS9mAlO82+1c=

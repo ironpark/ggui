@@ -328,8 +328,7 @@ build starts 50 ms later if nothing else changes. A scan also runs every
 some network file systems; when the system says it lost notifications,
 every watched directory is listed again as well. Editors' temporary
 files, such as Vim's `4913` and swap files and Emacs's backups, are not
-looked at. The watcher is
-[`pkg/fswatch`](../pkg/fswatch/), which any Go program can use. Where there are no notifications,
+looked at. The watcher is internal to the command. Where there are no notifications,
 or when inotify runs out of watches (`fs.inotify.max_user_watches`), dev
 says so in one line and scans four times a second instead;
 `GGUI_WATCH=poll` in the environment asks for that, for a file system
