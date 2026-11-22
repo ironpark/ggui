@@ -13,7 +13,7 @@ import (
 // color, the muted surface, a deeper wash of the destructive color.
 func TestBubbleVariantsHoverOnTheirOwnSurfaces(t *testing.T) {
 	t.Parallel()
-	for _, th := range []uitheme.Theme{uitheme.Default(), uitheme.Dark()} {
+	for _, th := range []*uitheme.Theme{uitheme.Default(), uitheme.Dark()} {
 		dark := isDark(th.Bg)
 		for _, tc := range []struct {
 			name string

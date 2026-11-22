@@ -21,8 +21,39 @@ func TestOfSharesOneThemePerValue(t *testing.T) {
 	if d1, d2 := theme.Of(ggui.Env{}), theme.Of(ggui.Env{}); d1 != d2 {
 		t.Fatal("the default theme is made again for every Env without one")
 	}
-	if *theme.Of(ggui.Env{}) != theme.Default() {
+	if !theme.Of(ggui.Env{}).Equal(theme.Default()) {
 		t.Fatal("Of without a theme is not Default")
+	}
+}
+
+// Two independently constructed themes with equal extension tokens compare
+// Equal and share the same *Theme pointer when applied under the same Env.
+func TestApplySharesPointerForEqualExtensionTokens(t *testing.T) {
+	t.Parallel()
+	k1 := ggui.NewEnvKey[color.Color]("ext-accent")
+	k2 := ggui.NewEnvKey[int]("ext-size")
+	c := color.Color(color.RGBA{0x12, 0x34, 0x56, 0xff})
+
+	a := theme.Default().Set(k1, c).Set(k2, 42)
+	b := theme.Default().Set(k2, 42).Set(k1, c)
+	if !a.Equal(b) {
+		t.Fatal("independently constructed themes with equal extension tokens are not Equal")
+	}
+	base := ggui.Env{}
+	pa := theme.Of(a.Apply(base))
+	pb := theme.Of(b.Apply(base))
+	if pa != pb {
+		t.Fatal("equal themes with distinct extension token chains did not share a pointer via Apply")
+	}
+
+	shadowed := theme.Default().Set(k2, 7).Set(k1, c).Set(k2, 42)
+	if !shadowed.Equal(a) || theme.Of(shadowed.Apply(base)) != pa {
+		t.Fatal("shadowed extension token did not match equivalent effective bindings")
+	}
+
+	diff := theme.Default().Set(k1, c).Set(k2, 99)
+	if diff.Equal(a) || theme.Of(diff.Apply(base)) == pa {
+		t.Fatal("themes with different extension token values compared equal or shared a pointer")
 	}
 }
 

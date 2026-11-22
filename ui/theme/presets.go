@@ -190,10 +190,10 @@ type Preset struct {
 }
 
 // Light is the preset's light theme.
-func (p Preset) Light() Theme { return p.For(false) }
+func (p Preset) Light() *Theme { return p.For(false) }
 
 // Dark is the preset's dark theme.
-func (p Preset) Dark() Theme { return p.For(true) }
+func (p Preset) Dark() *Theme { return p.For(true) }
 
 // BaseColors returns the base palettes a Preset takes.
 func BaseColors() []BaseColor {
@@ -228,19 +228,23 @@ type ChatTokens struct {
 // ChatTokens returns Chat, or Default's for a Theme not yet resolved
 // without one; Resolve fills an omitted Chat's padding and gaps in the same
 // way, and its corners from the theme's Radius.
-func (t Theme) ChatTokens() ChatTokens {
-	if t.Chat == (ChatTokens{}) {
+func (t *Theme) ChatTokens() ChatTokens {
+	if t == nil || t.Chat == (ChatTokens{}) {
 		return defaultTheme().Chat
 	}
 	return t.Chat
 }
 
 // For is Dark when dark is true and Light otherwise.
-func (p Preset) For(dark bool) Theme { return p.build(dark).Resolve() }
+func (p Preset) For(dark bool) *Theme {
+	t := p.build(dark)
+	t.resolveInPlace()
+	return t
+}
 
 // build is For before Resolve: every token the palette has is set, not
 // followed, even where it equals what it would follow.
-func (p Preset) build(dark bool) Theme {
+func (p Preset) build(dark bool) *Theme {
 	base := p.Base
 	if base == "" {
 		base = BaseNeutral
@@ -300,7 +304,7 @@ func (p Preset) build(dark bool) Theme {
 	// The corners follow Radius, shadcn's default --radius of 0.625rem in
 	// the style's step for a control.
 	t.setRadius(defaultRadius)
-	return t
+	return &t
 }
 
 // defaultRadius is shadcn/ui's stock --radius, 0.625rem.

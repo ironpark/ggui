@@ -453,7 +453,7 @@ func (f *comboboxField) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	// shadcn's input keeps its px-2.5 at the start and pr-1.5 before the
 	// addon, which sits pr-2 less its button's 0.3rem from the end: a
 	// field's padding, three quarters of a Space and half of one.
-	button := buttonExtraSmall(*t).Height
+	button := buttonExtraSmall(t).Height
 	left, gap, right := t.FieldPad.Left, t.Space*.75, t.Space/2
 	h := clamp(20+t.FieldPad.Top+t.FieldPad.Bottom, cs.MinH, cs.MaxH)
 	// As wide as it is given, or 200, room for a few words, when the

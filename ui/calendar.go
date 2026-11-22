@@ -407,7 +407,7 @@ func (c *CalendarWidget) layoutDropdown(p *calendarPane, index int, cs ggui.Cons
 	}
 	// shadcn's caption dropdown is a bordered label six units high, shorter
 	// than a field, so that the caption stays a cell high.
-	t := uitheme.From(env)
+	t := *uitheme.Of(env)
 	t.FieldPad = ggui.Insets(t.Space*.625, t.Space*.625)
 	env = t.Apply(env)
 	if from, to := c.years[0], c.years[len(c.years)-1]; p.yearFrom != from || p.yearTo != to {

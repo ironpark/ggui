@@ -33,10 +33,10 @@ func TestConfigZeroPreservesPresetAndDefaults(t *testing.T) {
 	light, dark := theme.Default(), theme.Dark()
 	for _, isDark := range []bool{false, true} {
 		got := (theme.Config{}).For(isDark)
-		if want := (theme.Preset{}).For(isDark); got != want {
+		if want := (theme.Preset{}).For(isDark); !got.Equal(want) {
 			t.Fatal("zero config differs from zero preset")
 		}
-		if got.Resolve() != got {
+		if !got.Resolve().Equal(got) {
 			t.Fatal("config is not stably resolved")
 		}
 	}
@@ -47,10 +47,10 @@ func TestConfigZeroPreservesPresetAndDefaults(t *testing.T) {
 	if c.Dark().Chat.BubbleRadius == 999 || c.Dark().Chart[0] == result.Fg {
 		t.Fatal("config results share mutable state")
 	}
-	if theme.Default() != light || theme.Dark() != dark {
+	if !theme.Default().Equal(light) || !theme.Dark().Equal(dark) {
 		t.Fatal("building config changed existing defaults")
 	}
-	if c.Light() != c.For(false) || c.Dark() != c.For(true) {
+	if !c.Light().Equal(c.For(false)) || !c.Dark().Equal(c.For(true)) {
 		t.Fatal("appearance helpers disagree")
 	}
 }
@@ -73,7 +73,7 @@ func TestConfigChartFollowsAccentUnlessChosen(t *testing.T) {
 				default:
 					want.Chart = theme.Preset{Base: base, Accent: chart, Style: p.Style}.For(dark).Chart
 				}
-				if got != want {
+				if !got.Equal(want) {
 					t.Fatalf("chart modified other tokens: base=%s chart=%s dark=%v", base, chart, dark)
 				}
 			}
@@ -97,10 +97,10 @@ func TestConfigRadiusReachesEveryCornerAndSurvivesResolve(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got != css {
+			if !got.Equal(css) {
 				t.Fatalf("%s/%s differs from --radius %v: radii %v/%v/%v, chat %+v", style, choice, radius, got.RadiusSm, got.Radius, got.RadiusLg, got.Chat)
 			}
-			if choice == theme.RadiusMedium && got != base {
+			if choice == theme.RadiusMedium && !got.Equal(base) {
 				t.Fatalf("%s: medium is not the stock radius", style)
 			}
 			if choice == theme.RadiusNone && (got.Radius != 0 || got.RadiusLg != 0 || got.Chat.BubbleRadius != 0) {
@@ -109,7 +109,7 @@ func TestConfigRadiusReachesEveryCornerAndSurvivesResolve(t *testing.T) {
 			if got.CardPad != base.CardPad || got.ButtonPad != base.ButtonPad || got.Chat.BubblePadding != base.Chat.BubblePadding {
 				t.Fatal("radius changed padding")
 			}
-			if got.Resolve() != got || theme.From(got.Apply(ggui.Env{})) != got {
+			if !got.Resolve().Equal(got) || !theme.From(got.Apply(ggui.Env{})).Equal(got) {
 				t.Fatal("radius lost on resolve/apply")
 			}
 		}
@@ -131,21 +131,21 @@ func TestConfigMenuAccentAndColor(t *testing.T) {
 		if bold.Accent != plain.Primary || bold.AccentFg != plain.PrimaryFg || bold.SidebarAccent != plain.SidebarAccent {
 			t.Fatalf("bold menu accent: Accent %v, AccentFg %v, SidebarAccent %v", bold.Accent, bold.AccentFg, bold.SidebarAccent)
 		}
-		if bold.Resolve() != bold {
+		if !bold.Resolve().Equal(bold) {
 			t.Fatal("bold accent lost on resolve")
 		}
-		if plain.Menu() != plain {
+		if !plain.Menu().Equal(plain) {
 			t.Fatal("a default menu is not drawn in its own theme")
 		}
 	}
 	c := theme.Config{Preset: p, MenuColor: theme.MenuColorInverted}
-	if got, want := c.Light().Menu(), p.Dark(); got != want {
+	if got, want := c.Light().Menu(), p.Dark(); !got.Equal(want) {
 		t.Fatalf("an inverted light menu is not the recipe's dark theme: Bg %v", got.Bg)
 	}
-	if c.Dark().Menu() != c.Dark() || c.Dark() != p.Dark() {
+	if !c.Dark().Menu().Equal(c.Dark()) || !c.Dark().Equal(p.Dark()) {
 		t.Fatal("an inverted dark menu changed the dark theme")
 	}
-	if c.Light() != c.Light() || c.Light().Bg != p.Light().Bg {
+	if !c.Light().Equal(c.Light()) || c.Light().Bg != p.Light().Bg {
 		t.Fatal("inverted menus made a recipe's light themes differ")
 	}
 }
@@ -162,7 +162,7 @@ func TestConfigIconsStoresTheRegisteredSet(t *testing.T) {
 	if got, ok := c.Dark().Get(key); !ok || got != "outline" {
 		t.Fatalf("the theme holds %q, %v", got, ok)
 	}
-	if c.Light() != c.Light() {
+	if !c.Light().Equal(c.Light()) {
 		t.Fatal("an icon library made a recipe's themes differ")
 	}
 	if _, ok := (theme.Config{}).Light().Get(key); ok {
@@ -275,11 +275,11 @@ func main(){
  got := %s
  want := (theme.Config{Preset:theme.Preset{Base:theme.BaseOlive,Accent:theme.AccentCyan,Style:theme.StyleRhea},Chart:theme.AccentAmber,Radius:theme.RadiusSmall,Font:theme.FontMono,Heading:theme.FontSans,MenuAccent:theme.MenuAccentBold,MenuColor:theme.MenuColorInverted}).Dark()
  if got.Accent != got.Primary { panic("exported configuration lost its bold menus") }
- if got != want { panic("exported configuration changed the theme") }
+ if !got.Equal(want) { panic("exported configuration changed the theme") }
  zero := %s
- if zero != (theme.Preset{}).Light() { panic("zero export changed the preset") }
+ if !zero.Equal((theme.Preset{}).Light()) { panic("zero export changed the preset") }
  interTheme := %s
- if interTheme != (theme.Config{Font:theme.FontInter,Heading:theme.FontInter}).Light() { panic("Inter export changed the font") }
+ if !interTheme.Equal((theme.Config{Font:theme.FontInter,Heading:theme.FontInter}).Light()) { panic("Inter export changed the font") }
  inverted := %s
  if inverted.Menu().Bg != (theme.Preset{}).Dark().Bg || inverted.Bg != (theme.Preset{}).Light().Bg { panic("inverted export lost its dark menus") }
  fmt.Print("ok")
@@ -306,7 +306,7 @@ func TestConfigInterIsExplicitAndPreservesDefaultRecipe(t *testing.T) {
 		if got.Text.Font != inter.Font() || got.Title.Font != inter.Font() || got.Heading.Font != inter.Font() {
 			t.Fatal("Inter did not reach body and heading styles")
 		}
-		if (theme.Config{}).For(dark) != (theme.Preset{}).For(dark) {
+		if !(theme.Config{}).For(dark).Equal((theme.Preset{}).For(dark)) {
 			t.Fatal("Inter changed the default recipe")
 		}
 		if got.Mono.Font != (theme.Preset{}).For(dark).Mono.Font {

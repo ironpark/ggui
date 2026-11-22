@@ -207,7 +207,7 @@ func TestRadiosStackUnlessHorizontal(t *testing.T) {
 // button given as one becomes the ghost, extra small button of shadcn's.
 func TestInputGroupKeepsAFieldsHeight(t *testing.T) {
 	t.Parallel()
-	for _, theme := range []uitheme.Theme{uitheme.Default(), uitheme.Dark()} {
+	for _, theme := range []*uitheme.Theme{uitheme.Default(), uitheme.Dark()} {
 		env := theme.Apply(ggui.Env{})
 		c := ggui.Loose(ggui.Sz(400, 400))
 		field := TextField(ggui.State("")).Layout(c, env)

@@ -392,12 +392,7 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		s.pad.Right = pick(s.native, t.Space*1.25, t.Space)
 	}
 	s.box.Radius(s.radius(t))
-	if t.Menu().Popover != t.Popover {
-		mt := t.Menu()
-		panelBox(s.list, &mt)
-	} else {
-		panelBox(s.list, t)
-	}
+	panelBox(s.list, t.Menu())
 	// A list that opens over its trigger appears at once: it has no side
 	// to come from. Read value tracked so Cached layouts invalidate on change.
 	val := s.value.Get()

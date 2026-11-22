@@ -272,7 +272,7 @@ func (t *EditorTabWidget) mount() ggui.Widget {
 
 // editorTabButton is the look of a tab's button, and of a group's label:
 // its content alone, the tab or the group drawing the rest.
-var editorTabButton = NewVariant("editor tab", func(t theme.Theme) ButtonStyle {
+var editorTabButton = NewVariant("editor tab", func(t *theme.Theme) ButtonStyle {
 	return ButtonStyle{Label: t.Fg, HoverLabel: t.Fg}
 })
 

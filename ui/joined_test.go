@@ -104,7 +104,7 @@ func TestButtonInlineIconsTakeTheSizesGapAndPadding(t *testing.T) {
 func TestToggleIsAtLeastSquareAndHasItsOwnVariants(t *testing.T) {
 	t.Parallel()
 	c := ggui.Loose(ggui.Sz(400, 200))
-	for _, th := range []uitheme.Theme{uitheme.Default(), uitheme.Dark()} {
+	for _, th := range []*uitheme.Theme{uitheme.Default(), uitheme.Dark()} {
 		env := th.Apply(ggui.Env{})
 		for _, tc := range []struct {
 			size *ButtonSizeVariant
@@ -131,7 +131,7 @@ func TestToggleIsAtLeastSquareAndHasItsOwnVariants(t *testing.T) {
 
 func TestDestructiveButtonFocusBorderIsTheSameInBothModes(t *testing.T) {
 	t.Parallel()
-	for _, th := range []uitheme.Theme{uitheme.Default(), uitheme.Dark()} {
+	for _, th := range []*uitheme.Theme{uitheme.Default(), uitheme.Dark()} {
 		if got, want := ButtonDestructive.Style(th).FocusBorder, fade(th.Destructive, .4); got != want {
 			t.Errorf("focus border %v, want %v", got, want)
 		}

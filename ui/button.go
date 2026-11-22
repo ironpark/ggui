@@ -29,11 +29,11 @@ type ButtonVariant = Variant[ButtonStyle]
 // drawn with it under a theme, or make more with NewVariant.
 var (
 	// ButtonPrimary is the main action: the Primary surface.
-	ButtonPrimary = NewVariant("primary", func(t uitheme.Theme) ButtonStyle {
+	ButtonPrimary = NewVariant("primary", func(t *uitheme.Theme) ButtonStyle {
 		return ButtonStyle{Fill: t.Primary, Hover: t.PrimaryHover, Label: t.PrimaryFg}
 	})
 	// ButtonOutline is a border around the page's background.
-	ButtonOutline = NewVariant("outline", func(t uitheme.Theme) ButtonStyle {
+	ButtonOutline = NewVariant("outline", func(t *uitheme.Theme) ButtonStyle {
 		fill, hover, border := t.Bg, t.Muted, t.Border
 		if isDark(t.Bg) {
 			fill, hover, border = fade(t.InputBorder, .3), fade(t.InputBorder, .5), t.InputBorder
@@ -41,11 +41,11 @@ var (
 		return ButtonStyle{Fill: fill, Hover: hover, Label: t.Fg, HoverLabel: t.Fg, Border: border}
 	})
 	// ButtonSecondary is a supporting action on the Secondary surface.
-	ButtonSecondary = NewVariant("secondary", func(t uitheme.Theme) ButtonStyle {
+	ButtonSecondary = NewVariant("secondary", func(t *uitheme.Theme) ButtonStyle {
 		return ButtonStyle{Fill: t.Secondary, Hover: mix(t.Secondary, t.Fg, .05), Label: t.SecondaryFg}
 	})
 	// ButtonGhost has no surface until the pointer is over it.
-	ButtonGhost = NewVariant("ghost", func(t uitheme.Theme) ButtonStyle {
+	ButtonGhost = NewVariant("ghost", func(t *uitheme.Theme) ButtonStyle {
 		hover := t.Muted
 		if isDark(t.Bg) {
 			hover = fade(hover, .5)
@@ -54,16 +54,16 @@ var (
 	})
 	// ButtonDestructive is an irreversible action: the Destructive surface,
 	// toned down on a dark page as shadcn does.
-	ButtonDestructive = NewVariant("destructive", func(t uitheme.Theme) ButtonStyle {
+	ButtonDestructive = NewVariant("destructive", func(t *uitheme.Theme) ButtonStyle {
 		opacity := .1
 		if isDark(t.Bg) {
 			opacity = .2
 		}
-		return ButtonStyle{Fill: fade(t.Destructive, opacity), Hover: fade(t.Destructive, opacity+.1), Label: t.Destructive, Ring: destructiveRing(&t), FocusBorder: fade(t.Destructive, .4)}
+		return ButtonStyle{Fill: fade(t.Destructive, opacity), Hover: fade(t.Destructive, opacity+.1), Label: t.Destructive, Ring: destructiveRing(t), FocusBorder: fade(t.Destructive, .4)}
 	})
 	// ButtonLink is a label in the Primary color, underlined under the
 	// pointer.
-	ButtonLink = NewVariant("link", func(t uitheme.Theme) ButtonStyle {
+	ButtonLink = NewVariant("link", func(t *uitheme.Theme) ButtonStyle {
 		return ButtonStyle{Label: t.Primary, Underline: true}
 	})
 )
@@ -87,44 +87,44 @@ type ButtonSizeVariant = Variant[ButtonSize]
 // The button sizes of shadcn/ui, from the theme's ButtonPad, Text size,
 // Space, IconSize and radii.
 var (
-	ButtonDefault = NewVariant("default", func(t uitheme.Theme) ButtonSize {
+	ButtonDefault = NewVariant("default", func(t *uitheme.Theme) ButtonSize {
 		return ButtonSize{Pad: t.ButtonPad, Height: 20 + 2*t.ButtonPad.Top, Gap: t.Space * .75, IconSize: t.IconSize, IconPad: t.ButtonPad.Left - 2}
 	})
-	ButtonExtraSmall = NewVariant("xs", func(t uitheme.Theme) ButtonSize {
+	ButtonExtraSmall = NewVariant("xs", func(t *uitheme.Theme) ButtonSize {
 		size := buttonExtraSmall(t)
 		size.Pad, size.IconPad = ggui.Insets(t.ButtonPad.Top-2, t.ButtonPad.Left*.8), t.ButtonPad.Left*.8-2
 		return size
 	})
-	ButtonSmall = NewVariant("sm", func(t uitheme.Theme) ButtonSize {
+	ButtonSmall = NewVariant("sm", func(t *uitheme.Theme) ButtonSize {
 		size := buttonSmall(t)
 		size.Pad, size.IconPad = ggui.Insets(t.ButtonPad.Top-2, t.ButtonPad.Left), t.ButtonPad.Left-4
 		return size
 	})
-	ButtonLarge = NewVariant("lg", func(t uitheme.Theme) ButtonSize {
+	ButtonLarge = NewVariant("lg", func(t *uitheme.Theme) ButtonSize {
 		return ButtonSize{Pad: ggui.Insets(t.ButtonPad.Top+2, t.ButtonPad.Left), Height: 24 + 2*t.ButtonPad.Top, Gap: t.Space * .75, IconSize: t.IconSize, IconPad: t.ButtonPad.Left - 2}
 	})
-	ButtonIcon = NewVariant("icon", func(t uitheme.Theme) ButtonSize {
+	ButtonIcon = NewVariant("icon", func(t *uitheme.Theme) ButtonSize {
 		return ButtonSize{Height: 20 + 2*t.ButtonPad.Top, Square: true, Gap: t.Space * .75, IconSize: t.IconSize}
 	})
-	ButtonIconExtraSmall = NewVariant("icon-xs", func(t uitheme.Theme) ButtonSize {
+	ButtonIconExtraSmall = NewVariant("icon-xs", func(t *uitheme.Theme) ButtonSize {
 		size := buttonExtraSmall(t)
 		size.Square, size.TextSize, size.LineHeight = true, 0, 0
 		return size
 	})
-	ButtonIconSmall = NewVariant("icon-sm", func(t uitheme.Theme) ButtonSize {
+	ButtonIconSmall = NewVariant("icon-sm", func(t *uitheme.Theme) ButtonSize {
 		size := buttonSmall(t)
 		size.Square, size.TextSize, size.LineHeight = true, 0, 0
 		size.IconSize = t.IconSize // shadcn shrinks the icon of sm, not of icon-sm
 		return size
 	})
-	ButtonIconLarge = NewVariant("icon-lg", func(t uitheme.Theme) ButtonSize {
+	ButtonIconLarge = NewVariant("icon-lg", func(t *uitheme.Theme) ButtonSize {
 		return ButtonSize{Height: 24 + 2*t.ButtonPad.Top, Square: true, Gap: t.Space * .75, IconSize: t.IconSize}
 	})
 )
 
 // buttonExtraSmall is what the xs text and icon sizes share: shadcn's h-6,
 // text-xs, gap-1, size-3 icons and rounded-[min(var(--radius-md),10px)].
-func buttonExtraSmall(t uitheme.Theme) ButtonSize {
+func buttonExtraSmall(t *uitheme.Theme) ButtonSize {
 	return ButtonSize{
 		Height: 12 + 2*t.ButtonPad.Top, TextSize: t.Text.Size * 12 / 14, LineHeight: 16.0 / 12,
 		Radius: min(t.RadiusSm, 10), Gap: t.Space / 2, IconSize: t.IconSize * .75,
@@ -133,7 +133,7 @@ func buttonExtraSmall(t uitheme.Theme) ButtonSize {
 
 // buttonSmall is what the sm text and icon sizes share: shadcn's h-7,
 // text-[0.8rem], gap-1, size-3.5 icons and rounded-[min(var(--radius-md),12px)].
-func buttonSmall(t uitheme.Theme) ButtonSize {
+func buttonSmall(t *uitheme.Theme) ButtonSize {
 	return ButtonSize{
 		Height: 16 + 2*t.ButtonPad.Top, TextSize: t.Text.Size * 12.8 / 14, LineHeight: 20.0 / 12.8,
 		Radius: min(t.RadiusSm, 12), Gap: t.Space / 2, IconSize: t.IconSize * .875,
@@ -375,7 +375,7 @@ func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := uitheme.Of(env)
 	b.theme = t
 	b.motion = env.Motion(t.MotionFast)
-	size := b.size.Style(*t)
+	size := b.size.Style(t)
 	toggle := b.toggleValue != nil
 	b.sides, env = takeJoinedSides(env)
 	// A size's own radius gives way inside a ButtonGroup, whose strip is
@@ -385,7 +385,7 @@ func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		b.corner = b.radius
 	}
 	b.box.Radius(b.corner)
-	b.style = b.variant.Style(*t)
+	b.style = b.variant.Style(t)
 	label := b.style.Label
 	if b.IsInert() {
 		label = t.Disabled(label)

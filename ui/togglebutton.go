@@ -13,11 +13,11 @@ import (
 // theme.
 var (
 	// ToggleDefault has no surface until the pointer is over it or it is on.
-	ToggleDefault = NewVariant("toggle", func(t uitheme.Theme) ButtonStyle {
+	ToggleDefault = NewVariant("toggle", func(t *uitheme.Theme) ButtonStyle {
 		return ButtonStyle{Hover: t.Muted, Label: t.Fg, HoverLabel: t.Fg}
 	})
 	// ToggleOutline adds the InputBorder around ToggleDefault.
-	ToggleOutline = NewVariant("toggle-outline", func(t uitheme.Theme) ButtonStyle {
+	ToggleOutline = NewVariant("toggle-outline", func(t *uitheme.Theme) ButtonStyle {
 		return ButtonStyle{Hover: t.Muted, Label: t.Fg, HoverLabel: t.Fg, Border: t.InputBorder}
 	})
 )

@@ -645,8 +645,8 @@ func (g *ToggleGroupWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Siz
 	}
 	g.Sync()
 	t := uitheme.Of(env)
-	size := g.size.Style(*t)
-	g.theme, g.style = t, g.variant.Style(*t)
+	size := g.size.Style(t)
+	g.theme, g.style = t, g.variant.Style(t)
 	g.motion = env.Motion(t.MotionFast)
 	g.rtl = env.Direction() == ggui.DirRTL
 	g.gap = g.spacing * t.Space / 2

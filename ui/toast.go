@@ -290,7 +290,7 @@ func (t *ToasterWidget) fill(e *toastEntry, message ToastMessage) {
 
 // toastClose is the close button of a notice: a ghost button whose mark
 // is muted.
-var toastClose = NewVariant("toast-close", func(t uitheme.Theme) ButtonStyle {
+var toastClose = NewVariant("toast-close", func(t *uitheme.Theme) ButtonStyle {
 	s := ButtonGhost.Style(t)
 	s.Label = t.MutedFg
 	return s

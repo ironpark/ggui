@@ -643,7 +643,7 @@ type CarouselNavigationWidget struct {
 
 // carouselButtonSide is the side of a previous or next button: shadcn's
 // icon-sm.
-func carouselButtonSide(t *uitheme.Theme) float64 { return ButtonIconSmall.Style(*t).Height }
+func carouselButtonSide(t *uitheme.Theme) float64 { return ButtonIconSmall.Style(t).Height }
 
 var carouselHoverSlot = ggui.NewSlot[*ggui.Motion]("carousel button hover")
 
@@ -670,7 +670,7 @@ func (b *CarouselNavigationWidget) name() string {
 func (b *CarouselNavigationWidget) Semantics() (ggui.Role, string) { return b.Role, b.name() }
 func (b *CarouselNavigationWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
 	b.env, b.theme = e, uitheme.Of(e)
-	b.style, b.motion = ButtonOutline.Style(*b.theme), e.Motion(b.theme.MotionFast)
+	b.style, b.motion = ButtonOutline.Style(b.theme), e.Motion(b.theme.MotionFast)
 	side := carouselButtonSide(b.theme)
 	return c.Constrain(ggui.Sz(side, side))
 }

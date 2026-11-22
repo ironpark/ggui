@@ -35,7 +35,7 @@ func TestBindModeAppliesTheChosenAppearance(t *testing.T) {
 	preserveEnv(t)
 	mode := ggui.State(theme.ModeDark)
 	recipe := theme.Config{Preset: theme.Preset{Accent: theme.AccentBlue}}
-	var seen theme.Theme
+	var seen *theme.Theme
 	p := ggui.NewProbe(ggui.FromFuncs(func(c ggui.Constraints, env ggui.Env) ggui.Size {
 		seen = theme.From(env)
 		return c.Constrain(ggui.Sz(10, 10))
@@ -45,11 +45,11 @@ func TestBindModeAppliesTheChosenAppearance(t *testing.T) {
 	defer p.Close()
 	for _, tc := range []struct {
 		mode theme.Mode
-		want theme.Theme
+		want *theme.Theme
 	}{{theme.ModeDark, recipe.Dark()}, {theme.ModeLight, recipe.Light()}, {theme.ModeDark, recipe.Dark()}, {theme.ModeSystem, recipe.Light()}} {
 		mode.Set(tc.mode)
 		p.Frame()
-		if seen != tc.want {
+		if !seen.Equal(tc.want) {
 			t.Fatalf("mode %v drew with Bg %v, want %v", tc.mode, seen.Bg, tc.want.Bg)
 		}
 	}
