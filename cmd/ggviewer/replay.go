@@ -28,45 +28,9 @@ func (v *session) service(windowFrame bool) {
 	a := v.cur
 	v.mu.Unlock()
 	for _, g := range gone {
-		if r := v.replayers[g]; r != nil {
-			images, shaders := r.Live()
-			if err := r.Dispose(); err != nil {
-				log.Printf("freeing app %d: %v", g.pid, err)
-			}
-			if v.opts.debug {
-				li, ls := r.Live()
-				log.Printf("app %d freed: %d images and %d shaders, %d and %d left", g.pid, images, shaders, li, ls)
-			}
-			delete(v.replayers, g)
-		}
-		g.mu.Lock()
-		for _, b := range append(g.oldShm, g.shm) {
-			if b != nil {
-				_ = remote.Unmap(b)
-			}
-		}
-		g.shm, g.oldShm, g.pending = nil, nil, nil
-		g.mu.Unlock()
+		v.freeApp(g)
 	}
-	if a != nil && (windowFrame || !v.opts.windowFramesOnly) {
-		a.mu.Lock()
-		pending, old := a.pending, a.oldShm
-		a.pending, a.oldShm = nil, nil
-		a.mu.Unlock()
-		r := v.replayers[a]
-		if r == nil && len(pending) > 0 {
-			r = ggfxremote.NewReplayer()
-			v.replayers[a] = r
-		}
-		for _, p := range pending {
-			if !v.replay(a, r, p.shm, p.batch) {
-				break
-			}
-		}
-		for _, b := range old {
-			_ = remote.Unmap(b)
-		}
-	}
+	v.replayPending(a, windowFrame)
 	for _, p := range v.dumps {
 		if err := v.dump(p); err != nil {
 			log.Printf("dumping the window: %v", err)
@@ -74,6 +38,54 @@ func (v *session) service(windowFrame bool) {
 		v.events.send(event{Type: evDumped, Path: p})
 	}
 	v.dumps = nil
+}
+
+// freeApp frees one gone app: its replayer and its shared memory.
+func (v *session) freeApp(g *app) {
+	if r := v.replayers[g]; r != nil {
+		images, shaders := r.Live()
+		if err := r.Dispose(); err != nil {
+			log.Printf("freeing app %d: %v", g.pid, err)
+		}
+		if v.opts.debug {
+			li, ls := r.Live()
+			log.Printf("app %d freed: %d images and %d shaders, %d and %d left", g.pid, images, shaders, li, ls)
+		}
+		delete(v.replayers, g)
+	}
+	g.mu.Lock()
+	for _, b := range append(g.oldShm, g.shm) {
+		if b != nil {
+			_ = remote.Unmap(b)
+		}
+	}
+	g.shm, g.oldShm, g.pending = nil, nil, nil
+	g.mu.Unlock()
+}
+
+// replayPending replays the shown app's queued batches, if this frame should
+// show them.
+func (v *session) replayPending(a *app, windowFrame bool) {
+	if a == nil || !(windowFrame || !v.opts.windowFramesOnly) {
+		return
+	}
+	a.mu.Lock()
+	pending, old := a.pending, a.oldShm
+	a.pending, a.oldShm = nil, nil
+	a.mu.Unlock()
+	r := v.replayers[a]
+	if r == nil && len(pending) > 0 {
+		r = ggfxremote.NewReplayer()
+		v.replayers[a] = r
+	}
+	for _, p := range pending {
+		if !v.replay(a, r, p.shm, p.batch) {
+			break
+		}
+	}
+	for _, b := range old {
+		_ = remote.Unmap(b)
+	}
 }
 
 // replay replays one batch of a's into the screen image and acks it. It
@@ -92,44 +104,60 @@ func (v *session) replay(a *app, r *ggfxremote.Replayer, shm []byte, b *remote.B
 	if err != nil {
 		return drop(err)
 	}
-	var screen *ggfx.Image
-	if w > 0 && h > 0 {
-		if v.screen == nil || v.screen.Bounds().Size() != image.Pt(w, h) {
-			if v.screen != nil {
-				v.screen.Deallocate()
-			}
-			v.screen = ggfx.NewImageWithOptions(image.Rect(0, 0, w, h), &ggfx.NewImageOptions{Unmanaged: true})
-		}
-		screen = v.screen
-	}
+	screen := v.screenFor(w, h)
 	if b.Read != nil {
-		dsts := make([][]byte, len(b.Read.Regions))
-		for k, rect := range b.Read.Regions {
-			dsts[k] = make([]byte, 4*max(rect.Dx(), 0)*max(rect.Dy(), 0))
-		}
-		reply := &remote.Pixels{Seq: b.Seq, Pixels: dsts}
-		if err := r.ReadPixels(batch, screen, b.Read.Image, b.Read.Regions, dsts); err != nil {
-			reply.Err = err.Error()
-		}
-		_ = a.conn.Send(reply)
-		return true
+		return v.replayRead(a, r, batch, screen, b)
 	}
 	res, err := r.Replay(batch, screen)
 	if err != nil {
 		return drop(err)
 	}
 	_ = a.conn.Send(&remote.Ack{Seq: b.Seq})
-	if res.Presented && !a.shown {
-		// The app's first frame takes the place of what the overlay said
-		// while it was coming.
-		a.shown = true
-		v.mu.Lock()
-		v.ov = overlay{}
-		v.ovSerial++
-		v.mu.Unlock()
-		v.events.send(event{Type: evFirstFrame, PID: a.pid})
-	}
+	v.notePresented(a, res)
 	return true
+}
+
+// screenFor returns the screen image for a frame of w by h, reallocating
+// v.screen as the size changes.
+func (v *session) screenFor(w, h int) *ggfx.Image {
+	if w <= 0 || h <= 0 {
+		return nil
+	}
+	if v.screen == nil || v.screen.Bounds().Size() != image.Pt(w, h) {
+		if v.screen != nil {
+			v.screen.Deallocate()
+		}
+		v.screen = ggfx.NewImageWithOptions(image.Rect(0, 0, w, h), &ggfx.NewImageOptions{Unmanaged: true})
+	}
+	return v.screen
+}
+
+// replayRead answers a batch's read of the screen's pixels.
+func (v *session) replayRead(a *app, r *ggfxremote.Replayer, batch []byte, screen *ggfx.Image, b *remote.Batch) bool {
+	dsts := make([][]byte, len(b.Read.Regions))
+	for k, rect := range b.Read.Regions {
+		dsts[k] = make([]byte, 4*max(rect.Dx(), 0)*max(rect.Dy(), 0))
+	}
+	reply := &remote.Pixels{Seq: b.Seq, Pixels: dsts}
+	if err := r.ReadPixels(batch, screen, b.Read.Image, b.Read.Regions, dsts); err != nil {
+		reply.Err = err.Error()
+	}
+	_ = a.conn.Send(reply)
+	return true
+}
+
+// notePresented records the app's first presented frame, which takes the
+// place of what the overlay said while it was coming.
+func (v *session) notePresented(a *app, res ggfxremote.Result) {
+	if !res.Presented || a.shown {
+		return
+	}
+	a.shown = true
+	v.mu.Lock()
+	v.ov = overlay{}
+	v.ovSerial++
+	v.mu.Unlock()
+	v.events.send(event{Type: evFirstFrame, PID: a.pid})
 }
 
 // compose draws the app's last frame and the overlay to dst.
