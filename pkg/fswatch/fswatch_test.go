@@ -521,6 +521,8 @@ func TestNoLeaks(t *testing.T) {
 		dir := t.TempDir()
 		mkfiles(t, dir, map[string]string{"a.src": "a", "sub/b.src": "b"})
 		before := runtime.NumGoroutine()
+		reported := time.NewTimer(5 * time.Second)
+		defer reported.Stop()
 		for range 3 {
 			o := testOptions(t, poll)
 			o.Recursive = true
@@ -536,9 +538,10 @@ func TestNoLeaks(t *testing.T) {
 			}()
 			time.Sleep(50 * time.Millisecond)
 			write(t, filepath.Join(dir, "sub", "b.src"), "b2")
+			reported.Reset(5 * time.Second)
 			select {
 			case <-out:
-			case <-time.After(5 * time.Second):
+			case <-reported.C:
 				t.Fatal("nothing reported")
 			}
 			w.Set([]string{dir, filepath.Join(dir, "c.src")})
@@ -617,17 +620,17 @@ func TestSyncConcurrentAndRunExit(t *testing.T) {
 	// Two concurrent Sync calls without Run.
 	var wg sync.WaitGroup
 	for range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			_ = w.Sync(ctx)
-		}()
+		})
 	}
 	wg.Wait()
 
 	// Sync racing with Run starting and exiting repeatedly.
+	deadlock := time.NewTimer(3 * time.Second)
+	defer deadlock.Stop()
 	for range 20 {
 		ctx, cancel := context.WithCancel(context.Background())
 		out := make(chan Batch, 1)
@@ -644,9 +647,10 @@ func TestSyncConcurrentAndRunExit(t *testing.T) {
 			close(syncDone)
 		}()
 		cancel()
+		deadlock.Reset(3 * time.Second)
 		select {
 		case <-syncDone:
-		case <-time.After(3 * time.Second):
+		case <-deadlock.C:
 			t.Fatal("Sync deadlocked while Run exited")
 		}
 		<-runDone
@@ -700,14 +704,12 @@ func TestFingerprintRunExitNoRace(t *testing.T) {
 			close(done)
 		}()
 		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for _, f := range files {
 				w.Add(f)
 			}
 			w.Set(files)
-		}()
+		})
 		cancel()
 		<-done
 		wg.Wait()

@@ -171,7 +171,10 @@ func TestServer(t *testing.T) {
 	}()
 	next := func(state string) event {
 		t.Helper()
+		idle := time.NewTimer(60 * time.Second)
+		defer idle.Stop()
 		for {
+			idle.Reset(60 * time.Second)
 			select {
 			case e := <-evs:
 				if e.State == state {
@@ -180,7 +183,7 @@ func TestServer(t *testing.T) {
 				if e.State == "error" {
 					t.Fatalf("build failed: %s", e.Error)
 				}
-			case <-time.After(60 * time.Second):
+			case <-idle.C:
 				t.Fatalf("no %s event", state)
 			}
 		}

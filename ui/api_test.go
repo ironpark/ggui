@@ -6,6 +6,7 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
+	"maps"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -267,9 +268,7 @@ func parseControlSources(t *testing.T, fset *token.FileSet, mode parser.Mode, te
 	t.Helper()
 	files := map[string]*ast.File{}
 	for _, dir := range controlDirs {
-		for name, f := range parseSourcesIn(t, dir, fset, mode, tests) {
-			files[name] = f
-		}
+		maps.Copy(files, parseSourcesIn(t, dir, fset, mode, tests))
 	}
 	return files
 }

@@ -124,7 +124,6 @@ func checkResources(t *testing.T, res map[resKey][]byte) {
 		}
 		size := int(e[0])
 		if size == 0 {
-			size = 256
 			if _, err := png.Decode(bytes.NewReader(data)); err != nil {
 				t.Errorf("256-pixel icon: %v", err)
 			}
