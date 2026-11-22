@@ -22,7 +22,7 @@ func ParseRepo(remote string) (host, repo string, err error) {
 	case strings.Contains(s, "://"):
 		u, err := url.Parse(s)
 		if err != nil {
-			return "", "", fmt.Errorf("remote %q: %v", remote, err)
+			return "", "", fmt.Errorf("remote %q: %w", remote, err)
 		}
 		host, path = u.Hostname(), u.Path
 	case strings.Contains(s, ":"):

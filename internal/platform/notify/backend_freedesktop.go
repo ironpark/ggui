@@ -54,7 +54,7 @@ func check() error {
 	fd.Lock()
 	defer fd.Unlock()
 	if fd.failed != nil {
-		return fmt.Errorf("%w: %v", ErrUnavailable, fd.failed)
+		return fmt.Errorf("%w: %w", ErrUnavailable, fd.failed)
 	}
 	return nil
 }
@@ -74,7 +74,7 @@ func connect() (*busConn, error) {
 		fd.Lock()
 		fd.failed = err
 		fd.Unlock()
-		return nil, fmt.Errorf("%w: the D-Bus session bus: %v", ErrUnavailable, err)
+		return nil, fmt.Errorf("%w: the D-Bus session bus: %w", ErrUnavailable, err)
 	}
 	rule := "type='signal',sender='" + fdService + "',path='" + fdPath + "',interface='" + fdService + "'"
 	if _, err := conn.call("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "AddMatch", "s", rule); err != nil {
