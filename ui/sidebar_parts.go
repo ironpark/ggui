@@ -3,26 +3,12 @@ package ui
 import (
 	"image/color"
 	"math"
-	"sync"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
-
-// sidebarPanelIcon is the role of the trigger's icon, which an icon set in
-// the Env or the theme may supply; sidebarIcons draws Lucide's panel-left
-// where none does.
-const sidebarPanelIcon icons.Role = "panel-left"
-
-var sidebarIcons = sync.OnceValue(func() icons.Set {
-	svg, err := icons.Parse([]byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /><path d="M9 3v18" /></svg>`))
-	if err != nil {
-		panic(err)
-	}
-	return icons.Map{sidebarPanelIcon: svg}
-})
 
 // sidebarTriggerIcon is the trigger's icon, turned to face the other way
 // under right-to-left.
@@ -45,7 +31,7 @@ func (w sidebarTriggerIcon) Paint(dst *ggui.Canvas, r ggui.Rect) { w.icon.Paint(
 //	bar := ui.Sidebar(page, items...).BindCollapsed(collapsed).Rail(true)
 //	top := widget.Row(ui.SidebarTrigger(collapsed), title)
 func SidebarTrigger(collapsed ggui.Binding[bool]) *ButtonWidget {
-	icon := sidebarTriggerIcon{icons.Placeholder(sidebarPanelIcon).Fallback(sidebarIcons())}
+	icon := sidebarTriggerIcon{Icon(icons.PanelLeft)}
 	b := ButtonOf(icon, func() { collapsed.Set(!ggui.Untrack(collapsed.Get)) }).Ghost().Pad(6)
 	b.defaultWords = func(s *Strings) string { return s.ToggleSidebar }
 	return b

@@ -111,3 +111,31 @@ func TestIconInkFollowsColorBeforeAndAfterLayout(t *testing.T) {
 		t.Fatal("clearing Color does not go back to the inherited color")
 	}
 }
+
+func TestRolesReturnsFreshCompleteSlice(t *testing.T) {
+	t.Parallel()
+	got := Roles()
+	if len(got) != 23 {
+		t.Fatalf("len(Roles()) = %d, want 23", len(got))
+	}
+	seen := make(map[Role]bool, len(got))
+	for _, r := range got {
+		if r == "" {
+			t.Fatal("Roles() contains an empty role")
+		}
+		if seen[r] {
+			t.Fatalf("Roles() contains duplicate role %q", r)
+		}
+		seen[r] = true
+	}
+	for _, want := range []Role{Copy, ArrowDown, PanelLeft} {
+		if !seen[want] {
+			t.Fatalf("Roles() missing %q", want)
+		}
+	}
+	first := got[0]
+	got[0] = Role("mutated")
+	if Roles()[0] != first {
+		t.Fatal("Roles() did not return a fresh slice")
+	}
+}

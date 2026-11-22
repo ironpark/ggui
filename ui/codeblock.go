@@ -493,7 +493,7 @@ func (g *codeCopyGlyph) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if c.hasHeader && !c.destructive && !c.copy.Hovered && !c.copy.Focused {
 		ink = c.theme.MutedFg
 	}
-	paintChatIcon(dst, g.env, pick(c.copied, icons.Check, iconCopy), r, ink, 0)
+	paintIcon(dst, g.env, pick(c.copied, icons.Check, icons.Copy), r, ink, 0)
 }
 
 // The gutter is painted separately so selecting or copying code cannot include it.
