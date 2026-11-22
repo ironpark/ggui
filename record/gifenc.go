@@ -119,8 +119,8 @@ const splitLead = 2
 // frame encodes the frame whose indices for rect are e.idx, shown for
 // centis.
 func (e *frameEncoder) frame(rect image.Rectangle, centis int, first bool) error {
-	draw := rect
 	opt := !first && e.level > 0
+	draw := rect
 	if opt {
 		draw = e.needed(rect, rect)
 		if draw.Empty() {
@@ -135,9 +135,30 @@ func (e *frameEncoder) frame(rect image.Rectangle, centis int, first bool) error
 	if opt {
 		clear = e.spareIndex(rect, draw)
 	}
+	whole, err := e.encodeParts(rect, draw, clear, opt)
+	if err != nil {
+		return err
+	}
+	if opt && e.level >= 2 && centis >= 2*splitLead {
+		shown, err := e.showSplit(rect, draw, clear, whole, centis)
+		if err != nil {
+			return err
+		}
+		if shown {
+			return nil
+		}
+	}
+	e.show(whole)
+	e.pending, e.centis = whole, centis
+	return nil
+}
+
+// encodeParts encodes the frame whole, and when opt also the plainer
+// ways it may be written, and returns the shortest whole.
+func (e *frameEncoder) encodeParts(rect, draw image.Rectangle, clear int, opt bool) (*encoded, error) {
 	whole := &e.parts[0]
 	if err := e.encode(whole, rect, draw, clear); err != nil {
-		return err
+		return nil, err
 	}
 	if opt {
 		// Transparency and a tighter rectangle usually shorten what LZW
@@ -147,40 +168,44 @@ func (e *frameEncoder) frame(rect image.Rectangle, centis int, first bool) error
 		// kept, so level 1 is never longer than level 0.
 		var err error
 		if whole, err = e.shorter(whole, &e.parts[3], rect, draw, -1, clear >= 0); err != nil {
-			return err
+			return nil, err
 		}
 		if whole, err = e.shorter(whole, &e.parts[4], rect, rect, -1, draw != rect); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	if opt && e.level >= 2 && centis >= 2*splitLead {
-		// Two rectangles far apart, as the cursor and a control it
-		// changed, can cost less than the one around both: the first
-		// shows for splitLead, the second for the rest.
-		if a, b, ok := e.split(rect, draw); ok {
-			pa, pb := &e.parts[1], &e.parts[2]
-			if err := e.encode(pa, rect, a, clear); err != nil {
-				return err
-			}
-			if err := e.encode(pb, rect, b, clear); err != nil {
-				return err
-			}
-			const overhead = 20 // a graphic control, an image descriptor and their ends
-			if pa.data.Len()+pb.data.Len()+overhead < whole.data.Len() {
-				e.show(pa)
-				e.pending, e.centis = pa, splitLead
-				if err := e.flush(); err != nil {
-					return err
-				}
-				e.show(pb)
-				e.pending, e.centis = pb, centis-splitLead
-				return nil
-			}
-		}
+	return whole, nil
+}
+
+// showSplit writes the frame in two, when the rectangles split draws
+// cost less apart than the one around both; it reports whether it did.
+func (e *frameEncoder) showSplit(rect, draw image.Rectangle, clear int, whole *encoded, centis int) (bool, error) {
+	// Two rectangles far apart, as the cursor and a control it
+	// changed, can cost less than the one around both: the first
+	// shows for splitLead, the second for the rest.
+	a, b, ok := e.split(rect, draw)
+	if !ok {
+		return false, nil
 	}
-	e.show(whole)
-	e.pending, e.centis = whole, centis
-	return nil
+	pa, pb := &e.parts[1], &e.parts[2]
+	if err := e.encode(pa, rect, a, clear); err != nil {
+		return false, err
+	}
+	if err := e.encode(pb, rect, b, clear); err != nil {
+		return false, err
+	}
+	const overhead = 20 // a graphic control, an image descriptor and their ends
+	if pa.data.Len()+pb.data.Len()+overhead >= whole.data.Len() {
+		return false, nil
+	}
+	e.show(pa)
+	e.pending, e.centis = pa, splitLead
+	if err := e.flush(); err != nil {
+		return false, err
+	}
+	e.show(pb)
+	e.pending, e.centis = pb, centis-splitLead
+	return true, nil
 }
 
 // encode encodes the part draw of the frame whose indices for rect are

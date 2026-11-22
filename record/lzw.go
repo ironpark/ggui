@@ -65,13 +65,7 @@ func (e *lzwEncoder) encode(w io.ByteWriter, lit int, fc frameCodes) error {
 		e.write(clearCode + 1)
 		return e.finish()
 	}
-	start := func(i int) byte {
-		if fc.clear >= 0 && fc.under[i] == fc.want[i] {
-			return byte(fc.clear)
-		}
-		return fc.want[i]
-	}
-	code := uint32(start(0))
+	code := uint32(fc.literal(0))
 	fc.chosen[0] = byte(code)
 	for i := 1; i < n; i++ {
 		p := fc.want[i]
@@ -79,33 +73,17 @@ func (e *lzwEncoder) encode(w io.ByteWriter, lit int, fc frameCodes) error {
 			code, fc.chosen[i] = c, p
 			continue
 		}
-		if fc.clear >= 0 && fc.under[i] == p {
-			if c, ok := e.find(code, byte(fc.clear)); ok {
-				code, fc.chosen[i] = c, byte(fc.clear)
-				continue
-			}
+		if c, ok := fc.transparent(e, code, i, p); ok {
+			code, fc.chosen[i] = c, byte(fc.clear)
+			continue
 		}
-		if l := fc.lossy; l != nil {
-			if fc.clear >= 0 && l.ok[fc.under[i]][p] {
-				if c, ok := e.find(code, byte(fc.clear)); ok {
-					code, fc.chosen[i] = c, byte(fc.clear)
-					continue
-				}
-			}
-			found := false
-			for _, q := range l.near[p] {
-				if c, ok := e.find(code, q); ok {
-					code, fc.chosen[i], found = c, q, true
-					break
-				}
-			}
-			if found {
-				continue
-			}
+		if c, chosen, ok := fc.near(e, code, i, p); ok {
+			code, fc.chosen[i] = c, chosen
+			continue
 		}
 		// The string ends: write it, and start the next with this pixel.
 		e.write(code)
-		s := start(i)
+		s := fc.literal(i)
 		key := code<<8 | uint32(s)
 		code = uint32(s)
 		fc.chosen[i] = s
@@ -117,6 +95,44 @@ func (e *lzwEncoder) encode(w io.ByteWriter, lit int, fc frameCodes) error {
 	e.incHi()
 	e.write(clearCode + 1)
 	return e.finish()
+}
+
+// literal returns the index pixel i maps to, as the transparent index
+// where the pixel shows that index already.
+func (fc *frameCodes) literal(i int) byte {
+	if fc.clear >= 0 && fc.under[i] == fc.want[i] {
+		return byte(fc.clear)
+	}
+	return fc.want[i]
+}
+
+// transparent extends code with the transparent index when pixel i
+// shows the index it maps to.
+func (fc *frameCodes) transparent(e *lzwEncoder, code uint32, i int, p byte) (uint32, bool) {
+	if fc.clear >= 0 && fc.under[i] == p {
+		return e.find(code, byte(fc.clear))
+	}
+	return 0, false
+}
+
+// near extends code with the transparent index or a near-enough index,
+// when pixel i passes for what it shows under lossy compression.
+func (fc *frameCodes) near(e *lzwEncoder, code uint32, i int, p byte) (uint32, byte, bool) {
+	l := fc.lossy
+	if l == nil {
+		return 0, 0, false
+	}
+	if fc.clear >= 0 && l.ok[fc.under[i]][p] {
+		if c, ok := e.find(code, byte(fc.clear)); ok {
+			return c, byte(fc.clear), true
+		}
+	}
+	for _, q := range l.near[p] {
+		if c, ok := e.find(code, q); ok {
+			return c, q, true
+		}
+	}
+	return 0, 0, false
 }
 
 func (e *lzwEncoder) reset() {

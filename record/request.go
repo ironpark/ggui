@@ -93,24 +93,13 @@ func serve(req string) int {
 }
 
 func serveTo(raw string, stdout io.Writer) (int, error) {
-	var req request
-	if err := json.Unmarshal([]byte(raw), &req); err != nil {
-		return 2, fmt.Errorf("record: %s is not a request: %w", Env, err)
-	}
-	if req.V != protocol {
-		return 2, fmt.Errorf("record: %s is a request of version %d, but this program's ggui reads version %d: "+
-			"use a ggui command of the same release as the module the app is built with", Env, req.V, protocol)
+	req, err := parseRequest(raw)
+	if err != nil {
+		return 2, err
 	}
 	rep := report{V: protocol}
 	if req.Format == "list" {
-		rep.Tours = Names()
-		if req.Report == "" {
-			for _, n := range rep.Tours {
-				fmt.Fprintln(stdout, n)
-			}
-			return 0, nil
-		}
-		return writeReport(req.Report, rep)
+		return listTours(req, stdout, rep)
 	}
 	t, ok := Lookup(req.Tour)
 	if !ok {
@@ -119,6 +108,52 @@ func serveTo(raw string, stdout io.Writer) (int, error) {
 	if req.Out == "" {
 		return 2, fmt.Errorf("record: %s names no file to write", Env)
 	}
+	o, err := optionsFor(req)
+	if err != nil {
+		return 2, err
+	}
+	if req.Format != "gif" && req.Format != "png" {
+		return 2, fmt.Errorf("record: %s asks for format %q; this program writes gif, png or list", Env, req.Format)
+	}
+	res, err := writeTour(t, req, o)
+	if err != nil {
+		return 1, err
+	}
+	rep.Frames, rep.DurationMS = res.frames, res.duration.Milliseconds()
+	rep.Width, rep.Height = res.w, res.h
+	if req.Report == "" {
+		return 0, nil
+	}
+	return writeReport(req.Report, rep)
+}
+
+// parseRequest decodes raw and checks its protocol version.
+func parseRequest(raw string) (request, error) {
+	var req request
+	if err := json.Unmarshal([]byte(raw), &req); err != nil {
+		return req, fmt.Errorf("record: %s is not a request: %w", Env, err)
+	}
+	if req.V != protocol {
+		return req, fmt.Errorf("record: %s is a request of version %d, but this program's ggui reads version %d: "+
+			"use a ggui command of the same release as the module the app is built with", Env, req.V, protocol)
+	}
+	return req, nil
+}
+
+// listTours writes the tour names, or a report of them.
+func listTours(req request, stdout io.Writer, rep report) (int, error) {
+	rep.Tours = Names()
+	if req.Report == "" {
+		for _, n := range rep.Tours {
+			fmt.Fprintln(stdout, n)
+		}
+		return 0, nil
+	}
+	return writeReport(req.Report, rep)
+}
+
+// optionsFor turns a request into resolved recording options.
+func optionsFor(req request) (*settings, error) {
 	o := resolve(nil)
 	o.fps, o.width = max(req.FPS, 0), max(req.Width, 0)
 	o.dither, o.loop = min(max(req.Dither, 0), 1), max(req.Loop, 0)
@@ -130,36 +165,30 @@ func serveTo(raw string, stdout io.Writer) (int, error) {
 	if req.Frame != "" {
 		f, err := parseFrame(req.Frame)
 		if err != nil {
-			return 2, err
+			return nil, err
 		}
 		o.frame = &f
 	}
 	if req.Backdrop != "" {
 		c, err := parseBackdrop(req.Backdrop)
 		if err != nil {
-			return 2, err
+			return nil, err
 		}
 		o.backdrop = c
 	}
-	var res result
-	var err error
+	return o, nil
+}
+
+// writeTour draws req's tour in the format it asks for.
+func writeTour(t Tour, req request, o *settings) (result, error) {
 	switch req.Format {
 	case "gif":
-		res, err = t.writeGIF(req.Out, o)
+		return t.writeGIF(req.Out, o)
 	case "png":
-		res, err = t.writePNGs(req.Out, o)
+		return t.writePNGs(req.Out, o)
 	default:
-		return 2, fmt.Errorf("record: %s asks for format %q; this program writes gif, png or list", Env, req.Format)
+		return result{}, fmt.Errorf("record: %s asks for format %q; this program writes gif, png or list", Env, req.Format)
 	}
-	if err != nil {
-		return 1, err
-	}
-	rep.Frames, rep.DurationMS = res.frames, res.duration.Milliseconds()
-	rep.Width, rep.Height = res.w, res.h
-	if req.Report == "" {
-		return 0, nil
-	}
-	return writeReport(req.Report, rep)
 }
 
 // noTour says that there is no tour called name, and which there are.
