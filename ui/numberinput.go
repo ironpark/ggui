@@ -312,7 +312,7 @@ func (n *NumberInputWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		n.box = widget.Box(n.row)
 	}
 	n.row.Gap(t.Space / 2)
-	// The colors follow the field's state in Paint; see fieldChrome.
+	// The colors follow the field's state in Paint; see fieldChromeJoined.
 	fieldBoxShape(n.box, t, t.FieldPad)
 	size := n.box.Layout(c, env.With(ggui.InputDisabledKey, n.disabled))
 	n.disabled = n.disabled || n.input.IsDisabled()

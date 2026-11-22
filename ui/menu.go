@@ -1014,8 +1014,10 @@ func (it *MenuItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if it.sub == nil {
 		return it.layoutRow(c, env)
 	}
-	// A submenu lifts further than the menu it opens from: shadcn's shadow-lg.
-	overlayShadow(it.sub.chrome(it.theme), it.theme)
+	// A submenu lifts further than the menu it opens from: shadcn's
+	// shadow-lg, the theme's OverlayShadow over its OverlayContact.
+	layers := [2]ggui.ShadowStyle{it.theme.OverlayShadow, it.theme.OverlayContact}
+	it.sub.chrome(it.theme).Shadow(layers[:]...)
 	// The submenu's first row lines up with this one: it rises by the
 	// panel's padding less its border, shadcn's alignOffset of -3.
 	it.subPopup.AlignOffset(-(it.theme.PanelPad.Top - it.theme.BorderWidth))
