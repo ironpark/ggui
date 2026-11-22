@@ -155,66 +155,100 @@ func (v *session) read(a *app) {
 	for {
 		m, err := a.conn.Receive()
 		if err != nil {
-			v.mu.Lock()
-			delete(v.apps, a)
-			if v.cur == a {
-				v.cur = nil
-				v.resetRequests(true)
-			}
-			v.gone = append(v.gone, a)
-			v.mu.Unlock()
-			v.events.send(event{Type: evAppDetached, PID: a.pid})
-			v.wake()
-			v.kick()
+			v.forget(a)
 			return
 		}
-		switch m := m.(type) {
-		case *remote.SharedMemory:
-			b, err := m.Map()
-			if err != nil {
-				log.Printf("app %d: mapping its shared memory: %v", a.pid, err)
-				_ = a.conn.Close()
-				continue
-			}
-			a.mu.Lock()
-			if a.shm != nil {
-				a.oldShm = append(a.oldShm, a.shm)
-			}
-			a.shm = b
-			a.mu.Unlock()
-		case *remote.Batch:
-			a.mu.Lock()
-			a.pending = append(a.pending, pendingBatch{batch: m, shm: a.shm})
-			a.mu.Unlock()
-			v.kick()
-			continue
-		case *remote.Idle:
-			continue
-		case *remote.ClipboardRequest:
-			// The app's clipboard is this system's, which the app may not reach
-			// itself (X11 needs a window of its own).
-			text, err := ggwd.ClipboardText()
-			if err != nil && v.opts.debug {
-				log.Printf("app %d: reading the clipboard: %v", a.pid, err)
-			}
-			_ = a.conn.Send(&remote.ClipboardText{Seq: m.Seq, Text: text, OK: err == nil})
-			continue
-		case *remote.SetClipboard:
-			if err := ggwd.SetClipboardText(m.Text); err != nil {
-				log.Printf("app %d: writing the clipboard: %v", a.pid, err)
-			}
-			continue
-		case *remote.Closed:
-			v.mu.Lock()
-			if v.cur == a {
-				v.req.close = v.req.close || v.closeAsked
-			}
-			v.mu.Unlock()
-		default:
-			v.request(a, m)
-		}
+		v.dispatchMessage(a, m)
+	}
+}
+
+// forget detaches a, which went away, and tells the main thread.
+func (v *session) forget(a *app) {
+	v.mu.Lock()
+	delete(v.apps, a)
+	if v.cur == a {
+		v.cur = nil
+		v.resetRequests(true)
+	}
+	v.gone = append(v.gone, a)
+	v.mu.Unlock()
+	v.events.send(event{Type: evAppDetached, PID: a.pid})
+	v.wake()
+	v.kick()
+}
+
+// dispatchMessage does what one message from a asks of the viewer.
+func (v *session) dispatchMessage(a *app, m remote.Message) {
+	switch m := m.(type) {
+	case *remote.SharedMemory:
+		v.mapSharedMemory(a, m)
+	case *remote.Batch:
+		v.queueBatch(a, m)
+	case *remote.Idle:
+	case *remote.ClipboardRequest:
+		v.answerClipboard(a, m)
+	case *remote.SetClipboard:
+		v.setClipboard(a, m)
+	case *remote.Closed:
+		v.noteClosed(a)
+		v.wake()
+	default:
+		v.request(a, m)
 		v.wake()
 	}
+}
+
+// mapSharedMemory maps the app's new shared memory, keeping the one it
+// replaces until the main thread has replayed the batches that used it.
+func (v *session) mapSharedMemory(a *app, m *remote.SharedMemory) {
+	b, err := m.Map()
+	if err != nil {
+		log.Printf("app %d: mapping its shared memory: %v", a.pid, err)
+		_ = a.conn.Close()
+		return
+	}
+	a.mu.Lock()
+	if a.shm != nil {
+		a.oldShm = append(a.oldShm, a.shm)
+	}
+	a.shm = b
+	a.mu.Unlock()
+	v.wake()
+}
+
+// queueBatch queues a's batch for replay, with the shared memory that was
+// active when it arrived.
+func (v *session) queueBatch(a *app, m *remote.Batch) {
+	a.mu.Lock()
+	a.pending = append(a.pending, pendingBatch{batch: m, shm: a.shm})
+	a.mu.Unlock()
+	v.kick()
+}
+
+// answerClipboard answers an app's request for the clipboard, which the app
+// may not reach itself (X11 needs a window of its own).
+func (v *session) answerClipboard(a *app, m *remote.ClipboardRequest) {
+	text, err := ggwd.ClipboardText()
+	if err != nil && v.opts.debug {
+		log.Printf("app %d: reading the clipboard: %v", a.pid, err)
+	}
+	_ = a.conn.Send(&remote.ClipboardText{Seq: m.Seq, Text: text, OK: err == nil})
+}
+
+// setClipboard puts an app's text on the clipboard.
+func (v *session) setClipboard(a *app, m *remote.SetClipboard) {
+	if err := ggwd.SetClipboardText(m.Text); err != nil {
+		log.Printf("app %d: writing the clipboard: %v", a.pid, err)
+	}
+}
+
+// noteClosed records that the app closed its window.
+func (v *session) noteClosed(a *app) {
+	v.mu.Lock()
+	if v.cur == a {
+		v.req.close = v.req.close || v.closeAsked
+	}
+	v.mu.Unlock()
 }
 
 // request queues an app's request of the window for the main thread if a is
@@ -225,6 +259,34 @@ func (v *session) request(a *app, m remote.Message) {
 	if v.cur != a {
 		return
 	}
+	switch m.(type) {
+	case *remote.SetMenu, *remote.UpdateMenuItem, *remote.SetTray, *remote.RemoveTray:
+		v.requestMenu(m)
+	default:
+		v.requestWindow(m)
+	}
+}
+
+// requestMenu queues an app's request for the menu bar, its dynamic items
+// or the system tray.
+func (v *session) requestMenu(m remote.Message) {
+	switch m := m.(type) {
+	case *remote.SetMenu:
+		v.req.menu = m
+		v.req.menuUpdates = nil
+	case *remote.UpdateMenuItem:
+		v.req.menuUpdates = append(v.req.menuUpdates, m)
+	case *remote.SetTray:
+		v.req.trays = append(v.req.trays, trayOp{set: m})
+	case *remote.RemoveTray:
+		v.req.trays = append(v.req.trays, trayOp{remove: m.Key})
+	}
+}
+
+// requestWindow queues an app's request for the window: its options, title,
+// size, position, icon, color mode, dock icon, cursor, text input or a
+// window request.
+func (v *session) requestWindow(m remote.Message) {
 	switch m := m.(type) {
 	case *remote.OpenWindow:
 		v.req.options = m
@@ -240,15 +302,6 @@ func (v *session) request(a *app, m remote.Message) {
 		v.req.colorMode = m
 	case *remote.SetDockIcon:
 		v.req.dockIcon = m
-	case *remote.SetMenu:
-		v.req.menu = m
-		v.req.menuUpdates = nil
-	case *remote.UpdateMenuItem:
-		v.req.menuUpdates = append(v.req.menuUpdates, m)
-	case *remote.SetTray:
-		v.req.trays = append(v.req.trays, trayOp{set: m})
-	case *remote.RemoveTray:
-		v.req.trays = append(v.req.trays, trayOp{remove: m.Key})
 	case *remote.SetCursor:
 		v.req.cursor = m
 	case *remote.TextInput:

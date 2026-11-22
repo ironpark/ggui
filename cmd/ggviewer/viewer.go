@@ -263,57 +263,97 @@ func (v *session) HandleEvent(ev ggwd.Event) error {
 	switch ev := ev.(type) {
 	case ggwd.StartEvent:
 		return v.start()
+	case ggwd.FrameEvent:
+		v.frame(ev)
 	case ggwd.WakeEvent:
 		v.pump()
 	case ggwd.BackgroundFrameEvent:
 		v.pump()
 		v.service(false)
-	case ggwd.FrameEvent:
-		if ev.Scale > 0 {
-			v.scale = ev.Scale
-		}
-		v.pump()
-		v.service(true)
-		v.compose(ev.Screen)
 	case ggwd.ResizeEvent:
-		v.scale = ev.Scale
-		cfg := viewer.Config(ev.Window, ev.Width, ev.Height, ev.Scale, v.focused)
-		v.pixels = image.Pt(cfg.PixelWidth, cfg.PixelHeight)
-		v.configure(cfg)
-		if v.state == ggwd.WindowStateNormal {
-			v.remember(func(g *geometry) { g.Width, g.Height = ev.Width, ev.Height })
-		}
+		v.resize(ev)
 	case ggwd.MoveEvent:
-		if v.state == ggwd.WindowStateNormal {
-			v.remember(func(g *geometry) { g.X, g.Y = ev.X, ev.Y })
-		}
-		v.reconfigure()
+		v.move(ev)
 	case ggwd.WindowStateEvent:
 		v.state = ev.State
 		v.reconfigure()
 	case ggwd.FocusEvent:
-		v.focused = ev.Focused
-		if v.opts.debug {
-			log.Printf("focused: %t", ev.Focused)
-		}
-		v.reconfigure()
+		v.focusChanged(ev)
 	case ggwd.SystemColorModeEvent, ggwd.MonitorEvent:
 		v.reconfigure()
 	case ggwd.QuitEvent, ggwd.ReopenEvent:
-		if ae, ok := viewer.AppEvent(ev); ok {
-			v.sendAppEvent(ae)
-		}
+		v.appEvent(ev)
 	case ggwd.CloseEvent:
-		// The app decides, and says Closed when it closes; with no app the
-		// window closes, and the viewer ends.
-		if v.askClose() {
-			ev.KeepOpen()
-		}
+		v.closeRequest(ev)
 	case ggwd.ClosedEvent:
 		v.menu.Set(nil)
 		v.clearTrays()
 		v.saveState()
 		v.events.send(event{Type: evWindowClosed})
+	default:
+		v.forwardInput(ev)
+	}
+	return nil
+}
+
+// frame shows the app's frames for a window frame.
+func (v *session) frame(ev ggwd.FrameEvent) {
+	if ev.Scale > 0 {
+		v.scale = ev.Scale
+	}
+	v.pump()
+	v.service(true)
+	v.compose(ev.Screen)
+}
+
+// resize handles the window's new size.
+func (v *session) resize(ev ggwd.ResizeEvent) {
+	v.scale = ev.Scale
+	cfg := viewer.Config(ev.Window, ev.Width, ev.Height, ev.Scale, v.focused)
+	v.pixels = image.Pt(cfg.PixelWidth, cfg.PixelHeight)
+	v.configure(cfg)
+	if v.state == ggwd.WindowStateNormal {
+		v.remember(func(g *geometry) { g.Width, g.Height = ev.Width, ev.Height })
+	}
+}
+
+// move handles the window's new position.
+func (v *session) move(ev ggwd.MoveEvent) {
+	if v.state == ggwd.WindowStateNormal {
+		v.remember(func(g *geometry) { g.X, g.Y = ev.X, ev.Y })
+	}
+	v.reconfigure()
+}
+
+// focusChanged handles the window's focus change.
+func (v *session) focusChanged(ev ggwd.FocusEvent) {
+	v.focused = ev.Focused
+	if v.opts.debug {
+		log.Printf("focused: %t", ev.Focused)
+	}
+	v.reconfigure()
+}
+
+// appEvent forwards a quit or reopen of the process to the attached app.
+func (v *session) appEvent(ev ggwd.Event) {
+	if ae, ok := viewer.AppEvent(ev); ok {
+		v.sendAppEvent(ae)
+	}
+}
+
+// closeRequest hands the window's close to the app, keeping the window open.
+func (v *session) closeRequest(ev ggwd.CloseEvent) {
+	// The app decides, and says Closed when it closes; with no app the
+	// window closes, and the viewer ends.
+	if v.askClose() {
+		ev.KeepOpen()
+	}
+}
+
+// forwardInput forwards the window's input to the app, letting the overlay
+// take the scroll over it.
+func (v *session) forwardInput(ev ggwd.Event) {
+	switch ev := ev.(type) {
 	case ggwd.MouseMoveEvent:
 		v.mouse = [2]float64{ev.X, ev.Y}
 		v.forwardEvent(ev)
@@ -324,7 +364,6 @@ func (v *session) HandleEvent(ev ggwd.Event) error {
 	default:
 		v.forwardEvent(ev)
 	}
-	return nil
 }
 
 // start opens the window, with the first app's options if one came.
@@ -410,35 +449,65 @@ func (v *session) pump() {
 	ovKind := v.ov.kind
 	v.req = requests{}
 	v.mu.Unlock()
+	reconfig := v.pumpReset(w, r)
+	reconfig = v.pumpOptions(w, r) || reconfig
+	v.pumpWindow(w, r)
+	v.pumpMenu(r)
+	v.pumpCursorAndTextInput(w, r)
+	reconfig = v.pumpVisibility(w, r, ovKind) || reconfig
+	reconfig = v.pumpActions(w, r) || reconfig
+	if reconfig {
+		v.reconfigure()
+	}
+	v.pumpScript(w, r)
+}
+
+// pumpReset clears the window and app state a reset asks for. It reports
+// whether the window's config changed.
+func (v *session) pumpReset(w *ggwd.Window, r requests) bool {
+	if !r.reset {
+		return false
+	}
+	viewer.Reset(w)
+	if v.lastOpts != nil {
+		v.lastOpts.MousePassthrough = false
+	}
+	if r.menu == nil {
+		v.menu.Set(nil)
+	}
+	v.clearTrays()
+	if v.appHid && (r.options == nil || !r.options.Hidden) {
+		w.Show()
+		v.setAppHidden(false)
+		return true
+	}
+	return false
+}
+
+// pumpOptions applies a new app's window options. It reports whether the
+// window's config changed.
+func (v *session) pumpOptions(w *ggwd.Window, r requests) bool {
+	if r.options == nil {
+		return false
+	}
+	c := planOptions(v.lastOpts, r.options, v.title, v.restored)
+	c.apply(w)
+	if c.title != nil {
+		v.title = *c.title
+	}
 	reconfig := false
-	if r.reset {
-		viewer.Reset(w)
-		if v.lastOpts != nil {
-			v.lastOpts.MousePassthrough = false
-		}
-		if r.menu == nil {
-			v.menu.Set(nil)
-		}
-		v.clearTrays()
-		if v.appHid && (r.options == nil || !r.options.Hidden) {
-			w.Show()
-			v.setAppHidden(false)
-			reconfig = true
-		}
+	if c.hidden != nil {
+		v.appHid = *c.hidden
+		reconfig = true
 	}
-	if r.options != nil {
-		c := planOptions(v.lastOpts, r.options, v.title, v.restored)
-		c.apply(w)
-		if c.title != nil {
-			v.title = *c.title
-		}
-		if c.hidden != nil {
-			v.appHid = *c.hidden
-			reconfig = true
-		}
-		last := *r.options
-		v.lastOpts = &last
-	}
+	last := *r.options
+	v.lastOpts = &last
+	return reconfig
+}
+
+// pumpWindow applies the app's requests for the window's title, size,
+// position, icon, color mode and dock icon.
+func (v *session) pumpWindow(w *ggwd.Window, r requests) {
 	if r.title != nil && *r.title != v.title {
 		w.SetTitle(*r.title)
 		v.title = *r.title
@@ -458,6 +527,11 @@ func (v *session) pump() {
 	if r.dockIcon != nil {
 		viewer.SetDockIcon(r.dockIcon)
 	}
+}
+
+// pumpMenu applies the app's requests for the menu bar, its dynamic items
+// and the system tray.
+func (v *session) pumpMenu(r requests) {
 	if r.menu != nil {
 		v.menu.Set(remoteToNativeMenu(r.menu.Items))
 	}
@@ -470,6 +544,11 @@ func (v *session) pump() {
 			v.menu.SetChecked(u.ID, u.Checked)
 		}
 	}
+}
+
+// pumpCursorAndTextInput applies the app's requests for the cursor and text
+// input.
+func (v *session) pumpCursorAndTextInput(w *ggwd.Window, r requests) {
 	if r.cursor != nil {
 		viewer.SetCursor(w, r.cursor)
 	}
@@ -479,6 +558,13 @@ func (v *session) pump() {
 		}
 		viewer.SetTextInput(w, r.textInput)
 	}
+}
+
+// pumpVisibility applies the requests that hide or show the window: window
+// requests and the overlay's show. It reports whether the window's config
+// changed.
+func (v *session) pumpVisibility(w *ggwd.Window, r requests, ovKind overlayKind) bool {
+	reconfig := false
 	for _, q := range r.window {
 		viewer.Do(w, &remote.WindowRequest{Request: q})
 		switch q {
@@ -495,32 +581,51 @@ func (v *session) pump() {
 		v.setAppHidden(false)
 		reconfig = true
 	}
+	return reconfig
+}
+
+// pumpActions does the debug-window actions. It reports whether the window's
+// config changed.
+func (v *session) pumpActions(w *ggwd.Window, r requests) bool {
+	reconfig := false
 	for _, a := range r.actions {
-		switch a.Action {
-		case "resize":
-			w.SetSize(a.Width, a.Height)
-		case "hide":
-			w.Hide()
+		if v.windowAction(w, a) {
 			reconfig = true
-		case "show":
-			w.Show()
-			reconfig = true
-		case "minimize":
-			w.Minimize()
-		case "restore":
-			w.Restore()
-		case "focus":
-			w.Focus()
-		case "close":
-			// As the window's close button: the app is asked.
-			if !v.askClose() {
-				w.Close()
-			}
 		}
 	}
-	if reconfig {
-		v.reconfigure()
+	return reconfig
+}
+
+// windowAction does one debug-window action, reporting whether it changed the
+// window's config.
+func (v *session) windowAction(w *ggwd.Window, a command) bool {
+	switch a.Action {
+	case "resize":
+		w.SetSize(a.Width, a.Height)
+	case "hide":
+		w.Hide()
+		return true
+	case "show":
+		w.Show()
+		return true
+	case "minimize":
+		w.Minimize()
+	case "restore":
+		w.Restore()
+	case "focus":
+		w.Focus()
+	case "close":
+		// As the window's close button: the app is asked.
+		if !v.askClose() {
+			w.Close()
+		}
 	}
+	return false
+}
+
+// pumpScript does what the launcher's debug commands asked: scripted input,
+// dumps and the close.
+func (v *session) pumpScript(w *ggwd.Window, r requests) {
 	for _, in := range r.inputs {
 		v.scripted = true
 		v.forward(in)
