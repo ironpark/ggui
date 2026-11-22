@@ -520,7 +520,7 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Clip(r).Paint(s.text, ggui.Rct(ggui.Pt(r.Origin.X+s.pad.Left, r.Origin.Y+(r.Size.H-s.textSize.H)/2), s.textSize))
 		// The chevron is muted and points down whether or not the list is open.
 		center := ggui.Pt(r.Origin.X+r.Size.W-s.pad.Right-t.IconSize/2, r.Origin.Y+r.Size.H/2)
-		chevron(dst, s.env, t, center, 2, muted)
+		controlkit.PaintIconAt(dst, s.env, controlkit.IconMark{Role: icons.ChevronDown, Center: center, Size: t.IconSize, Color: muted})
 	}
 	if !s.shownInvalid && !sides.Any() {
 		FocusRing(dst, &s.Interactive, Ring{Theme: t, Rect: r, Radius: radius, Color: t.Ring, Motion: s.motion})

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/ui/icons"
 	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
@@ -30,14 +29,6 @@ func panelShadow(b *widget.BoxWidget, t *uitheme.Theme) *widget.BoxWidget {
 	return b.Shadow(layers[:]...)
 }
 
-// overlayShadow gives b the shadow of what floats higher, shadcn's
-// shadow-lg: a submenu, a sheet. It is the theme's OverlayShadow over its
-// OverlayContact.
-func overlayShadow(b *widget.BoxWidget, t *uitheme.Theme) *widget.BoxWidget {
-	layers := [2]ggui.ShadowStyle{t.OverlayShadow, t.OverlayContact}
-	return b.Shadow(layers[:]...)
-}
-
 // paintedBaseline is where the glyphs of a line of text stand, for a line
 // whose box starts at top with the ascent layout reports, at the canvas's
 // scale. It is not quite top+ascent: text is drawn on whole pixels, the
@@ -50,18 +41,9 @@ func paintedBaseline(top, ascent, scale float64) float64 {
 }
 
 // fieldBoxShape gives a field's box what its size depends on, the padding
-// and the radius, and leaves its colors to fieldChrome.
+// and the radius, and leaves its colors to fieldChromeJoined.
 func fieldBoxShape(b *widget.BoxWidget, t *uitheme.Theme, pad ggui.EdgeInsets) {
 	b.Padding(pad).Radius(t.Radius)
-}
-
-// fieldFill is the surface of a field: the theme's Input, which may be
-// translucent and is drawn as it is, or the muted one of a disabled field.
-func fieldFill(t *uitheme.Theme, inert bool) color.Color {
-	if inert {
-		return fade(t.InputBorder, pick(controlkit.IsDark(t.Bg), .8, .5))
-	}
-	return t.Input
 }
 
 // invalidBorder is the border of a control that failed validation: the
@@ -85,21 +67,15 @@ type fieldState struct {
 	focused, invalid, inert bool
 }
 
-// fieldChrome colors a field's box for its state and draws the halo around
-// it; see fieldTones. Call it in Paint, before painting b in r.
-func fieldChrome(dst *ggui.Canvas, at ggui.Anchor, b *widget.BoxWidget, t *uitheme.Theme, r ggui.Rect, radius float64, s fieldState, motion time.Duration) {
-	fill, border := fieldTones(dst, at, t, r, radius, s, motion)
-	b.Fill(fill).Border(t.BorderWidth, border)
-}
-
-// fieldChromeJoined is fieldChrome for a field that may sit in a
-// ButtonGroup: on the sides joined to a neighbour its corners are square,
-// its border gives way to the neighbour's, and its halo, which the group
-// draws above its children, runs past the seam. With no side joined it is
-// fieldChrome.
+// fieldChromeJoined colors a field's box for its state and draws the halo
+// around it; see fieldTones. Call it in Paint, before painting b in r. The
+// field may sit in a ButtonGroup: on the sides joined to a neighbour its
+// corners are square, its border gives way to the neighbour's, and its
+// halo, which the group draws above its children, runs past the seam.
 func fieldChromeJoined(dst *ggui.Canvas, at ggui.Anchor, b *widget.BoxWidget, t *uitheme.Theme, r ggui.Rect, radius float64, s fieldState, motion time.Duration, sides JoinedSides) {
 	if !sides.Any() {
-		fieldChrome(dst, at, b, t, r, radius, s, motion)
+		fill, border := fieldTones(dst, at, t, r, radius, s, motion)
+		b.Fill(fill).Border(t.BorderWidth, border)
 		return
 	}
 	b.Fill(nil).Border(0, nil)
@@ -139,25 +115,23 @@ func fieldTones(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, r ggui.Rect,
 }
 
 // fieldToneParts is fieldTones without the drawing: the fill, the border,
-// and the halo with whether there is one to draw.
+// and the halo with whether there is one to draw. The fill is the theme's
+// Input, which may be translucent and is drawn as it is, or the muted
+// surface of a disabled field.
 func fieldToneParts(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, s fieldState, motion time.Duration) (fill, border, halo color.Color, ringed bool) {
 	focus := controlkit.Ease(dst, t, at, fieldFocusSlot, pick(s.focused && !s.inert, 1.0, 0.0), motion)
 	invalid := controlkit.Ease(dst, t, at, fieldInvalidSlot, pick(s.invalid, 1.0, 0.0), motion)
+	fill = t.Input
 	border = mix(mix(t.InputBorder, t.Ring, focus), invalidBorder(t), invalid)
 	if s.inert {
+		fill = fade(t.InputBorder, pick(controlkit.IsDark(t.Bg), .8, .5))
 		border = t.Disabled(border)
 	} else if focus > 0 || invalid > 0 {
 		// An invalid field shows the destructive halo whether or not it
 		// is focused, as aria-invalid outranks focus-visible in shadcn.
 		halo, ringed = mix(fade(t.Halo(t.Ring), focus), t.Halo(destructiveRing(t)), invalid), true
 	}
-	return fieldFill(t, s.inert), border, halo, ringed
-}
-
-// chevron resolves the directional role shared by selects and accordions.
-// dy points the tip down when positive and up when negative.
-func chevron(dst *ggui.Canvas, env ggui.Env, t *uitheme.Theme, center ggui.Point, dy float64, col color.Color) {
-	controlkit.PaintIconAt(dst, env, controlkit.IconMark{Role: pick(dy < 0, icons.ChevronUp, icons.ChevronDown), Center: center, Size: t.IconSize, Color: col})
+	return fill, border, halo, ringed
 }
 
 // fieldRing is the focus ring for a field: the theme's, or the destructive

@@ -3,6 +3,7 @@ package ui
 import (
 	"image/color"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -752,7 +753,7 @@ type mdTable struct {
 }
 
 func (t *mdTable) update(b markdown.Block) bool {
-	if t.align != nil && !equalAligns(t.align, b.Align) {
+	if t.align != nil && !slices.Equal(t.align, b.Align) {
 		return false // a column aligned another way: built again
 	}
 	t.align = b.Align
@@ -793,18 +794,6 @@ func (t *mdTable) update(b markdown.Block) bool {
 		clear(t.names[len(all):])
 	}
 	t.cells, t.names = t.cells[:len(all)], t.names[:len(all)]
-	return true
-}
-
-func equalAligns(a, b []markdown.Align) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
 	return true
 }
 

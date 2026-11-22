@@ -176,7 +176,7 @@ func (f *TextFieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		pad = ggui.Insets(t.Space, t.FieldPad.Left)
 	}
 	// Only the shape is set here: the colors follow the field's state in
-	// Paint, where fieldChrome eases them.
+	// Paint, where fieldChromeJoined eases them.
 	fieldBoxShape(f.box, t, pad)
 	// A line of text and the padding, or shadcn's four-line minimum of a
 	// textarea: eight of the theme's Space.
