@@ -659,17 +659,10 @@ func (b *BadgeWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	st := b.style
 	radius := pick(b.radius >= 0, b.radius, r.Size.H/2)
+	hovered := b.takeHover(dst, r)
 	overFill, overLabel := st.HoverFill, st.HoverLabel
-	hovered := false
 	if b.action != nil {
-		b.Hit(dst, r, b, ggui.CursorShapePointer)
 		overFill, overLabel = controlkit.ColorOr(st.LinkFill, overFill), controlkit.ColorOr(st.LinkLabel, overLabel)
-		hovered = b.Hovered && !b.IsInert()
-	} else if overFill != nil || overLabel != nil || st.Underline {
-		// Read rather than claimed: the pointer stays with whatever the
-		// badge is inside.
-		p, ok := dst.Pointer()
-		hovered = ok && r.Contains(p) && dst.TakesInput()
 	}
 	fill, label := st.Fill, st.Label
 	b.hover = controlkit.Ease(dst, b.theme, b.Anchor(r), badgeHoverSlot, pick(hovered, 1.0, 0.0), b.motion)
@@ -688,6 +681,32 @@ func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if st.Border != nil {
 		dst.StrokeRoundRect(r, radius, b.theme.BorderWidth, st.Border)
 	}
+	b.paintLabel(dst, r, label)
+	if b.action != nil {
+		FocusRing(dst, &b.Interactive, Ring{Theme: b.theme, Rect: r, Radius: radius, Color: b.theme.Ring, Motion: b.motion})
+	}
+}
+
+// takeHover reports whether the pointer is over the badge in r. A badge
+// with an action takes the pointer, registering r for it; one with only a
+// look under the pointer reads it rather than claims it, so the pointer
+// stays with whatever the badge is inside.
+func (b *BadgeWidget) takeHover(dst *ggui.Canvas, r ggui.Rect) bool {
+	st := b.style
+	if b.action != nil {
+		b.Hit(dst, r, b, ggui.CursorShapePointer)
+		return b.Hovered && !b.IsInert()
+	}
+	if st.HoverFill == nil && st.HoverLabel == nil && !st.Underline {
+		return false
+	}
+	p, ok := dst.Pointer()
+	return ok && r.Contains(p) && dst.TakesInput()
+}
+
+// paintLabel paints the icons and the text in label's color, the text
+// underlined under the pointer where the badge's look has an underline.
+func (b *BadgeWidget) paintLabel(dst *ggui.Canvas, r ggui.Rect, label color.Color) {
 	rtl := b.env.Direction() == ggui.DirRTL
 	iconY := r.Origin.Y + (r.Size.H-b.iconSide)/2
 	if b.leads {
@@ -696,7 +715,7 @@ func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	textRect := mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+b.textAt, r.Origin.Y+(r.Size.H-b.size.H)/2), b.size), r, rtl)
 	dst.Paint(b.text, textRect)
-	if st.Underline && b.hover > 0 {
+	if b.style.Underline && b.hover > 0 {
 		if base, ok := b.text.Baseline(); ok {
 			// shadcn's underline-offset-4, as a link button's.
 			dst.FillRect(ggui.Rct(ggui.Pt(textRect.Origin.X, textRect.Origin.Y+base+b.theme.Space/2), ggui.Sz(textRect.Size.W, 1)), fade(label, b.hover))
@@ -705,9 +724,6 @@ func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if b.trails {
 		trailRect := mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+b.trailAt, iconY), ggui.Sz(b.iconSide, b.iconSide)), r, rtl)
 		paintIcon(dst, b.env, b.trail, trailRect, label, 0)
-	}
-	if b.action != nil {
-		FocusRing(dst, &b.Interactive, Ring{Theme: b.theme, Rect: r, Radius: radius, Color: b.theme.Ring, Motion: b.motion})
 	}
 }
 

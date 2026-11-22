@@ -134,18 +134,7 @@ func (b *BreadcrumbWidget) build() {
 	var parts []ggui.Widget
 	for i, c := range crumbs {
 		if i > 0 {
-			switch {
-			case b.custom != nil:
-				parts = append(parts, &breadcrumbSeparatorOf{child: b.custom})
-			case b.separator != "":
-				sep := widget.Text(b.separator).NoWrap()
-				b.muted = append(b.muted, sep)
-				parts = append(parts, sep)
-			default:
-				sep := Icon(icons.ChevronRight).Size(breadcrumbSeparator)
-				b.chevrons = append(b.chevrons, sep)
-				parts = append(parts, sep)
-			}
+			parts = append(parts, b.newSeparator())
 		}
 		last := i == len(crumbs)-1
 		switch {
@@ -163,6 +152,24 @@ func (b *BreadcrumbWidget) build() {
 		}
 	}
 	b.row = widget.Wrap(parts...).Gap(breadcrumbGap).Align(widget.AlignCenter)
+}
+
+// newSeparator makes what goes between two crumbs: the custom separator,
+// the separator text, which Layout mutes, or a chevron, which it mutes and
+// turns with the direction.
+func (b *BreadcrumbWidget) newSeparator() ggui.Widget {
+	switch {
+	case b.custom != nil:
+		return &breadcrumbSeparatorOf{child: b.custom}
+	case b.separator != "":
+		sep := widget.Text(b.separator).NoWrap()
+		b.muted = append(b.muted, sep)
+		return sep
+	default:
+		sep := Icon(icons.ChevronRight).Size(breadcrumbSeparator)
+		b.chevrons = append(b.chevrons, sep)
+		return sep
+	}
 }
 
 // Layout implements ggui.Widget.
