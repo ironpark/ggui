@@ -49,11 +49,14 @@ func reported(t *testing.T, s source, what string, want ...string) {
 
 // quiet drains what the source reports until it has said nothing for d.
 func quiet(s source, d time.Duration) {
+	idle := time.NewTimer(d)
+	defer idle.Stop()
 	for {
+		idle.Reset(d)
 		select {
 		case <-s.wake():
 			s.take()
-		case <-time.After(d):
+		case <-idle.C:
 			return
 		}
 	}
@@ -207,6 +210,8 @@ func TestSourceStress(t *testing.T) {
 	}()
 	end := time.Now().Add(d)
 	taken, rounds := 0, 0
+	window := time.NewTimer(50 * time.Millisecond)
+	defer window.Stop()
 	for time.Now().Before(end) {
 		dirs := []string{one}
 		if rounds%2 == 1 {
@@ -219,14 +224,14 @@ func TestSourceStress(t *testing.T) {
 			t.Fatal(err)
 		}
 		rounds++
-		until := time.After(50 * time.Millisecond)
+		window.Reset(50 * time.Millisecond)
 	drain:
 		for {
 			select {
 			case <-s.wake():
 				p, _, _ := s.take()
 				taken += len(p)
-			case <-until:
+			case <-window.C:
 				break drain
 			}
 		}

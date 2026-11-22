@@ -67,13 +67,16 @@ func (f *fakeService) emit(member, sig string, body ...any) {
 
 func (f *fakeService) next(t *testing.T, member string) *message {
 	t.Helper()
+	idle := time.NewTimer(5 * time.Second)
+	defer idle.Stop()
 	for {
+		idle.Reset(5 * time.Second)
 		select {
 		case m := <-f.got:
 			if m.member == member {
 				return m
 			}
-		case <-time.After(5 * time.Second):
+		case <-idle.C:
 			t.Fatalf("no %s call", member)
 		}
 	}
