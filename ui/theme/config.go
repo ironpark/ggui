@@ -205,6 +205,17 @@ func (c Config) Dark() *Theme { return c.For(true) }
 // defaults, preset values or environment preferences are modified.
 func (c Config) For(dark bool) *Theme {
 	t := c.Preset.For(dark)
+	c.checkChoices()
+	c.applyCharts(t, dark)
+	c.applyMenu(t, dark)
+	c.applyFonts(t)
+	c.applyIcons(t)
+	t.resolveInPlace()
+	return t
+}
+
+// checkChoices panics on a choice the recipe does not have.
+func (c Config) checkChoices() {
 	if !slices.Contains(ChartColors(), c.Chart) {
 		panic("ggui: unknown chart accent " + string(c.Chart))
 	}
@@ -217,53 +228,78 @@ func (c Config) For(dark bool) *Theme {
 	if !slices.Contains(MenuColors(), c.MenuColor) {
 		panic("ggui: unknown menu color " + string(c.MenuColor))
 	}
-	if c.Chart != AccentBase {
-		chart := string(c.Chart)
-		if c.Chart == ChartBase {
-			if chart = string(c.Preset.Base); chart == "" {
-				chart = string(BaseNeutral)
-			}
-		}
-		mode := 0
-		if dark {
-			mode = 1
-		}
-		t.Chart = chartColors(themePalettes()[chart][mode])
+}
+
+// applyCharts sets the chart colors of t to the accent's palette, unless
+// the recipe keeps the accent's own.
+func (c Config) applyCharts(t *Theme, dark bool) {
+	if c.Chart == AccentBase {
+		return
 	}
+	mode := 0
+	if dark {
+		mode = 1
+	}
+	t.Chart = chartColors(themePalettes()[c.chartName()][mode])
+}
+
+// chartName is the palette c.Chart names.
+func (c Config) chartName() string {
+	if c.Chart != ChartBase {
+		return string(c.Chart)
+	}
+	if chart := string(c.Preset.Base); chart != "" {
+		return chart
+	}
+	return string(BaseNeutral)
+}
+
+// applyMenu applies the recipe's menu accent, radius and inverted color.
+func (c Config) applyMenu(t *Theme, dark bool) {
 	if c.MenuAccent == MenuAccentBold {
 		t.Accent, t.AccentFg = t.Primary, t.PrimaryFg
 	}
 	if c.Radius != RadiusDefault {
 		t.setRadius(radiusValues[c.Radius])
 	}
-	if c.Font != FontDefault {
-		font := configFont(c.Font)
-		if font == nil {
-			panic("ggui: font " + string(c.Font) + " is not registered; see theme.RegisterFont")
-		}
-		t.Text.Font = font
-	}
-	if c.Heading != FontDefault {
-		font := configFont(c.Heading)
-		if font == nil {
-			panic("ggui: font " + string(c.Heading) + " is not registered; see theme.RegisterFont")
-		}
-		t.Title.Font, t.Heading.Font = font, font
-	}
-	if c.Icons != IconsDefault {
-		node, ok := iconLibraries.Load(c.Icons)
-		if !ok {
-			panic("ggui: icon library " + string(c.Icons) + " is not registered; see theme.RegisterIcons")
-		}
-		// A Preset's theme has no tokens of its own, so the library's one
-		// node is the whole list, shared by every theme that names it.
-		t.ext = node.(*tokenNode)
-	}
 	if c.MenuColor == MenuColorInverted && !dark {
 		t.menu = invertedMenu(c)
 	}
-	t.resolveInPlace()
-	return t
+}
+
+// applyFonts sets the fonts the recipe names, panicking on one that is not
+// registered.
+func (c Config) applyFonts(t *Theme) {
+	if c.Font != FontDefault {
+		t.Text.Font = c.registeredFont(c.Font)
+	}
+	if c.Heading != FontDefault {
+		font := c.registeredFont(c.Heading)
+		t.Title.Font, t.Heading.Font = font, font
+	}
+}
+
+func (c Config) registeredFont(font FontFamily) *ggui.Font {
+	f := configFont(font)
+	if f == nil {
+		panic("ggui: font " + string(font) + " is not registered; see theme.RegisterFont")
+	}
+	return f
+}
+
+// applyIcons stores the icon library the recipe names, panicking on one
+// that is not registered.
+func (c Config) applyIcons(t *Theme) {
+	if c.Icons == IconsDefault {
+		return
+	}
+	node, ok := iconLibraries.Load(c.Icons)
+	if !ok {
+		panic("ggui: icon library " + string(c.Icons) + " is not registered; see theme.RegisterIcons")
+	}
+	// A Preset's theme has no tokens of its own, so the library's one
+	// node is the whole list, shared by every theme that names it.
+	t.ext = node.(*tokenNode)
 }
 
 // invertedMenus keeps the dark theme each recipe's inverted menus draw

@@ -111,8 +111,28 @@ func FromCSS(css string) (light, dark *Theme, err error) {
 // ignored.
 func (t *Theme) ApplyCSS(decls string) (*Theme, error) {
 	out := t.Clone()
-	vars := map[string]string{}
-	var order []string
+	vars, order := cssVars(decls)
+	for _, name := range order {
+		if styles := cssFonts[name]; styles != nil {
+			if font := cssFont(vars, name); font != nil {
+				for _, style := range styles(out) {
+					style.Font = font
+				}
+			}
+			continue
+		}
+		if err := out.applyVar(vars, name); err != nil {
+			return out, err
+		}
+	}
+	out.resolveInPlace()
+	return out, nil
+}
+
+// cssVars reads declarations into a map of variable name to value, and
+// the names in the order first declared.
+func cssVars(decls string) (vars map[string]string, order []string) {
+	vars = map[string]string{}
 	for decl := range strings.SplitSeq(stripComments(decls), ";") {
 		name, value, ok := strings.Cut(decl, ":")
 		name = strings.TrimSpace(name)
@@ -125,43 +145,37 @@ func (t *Theme) ApplyCSS(decls string) (*Theme, error) {
 		}
 		vars[name] = strings.TrimSpace(value)
 	}
-	for _, name := range order {
-		if styles := cssFonts[name]; styles != nil {
-			if font := cssFont(vars, name); font != nil {
-				for _, style := range styles(out) {
-					style.Font = font
-				}
-			}
-			continue
-		}
-		value, err := resolveVar(vars, name, 0)
+	return vars, order
+}
+
+// applyVar lays one variable's value over out: a color token, the radii,
+// or a CSSColor of its own name.
+func (t *Theme) applyVar(vars map[string]string, name string) error {
+	value, err := resolveVar(vars, name, 0)
+	if err != nil {
+		return err
+	}
+	switch {
+	case cssColors[name] != nil:
+		c, err := ParseColor(value)
 		if err != nil {
-			return out, err
+			return fmt.Errorf("theme: --%s: %w", name, err)
 		}
-		if field, ok := cssColors[name]; ok {
-			c, err := ParseColor(value)
-			if err != nil {
-				return out, fmt.Errorf("theme: --%s: %w", name, err)
-			}
-			p := field(out)
-			*p = c
-			out.pin(p)
-			continue
+		p := cssColors[name](t)
+		*p = c
+		t.pin(p)
+	case name == "radius":
+		r, err := parseLength(value)
+		if err != nil {
+			return fmt.Errorf("theme: --radius: %w", err)
 		}
-		if name == "radius" {
-			r, err := parseLength(value)
-			if err != nil {
-				return out, fmt.Errorf("theme: --radius: %w", err)
-			}
-			out.setRadius(r)
-			continue
-		}
+		t.setRadius(r)
+	default:
 		if c, err := ParseColor(value); err == nil {
-			out.ext = &tokenNode{key: CSSColor(name), val: c, next: out.ext}
+			t.ext = &tokenNode{key: CSSColor(name), val: c, next: t.ext}
 		}
 	}
-	out.resolveInPlace()
-	return out, nil
+	return nil
 }
 
 var cssColorKeys sync.Map // name -> ggui.EnvKey[color.Color]
