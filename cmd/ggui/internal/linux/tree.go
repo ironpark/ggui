@@ -74,7 +74,7 @@ func Assemble(t Tree) (dir string, warnings []string, err error) {
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			return err
 		}
-		if err := os.WriteFile(p, data, mode); err != nil {
+		if err := os.WriteFile(p, data, mode); err != nil { //nolint:gosec // G703: the path is the CLI user's own argument or build output
 			return err
 		}
 		// WriteFile's mode is cut by the umask; the tree's modes are

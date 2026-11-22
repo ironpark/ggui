@@ -1,7 +1,7 @@
 package machosign
 
 import (
-	"crypto/sha1"
+	"crypto/sha1" //nolint:gosec // G505, G401: CodeResources version 1 "files" requires SHA-1
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -191,12 +191,12 @@ func sealResources(contents, main string) ([]byte, error) {
 			}
 			files2[name] = nested
 		}
-		data, err := os.ReadFile(p)
+		data, err := os.ReadFile(p) //nolint:gosec // G122: signs a bundle this process just assembled
 		if err != nil {
 			return err
 		}
 		if r1, ok := match(v1, name); ok && !r1.omit {
-			h := sha1.Sum(data)
+			h := sha1.Sum(data) //nolint:gosec // G505, G401: CodeResources version 1 "files" requires SHA-1
 			if r1.optional {
 				files[name] = map[string]any{"hash": h[:], "optional": true}
 			} else {

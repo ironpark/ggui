@@ -1,6 +1,7 @@
 package web
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -294,34 +295,49 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.Rebuild()
 		w.WriteHeader(http.StatusNoContent)
 	default:
-		// Anything else comes from the package's own directory, so it can
-		// ship an asset it fetches at run time. A page request naming no
-		// file is a route the app shows itself.
-		clean := pathClean(rest)
-		if blockedStaticPath(clean) {
-			http.NotFound(w, r)
-			return
-		}
-		file := filepath.Join(s.pkgDir, filepath.FromSlash(clean))
-		if _, err := os.Stat(file); errors.Is(err, fs.ErrNotExist) {
-			// A dangling symlink is not a route.
-			if _, lerr := os.Lstat(file); lerr == nil {
-				http.NotFound(w, r)
-				return
-			}
-			if wantsPage(r) {
-				s.serveIndex(w)
-				return
-			}
-			http.NotFound(w, r)
-			return
-		}
-		if !s.containedInPkgDir(file) {
-			http.NotFound(w, r)
-			return
-		}
-		http.ServeFile(w, r, file)
+		s.serveAsset(w, r, rest)
 	}
+}
+
+// serveAsset serves what comes from the package's own directory, so it
+// can ship an asset it fetches at run time. A page request naming no file
+// is a route the app shows itself. The directory is opened as a root, so
+// a path cannot leave it through a symlink.
+func (s *Server) serveAsset(w http.ResponseWriter, r *http.Request, rest string) {
+	clean := pathClean(rest)
+	if blockedStaticPath(clean) {
+		http.NotFound(w, r)
+		return
+	}
+	root, err := os.OpenRoot(s.pkgDir)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer root.Close()
+	name := cmp.Or(clean, ".")
+	if _, err := root.Stat(name); err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
+		// A dangling symlink is not a route.
+		if _, lerr := root.Lstat(name); lerr == nil {
+			http.NotFound(w, r)
+			return
+		}
+		if wantsPage(r) {
+			s.serveIndex(w)
+			return
+		}
+		http.NotFound(w, r)
+		return
+	}
+	if !s.containedInPkgDir(filepath.Join(s.pkgDir, filepath.FromSlash(name))) {
+		http.NotFound(w, r)
+		return
+	}
+	http.ServeFileFS(w, r, root.FS(), name) //nolint:gosec // G703: root-scoped by os.Root, and the name is cleaned and checked
 }
 
 // sameOrigin rejects cross-origin browser requests while permitting same-origin
