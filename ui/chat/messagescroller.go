@@ -297,71 +297,17 @@ func (s *MessageScrollerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Si
 	s.startButton.Name(s.words.ScrollToStart)
 	s.endButton.Name(s.words.ScrollToEnd)
 	t := s.theme
-	gap := s.gap
-	if gap < 0 {
-		gap = 3 * t.Space
-	}
 	s.fadeLen, s.buttonInset = 3*t.Space, 2*t.Space
 	s.buttonIn, s.buttonOut = env.Motion(t.MotionSlow), env.Motion(2*t.MotionSlow)
 	size := c.Constrain(ggui.Sz(bounded(c.MaxW, 400), min(c.MaxH, s.height)))
 	s.viewport = size.H
 	rows := s.source.Get()
 	s.rows = slices.Clone(rows)
-	s.starts, s.sizes = s.starts[:0], s.sizes[:0]
-	seen := map[string]bool{}
-	s.total = 0
-	lastOld := -1
-	for i, row := range rows {
-		if row.ID == "" || seen[row.ID] {
-			panic("chat.MessageScroller: message IDs must be nonempty and unique")
-		}
-		seen[row.ID] = true
-		if row.Content == nil {
-			panic("chat.MessageScroller: nil content")
-		}
-		if i > 0 {
-			s.total += gap
-		}
-		s.starts = append(s.starts, s.total)
-		sz := row.Content.Layout(ggui.Loose(ggui.Sz(size.W, ggui.Unbounded)), env)
-		s.sizes = append(s.sizes, sz)
-		s.total += sz.H
-		if len(oldRows) > 0 && row.ID == oldRows[len(oldRows)-1].ID {
-			lastOld = i
-		}
-	}
+	s.measureRows(rows, size.W, env)
 	if len(rows) > 0 && !s.opened {
-		s.opened = true
-		s.offset = s.limit()
-		if s.opening == ScrollStart {
-			s.offset = 0
-		}
-		if s.opening == ScrollLastAnchor {
-			for i, row := range slices.Backward(rows) {
-				if row.Anchor {
-					s.offset = min(s.starts[i]-s.margin, s.limit())
-					break
-				}
-			}
-		}
-		s.following = s.auto && s.limit()-s.offset <= s.threshold
+		s.open(rows)
 	} else if len(rows) > 0 {
-		if s.following && s.auto {
-			s.offset = s.limit()
-		} else {
-			if i := s.index(saved.MessageID); i >= 0 {
-				s.offset = s.starts[i] + saved.Offset
-			}
-		}
-		if lastOld >= 0 {
-			for i := lastOld + 1; i < len(rows); i++ {
-				if rows[i].Anchor {
-					s.anchor = rows[i].ID
-					s.offset = max(0, s.starts[i]-s.margin-s.peek)
-					s.following = s.auto
-				}
-			}
-		}
+		s.keepPosition(saved, rows, oldRows)
 	}
 	if i := s.index(s.anchor); s.anchor != "" && i >= 0 {
 		start := max(0, s.starts[i]-s.margin-s.peek)
@@ -374,6 +320,79 @@ func (s *MessageScrollerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Si
 	s.startSize = s.startButton.Layout(c.Loosen(), env)
 	s.endSize = s.endButton.Layout(c.Loosen(), env)
 	return size
+}
+
+// measureRows lays rows out at width, a gap apart, and records where each
+// starts and the transcript's total height. It panics on a missing or a
+// repeated ID and on nil content.
+func (s *MessageScrollerWidget) measureRows(rows []MessageEntry, width float64, env ggui.Env) {
+	gap := s.gap
+	if gap < 0 {
+		gap = 3 * s.theme.Space
+	}
+	s.starts, s.sizes = s.starts[:0], s.sizes[:0]
+	seen := map[string]bool{}
+	s.total = 0
+	for i, row := range rows {
+		if row.ID == "" || seen[row.ID] {
+			panic("chat.MessageScroller: message IDs must be nonempty and unique")
+		}
+		seen[row.ID] = true
+		if row.Content == nil {
+			panic("chat.MessageScroller: nil content")
+		}
+		if i > 0 {
+			s.total += gap
+		}
+		s.starts = append(s.starts, s.total)
+		sz := row.Content.Layout(ggui.Loose(ggui.Sz(width, ggui.Unbounded)), env)
+		s.sizes = append(s.sizes, sz)
+		s.total += sz.H
+	}
+}
+
+// open places the first nonempty transcript at the edge or the last anchor
+// Opening names, and follows the end if it opened there.
+func (s *MessageScrollerWidget) open(rows []MessageEntry) {
+	s.opened = true
+	s.offset = s.limit()
+	if s.opening == ScrollStart {
+		s.offset = 0
+	}
+	if s.opening == ScrollLastAnchor {
+		for i, row := range slices.Backward(rows) {
+			if row.Anchor {
+				s.offset = min(s.starts[i]-s.margin, s.limit())
+				break
+			}
+		}
+	}
+	s.following = s.auto && s.limit()-s.offset <= s.threshold
+}
+
+// keepPosition holds the reader's place as the rows change: at the end
+// while following it, else on the row saved names. An anchor among the rows
+// added after the last of oldRows takes the place, a peek below the margin.
+func (s *MessageScrollerWidget) keepPosition(saved TranscriptPosition, rows, oldRows []MessageEntry) {
+	if s.following && s.auto {
+		s.offset = s.limit()
+	} else if i := s.index(saved.MessageID); i >= 0 {
+		s.offset = s.starts[i] + saved.Offset
+	}
+	if len(oldRows) == 0 {
+		return
+	}
+	lastOld := s.index(oldRows[len(oldRows)-1].ID)
+	if lastOld < 0 {
+		return
+	}
+	for i := lastOld + 1; i < len(rows); i++ {
+		if rows[i].Anchor {
+			s.anchor = rows[i].ID
+			s.offset = max(0, s.starts[i]-s.margin-s.peek)
+			s.following = s.auto
+		}
+	}
 }
 func (s *MessageScrollerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	s.rect = r
@@ -410,8 +429,8 @@ func (s *MessageScrollerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		s.rowsRect, s.painting = r, &v
 		clip.FadeEdges(r, false, 0, min(s.limit()-s.offset, s.fadeLen), s.paintRowsFn)
 		s.painting = nil
-		s.paintEdgeButton(clip, r, s.startButton, &s.startShown, s.startSize, v.CanScrollStart, -1)
-		s.paintEdgeButton(clip, r, s.endButton, &s.endShown, s.endSize, v.CanScrollEnd, 1)
+		s.paintEdgeButton(clip, r, edgeButton{button: s.startButton, shown: &s.startShown, size: s.startSize, side: -1}, v.CanScrollStart)
+		s.paintEdgeButton(clip, r, edgeButton{button: s.endButton, shown: &s.endShown, size: s.endSize, side: 1}, v.CanScrollEnd)
 	})
 	changed := v.CurrentAnchorID != s.visibility.CurrentAnchorID || v.CanScrollStart != s.visibility.CanScrollStart || v.CanScrollEnd != s.visibility.CanScrollEnd || !slices.Equal(v.VisibleMessageIDs, s.visibility.VisibleMessageIDs)
 	s.visibility = v
@@ -442,14 +461,24 @@ func (s *MessageScrollerWidget) paintRows(dst *ggui.Canvas) {
 	}
 }
 
-// paintEdgeButton paints a scroll-to-edge button in the middle of the edge
-// that side names, -1 the start and 1 the end. It eases in while active,
-// and out, twice as slowly, when the reader is back at the edge: fading,
-// shrinking a little and sliding its own height toward the edge, taking no
-// input on its way out.
-func (s *MessageScrollerWidget) paintEdgeButton(dst *ggui.Canvas, r ggui.Rect, b *ui.ButtonWidget, shown *ggui.Motion, size ggui.Size, active bool, side float64) {
-	shown.Easing(pick(active, scrollButtonIn, scrollButtonOut))
-	v := shown.Toggle(active, ggui.FrameTime(), pick(active, s.buttonIn, s.buttonOut))
+// edgeButton is a scroll-to-edge button as it paints: the button, how far it
+// has eased in, its laid-out size, and the edge its side names, -1 the start
+// and 1 the end.
+type edgeButton struct {
+	button *ui.ButtonWidget
+	shown  *ggui.Motion
+	size   ggui.Size
+	side   float64
+}
+
+// paintEdgeButton paints e in the middle of its edge. It eases in while
+// active, and out, twice as slowly, when the reader is back at the edge:
+// fading, shrinking a little and sliding its own height toward the edge,
+// taking no input on its way out.
+func (s *MessageScrollerWidget) paintEdgeButton(dst *ggui.Canvas, r ggui.Rect, e edgeButton, active bool) {
+	b, size, side := e.button, e.size, e.side
+	e.shown.Easing(pick(active, scrollButtonIn, scrollButtonOut))
+	v := e.shown.Toggle(active, ggui.FrameTime(), pick(active, s.buttonIn, s.buttonOut))
 	if v <= 0 {
 		return
 	}
