@@ -482,41 +482,9 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 		&questionProgress{Widget: progress, current: current, total: total},
 		widget.Column(heading...).Gap(0).Align(widget.AlignStretch),
 	}
-	rows := []ggui.Widget{}
-	shortcut := 0
-	for ci, choice := range item.Choices {
-		c := &questionChoice{q: q, item: item, option: choice, index: ci}
-		c.Role = pick(item.Multiple, ggui.RoleCheckbox, ggui.RoleRadio)
-		c.SetName(choice.Label)
-		c.SetInert(choice.Disabled)
-		if !choice.Disabled {
-			if q.shortcuts == QuestionLetters && shortcut < 26 {
-				c.shortcut = string(rune('A' + shortcut))
-			}
-			if q.shortcuts == QuestionNumbers && shortcut < 9 {
-				c.shortcut = fmt.Sprint(shortcut + 1)
-			}
-			shortcut++
-		}
-		q.choices = append(q.choices, c)
-		rows = append(rows, c)
-	}
+	rows := q.choiceRows(item)
 	if item.InputLabel != "" {
-		q.input = ui.TextField(questionTextBinding{q, item}).Name(item.InputLabel).Placeholder(item.Placeholder)
-		q.inputItem = item.Name
-		q.input.Input().Key(childKey{ownerOf(&q.Interactive, q), questionInputKey(item.Name)})
-		q.input.OnKey(func(ev ggui.KeyEvent) bool {
-			if ev.Key == ggui.KeyEnter && (ev.Mods.Ctrl || ev.Mods.Meta || strings.TrimSpace(q.answer(item).Text) != "") {
-				q.Next()
-				return true
-			}
-			if q.answer(item).Text == "" && (ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyArrowDown) {
-				q.focusAnswer(pick(ev.Key == ggui.KeyArrowUp, -1, 1), len(q.choices))
-				return true
-			}
-			return false
-		})
-		rows = append(rows, &questionInput{q.input})
+		rows = append(rows, q.answerInput(item))
 	}
 	body = append(body, widget.Column(rows...).Gap(8).Align(widget.AlignStretch))
 	var message *widget.TextWidget
@@ -551,6 +519,52 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 		}
 		next.Relabel(pick(current == total, pick(q.submitLabel != "", q.submitLabel, s.Submit), s.Next))
 	})
+}
+
+// choiceRows makes item's choices and keeps them for focus. Each enabled
+// choice takes the next letter or number the shortcuts setting gives.
+func (q *QuestionnaireWidget) choiceRows(item Question) []ggui.Widget {
+	rows := []ggui.Widget{}
+	shortcut := 0
+	for ci, choice := range item.Choices {
+		c := &questionChoice{q: q, item: item, option: choice, index: ci}
+		c.Role = pick(item.Multiple, ggui.RoleCheckbox, ggui.RoleRadio)
+		c.SetName(choice.Label)
+		c.SetInert(choice.Disabled)
+		if !choice.Disabled {
+			if q.shortcuts == QuestionLetters && shortcut < 26 {
+				c.shortcut = string(rune('A' + shortcut))
+			}
+			if q.shortcuts == QuestionNumbers && shortcut < 9 {
+				c.shortcut = fmt.Sprint(shortcut + 1)
+			}
+			shortcut++
+		}
+		q.choices = append(q.choices, c)
+		rows = append(rows, c)
+	}
+	return rows
+}
+
+// answerInput makes item's free-text answer field. Enter moves on once the
+// field holds text, or with Ctrl or Cmd; an arrow leaves an empty field for
+// the choices.
+func (q *QuestionnaireWidget) answerInput(item Question) *questionInput {
+	q.input = ui.TextField(questionTextBinding{q, item}).Name(item.InputLabel).Placeholder(item.Placeholder)
+	q.inputItem = item.Name
+	q.input.Input().Key(childKey{ownerOf(&q.Interactive, q), questionInputKey(item.Name)})
+	q.input.OnKey(func(ev ggui.KeyEvent) bool {
+		if ev.Key == ggui.KeyEnter && (ev.Mods.Ctrl || ev.Mods.Meta || strings.TrimSpace(q.answer(item).Text) != "") {
+			q.Next()
+			return true
+		}
+		if q.answer(item).Text == "" && (ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyArrowDown) {
+			q.focusAnswer(pick(ev.Key == ggui.KeyArrowUp, -1, 1), len(q.choices))
+			return true
+		}
+		return false
+	})
+	return &questionInput{q.input}
 }
 
 // button makes an action button, worded at layout.
@@ -839,37 +853,42 @@ func (c *questionChoice) HandlePointer(ev ggui.PointerEvent) bool {
 	return c.Pointer(ev, func() { c.q.selectChoice(c.index) })
 }
 func (c *questionChoice) HandleKey(ev ggui.KeyEvent) {
-	if c.IsInert() {
+	if c.IsInert() || c.q.shortcut(ev) {
 		return
 	}
-	if c.q.shortcut(ev) {
+	if ev.Kind == ggui.KeyPress && c.keyPress(ev) {
 		return
-	}
-	if ev.Kind == ggui.KeyPress {
-		dir := controlkit.DirectionalKey(ev, c.env.Direction() == ggui.DirRTL)
-		switch dir.Key {
-		case ggui.KeyArrowUp, ggui.KeyArrowDown:
-			c.q.focusAnswer(pick(dir.Key == ggui.KeyArrowUp, -1, 1), c.index)
-			return
-		case ggui.KeyArrowLeft, ggui.KeyArrowRight:
-			if !c.item.Multiple {
-				c.q.focusAnswer(pick(dir.Key == ggui.KeyArrowLeft, -1, 1), c.index)
-			} else if dir.Key == ggui.KeyArrowLeft {
-				c.q.Previous()
-			} else {
-				c.q.Next()
-			}
-			return
-		case ggui.KeyEnter:
-			if c.selected() {
-				c.q.Next()
-			} else {
-				c.q.selectChoice(c.index)
-			}
-			return
-		}
 	}
 	c.Keyboard(ev, func() { c.q.selectChoice(c.index) })
+}
+
+// keyPress handles a pressed key and reports whether it was one: up and
+// down move among the answers, left and right among a radio's answers or,
+// on a checkbox, between the questions, and Enter chooses the answer or,
+// once it is chosen, moves on.
+func (c *questionChoice) keyPress(ev ggui.KeyEvent) bool {
+	dir := controlkit.DirectionalKey(ev, c.env.Direction() == ggui.DirRTL)
+	switch dir.Key {
+	case ggui.KeyArrowUp, ggui.KeyArrowDown:
+		c.q.focusAnswer(pick(dir.Key == ggui.KeyArrowUp, -1, 1), c.index)
+	case ggui.KeyArrowLeft, ggui.KeyArrowRight:
+		if !c.item.Multiple {
+			c.q.focusAnswer(pick(dir.Key == ggui.KeyArrowLeft, -1, 1), c.index)
+		} else if dir.Key == ggui.KeyArrowLeft {
+			c.q.Previous()
+		} else {
+			c.q.Next()
+		}
+	case ggui.KeyEnter:
+		if c.selected() {
+			c.q.Next()
+		} else {
+			c.q.selectChoice(c.index)
+		}
+	default:
+		return false
+	}
+	return true
 }
 func (c *questionChoice) ConsumesKey(ev ggui.KeyEvent) bool {
 	switch ev.Key {
