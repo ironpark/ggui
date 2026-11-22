@@ -176,49 +176,9 @@ func parseThin(data []byte) (*thin, error) {
 	}
 	off := headerSize
 	for range t.ncmds {
-		if off+8 > end {
-			return nil, errors.New("load commands run past their size")
-		}
-		cmd, size := le.Uint32(data[off:]), int(le.Uint32(data[off+4:]))
-		if size < 8 || off+size > end {
-			return nil, fmt.Errorf("load command %#x has a bad size", cmd)
-		}
-		c := data[off : off+size]
-		switch cmd {
-		case lcSegment64:
-			if size < 72 {
-				return nil, errors.New("short segment command")
-			}
-			name := string(bytes.TrimRight(c[8:24], "\x00"))
-			fileoff, filesize := le.Uint64(c[40:]), le.Uint64(c[48:])
-			switch name {
-			case "__LINKEDIT":
-				t.linkedit = off
-			case "__TEXT":
-				t.textOff, t.textSize = fileoff, filesize
-			}
-			nsects := int(le.Uint32(c[64:]))
-			if 72+80*nsects > size {
-				return nil, fmt.Errorf("segment %s has more sections than fit", name)
-			}
-			for i := range nsects {
-				s := c[72+80*i:]
-				if o := uint64(le.Uint32(s[48:])); o != 0 && o < t.firstSection {
-					t.firstSection = o
-				}
-			}
-			if filesize > 0 && fileoff > 0 && fileoff < t.firstSection {
-				t.firstSection = fileoff
-			}
-		case lcCodeSignature:
-			if size < 16 {
-				return nil, errors.New("short code signature command")
-			}
-			t.codeSig = off
-		case lcUUID:
-			if size >= 24 {
-				t.uuid = c[8:24]
-			}
+		size, err := t.readLoadCommand(data[:end], off)
+		if err != nil {
+			return nil, err
 		}
 		off += size
 	}
@@ -226,6 +186,67 @@ func parseThin(data []byte) (*thin, error) {
 		return nil, errors.New("no __LINKEDIT segment, where the signature goes")
 	}
 	return t, nil
+}
+
+// readLoadCommand reads the load command at off in cmds, the header and
+// the load commands, and returns its size.
+func (t *thin) readLoadCommand(cmds []byte, off int) (int, error) {
+	le := binary.LittleEndian
+	if off+8 > len(cmds) {
+		return 0, errors.New("load commands run past their size")
+	}
+	cmd, size := le.Uint32(cmds[off:]), int(le.Uint32(cmds[off+4:]))
+	if size < 8 || off+size > len(cmds) {
+		return 0, fmt.Errorf("load command %#x has a bad size", cmd)
+	}
+	c := cmds[off : off+size]
+	switch cmd {
+	case lcSegment64:
+		if err := t.readSegment(c, off); err != nil {
+			return 0, err
+		}
+	case lcCodeSignature:
+		if size < 16 {
+			return 0, errors.New("short code signature command")
+		}
+		t.codeSig = off
+	case lcUUID:
+		if size >= 24 {
+			t.uuid = c[8:24]
+		}
+	}
+	return size, nil
+}
+
+// readSegment reads c, the segment command at off: where __LINKEDIT's
+// command is, where __TEXT lies, and where its sections' contents start.
+func (t *thin) readSegment(c []byte, off int) error {
+	le := binary.LittleEndian
+	if len(c) < 72 {
+		return errors.New("short segment command")
+	}
+	name := string(bytes.TrimRight(c[8:24], "\x00"))
+	fileoff, filesize := le.Uint64(c[40:]), le.Uint64(c[48:])
+	switch name {
+	case "__LINKEDIT":
+		t.linkedit = off
+	case "__TEXT":
+		t.textOff, t.textSize = fileoff, filesize
+	}
+	nsects := int(le.Uint32(c[64:]))
+	if 72+80*nsects > len(c) {
+		return fmt.Errorf("segment %s has more sections than fit", name)
+	}
+	for i := range nsects {
+		s := c[72+80*i:]
+		if o := uint64(le.Uint32(s[48:])); o != 0 && o < t.firstSection {
+			t.firstSection = o
+		}
+	}
+	if filesize > 0 && fileoff > 0 && fileoff < t.firstSection {
+		t.firstSection = fileoff
+	}
+	return nil
 }
 
 // pageShift is log2 of the size of the pages hashed: 16 KB on arm64,

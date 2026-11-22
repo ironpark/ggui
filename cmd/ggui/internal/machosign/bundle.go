@@ -142,77 +142,109 @@ var bundleExts = []string{".app", ".framework", ".bundle", ".plugin", ".xpc", ".
 // of the bundle's files, CodeResources, leaving out main, the main
 // program.
 func sealResources(contents, main string) ([]byte, error) {
-	v1, v2 := compileRules(rules), compileRules(rules2)
-	files, files2 := map[string]any{}, map[string]any{}
-	err := filepath.WalkDir(contents, func(p string, e fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(contents, p)
-		if err != nil {
-			return err
-		}
-		name := filepath.ToSlash(rel)
-		switch {
-		case name == ".":
-			return nil
-		case name == "_CodeSignature" && e.IsDir():
-			return filepath.SkipDir
-		case name == main:
-			return nil
-		}
-		r2, ok2 := match(v2, name)
-		if e.IsDir() {
-			if ok2 && r2.nested && slices.Contains(bundleExts, strings.ToLower(path.Ext(name))) {
-				return fmt.Errorf("nested bundle Contents/%s: only nested programs are signed, not bundles; sign the app on a Mac with codesign --deep, or leave it out", name)
-			}
-			return nil
-		}
-		if e.Type()&fs.ModeSymlink != 0 {
-			if ok2 && !r2.omit {
-				target, err := os.Readlink(p)
-				if err != nil {
-					return err
-				}
-				// The seal holds the target as macOS reads it, with
-				// slashes: Windows keeps a link's target with
-				// backslashes, and Readlink gives it back that way.
-				files2[name] = withOptional(map[string]any{"symlink": filepath.ToSlash(target)}, r2.optional)
-			}
-			return nil
-		}
-		if !e.Type().IsRegular() {
-			return fmt.Errorf("sealing Contents/%s: neither a file, a directory nor a symbolic link", name)
-		}
-		if ok2 && r2.nested && !r2.omit {
-			nested, err := signNested(p)
-			if err != nil {
-				return fmt.Errorf("signing Contents/%s: %w", name, err)
-			}
-			files2[name] = nested
-		}
-		data, err := os.ReadFile(p) //nolint:gosec // G122: signs a bundle this process just assembled
-		if err != nil {
-			return err
-		}
-		if r1, ok := match(v1, name); ok && !r1.omit {
-			h := sha1.Sum(data) //nolint:gosec // G505, G401: CodeResources version 1 "files" requires SHA-1
-			if r1.optional {
-				files[name] = map[string]any{"hash": h[:], "optional": true}
-			} else {
-				files[name] = h[:]
-			}
-		}
-		if ok2 && !r2.omit && !r2.nested {
-			h := sha256.Sum256(data)
-			files2[name] = withOptional(map[string]any{"hash2": h[:]}, r2.optional)
-		}
-		return nil
-	})
-	if err != nil {
+	s := &resourceSeal{
+		contents: contents, main: main,
+		v1: compileRules(rules), v2: compileRules(rules2),
+		files: map[string]any{}, files2: map[string]any{},
+	}
+	if err := filepath.WalkDir(contents, s.visit); err != nil {
 		return nil, err
 	}
-	return plist.MarshalXML(map[string]any{"files": files, "files2": files2, "rules": rules, "rules2": rules2})
+	return plist.MarshalXML(map[string]any{"files": s.files, "files2": s.files2, "rules": rules, "rules2": rules2})
+}
+
+// resourceSeal is the seal sealResources gathers as it walks contents:
+// files under rules, for macOS before 10.9, and files2 under rules2.
+type resourceSeal struct {
+	contents, main string
+	v1, v2         []rule
+	files, files2  map[string]any
+}
+
+// visit seals the entry at p, leaving out Contents itself, its
+// _CodeSignature and the main program.
+func (s *resourceSeal) visit(p string, e fs.DirEntry, err error) error {
+	if err != nil {
+		return err
+	}
+	rel, err := filepath.Rel(s.contents, p)
+	if err != nil {
+		return err
+	}
+	name := filepath.ToSlash(rel)
+	switch {
+	case name == ".":
+		return nil
+	case name == "_CodeSignature" && e.IsDir():
+		return filepath.SkipDir
+	case name == s.main:
+		return nil
+	}
+	return s.sealEntry(p, name, e)
+}
+
+// sealEntry seals the entry at p, name in Contents, by its kind: a
+// directory only by refusing a nested bundle, a symbolic link by its
+// target, and a regular file by its contents. A name no rule of rules2
+// matches is omitted from files2.
+func (s *resourceSeal) sealEntry(p, name string, e fs.DirEntry) error {
+	r2, ok2 := match(s.v2, name)
+	if !ok2 {
+		r2.omit = true
+	}
+	if e.IsDir() {
+		if r2.nested && slices.Contains(bundleExts, strings.ToLower(path.Ext(name))) {
+			return fmt.Errorf("nested bundle Contents/%s: only nested programs are signed, not bundles; sign the app on a Mac with codesign --deep, or leave it out", name)
+		}
+		return nil
+	}
+	if e.Type()&fs.ModeSymlink != 0 {
+		if !r2.omit {
+			target, err := os.Readlink(p)
+			if err != nil {
+				return err
+			}
+			// The seal holds the target as macOS reads it, with
+			// slashes: Windows keeps a link's target with
+			// backslashes, and Readlink gives it back that way.
+			s.files2[name] = withOptional(map[string]any{"symlink": filepath.ToSlash(target)}, r2.optional)
+		}
+		return nil
+	}
+	if !e.Type().IsRegular() {
+		return fmt.Errorf("sealing Contents/%s: neither a file, a directory nor a symbolic link", name)
+	}
+	return s.sealFile(p, name, r2)
+}
+
+// sealFile seals the regular file at p, name in Contents: a nested
+// program, which it signs first, by its signature, and the file by its
+// hashes under the rules that keep it.
+func (s *resourceSeal) sealFile(p, name string, r2 rule) error {
+	if r2.nested && !r2.omit {
+		nested, err := signNested(p)
+		if err != nil {
+			return fmt.Errorf("signing Contents/%s: %w", name, err)
+		}
+		s.files2[name] = nested
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return err
+	}
+	if r1, ok := match(s.v1, name); ok && !r1.omit {
+		h := sha1.Sum(data) //nolint:gosec // G505, G401: CodeResources version 1 "files" requires SHA-1
+		if r1.optional {
+			s.files[name] = map[string]any{"hash": h[:], "optional": true}
+		} else {
+			s.files[name] = h[:]
+		}
+	}
+	if !r2.omit && !r2.nested {
+		h := sha256.Sum256(data)
+		s.files2[name] = withOptional(map[string]any{"hash2": h[:]}, r2.optional)
+	}
+	return nil
 }
 
 func withOptional(d map[string]any, optional bool) map[string]any {
