@@ -8,8 +8,8 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/inspect"
-	"github.com/ironpark/ggui/pkg/gem"
 )
 
 type inspectVisibility struct {

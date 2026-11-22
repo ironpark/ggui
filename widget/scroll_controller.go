@@ -1,8 +1,8 @@
 package widget
 
 import (
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // attach applies what the controller asked for before the first layout.

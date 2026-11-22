@@ -7,9 +7,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/pkg/gem"
-	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/layout"
 	"github.com/ironpark/ggui/property"
 )
 

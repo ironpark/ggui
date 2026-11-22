@@ -3,7 +3,7 @@ package textedit
 import (
 	"time"
 
-	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/layout"
 )
 
 // Clicks turns a pointer's clicks on text into a selection: one places the

@@ -8,7 +8,7 @@
 // names there -- and sets the whole thing going from Config.Accessibility.
 // Import it to read a field list, or to build a tree by hand.
 //
-// Point, Rect and Size are re-exported from pkg/layout for the same reason, so
+// Point, Rect and Size are re-exported from layout for the same reason, so
 // that a bridge writes them under one name throughout.
 //
 // It is a package of its own because the bridges must read everything a
@@ -20,7 +20,7 @@ package a11y
 import (
 	"reflect"
 
-	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/layout"
 )
 
 // The geometry a node is measured in.

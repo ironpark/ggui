@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggwd"
 )
 

@@ -12,7 +12,7 @@ import (
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggfx/svg"
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/gem"
 )
 
 const (

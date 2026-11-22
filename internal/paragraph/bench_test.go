@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui/internal/fontsys"
-	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/layout"
 )
 
 // The benchmarks set text in the built-in font with the system's fonts

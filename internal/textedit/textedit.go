@@ -17,7 +17,7 @@ import (
 
 	"github.com/ironpark/ggui/internal/third_party/typesetting/segmenter"
 
-	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/gem"
 )
 
 // Editor is the model behind widget.TextInput: a string and a selection. The

@@ -17,7 +17,7 @@ package gem_test
 import (
 	"testing"
 
-	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/gem"
 )
 
 func TestPoolNew(t *testing.T) {

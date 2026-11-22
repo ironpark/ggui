@@ -7,9 +7,9 @@ import (
 	"sync"
 
 	"github.com/ironpark/ggui/a11y"
+	"github.com/ironpark/ggui/geom"
 	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/pkg/geom"
-	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/layout"
 	"github.com/ironpark/ggui/property"
 )
 

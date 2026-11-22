@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/gem"
 
 	"github.com/ironpark/ggfx"
 	"golang.org/x/image/font/gofont/gomono"

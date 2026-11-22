@@ -4,7 +4,7 @@ import (
 	"image"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/layout"
 )
 
 // shadowSource takes every value on the vertices, as roundRectSource does,

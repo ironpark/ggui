@@ -8,11 +8,11 @@ import (
 	"unicode/utf8"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/internal/third_party/typesetting/bidi"
-	"github.com/ironpark/ggui/pkg/gem"
 	"golang.org/x/text/language"
 
 	"github.com/ironpark/ggui/internal/textedit"

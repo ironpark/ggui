@@ -5,7 +5,7 @@ import (
 	"iter"
 	"strings"
 
-	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/gem"
 )
 
 // NodeID identifies a node from frame to frame. It is the handler's

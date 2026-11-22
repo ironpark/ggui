@@ -8,8 +8,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/inspect"
-	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // The widget inspector, as the root package knows it. The panel itself is

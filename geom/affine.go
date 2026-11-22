@@ -1,14 +1,14 @@
 // Package geom is 2D geometry beyond boxes: affine transforms of points
 // and rectangles, and outlines of lines and Bézier curves that can say
 // whether they hold a point and what they cover. It builds on
-// pkg/layout's Point and Rect, which ggui's own are.
+// layout's Point and Rect, which ggui's own are.
 package geom
 
 import (
 	"iter"
 	"math"
 
-	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/layout"
 )
 
 type (

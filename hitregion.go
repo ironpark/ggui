@@ -1,6 +1,6 @@
 package ggui
 
-import "github.com/ironpark/ggui/pkg/gem"
+import "github.com/ironpark/ggui/gem"
 
 // A hitRegion is a part of the window a widget registered with the Canvas
 // for input in the frame painted last: its handlers, what it is called,

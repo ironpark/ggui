@@ -10,7 +10,7 @@ import (
 	"math"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/layout"
 )
 
 // Rounded rectangles are drawn from a signed distance field rather than

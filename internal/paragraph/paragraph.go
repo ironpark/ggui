@@ -1,10 +1,10 @@
 package paragraph
 
 import (
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/internal/third_party/text"
-	"github.com/ironpark/ggui/pkg/gem"
-	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/layout"
 )
 
 // Paragraph is text in several styles laid out as one: it wraps across

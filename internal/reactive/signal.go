@@ -6,7 +6,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/layout"
 )
 
 // Measurement dependencies are separate from reactive subscriptions: even an

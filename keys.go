@@ -3,7 +3,7 @@ package ggui
 import (
 	"slices"
 
-	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggwd"
 )
 

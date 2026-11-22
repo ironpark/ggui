@@ -7,7 +7,7 @@ package kinetics
 import (
 	"math"
 
-	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/gem"
 )
 
 // RubberReach is how far past an end, as a share of the viewport's

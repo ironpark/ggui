@@ -3,7 +3,7 @@ package kinetics
 import (
 	"math"
 
-	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/gem"
 )
 
 // Easing maps normalized time in [0, 1] to normalized progress.

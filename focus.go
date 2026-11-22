@@ -1,6 +1,6 @@
 package ggui
 
-import "github.com/ironpark/ggui/pkg/gem"
+import "github.com/ironpark/ggui/gem"
 
 // activeScope returns the topmost focus scope painted this frame.
 func (in *inputState) activeScope() *focusScope {

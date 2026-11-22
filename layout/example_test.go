@@ -3,7 +3,7 @@ package layout_test
 import (
 	"fmt"
 
-	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/layout"
 )
 
 func ExampleScratch_Flow() {
