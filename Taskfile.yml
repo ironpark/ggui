@@ -28,7 +28,7 @@ tasks:
       - '"{{.GO}}" build -tags ggui_inspector .'
       # What ggui dev runs in its viewer, ggwd's remote backend linked in.
       - '"{{.GO}}" build -tags ggwd_remote,ggui_inspector,ggui_debug ./...'
-      - '"{{.GO}}" build -C examples/sqlite ./...'
+      - '"{{.GO}}" build -C docs/examples/sqlite ./...'
       - '"{{.GO}}" build -C fonts/notoemoji ./...'
       - '"{{.GO}}" build -C icons/heroicons ./...'
       - '"{{.GO}}" build -C icons/lucide ./...'
@@ -47,7 +47,7 @@ tasks:
       - '"{{.GO}}" test ./...'
       - '"{{.GO}}" test -tags ggui_inspector . ./widget ./internal/apitest'
       - '"{{.GO}}" test -tags ggwd_remote . ./internal/platform/... ./runtime'
-      - '"{{.GO}}" test -C examples/sqlite ./...'
+      - '"{{.GO}}" test -C docs/examples/sqlite ./...'
       - '"{{.GO}}" test -C fonts/notoemoji ./...'
       - '"{{.GO}}" test -C icons/heroicons ./...'
       - '"{{.GO}}" test -C icons/lucide ./...'
@@ -114,7 +114,7 @@ tasks:
     cmds:
       - '"{{.GO}}" vet ./...'
       - '"{{.GO}}" vet -tags ggui_inspector .'
-      - '"{{.GO}}" vet -C examples/sqlite ./...'
+      - '"{{.GO}}" vet -C docs/examples/sqlite ./...'
       - '"{{.GO}}" vet -C fonts/notoemoji ./...'
       - '"{{.GO}}" vet -C icons/heroicons ./...'
       - '"{{.GO}}" vet -C icons/lucide ./...'
@@ -179,7 +179,7 @@ tasks:
     # go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
     cmds:
       - for: [darwin/arm64, linux/amd64, windows/amd64, windows/arm64]
-        cmd: 'GOOS={{splitList "/" .ITEM | first}} GOARCH={{splitList "/" .ITEM | last}} staticcheck ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/... ./cmd/ggui/... ./pkg/fswatch/...'
+        cmd: 'GOOS={{splitList "/" .ITEM | first}} GOARCH={{splitList "/" .ITEM | last}} staticcheck ./... ./docs/examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/... ./cmd/ggui/... ./pkg/fswatch/...'
 
   fuzz:
     desc: Run every fuzz target for FUZZTIME each (default 10s)
@@ -190,7 +190,7 @@ tasks:
     desc: Format Go sources
     cmds:
       - '"{{.GO}}" fmt ./...'
-      - '"{{.GO}}" fmt -C examples/sqlite ./...'
+      - '"{{.GO}}" fmt -C docs/examples/sqlite ./...'
       - '"{{.GO}}" fmt -C fonts/notoemoji ./...'
       - '"{{.GO}}" fmt -C icons/heroicons ./...'
       - '"{{.GO}}" fmt -C icons/lucide ./...'
@@ -202,7 +202,7 @@ tasks:
     desc: Tidy Go dependencies
     cmds:
       - '"{{.GO}}" mod tidy'
-      - '"{{.GO}}" mod tidy -C examples/sqlite'
+      - '"{{.GO}}" mod tidy -C docs/examples/sqlite'
       - '"{{.GO}}" mod tidy -C fonts/notoemoji'
       - '"{{.GO}}" mod tidy -C icons/heroicons'
       - '"{{.GO}}" mod tidy -C icons/lucide'
@@ -242,7 +242,7 @@ tasks:
     # The bundle's name, identifier and display name come from the
     # example's ggui.toml: bin/ggui-EXAMPLE.app.
     cmds:
-      - 'bin/ggui build --target macos --out bin --tags "{{.TAGS}}" ./examples/{{.EXAMPLE}}'
+      - 'bin/ggui build --target macos --out bin --tags "{{.TAGS}}" ./docs/examples/{{.EXAMPLE}}'
 
   run:
     desc: Bundle and launch the counter example
@@ -298,7 +298,7 @@ tasks:
           enum: [counter, todo, workspace, gallery, create, router]
     deps: [cli]
     cmds:
-      - 'bin/ggui dev --web --port {{.PORT}} --wasm-opt "{{.WASM_OPT}}" --tags "{{.TAGS}}" ./examples/{{.EXAMPLE}}'
+      - 'bin/ggui dev --web --port {{.PORT}} --wasm-opt "{{.WASM_OPT}}" --tags "{{.TAGS}}" ./docs/examples/{{.EXAMPLE}}'
 
   serve-gallery:
     desc: Serve the component gallery in a browser at http://localhost:3000

@@ -4,7 +4,7 @@ A small project dashboard that connects GGUI features through real actions.
 It uses local, in-memory data and needs no services or credentials.
 
 ```sh
-go run ./examples/workspace
+go run ./docs/examples/workspace
 ```
 
 On macOS, `task run-workspace` builds and launches an app bundle.
@@ -36,12 +36,12 @@ All changes disappear when the app closes.
 
 - [main.go](main.go): app lifetime, theme binding, and keyboard shortcut.
 - [model.go](model.go): state, derived search and counts, validation, and actions.
-- [layout.go](layout.go): responsive arrangements that preserve controls across resizing.
-- [view.go](view.go): layout, table selection, draft lenses, borrowed bindings,
+- [view.go](view.go): responsive layout, table selection, draft lenses, borrowed bindings,
   charts, dialogs, and toast feedback.
+- [render.go](render.go): offscreen layout preview renderer (`-render-dir`).
 - [main_test.go](main_test.go): headless interaction tests using the same view.
 
-Run `go test ./examples/workspace` to exercise the example.
+Run `go test ./docs/examples/workspace` to exercise the example.
 
 
 ## Layout previews
@@ -49,7 +49,7 @@ Run `go test ./examples/workspace` to exercise the example.
 Render the actual widgets in light and dark themes at 1040, 760, and 480 pixels:
 
 ```sh
-go run ./examples/workspace -render-dir /tmp/workspace-previews
+go run ./docs/examples/workspace -render-dir /tmp/workspace-previews
 ```
 
 This writes Tasks, Insights, Settings, and editor screenshots. If Metal is

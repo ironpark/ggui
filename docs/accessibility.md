@@ -8,6 +8,12 @@ and word the controls in the user's language.
 Examples use `ggui`, `widget` and `ui` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
+## On this page
+
+- [Where the code lives](#where-the-code-lives)
+- [Custom semantics and actions](#custom-semantics-and-actions)
+- [Localization](#localization)
+
 **The native accessibility bridge covers macOS and Windows.** On macOS it
 exposes widget semantics to VoiceOver and the other Cocoa assistive tools. On
 Windows it implements a UI Automation provider, which also reaches the older
@@ -32,16 +38,16 @@ slider reports itself read-only; everything else behaves the same.
 
 ## Where the code lives
 
-The accessibility layer is the `a11y` package: the vocabulary a widget
-describes itself in, the tree one frame publishes, and the platform bridges.
-The `ggui` package re-exports every name from it, so `ggui.Node` and
-`a11y.Node` are the same type and normal code never imports `a11y` directly.
-Geometry sits below both, in `pkg/layout`, for the same reason.
+The accessibility vocabulary and `SemTree` live in the `a11y` package, while
+the native bridges live in `internal/platform/a11ybridge`. The `ggui` package
+re-exports every name from `a11y`, so `ggui.Node` and `a11y.Node` are the same
+type and normal code never imports `a11y` directly. Geometry sits below both,
+in `pkg/layout`, for the same reason.
 
 The split is what lets a bridge read everything a widget published without a
-copy of `Node` that falls behind the original. A new platform is a new file
-in `a11y`, implementing the one interface that knows an operating system
-exists.
+copy of `Node` that falls behind the original. A new platform is a new file in
+`internal/platform/a11ybridge`, implementing the `axPlatform` interface that
+knows an operating system exists.
 
 Set `Config.Accessibility` when creating the app:
 
@@ -116,7 +122,7 @@ headless example.
 For status updates that should be spoken without moving focus, use
 `app.Announce("Saved", ggui.Polite)`. `ggui.Assertive` requests an interrupting
 announcement. Announcements may be queued from any goroutine; native delivery
-requires the active macOS bridge.
+requires an active macOS or Windows bridge.
 
 ## Localization
 
@@ -145,13 +151,15 @@ Fields ending in `Format` are `fmt` formats whose arguments each field's
 comment lists; an explicit index such as `%[2]d` puts them in the order a
 language needs. A control reads its Strings from its Env as it lays out, so
 `ui.BindStrings(lang, root)` switches the language of a mounted tree when the
-`lang` signal changes, with nothing rebuilt. A custom widget words itself the
-same way, with `ui.StringsFrom(env)` in `Layout`.
+`lang` signal changes, with nothing rebuilt. `ui.Strings` also covers the
+controls in `ui/chart` and `ui/chat`. A custom widget words itself the same
+way in `Layout`, reading a shared read-only `*ui.Strings` with
+`ui.StringsOf(env)` or a mutable copy with `ui.StringsFrom(env)`.
 
 A setter on a control still wins over the Strings around it: `Name`,
 `Placeholder`, `Pagination.Labels`, `Command.Empty` and `HintLabels`,
 `Calendar.WeekdayLabels`, `MonthLabel` and `MonthNames`,
-`Questionnaire.SubmitLabel`, `AlertDialog.Confirm` and `Cancel`,
+`chat.Questionnaire.SubmitLabel` (`ui/chat`), `AlertDialog.Confirm` and `Cancel`,
 `EditorTab.CloseName`, `DatePicker.Format`.
 
 Strings are the controls' words. An app's own text is translated by package

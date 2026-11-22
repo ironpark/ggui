@@ -1,4 +1,4 @@
-module github.com/ironpark/ggui/examples/sqlite
+module github.com/ironpark/ggui/docs/examples/sqlite
 
 go 1.27.0
 

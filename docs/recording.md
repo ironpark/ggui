@@ -11,6 +11,8 @@ offscreen. A recording takes about as long as drawing its frames, needs no
 display, and comes out the same every time, so it can be made again after
 every change to the UI.
 
+## On this page
+
 - [Writing a tour](#writing-a-tour)
 - [Driving the app](#driving-the-app)
 - [The pointer and the keyboard](#the-pointer-and-the-keyboard)
@@ -27,7 +29,10 @@ A tour lives in the app, beside what it shows. Register it before
 `ggui.Run`, from an `init` function or from `main`:
 
 ```go
-import "github.com/ironpark/ggui/record"
+import (
+	"github.com/ironpark/ggui/record"
+	"github.com/ironpark/ggui/ui/theme"
+)
 
 func init() {
 	var m *Model
@@ -36,7 +41,7 @@ func init() {
 		Scale: 2,                 // drawn at 1600×1000, as on a Retina display
 		Setup: func(p *ggui.Probe) {
 			m = NewModel(demoData()) // demo state, not the user's
-			uitheme.Bind(ggui.Const(true), uitheme.Dark(), uitheme.Default())
+			theme.Bind(m.Dark, theme.Dark(), theme.Default())
 		},
 		Build: func() ggui.Widget { return m.Build() },
 		Script: func(r *record.Recorder) {
@@ -217,9 +222,11 @@ toolbar items are the system's, not the app's.
 
 The titles are set in the theme's font at those weights. A font of one
 weight draws them all in it: a tour draws in Go Regular, as a `Probe`
-does, unless its `Setup` sets a font (`ggui.SetDefaultFont`, or
-`gofont.Enable()` for Go Medium and Go Bold), so a tour that should look
-like the app on a Mac sets the font the app uses.
+does, unless its `Setup` sets a font (`ggui.SetDefaultFont`,
+`gofont.Enable()` for Go Medium and Go Bold, or opt-in families such as
+`fonts/inter` and `fonts/geist` registered with `theme.RegisterFont`; see
+[Fonts, emoji, and icons](fonts.md)), so a tour that should look like the app
+on a Mac sets the font the app uses.
 
 The content is placed below the bar, the bar the height the table gives;
 in `FrameMacHidden` it reaches the window's top edge and the buttons are
@@ -287,15 +294,13 @@ if err := tour.WriteGIF("tour.gif", record.FPS(10), record.Width(800)); err != n
 }
 ```
 
-`WriteGIF` and `WritePNGs` take the same options as the command's flags:
-`FPS`, `Width`, `Colors`, `Dither`, `Loop`, `Lossy`, and `Background`,
-which fills each frame with a color of your choosing instead of the
-background the tour's `Env` holds (`ggui.Env.Background`, which a theme
-sets). `Optimize` has no flag; [the GIF](#the-gif) describes it. `Frame`,
-`CornerRadius`, `Margin`, `Backdrop`, `Separator`, `ButtonInset` and
-`Cursor` set the [frame](#the-window-frame) and the
-[cursor](#the-pointer-and-the-keyboard); `Separator` and `ButtonInset`
-have no flag.
+`WriteGIF` and `WritePNGs` take options matching the command's flags —
+`FPS`, `Width`, `Colors`, `Dither`, `Loop`, `Lossy`, `Frame`, `Backdrop`,
+and `Cursor` — plus Go-only options with no CLI flag: `Background` (fill
+each frame with a color instead of the background the tour's `Env` holds,
+`ggui.Env.Background`), `Optimize` (described under [the GIF](#the-gif)),
+and the frame layout options `CornerRadius`, `Margin`, `Separator`, and
+`ButtonInset` (described under [the window frame](#the-window-frame)).
 
 Drawing needs the renderer, which the package brings up with no window:
 call them from the main goroutine, as `ggui.Run` is called, before any app
@@ -346,18 +351,17 @@ The demo recording behind these numbers is 360×220 at `Scale: 2`, 5.9
 seconds at 15 frames a second: a button clicked, a name typed and a dark
 mode switched on. Sizes in KB:
 
-| | Before | Level 1 | Level 2 | `Lossy(30)` | Level 2, `Lossy(30)` |
+| | Baseline (RGB, level 0) | Level 1 | Level 2 | `Lossy(30)` | Level 2, `Lossy(30)` |
 | --- | --- | --- | --- | --- | --- |
 | `FrameMac` and the cursor, 912×688 | 130.8 | 125.1 | 115.7 | 92.2 | 83.6 |
 | The same, `Width(720)` | 116.7 | 107.2 | 100.5 | 78.1 | 71.9 |
 | The content alone, 720×440 | 37.7 | 33.8 | 33.7 | 27.9 | 27.9 |
 | The same, `Width(360)` | 17.0 | 15.4 | 15.4 | 13.7 | 13.7 |
 
-"Before" is the encoder that wrote each changed rectangle whole, with the
-palette chosen in RGB. Encoding takes no measurable time beside drawing:
-each of these recordings takes as long at every setting, 0.2 to 0.3
-seconds, or about a second for `Width(720)`, which scales the framed
-image.
+The baseline column writes each changed rectangle whole with an RGB palette.
+Encoding takes no measurable time beside drawing: each of these recordings
+takes as long at every setting, 0.2 to 0.3 seconds, or about a second for
+`Width(720)`, which scales the framed image.
 
 ## PNG frames and ffmpeg
 

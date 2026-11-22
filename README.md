@@ -74,10 +74,12 @@ go get github.com/ironpark/ggui@latest
 
 **Requires Go 1.27+** for generic methods in the reactive API; the command
 builds your app with the `go` on your `PATH`.
-ggui itself does not use CGO or a WebView. ggfx's platform dependencies,
-inherited from Ebitengine, still apply, including Xcode command line tools on macOS and X11/ALSA development
-headers on Linux; the no-CGO claim does not cover every platform dependency.
-`ggui doctor` checks a machine for all of this and says what is missing.
+ggui, ggfx, and ggwd use no CGO or WebView — they call system libraries via
+`purego`/`dlopen`, so no C compiler or development headers are needed to build.
+At runtime, Linux needs an X11 or XWayland display with `libX11` and OpenGL 3.3
+or OpenGL ES 3.0, Windows uses Direct3D 11 or OpenGL 3.3, and macOS 13+ uses
+system frameworks. `ggui doctor` checks a machine for all of this and says what
+is missing.
 
 The library and the command are versioned apart: the library as `vX.Y.Z`,
 the command as `cmd/ggui/vX.Y.Z`. `ggui init` requires the latest library
@@ -158,25 +160,27 @@ and launch macOS app bundles.
 
 | Example | Explore | Run on macOS |
 | --- | --- | --- |
-| [Counter](examples/counter) | Reactive state, buttons, shortcuts, and theme switching. | `task run` |
-| [Todo](examples/todo) | IME text input, validation, keyed lists with inline editing, transitions, an empty state and an AlertDialog. | `task run-todo` |
-| [Settings](examples/settings) | One struct in one signal, Field lenses, a derived dirty flag, Styled text and a worker that posts its result back. | `go run ./examples/settings` |
-| [Custom widgets](examples/custom) | A dial built on Interactive with a Spring, a disclosure that calls Invalidate, and a 5,000-row virtualized list. | `go run ./examples/custom` |
-| [Charts](examples/charts) | All 70 shadcn chart examples, interactive tooltips, themes and animation replay. | `go run ./examples/charts` |
-| [Carousel & Input OTP](examples/controls) | Swipeable carousels and segmented code inputs, all shadcn variants and state previews. | `go run ./examples/controls` |
-| [Windows](examples/windows) | Several windows over one signal, window state as signals, native menus and a tray icon that follow the system's dark mode. | `go run ./examples/windows` |
-| [Files](examples/files) | Files dropped from the desktop and the native Open, Save and folder dialogs reached through `Host.Dialogs`. | `go run ./examples/files` |
-| [Workspace](examples/workspace) | A project dashboard combining searchable tables, form lenses, live options, dialogs, charts, animated progress, toasts, and theme switching. | `task run-workspace` |
-| [SQLite](examples/sqlite) | A SQLite client with table browsing, filters, paging, typed edits, row creation/deletion, cancellable SQL, and CSV export. | `go run ./examples/sqlite` |
-| [Gallery](examples/gallery) | Searchable previews across Inputs, Navigation, Feedback, Layout, and Data, with a theme customizer for style, radius, menu colors and light, dark or system mode. | `task run-gallery` |
-| [Create](examples/create) | Live theme editor with interactive card previews, independent palettes, typography, radius, preset import/export and Go code. | `go run ./examples/create` |
+| [Counter](docs/examples/counter) | Reactive state, buttons, shortcuts, and theme switching. | `task run` |
+| [Todo](docs/examples/todo) | IME text input, validation, keyed lists with inline editing, transitions, an empty state and an AlertDialog. | `task run-todo` |
+| [Settings](docs/examples/settings) | One struct in one signal, Field lenses, a derived dirty flag, Styled text and a worker that posts its result back. | `go run ./docs/examples/settings` |
+| [Router](docs/examples/router) | Nested persistent layouts, path parameters, redirects, scoped not-found screens, and history navigation. | `go run ./docs/examples/router` |
+| [Custom widgets](docs/examples/custom) | A dial built on Interactive with a Spring, a disclosure that calls Invalidate, and a 5,000-row virtualized list. | `go run ./docs/examples/custom` |
+| [Charts](docs/examples/charts) | All 70 shadcn chart examples, interactive tooltips, themes and animation replay. | `go run ./docs/examples/charts` |
+| [Carousel & Input OTP](docs/examples/controls) | Swipeable carousels and segmented code inputs, all shadcn variants and state previews. | `go run ./docs/examples/controls` |
+| [Windows](docs/examples/windows) | Several windows over one signal, window state as signals, native menus and a tray icon that follow the system's dark mode. | `go run ./docs/examples/windows` |
+| [Files](docs/examples/files) | Files dropped from the desktop and the native Open, Save and folder dialogs reached through `Host.Dialogs`. | `go run ./docs/examples/files` |
+| [Workspace](docs/examples/workspace) | A project dashboard combining searchable tables, form lenses, live options, dialogs, charts, animated progress, toasts, and theme switching. | `task run-workspace` |
+| [SQLite](docs/examples/sqlite) | A SQLite client with table browsing, filters, paging, typed edits, row creation/deletion, cancellable SQL, and CSV export. | `go run ./docs/examples/sqlite` |
+| [Gallery](docs/examples/gallery) | Searchable previews across Inputs, Navigation, Feedback, Layout, and Data, with a theme customizer for style, radius, menu colors and light, dark or system mode. | `task run-gallery` |
+| [Create](docs/examples/create) | Live theme editor with interactive card previews, independent palettes, typography, radius, preset import/export and Go code. | `task run-create` |
 
-On other platforms, use `go run ./examples/counter`, `go run ./examples/todo`,
-or `go run ./examples/gallery`. The gallery adapts from two columns to one in
-narrow windows and keeps search, theme controls, and the command launcher visible
-while scrolling.
+Browse [All examples](docs/examples/README.md) for the complete catalog and
+headless test commands. On other platforms, use `go run ./docs/examples/counter`,
+`go run ./docs/examples/todo`, or `go run ./docs/examples/gallery`. The gallery
+adapts from two columns to one in narrow windows and keeps search, theme
+controls, and the command launcher visible while scrolling.
 
-The [counter tests](examples/counter/main_test.go) show how to drive the same UI
+The [counter tests](docs/examples/counter/main_test.go) show how to drive the same UI
 headlessly with a `Probe`.
 
 ## How it fits together
@@ -194,8 +198,11 @@ The core `ggui` package provides the app and its windows, reactivity,
 rendering, input, and the widget protocol. The `widget` package holds the
 unstyled building blocks written on it: text, rows, columns, stacks,
 scrolling, lists, popups, and transitions. The `ui` package adds themed
-controls built on both public APIs, which you can also use to build your
-own controls.
+controls built on both public APIs (alongside its focused subpackages
+`ui/theme`, `ui/icons`, `ui/chart`, and `ui/chat`), which you can also use to
+build your own controls. Optional top-level packages add page and layout
+routing (`router`), application localization (`i18n`), and scripted offscreen
+recording (`record`).
 
 ## Accessibility
 
@@ -221,6 +228,7 @@ and the full topic list.
 | Topic | Read more |
 | --- | --- |
 | State and components | [Signals, ownership, builders, and keyed lists](docs/reactivity.md#concepts) |
+| Routing | [Pages, persistent layouts, typed targets, and history](docs/routing.md) |
 | Layout and controls | [Widgets and layout](docs/layout.md#widgets-and-layout) · [Controls](docs/forms.md#controls) · [Additional controls](docs/data-and-navigation.md) |
 | Chat and questionnaires | [Attachments, conversations, Markdown, transcript scrolling, and questionnaires](docs/chat.md) |
 | Feedback and composition | [Toasts, sheets, dialogs, and composition helpers](docs/feedback-and-composition.md) |
@@ -230,7 +238,7 @@ and the full topic list.
 | Look and feel | [Styling](docs/styling.md) · [Animation](docs/animation.md#animation) · [HiDPI](docs/rendering.md#hidpi) |
 | Windows and the desktop | [Several windows, placement, menus, tray, dialogs](docs/windows-and-platform.md) |
 | Other languages | [Translating an app](docs/i18n.md) · [Localizing the controls' own words](docs/accessibility.md#localization) · [Right-to-left text](docs/fonts.md#right-to-left-text) |
-| The ggui command | [init, dev, build, release, doctor and ggui.toml](docs/cli.md) |
+| The ggui command | [init, dev, build, release, record, i18n, doctor, and ggui.toml](docs/cli.md) |
 | Shipping to Linux | [The .deb, .rpm and tarball, their dependencies, and installing for one user](docs/linux.md) |
 | Releasing | [Publishing with ggui release: a GitHub release, a Homebrew cask, a Chocolatey package](docs/releasing.md) |
 | Custom widgets | [The widget protocol, setters and painting](docs/rendering.md#custom-widgets) · [API conventions](docs/api-conventions.md) |
@@ -242,6 +250,7 @@ and the full topic list.
 
 ```sh
 task             # fmt + vet + test
+task check       # fmt + cross-platform vet + staticcheck (pre-push check)
 task build       # build all packages
 task run         # bundle and launch the counter example (macOS)
 task run-todo
@@ -256,7 +265,7 @@ build `bin/ggui-<example>.app` with [`ggui build`](docs/cli.md#ggui-build),
 then launch it with `open -n`. Each launch starts a new instance using the rebuilt
 binary. The bundles are local development builds; they are not distribution-signed
 or notarized. `task build`, `task test`, and the other Go maintenance tasks also
-work on other platforms; run examples there with `go run ./examples/<example>`.
+work on other platforms; run examples there with `go run ./docs/examples/<example>`.
 Override the Go executable with `task build GO=/path/to/go` when needed.
 
 See [Development](docs/development.md) for all commands, browser/WASM examples,
@@ -264,8 +273,10 @@ debug builds, visual checks, and the repository map.
 
 ## License
 
-ggui is licensed under the [Apache License 2.0](LICENSE). The code, fonts
-and icon sets it bundles from other projects keep their own licenses, in the
-directories that hold them: the text engines under
+ggui is licensed under the [Apache License 2.0](LICENSE). The code, fonts,
+theme palettes, and icon sets it bundles from other projects keep their own
+licenses, in the directories that hold them: the text engines under
 [internal/third_party](internal/third_party), the fonts under
-[fonts](fonts), and the icon sets under [icons](icons).
+[fonts](fonts), the bundled and full icon sets under [ui/icons](ui/icons) and
+[icons](icons), and the vendored theme palettes under
+[ui/theme](ui/theme/README.md#palette-sources).

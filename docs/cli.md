@@ -37,7 +37,7 @@ applications it runs. `ggui version` prints the version installed.
 | [`ggui record [name]`](#ggui-record) | Draw a tour the app registered into an animated GIF, or PNG frames. |
 
 `ggui help <command>` prints a command's flags. Settings come from
-[`ggui.toml`](#ggui-toml), and flags override them. Flags may come before
+[`ggui.toml`](#gguitoml), and flags override them. Flags may come before
 or after the package, as in `ggui dev ./cmd/app --web`.
 
 On a terminal, ggui shows each step that takes a while as a line with a
@@ -59,7 +59,7 @@ and spinners. `NO_COLOR` wins over the other two.
 - [ggui doctor](#ggui-doctor)
 - [ggui i18n](#ggui-i18n)
 - [ggui record](#ggui-record)
-- [ggui.toml](#ggui-toml)
+- [ggui.toml](#gguitoml)
 
 ## ggui init
 
@@ -425,7 +425,7 @@ once the app has painted.
   browser that accepts it, with an `ETag` naming the build, so a reload
   without a rebuild comes from the browser's cache.
 - **Routes reload.** Any request for HTML that names no file is answered
-  with the page, so an app using `router.Browser` can be reloaded on a
+  with the page, so an app using [`router.Browser`](routing.md#history-and-web-deployment) can be reloaded on a
   route. Other files are served from the package's directory, so the app
   can fetch an asset it ships beside its code.
 
@@ -807,7 +807,7 @@ tarball for one user, and what Linux apps lack so far.
 
 The page loads its files relative to `web.base`, which it writes as its
 `<base>`. Serve the directory at that path, and have the host answer every
-route below it with `index.html` if the app uses `router.Browser`. A host
+route below it with `index.html` if the app uses [`router.Browser`](routing.md#history-and-web-deployment). A host
 that serves precompressed files, such as nginx with `gzip_static on` or
 Caddy with `precompressed gzip`, sends the `.gz` copies, a little over a
 quarter of the binary's size.
@@ -829,7 +829,7 @@ credentials each channel needs and a GitHub Actions workflow.
 
 | Target | Files, for each architecture |
 | --- | --- |
-| `macos` | `name-VERSION-macos-ARCH.dmg` when `[macos.dmg]` asks for a disk image, else `name-VERSION-macos-ARCH.zip` of `Name.app`, as `ditto -c -k --keepParent` lays it out, links and modes kept; `.pkg` too when `[macos.pkg]` asks. On a Mac one build, `universal`, joined with `lipo`; elsewhere one for each of `amd64` and `arm64`, unsigned. Signed and notarized as `[macos]` says. |
+| `macos` | `name-VERSION-macos-ARCH.dmg` when `[macos.dmg]` asks for a disk image, else `name-VERSION-macos-ARCH.zip` of `Name.app`, as `ditto -c -k --keepParent` lays it out, links and modes kept; `.pkg` too when `[macos.pkg]` asks (on macOS). Builds one `universal` binary on any host when both `amd64` and `arm64` are in `arches` (joined in pure Go), signed and notarized as `[macos]` specifies (Apple's tools on macOS, or `rcodesign` on Linux and Windows builds that link it). |
 | `windows` | `name-VERSION-windows-ARCH.zip`, holding `Name.exe`: `amd64`, `arm64` and `386`. |
 | `linux` | What `linux.formats` names: the tarball, `.deb` and `.rpm`: `amd64`, `arm64` and `riscv64`. |
 
@@ -1187,7 +1187,7 @@ and an Apple ID given is used.
 | Key | Default | Use |
 | --- | --- | --- |
 | `profile` | none | A notarytool keychain profile, made with `xcrun notarytool store-credentials NAME`. |
-| `api_key_file` | none | An App Store Connect API key as JSON: `{"issuer_id", "key_id", "private_key"}`, the last the `.p8` file's contents, as `rcodesign encode-app-store-connect-api-key` writes it. The only kind that works away from a Mac. |
+| `api_key_file` | none | An App Store Connect API key as JSON: `{"issuer_id", "key_id", "private_key"}`, the last the base64 of the `.p8` key, as `rcodesign encode-app-store-connect-api-key` writes it. The only kind that works away from a Mac. |
 | `apple_id` | none | An Apple ID, with `team_id` and an app-specific password. |
 | `team_id` | none | The ten-character team ID, as in the identity's parentheses. |
 | `password_env` | `"GGUI_NOTARY_PASSWORD"` | The environment variable holding the Apple ID's app-specific password. |
@@ -1259,7 +1259,7 @@ What `ggui build --target linux` writes beyond `[app]`; see
 | Key | Default | Use |
 | --- | --- | --- |
 | `title` | `app.name` | The page title. |
-| `base` | `"/"` | The path the app is served below. An app using `router.Browser` passes the same path to it. |
+| `base` | `"/"` | The path the app is served below. An app using [`router.Browser`](routing.md#history-and-web-deployment) passes the same path to it. |
 | `wasm_opt` | `"-O2"` | `wasm-opt` flags for `ggui build --target web`; `""` skips it. Without `wasm-opt` on `PATH` the binary ships as linked. |
 
 ### [i18n]

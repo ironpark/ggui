@@ -12,7 +12,7 @@ import (
 // painted inside (hitRegion.parent, set by parentFor as the paint
 // registers it), and what input follows from frame to frame along a chain
 // of them it keeps as a path: copies of the regions, matched to the next
-// frame's entry against entry. See docs/design/input-routing.md.
+// frame's entry against entry.
 
 // regionPath keeps the regions of a chain input follows across frames,
 // the innermost first, as copies that outlive the list they were painted

@@ -13,6 +13,13 @@ command's reference has the flags and the file names.
 GOARCH=amd64 ggui build --target linux --format tar,deb,rpm
 ```
 
+## On this page
+
+- [What runs](#what-runs)
+- [What the packages contain](#what-the-packages-contain)
+- [The tarball, and installing for one user](#the-tarball-and-installing-for-one-user)
+- [Not yet on Linux](#not-yet-on-linux)
+
 ## What runs
 
 The program is built with `CGO_ENABLED=0` for `amd64`, `arm64` or
@@ -41,9 +48,9 @@ which any RPM distribution resolves.
 The app also runs programs for some features, and does without the
 feature when one is missing: `fc-match` (fontconfig) to find the system's
 UI fonts, `zenity` or `kdialog` for file and message dialogs, and
-`xdg-open` for `runtime.OpenURL`. The packages do not depend on them;
-desktops have them. `ggui doctor`, run on the Linux machine, checks for
-all of this.
+`xdg-open` for `runtime.OpenURL` and `runtime.Reveal`. The packages do not
+depend on them; desktops have them. `ggui doctor`, run on the Linux machine,
+checks for all of this.
 
 ### X11 and Wayland
 

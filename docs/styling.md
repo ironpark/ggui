@@ -42,7 +42,7 @@ that were built long before it.
 
 ## Local styles
 
-`TextStyle` is a plain value with six fields:
+`TextStyle` is a plain value with seven fields:
 
 ```go
 type TextStyle struct {
@@ -52,6 +52,7 @@ type TextStyle struct {
 	LineHeight float64     // the height of a line, as a multiple of Size
 	Weight     FontWeight  // drawn with the Font's face nearest it
 	Tracking   float64     // multiple of Size added after each letter
+	Italic     bool        // drawn with the Font's italic face
 }
 ```
 
@@ -167,9 +168,11 @@ anything being rebuilt.
 widget.Box(widget.Text("Z").Color(theme.PrimaryFg)).Fill(theme.Primary)
 widget.Text("Off").Color(theme.MutedFg.Alpha(.55))
 widget.Box().Fill(theme.Var("warning"))   // a variable of your own; see below
+widget.Box().Fill(theme.Var("accent-bright").Or(theme.Primary))
 ```
 
-`Alpha` fades a token, and `theme.Fade` and `theme.Mix` keep a token a token
+`Alpha` fades a token, `Color.Or` falls back to another token or color when a
+custom variable is unset, and `theme.Fade` and `theme.Mix` keep a token a token
 until it is drawn. Reading the theme's values with `theme.Use()` in a builder
 takes a snapshot instead, which a theme switch leaves behind, and a
 `ggui_debug` build reports it; `theme.Use()` is for a `Reactive` that builds
@@ -259,6 +262,7 @@ Each is an `EdgeInsets`, built with the CSS shorthand `Insets` takes.
 | `MotionSlow` | disclosures and sheets | 200ms |
 | `MotionOverlay` | dialogs and popups | 100ms |
 | `MotionDrawer` | a drawer sliding in or out | 450ms |
+| `TooltipDelay` | opening delay before a tooltip appears (`time.Duration`) | 0 |
 | `Ease` | the curve control transitions run on, a `theme.Curve` | `cubic-bezier(0.4, 0, 0.2, 1)` |
 | `HoverMix` | how far a color moves toward `Fg` under the pointer | 0.06 |
 | `PressMix` | how far it moves toward `Fg` while pressed | 0.08 |
@@ -310,12 +314,13 @@ A preset sets its whole palette and its radii, so on a preset only the tokens
 shadcn has no variable for, such as `PrimaryHover`, `Selection` and `Input`,
 follow.
 
-`theme.Default()`, `theme.Dark()`, `Preset.For`/`Config.For`, and
-`theme.From(env)` each return a fresh `*theme.Theme` safe to customize. To
-derive a variant from an existing `*theme.Theme` (or from `theme.Of(env)` or
-`theme.Use()`, which return shared read-only pointers), call `t.Clone()` before
-modifying fields so the original is not mutated. To compare two `*theme.Theme`
-values by content rather than pointer identity, use `a.Equal(b)`:
+Constructors and copy helpers (`theme.Default()`, `theme.Dark()`,
+`theme.From(env)`, `Preset.Light`/`Dark`/`For`, `Config.Light`/`Dark`/`For`,
+`theme.FromCSS`, and `t.Clone()`) return fresh, mutable `*theme.Theme` pointers
+safe to customize. `theme.Use()` and `theme.Of(env)` return shared read-only
+`*theme.Theme` pointers; call `t.Clone()` before modifying fields so the shared
+theme is not mutated. Compare two `*theme.Theme` values structurally with
+`a.Equal(b)` rather than `==` (which compares pointer identity):
 
 ```go
 compact := base.Clone()
@@ -367,7 +372,10 @@ widget.Text("Low disk space").Color(theme.Var("warning"))
 warning, ok := theme.Of(env).Get(theme.CSSColor("warning")) // in a widget's Layout
 ```
 
-Other variables, such as fonts, are ignored.
+`--font-sans` sets `Text.Font`, `--font-heading` sets `Title.Font` and
+`Heading.Font`, and `--font-mono` sets `Mono.Font`, each resolved through
+`theme.RegisterFont` to the first registered family in its list. Unregistered
+font families and other variables are ignored.
 
 `t.ApplyCSS(decls)` lays one block's declarations over a theme you already
 have, and `theme.ParseColor(s)` reads a single value. Both accept hex,
@@ -517,8 +525,8 @@ preset := theme.Preset{
 app.Setup(func() { theme.Bind(dark, preset.Dark(), preset.Light()) })
 
 // Each call returns an independent *theme.Theme; customize after selecting a preset.
-// For(dark) picks Dark or Light.
-t := preset.For(dark)
+// For(isDark) picks Dark when isDark is true and Light otherwise.
+t := preset.For(true)
 t.Chat.BubbleRadius = 20
 t.Chat.BubblePadding = ggui.Insets(10, 14)
 theme.Set(t)
@@ -556,7 +564,12 @@ builder: `Radius` (none, or a `--radius` of 7.2, 10 or 14 logical pixels),
 `MenuAccent` (subtle, or bold rows in the primary color), `MenuColor` (default,
 or menus inverted to the dark theme in a light one), `Chart` (follow the
 accent, keep the base's, or any accent), body and heading `Font`, and an
-`Icons` library. `Config{}` is exactly `Preset{}`. `theme.Mode` with
+`Icons` library. `Config{}` is exactly `Preset{}`. `ui/theme` does not embed
+font packs or icon sets automatically: `Config.Font` and `Config.Heading`
+require registering those families with `theme.RegisterFont`, `Config.Icons`
+requires importing or registering an icon set, and `Config.For` (along with
+`Light` and `Dark`) panics if an unregistered font or icon library is requested;
+see [Fonts, emoji, and icons](fonts.md). `theme.Mode` with
 `theme.BindMode` and `ui.ThemeMode` choose light, dark or the system's
 appearance. See [ui/theme](../ui/theme/README.md) for both.
 
@@ -698,9 +711,9 @@ ui.Button("Upgrade", upgrade).Variant(ButtonBrand)
 
 | Type | Built-in variants | Fields |
 | --- | --- | --- |
-| `ui.ButtonVariant` | `ButtonPrimary`, `ButtonOutline`, `ButtonSecondary`, `ButtonGhost`, `ButtonDestructive`, `ButtonLink` | `Fill`, `Hover`, `Label`, `HoverLabel`, `Border`, `Ring`, `Shadow`, `Underline` |
-| `ui.ButtonSizeVariant` | `ButtonDefault`, `ButtonSmall`, `ButtonLarge`, `ButtonIcon` | `Pad`, `Square` |
-| `ui.BadgeVariant` | `BadgeSecondary`, `BadgePrimary`, `BadgeOutline`, `BadgeDestructive` | `Fill`, `Label`, `Border` |
+| `ui.ButtonVariant` | `ButtonPrimary`, `ButtonOutline`, `ButtonSecondary`, `ButtonGhost`, `ButtonDestructive`, `ButtonLink` | `Fill`, `Hover`, `Label`, `HoverLabel`, `Border`, `FocusBorder`, `Ring`, `Shadow`, `Underline` |
+| `ui.ButtonSizeVariant` | `ButtonDefault`, `ButtonExtraSmall`, `ButtonSmall`, `ButtonLarge`, `ButtonIcon`, `ButtonIconExtraSmall`, `ButtonIconSmall`, `ButtonIconLarge` | `Pad`, `Square`, `Height`, `TextSize`, `LineHeight`, `Radius`, `Gap`, `IconSize`, `IconPad` |
+| `ui.BadgeVariant` | `BadgeSecondary`, `BadgePrimary`, `BadgeOutline`, `BadgeGhost`, `BadgeLink`, `BadgeDestructive` | `Fill`, `Label`, `Border`, `HoverFill`, `HoverLabel`, `Underline`, `LinkFill`, `LinkLabel` |
 
 ## Applying styles and a theme switch
 

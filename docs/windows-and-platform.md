@@ -1,6 +1,6 @@
 # Windows and the desktop
 
-[Documentation](README.md) · [Getting started](getting-started.md) · [Windows example](../examples/windows)
+[Documentation](README.md) · [Getting started](getting-started.md) · [Windows example](examples/windows)
 
 An `App` is the process's GUI: one event loop, one UI thread, one reactive
 graph, and any number of windows. This page covers the windows and what an
@@ -65,6 +65,7 @@ it opens, the same calls change the `Config` it will open with.
 | `SetPosition`, `Position` | Move the window on its screen, from the screen's top-left corner. |
 | `SetSizeLimits(min, max)` | Bound the size the user can resize to. |
 | `SetResizable`, `SetFrameless`, `SetAlwaysOnTop`, `SetIcon` | Change what `Config` set. |
+| `StartDrag`, `TitlebarDoubleClick` | Drag the window or run the system's title-bar double-click action from a custom header on macOS (with `Config.TitlebarHidden` and optional `Config.TrafficLights`). |
 | `Minimize`, `Maximize`, `Restore`, `SetFullscreen` | Change the window's state. |
 | `Show`, `Hide`, `Visible` | Show or hide the window without closing it. |
 | `Focus`, `RequestAttention` | Bring it forward, or bounce the dock icon. |
@@ -247,8 +248,9 @@ ui.NativeContextMenu(widget.Text("Right-click me"),
 `ui.NativeContextMenuFunc(content,
 func() []ggui.MenuItem { ... })` builds entries at invocation time. Secondary
 click, Shift+F10, Enter, Space, and accessibility actions can open the menu.
-Windows, Linux, browsers, and probes use the regular widget context menu;
-its submenus are displayed inline, as with `ui.AppMenubar`.
+Windows, Linux, browsers, probes, and `ggui dev`'s remote viewer use the
+regular widget context menu; its submenus are displayed inline, as with
+`ui.AppMenubar`.
 
 For custom controls, `window.ShowContextMenu(position, items...)` opens the
 native menu directly. Positions are logical content coordinates from the
@@ -275,14 +277,17 @@ ggui.Watch(pending, func(n int) { tray.SetTitle(fmt.Sprint(n)) })
 
 A `Template` icon is drawn from its alpha alone in the menu bar's own color,
 which suits a monochrome glyph. `SetTitle`, `SetTooltip`, `SetIcon` and
-`SetMenu` change a tray, and `Remove` takes it away.
+`SetMenu` change a tray, and `Remove` takes it away. `ggui.TraySupported()`
+reports whether the platform supports tray icons, like `ggui.NativeMenu()` and
+`ggui.NativeContextMenu()`.
 
 On Windows the icon goes in the taskbar's notification area. A `Template` icon
 is drawn white on a dark taskbar and black on a light one, following the
 setting as it changes. The tray shows no text, so `Title` serves as the tooltip
 when `Tooltip` is empty, and a tray without an `Icon` shows the executable's.
 The menu opens on a click of either button; `OnClick` runs on the primary
-button or Enter. The icons come back if Explorer restarts.
+button or Enter. The icons come back if Explorer restarts. Under `ggui dev`'s
+remote viewer, tray icons are forwarded to the viewer on macOS and Windows.
 
 The app runs as long as a window is open, so an app that lives in the tray
 keeps its window and hides it rather than closing it:
@@ -380,7 +385,11 @@ the first of
 4. the executable's name without its extension.
 
 A binary `ggui build` made returns its project's id from the start of `main`.
-A `go run` or `go build` has no linked id, so it returns the `SingleInstance`
+On macOS, `ggui dev --display=window` runs the app inside its development
+bundle (`<Name>.dev.app`), so `AppID` returns `<app.id>.dev` to keep dev
+settings, placements, and notifications separate from a release build (see
+[The macOS development bundle](cli.md#the-macos-development-bundle)). A
+`go run` or `go build` has no linked id, so it returns the `SingleInstance`
 id, or before that call or without it the executable's name, which under `go
 run` is a temporary one. Give `SingleInstance` the project's id, and call it
 before reading `AppID`, to have a dev run and the built app agree. The id names
@@ -471,7 +480,7 @@ app runs, so call it from `Setup` rather than before `Run`: `Setup` runs on
 the UI thread as the app starts, before any window is shown, so the windows
 open hidden and the app leaves the Dock. `ShowFromTray`, from the tray's menu
 or `OnReopen`, brings them out.
-Only macOS has a tray icon: elsewhere an app started hidden needs another way
+Only macOS and Windows have tray icons: elsewhere an app started hidden needs another way
 back, such as a `SingleInstance` handler that calls `ShowFromTray` when the user
 opens the app again.
 
@@ -556,14 +565,18 @@ app.RequestNotificationPermission(func(granted bool) { notifyOn.Set(granted) })
 | Elsewhere | None | | `ErrNotificationsUnavailable` |
 
 On macOS, UserNotifications posts only for an app with a bundle identifier.
-An executable run on its own, by `go run`, `go build` or `ggui dev`, has none:
-its notifications are shown by `osascript` instead, with no buttons and no
-response to a click, which the app says once on stderr. `ggui dev` runs the
-executable it builds, not a bundle, in either display mode, so under
-`ggui dev` notifications appear without buttons and a click does nothing;
-macOS may show them under Script Editor's name and icon, and the first one
-may ask to allow Script Editor's notifications. Build the bundle to see them
-as users will: `ggui build --target macos`, then open the app. macOS also
+An executable run on its own, by `go run` or `go build`, has none: its
+notifications are shown by `osascript` instead, with no buttons and no
+response to a click, which the app says once on stderr; macOS may show them
+under Script Editor's name and icon, and the first one may ask to allow Script
+Editor's notifications. Under `ggui dev`, the two display modes differ (see
+[The macOS development bundle](cli.md#the-macos-development-bundle)): with
+`--display=remote` (the default) the app binary runs outside `<Name>.dev.app`,
+so it falls back to `osascript` banners; with `--display=window` the app
+itself runs inside `<Name>.dev.app` with bundle identifier `<app.id>.dev`, so
+UserNotifications posts full notifications with buttons and click handling.
+Build the release bundle to test them under the release identifier:
+`ggui build --target macos`, then open the app. macOS also
 refuses a bundle it will not vouch for, such as one opened from a temporary
 directory, with "Notifications are not allowed for this application", which
 the app writes on stderr: open it from a folder such as `/Applications` or the
@@ -615,7 +628,7 @@ p.ClickNotification("chat-42", "read") // the handlers run in a frame
 | `Config.Remember` | Yes | Yes | Yes | No |
 | App menus in the menu bar | Yes | Drawn with `ui.AppMenubar` | Drawn with `ui.AppMenubar` | Drawn with `ui.AppMenubar` |
 | Native context menus | Yes | Widget fallback | Widget fallback | Widget fallback |
-| Tray icon | Yes | No | No | No |
+| Tray icon | Yes | Yes | No | No |
 | Message dialogs | Alert sheet | Message box | `zenity` / `kdialog` | `alert` / `confirm` |
 | Clipboard | Pasteboard API | Clipboard API | X11 `CLIPBOARD` selection | Paste events and `navigator.clipboard` |
 | `SystemDark` | Yes | Yes | Yes | Yes |

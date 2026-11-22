@@ -62,5 +62,5 @@ func reportSnapshot() {
 // inModule reports whether fn is ggui's own, ui and theme included, as
 // opposed to its examples.
 func inModule(fn string) bool {
-	return strings.Contains(fn, "github.com/ironpark/ggui") && !strings.Contains(fn, "github.com/ironpark/ggui/examples/")
+	return strings.Contains(fn, "github.com/ironpark/ggui") && !strings.Contains(fn, "github.com/ironpark/ggui/docs/examples/")
 }

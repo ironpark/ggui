@@ -11,24 +11,24 @@ library's dependency graph; the root `go.work` lets the commands below run
 from the repository root, and `task test` covers it alongside the rest.
 
 ```sh
-go run ./examples/sqlite -db /path/to/database.sqlite
-go run ./examples/sqlite -db /path/to/database.sqlite -readonly
+go run ./docs/examples/sqlite -db /path/to/database.sqlite
+go run ./docs/examples/sqlite -db /path/to/database.sqlite -readonly
 # Or start without -db and drop a database onto the window.
 ```
 
 Outside the repository it runs straight from the module proxy:
 
 ```sh
-go run github.com/ironpark/ggui/examples/sqlite@latest
+go run github.com/ironpark/ggui/docs/examples/sqlite@latest
 ```
 
 For that to work the module must not use a `replace` directive, so its
-`go.mod` pins a published `github.com/ironpark/ggui` pseudo-version. Local
+`go.mod` pins a published `github.com/ironpark/ggui` version. Local
 builds use the workspace and ignore the pin. After pushing library changes the
 example depends on, bump it:
 
 ```sh
-go get -C examples/sqlite github.com/ironpark/ggui@main
+go get -C docs/examples/sqlite github.com/ironpark/ggui@main
 ```
 
 ## Opening a database
@@ -135,9 +135,9 @@ inserts or deletes rows; refresh to obtain the latest data.
 ## Validation
 
 ```sh
-go test ./examples/sqlite
-go test -race ./examples/sqlite
-go run ./examples/sqlite -render-dir /tmp/sqlite-previews
+go test ./docs/examples/sqlite
+go test -race ./docs/examples/sqlite
+go run ./docs/examples/sqlite -render-dir /tmp/sqlite-previews
 ```
 
 The renderer creates its own temporary fixture and exports welcome, data, filters,

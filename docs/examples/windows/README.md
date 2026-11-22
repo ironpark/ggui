@@ -12,6 +12,6 @@ icon shows the count and a menu of its own. Right-click the count for a native
 context menu on macOS, with a widget menu fallback on other platforms.
 
 ```sh
-go run ./examples/windows
-go run ./examples/windows -smoke   # open, resize, maximize and close windows, report, quit
+go run ./docs/examples/windows
+go run ./docs/examples/windows -smoke   # open, resize, maximize and close windows, report, quit
 ```

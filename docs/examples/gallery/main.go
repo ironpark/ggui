@@ -654,7 +654,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 		entries = append(entries, preview("Input OTP", ui.Field("Verification code", ui.InputOTP(otpValue, 6).Groups(3, 3)).Help("Paste a code or edit individual slots.")))
 		entries = append(entries, preview("Charts", widget.Column(
 			chartPreview(),
-			ui.Caption("Area, bar, line, pie, radar and radial charts. Run examples/charts for all variants."),
+			ui.Caption("Area, bar, line, pie, radar and radial charts. Run docs/examples/charts for all variants."),
 		).Gap(12)))
 		if present != nil {
 			return present(entries)

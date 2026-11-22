@@ -5,7 +5,7 @@ from the desktop onto the card to list it, or press a button to open the
 platform's own Open, Save or folder dialog through the host's `Dialogs`.
 
 ```sh
-go run ./examples/files
+go run ./docs/examples/files
 ```
 
 The dialogs are macOS's `NSOpenPanel`/`NSSavePanel`, Windows' common
@@ -15,5 +15,5 @@ reports `runtime.ErrUnsupported`. The test answers them with the
 `Probe.Drop`, so it runs headlessly:
 
 ```sh
-go test ./examples/files
+go test ./docs/examples/files
 ```

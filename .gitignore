@@ -7,16 +7,19 @@
 *.wasm
 
 # `go build` inside an example directory drops a binary named after it.
-/examples/charts/charts
-/examples/controls/controls
-/examples/counter/counter
-/examples/custom/custom
-/examples/files/files
-/examples/gallery/gallery
-/examples/settings/settings
-/examples/sqlite/sqlite
-/examples/todo/todo
-/examples/workspace/workspace
+/docs/examples/charts/charts
+/docs/examples/controls/controls
+/docs/examples/counter/counter
+/docs/examples/create/create
+/docs/examples/custom/custom
+/docs/examples/files/files
+/docs/examples/gallery/gallery
+/docs/examples/router/router
+/docs/examples/settings/settings
+/docs/examples/sqlite/sqlite
+/docs/examples/todo/todo
+/docs/examples/windows/windows
+/docs/examples/workspace/workspace
 
 # Test & coverage
 *.test

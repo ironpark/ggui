@@ -7,6 +7,12 @@ Exercise layout, state, and interaction without opening an application window.
 Examples use `ggui` and `ui` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
+## On this page
+
+- [State, layout, and semantic actions](#state-layout-and-semantic-actions)
+- [Writes from the wrong goroutine](#writes-from-the-wrong-goroutine)
+- [Pixels](#pixels)
+
 `Probe` drives layout and input without opening a window. It uses the app's frame
 steps and hit regions, so tests exercise the same interaction routing.
 
@@ -38,7 +44,7 @@ func TestCheckbox(t *testing.T) {
 | --- | --- |
 | `NewProbe(widget, size)` | Testing a widget constructed in advance. |
 | `ProbeBuilder(build, size)` | Testing app-style setup: the root builder runs once; use explicit reactive blocks for updates. |
-| `Host` | The surface `App` and `Probe` share (`Shortcut`, `OnKey`, `OnFrame`, `Post`, `Perform`, `Announce`, `Semantics`, `Close`), so the same setup function drives both. |
+| `Host` | The surface `App`, `Window`, and `Probe` share (`Post`, `OnFrame`, `OnKey`, `Shortcut`, `OnDrop`, `Dialogs`, `OnCloseRequest`, `Clipboard`, `Perform`, `Announce`, `Semantics`, `Notify`, `RemoveNotification`, `OnNotification`, `Close`), so the same setup function drives both app and tests. |
 | `Tap(label)`, `Find(label)`, `FindRole(role, label)` | Locating controls by semantics. |
 | `Click`, `Press`, `Move`, `Release`, `Scroll` | Pointer interaction. `Move` hovers the region under the pointer and the regions it is painted inside, as a window does. |
 | `Key("cmd+v")`, `Type`, `Text` | Shortcuts, written as `ParseChord` reads them so `cmd` is ⌘ on macOS and Ctrl elsewhere; other key events; text entry. |
@@ -49,16 +55,17 @@ func TestCheckbox(t *testing.T) {
 > Each probe has its own reactive runtime, animations, clock and
 > environment, so probe tests may call `t.Parallel`: one probe's frames never
 > run another's effects, and `Advance` moves only its own time. `SetEnv`, a
-> theme set with `ui/theme`, `SetClock`, `SetDefaultFont`, `SetEmojiFont` and `SetIME`
+> theme set with `ui/theme`, `SetClock`, `SetDefaultFont`, `SetDefaultMonoFont`,
+> `SetEmojiFont` and `SetIME`
 > change the probe whose frames the test runs, or before its first frame
 > what every probe the test makes starts from; either way they stay on the
 > test's goroutine. A subtest runs on a goroutine of its own, so a setting
 > its probes need is made in the subtest. Keep each parallel test to its
 > own signals, and call `Close`, usually with `defer`.
 >
-> Two settings remain the process's, and tests that change them must not be
-> parallel: `RegisterInspector`, and `a11y.SetWantsDetail`, which says
-> whether an assistive technology is reading.
+> Three settings remain process-wide, and tests that change them must not be
+> parallel: `RegisterInspector`, `a11y.SetWantsDetail` (which says whether an
+> assistive technology is reading), and `widget.SetImageCacheLimit`.
 
 ## State, layout, and semantic actions
 
@@ -148,7 +155,7 @@ tolerance. For whole catalogs of charts and controls, see the
 [chart](charts.md#complete-reference-catalog-and-visual-validation) and
 [control](carousel-and-otp.md#examples-and-validation) render catalogs.
 
-See the [counter tests](../examples/counter/main_test.go) for a full app
-example, the [todo tests](../examples/todo/main_test.go) for keyed rows and a
-dialog, and the [settings tests](../examples/settings/main_test.go) for
+See the [counter tests](examples/counter/main_test.go) for a full app
+example, the [todo tests](examples/todo/main_test.go) for keyed rows and a
+dialog, and the [settings tests](examples/settings/main_test.go) for
 waiting on work posted from a worker.

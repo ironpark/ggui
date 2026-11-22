@@ -141,9 +141,9 @@ password-manager integration are outside this native component's scope.
 Run from the repository root:
 
 ```sh
-go run ./examples/controls
-go run ./examples/controls -dark -example input-otp-separator
-go run ./examples/controls -render-dir /tmp/ggui-controls-renders
+go run ./docs/examples/controls
+go run ./docs/examples/controls -dark -example input-otp-separator
+go run ./docs/examples/controls -render-dir /tmp/ggui-controls-renders
 ```
 
 The catalog contains all 18 examples from the inspected shadcn Base UI docs and
@@ -156,9 +156,9 @@ light/dark themes, 320/560px widths, and four states. Carousel samples show init
 120ms glide, settled and final-snap states. OTP samples show initial, active,
 complete and invalid states; disabled examples stay disabled throughout.
 
-Review compares the live reference and its example sources against native
-renders. Corrections include demo height, disabled opacity, joined focus-ring
-corners and Embla's spring response. Tests exercise dragging, keyboard navigation,
+Visual checks compare native renders against the live reference and its example
+sources for layout geometry, disabled opacity, joined focus-ring corners, and
+Embla's spring response. Automated tests exercise dragging, keyboard navigation,
 loop boundaries, responsive snaps, external bindings, autoplay pause/stop,
 reduced motion, visibility culling, filtering, clipboard, undo, slot replacement,
 Unicode selection, IME commits, accessibility and reactive validation/disabled

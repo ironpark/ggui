@@ -8,7 +8,7 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/examples/internal/offscreen"
+	"github.com/ironpark/ggui/docs/examples/internal/offscreen"
 	"github.com/ironpark/ggui/fonts/gofont"
 	"github.com/ironpark/ggui/ui/theme"
 )

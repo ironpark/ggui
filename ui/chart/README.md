@@ -46,7 +46,7 @@ and formatters without sharing interactive or animation state:
 - `chart.Legend(c)` / `chart.LegendContent(c)`
 - `chart.Tooltip(c, index)` / `chart.TooltipContent(c, index)`
 
-See [docs/charts.md](../../docs/charts.md) and [examples/charts](../../examples/charts) for full usage and examples.
+See [docs/charts.md](../../docs/charts.md) and [docs/examples/charts](../../docs/examples/charts) for full usage and examples.
 
 ## Migration
 
