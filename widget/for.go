@@ -280,7 +280,8 @@ func (f *EachWidget[T, K]) Transition(wrap func(ggui.Widget) *TransitionWidget) 
 // Gap sets the space between consecutive children.
 func (f *EachWidget[T, K]) Gap(v float64) *EachWidget[T, K] {
 	defer property.Watch(&f.props, &f.gap)()
-	f.gap = v
+	defer property.Watch(&f.props, &f.space)()
+	f.gap, f.space = v, 0
 	return f
 }
 
@@ -458,7 +459,7 @@ func (f *EachWidget[T, K]) placeLeaving(env ggui.Env) {
 	kept := 0
 	for i, e := range f.leaving {
 		t := e.transition()
-		p := 1.0
+		p := 0.0
 		if t.duration > 0 {
 			p = 1 - float64(now.Sub(e.since))/float64(t.duration)
 		}
@@ -532,6 +533,28 @@ func (f *EachWidget[T, K]) evict() {
 		f.entries[k].dispose()
 		delete(f.entries, k)
 	}
+}
+
+// Baseline implements Baseliner: the empty branch's when shown, else the first
+// laid-out child's that has one.
+func (f *EachWidget[T, K]) Baseline() (float64, bool) {
+	if len(f.items) == 0 && len(f.leaving) == 0 && f.empty != nil {
+		return ggui.BaselineOf(f.empty)
+	}
+	if f.virtual() {
+		n := min(len(f.visible), len(f.virtualRects))
+		for i := range n {
+			child := f.visible[i]
+			if ggui.IsVacant(child) {
+				continue
+			}
+			if b, ok := baselineAt(child, f.virtualRects[i].Origin.Y); ok {
+				return b, true
+			}
+		}
+		return 0, false
+	}
+	return f.flow.Baseline()
 }
 
 // Paint implements Widget. The list describes itself as a list of Len

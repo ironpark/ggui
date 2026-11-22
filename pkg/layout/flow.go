@@ -112,12 +112,10 @@ func (s *Scratch) Flow(c Constraints, f FlowStyle, items []Item, measure Measure
 		used += f.main(m.Size)
 		if m.Absent {
 			present--
+			settled := f.Gap * float64(max(present-1, 0))
+			used += settled - gaps
+			gaps = settled
 		}
-	}
-	if present < n {
-		settled := f.Gap * float64(max(present-1, 0))
-		used += settled - gaps
-		gaps = settled
 	}
 	free := max(mainMax-used, 0)
 	for i, item := range items {

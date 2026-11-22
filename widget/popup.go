@@ -232,9 +232,11 @@ func (p *PopupWidget) Adopt(prev any) {
 		p.paintedOpen, p.opener = q.paintedOpen, q.opener
 		p.hadContentFocus, p.contentKeys = q.hadContentFocus, q.contentKeys
 		p.children = q.children
+		if p.point == nil {
+			p.point = q.point
+		}
 		if p.bound == nil {
 			p.open = q.IsOpen()
-			p.point = q.point
 		}
 	}
 }
@@ -310,7 +312,6 @@ func (p *PopupWidget) FocusOnOpen(v bool) *PopupWidget {
 // This is useful when a nonmodal popup switches between different panels.
 func (p *PopupWidget) FocusContent() *PopupWidget {
 	p.focusContent = true
-	p.paintedOpen = false
 	return p
 }
 
@@ -377,12 +378,12 @@ func (p *PopupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if p.nonmodal {
 		if open && !p.paintedOpen {
 			p.opener = dst.Focused()
-			p.focusContent = !p.keepFocus
+			p.focusContent = p.focusContent || !p.keepFocus
 			p.hadContentFocus = false
 		}
 		inside := p.ownsFocus(dst)
 		p.hadContentFocus = p.hadContentFocus || inside
-		if open && p.hadContentFocus && !inside && !anchorFocused && dst.Focused() != nil {
+		if open && !p.focusContent && p.hadContentFocus && !inside && !anchorFocused && dst.Focused() != nil {
 			if !dst.FocusStale() {
 				p.SetOpen(false)
 				open = p.IsOpen()
@@ -608,7 +609,7 @@ func (s popupScrim) HandlePointer(ev ggui.PointerEvent) bool {
 		s.p.Hide()
 		return true
 	case ggui.PointerUp, ggui.PointerTap:
-		return true
+		return !s.p.nonmodal
 	}
 	return false
 }

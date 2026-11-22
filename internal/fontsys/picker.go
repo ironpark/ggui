@@ -1,6 +1,8 @@
 package fontsys
 
 import (
+	"slices"
+
 	"github.com/ironpark/ggui/internal/third_party/text"
 )
 
@@ -25,9 +27,13 @@ type Picker struct {
 func (f *Font) Picker(w Weight) *Picker {
 	f = f.Resolve()
 	f.mu.Lock()
-	fonts, _ := f.chainLocked(w)
-	p := &Picker{fonts: fonts, system: f.systemFallback(), weight: w}
+	own, axis := f.forWeightLocked(w)
+	fallbacks := slices.Clone(f.fallbacks)
+	sys := f.systemFallbackLocked()
+	noFb := f.noFallback.Load()
 	f.mu.Unlock()
+	fonts, _ := f.resolveChain(own, axis, fallbacks, sys, noFb, w)
+	p := &Picker{fonts: fonts, system: sys, weight: w}
 	p.metas = make([]*text.GoTextFaceSource, 0, len(fonts))
 	for _, cf := range fonts {
 		p.metas = append(p.metas, cf.Font.Meta())
@@ -37,10 +43,7 @@ func (f *Font) Picker(w Weight) *Picker {
 
 // DrawsEmoji reports whether f's faces set an emoji font beside its own.
 func (f *Font) DrawsEmoji() bool {
-	f = f.Resolve()
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return !f.noFallback
+	return !f.Resolve().noFallback.Load()
 }
 
 // Len is how many fonts the chain has: its own, and the system fonts Pick

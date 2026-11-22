@@ -125,7 +125,9 @@ func (e *Editor) push() {
 	if e.pending != nil {
 		e.undo = append(e.undo, diff(e.Text, *e.pending))
 		if len(e.undo) >= maxUndo {
-			e.undo = e.undo[1:]
+			copy(e.undo, e.undo[1:])
+			e.undo[len(e.undo)-1] = delta{}
+			e.undo = e.undo[:len(e.undo)-1]
 		}
 	}
 	s := e.state()
@@ -156,6 +158,7 @@ func (e *Editor) record(s string) {
 		return
 	}
 	e.push()
+	clear(e.redo)
 	e.redo = e.redo[:0]
 	e.lastEdit, e.lastInsert = now, insert
 }
@@ -172,6 +175,7 @@ func (e *Editor) Undo() bool {
 	if n := len(e.undo); n > 0 {
 		s := e.undo[n-1].apply(to.text)
 		e.pending = &s
+		e.undo[n-1] = delta{}
 		e.undo = e.undo[:n-1]
 	}
 	e.restore(to)
@@ -185,6 +189,7 @@ func (e *Editor) Redo() bool {
 		return false
 	}
 	to := e.redo[n-1].apply(e.Text)
+	e.redo[n-1] = delta{}
 	e.redo = e.redo[:n-1]
 	e.push()
 	e.restore(to)
@@ -200,7 +205,9 @@ func (e *Editor) restore(s snapshot) {
 // no longer be redone onto it; undo still returns to the states before.
 func (e *Editor) SetText(s string) {
 	if s != e.Text {
+		clear(e.redo)
 		e.redo = e.redo[:0]
+		e.lastInsert = false
 	}
 	e.Text = s
 	e.Anchor, e.Caret = e.Snap(e.Anchor), e.Snap(e.Caret)
@@ -315,7 +322,13 @@ func (e *Editor) MoveBy(dir int, word, extend bool) {
 // Backspace deletes the selection, or the grapheme or word before the caret.
 func (e *Editor) Backspace(word bool) {
 	if !e.HasSelection() {
+		if e.Caret <= 0 {
+			return
+		}
 		e.Anchor = gem.Pick(word, prevWord(e.Text, e.Caret), PrevGrapheme(e.Text, e.Caret))
+		if e.Anchor == e.Caret {
+			return
+		}
 	}
 	e.Replace("")
 }
@@ -323,7 +336,13 @@ func (e *Editor) Backspace(word bool) {
 // DeleteForward deletes the selection, or the grapheme or word after the caret.
 func (e *Editor) DeleteForward(word bool) {
 	if !e.HasSelection() {
+		if e.Caret >= len(e.Text) {
+			return
+		}
 		e.Anchor = gem.Pick(word, nextWord(e.Text, e.Caret), NextGrapheme(e.Text, e.Caret))
+		if e.Anchor == e.Caret {
+			return
+		}
 	}
 	e.Replace("")
 }
@@ -394,6 +413,8 @@ func clusterBoundsLocked(s string) []int {
 	return bounds
 }
 
+const maxClusterScratch = 65536
+
 // appendBoundsLocked appends the bounds of s to bounds, segmenting with the
 // cache's buffers, whose lock the caller holds.
 func appendBoundsLocked(bounds []int, s string) []int {
@@ -423,7 +444,14 @@ func appendBoundsLocked(bounds []int, s string) []int {
 		}
 		start = end
 	}
-	return append(bounds, len(s))
+	bounds = append(bounds, len(s))
+	if cap(c.runes) > maxClusterScratch {
+		c.runes = nil
+	}
+	if cap(c.offsets) > maxClusterScratch {
+		c.offsets = nil
+	}
+	return bounds
 }
 
 // joinEmojiSequences mends the cluster starts of runes, as rune indices,

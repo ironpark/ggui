@@ -250,6 +250,49 @@ func TestBackspaceAndDeleteAtTextEdgesKeepText(t *testing.T) {
 	if e.Text != "ab" || e.Caret != 2 {
 		t.Fatalf("deleting past the edges gave %q caret %d, want \"ab\" caret 2", e.Text, e.Caret)
 	}
+	// No-op backspace/delete must not push undo steps or wipe redo.
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	ed := Editor{Now: func() time.Time { return now }}
+	ed.Replace("a")
+	now = now.Add(time.Second)
+	ed.Replace("b")
+	ed.Undo() // text is "a", redo has "ab"
+	ed.MoveTo(0, false)
+	ed.Backspace(false)
+	ed.Backspace(true)
+	ed.MoveTo(len(ed.Text), false)
+	ed.DeleteForward(false)
+	ed.DeleteForward(true)
+	if !ed.Redo() || ed.Text != "ab" {
+		t.Fatalf("no-op backspace/delete wiped redo: text=%q", ed.Text)
+	}
+	ed.Undo()
+	ed.MoveTo(0, false)
+	ed.Backspace(false)
+	ed.Undo()
+	if ed.Text != "" {
+		t.Fatalf("no-op backspace pushed a bogus undo step: text=%q", ed.Text)
+	}
+}
+
+func TestSetTextResetsLastInsertAndClusterScratchCapped(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	e := Editor{Now: func() time.Time { return now }}
+	e.Replace("a")
+	e.SetText("external")
+	e.MoveTo(len(e.Text), false)
+	e.Replace("!") // right after SetText within undoCoalesce must not coalesce into pre-SetText state
+	if !e.Undo() || e.Text != "external" {
+		t.Fatalf("undo after SetText+type gave %q, want \"external\"", e.Text)
+	}
+	// Huge single line must not pin clusterCache scratch buffers above maxClusterScratch.
+	AppendBounds(nil, strings.Repeat("a", maxClusterScratch+1024))
+	clusterCache.mu.Lock()
+	rc, oc := cap(clusterCache.runes), cap(clusterCache.offsets)
+	clusterCache.mu.Unlock()
+	if rc > maxClusterScratch || oc > maxClusterScratch {
+		t.Fatalf("clusterCache scratch retained cap runes=%d offsets=%d > %d", rc, oc, maxClusterScratch)
+	}
 }
 
 func TestUndoKeepsOnlyWhatEachStepChanged(t *testing.T) {

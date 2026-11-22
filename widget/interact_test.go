@@ -88,3 +88,15 @@ func TestFocusCallsItsCallbacks(t *testing.T) {
 		t.Fatalf("keys %v, focus %v; want none after the click away, and focus gained then lost", keys, focus)
 	}
 }
+
+func TestPointerOnHoverNilClearsWithoutPanic(t *testing.T) {
+	t.Parallel()
+	w := Pointer(Box().Size(50, 50)).OnHover(func(bool) {}).OnHover(nil)
+	if w.onEnter != nil || w.onExit != nil {
+		t.Fatal("OnHover(nil) did not clear onEnter/onExit")
+	}
+	p := ggui.NewProbe(w, ggui.Sz(50, 50))
+	defer p.Close()
+	p.Move(ggui.Pt(10, 10))
+	p.Move(ggui.Pt(100, 100))
+}

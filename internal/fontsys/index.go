@@ -144,7 +144,7 @@ func SystemFallback(r rune) *Font {
 		var ok bool
 		if f, ok = s.families[family]; !ok {
 			if f = indexedFamily(fps, family); f != nil {
-				f.noFallback = true
+				f.noFallback.Store(true)
 			}
 			s.families[family] = f
 		}

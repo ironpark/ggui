@@ -177,17 +177,20 @@ func (r *textRenderer) shapeLine(line string) (shaping.Line, []rune) {
 	runeAt[len(line)] = n
 	var outs []shaping.Output
 	size := fixed.Int26_6(math.Round(r.style.Size * 64))
+	spacing := fixed.Int26_6(math.Round(r.style.Tracking * r.style.Size * 64))
 	pick := func(g string) bool { return r.emoji != nil && fontsys.IsEmojiCluster(g) }
 	textedit.GraphemeRuns(line, pick, func(start, end int, emoji bool) bool {
 		in := shaping.Input{Text: runes, RunStart: runeAt[start], RunEnd: runeAt[end], Direction: di.DirectionLTR, Size: size}
 		if emoji {
 			in.Face, in.Size, in.Script = r.emoji, fixed.Int26_6(math.Round(r.esize*64)), language.Common
-			outs = append(outs, r.shaper.Shape(in))
+			out := r.shaper.Shape(in)
+			track(&out, spacing)
+			outs = append(outs, out)
 			return true
 		}
 		for _, part := range r.seg.Split(in, r) {
 			out := r.shaper.Shape(part)
-			track(&out, fixed.Int26_6(math.Round(r.style.Tracking*r.style.Size*64)))
+			track(&out, spacing)
 			outs = append(outs, out)
 		}
 		return true

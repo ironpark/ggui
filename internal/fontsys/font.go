@@ -10,6 +10,7 @@ package fontsys
 import (
 	"bytes"
 	"runtime"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -39,12 +40,16 @@ type Font struct {
 	light      *text.GoTextFaceSource
 	lightLoad  func() *text.GoTextFaceSource // reads light on first use, for a font of the system's index
 	lightOnce  sync.Once
-	loaded     atomic.Bool  // source has parsed src
+	loaded     atomic.Bool // source has parsed src
+	axisOnce   sync.Once   // caches the weight variation axis range from Meta()
+	axisLo     float32
+	axisHi     float32
+	hasAxis    bool
 	weight     Weight       // what src draws, from its metadata
-	weights    []*Font      // the faces WithWeight added
+	weights    []*Font      // the faces WithWeight added; guarded by mu
 	alias      func() *Font // draws in the font this returns, as ggui's default mono font does
-	fallbacks  []*Font
-	noFallback bool
+	fallbacks  []*Font      // guarded by mu
+	noFallback atomic.Bool
 
 	// mu guards the cache, which probes on goroutines of their own fill
 	// at once from a font they share.
@@ -206,7 +211,7 @@ func (f *Font) AddFallbacks(fonts ...*Font) {
 // behind it.
 func (f *Font) SetNoFallback() {
 	f.mu.Lock()
-	f.noFallback = true
+	f.noFallback.Store(true)
 	f.mu.Unlock()
 	f.changed()
 }
@@ -236,6 +241,29 @@ func (f *Font) ForWeight(w Weight) (*Font, bool) {
 	if lo, hi, ok := f.weightAxis(); ok && float32(w) >= lo && float32(w) <= hi {
 		return f, true
 	}
+	f.mu.Lock()
+	best := f.nearestWeightLocked(w)
+	f.mu.Unlock()
+	_, _, axis := best.weightAxis()
+	return best, axis
+}
+
+// forWeightLocked is ForWeight with f.mu already held.
+func (f *Font) forWeightLocked(w Weight) (*Font, bool) {
+	if w == 0 {
+		return f, false
+	}
+	if lo, hi, ok := f.weightAxis(); ok && float32(w) >= lo && float32(w) <= hi {
+		return f, true
+	}
+	best := f.nearestWeightLocked(w)
+	_, _, axis := best.weightAxis()
+	return best, axis
+}
+
+// nearestWeightLocked returns f or the entry in f.weights nearest w.
+// f.mu must be held.
+func (f *Font) nearestWeightLocked(w Weight) *Font {
 	best := f
 	for _, c := range f.weights {
 		d, bd := abs(int(c.weight-w)), abs(int(best.weight-w))
@@ -243,20 +271,22 @@ func (f *Font) ForWeight(w Weight) (*Font, bool) {
 			best = c
 		}
 	}
-	_, _, axis := best.weightAxis()
-	return best, axis
+	return best
 }
 
 var wghtTag = text.MustParseTag("wght")
 
 // weightAxis reports the range of f's weight axis, if it is a variable font.
 func (f *Font) weightAxis() (lo, hi float32, ok bool) {
-	for _, a := range f.Meta().AppendVariationAxes(nil) {
-		if a.Tag == wghtTag {
-			return a.Min, a.Max, true
+	f.axisOnce.Do(func() {
+		for _, a := range f.Meta().AppendVariationAxes(nil) {
+			if a.Tag == wghtTag {
+				f.axisLo, f.axisHi, f.hasAxis = a.Min, a.Max, true
+				return
+			}
 		}
-	}
-	return 0, 0, false
+	})
+	return f.axisLo, f.axisHi, f.hasAxis
 }
 
 // goFace is a face of f's own glyphs at size, set to weight w along a
@@ -314,7 +344,7 @@ func (f *Font) ChainFaceWith(size float64, w Weight, axis bool, set func(*text.G
 		}
 		return g
 	}
-	if f.light == nil && f.lightLoad == nil || f.loaded.Load() {
+	if f.lightLoad == nil && f.light == nil || f.loaded.Load() {
 		return face()
 	}
 	light := &text.GoTextFace{Source: f.lightSource(), Size: size}
@@ -336,7 +366,7 @@ func abs(n int) int { return max(n, -n) }
 func (f *Font) Face(size float64, weight Weight, emoji func() *EmojiChoice) text.Face {
 	f = f.Resolve()
 	var choice *EmojiChoice
-	if !f.noFallback && emoji != nil {
+	if !f.noFallback.Load() && emoji != nil {
 		choice = emoji()
 	}
 	return f.FaceFor(size, weight, choice)
@@ -346,7 +376,7 @@ func (f *Font) Face(size float64, weight Weight, emoji func() *EmojiChoice) text
 func (f *Font) SpacedFace(size float64, weight Weight, spacing float64, emoji func() *EmojiChoice) text.Face {
 	f = f.Resolve()
 	var choice *EmojiChoice
-	if !f.noFallback && emoji != nil {
+	if !f.noFallback.Load() && emoji != nil {
 		choice = emoji()
 	}
 	return f.SpacedFaceFor(size, weight, spacing, choice)
@@ -362,23 +392,41 @@ func (f *Font) FaceFor(size float64, weight Weight, emoji *EmojiChoice) text.Fac
 // SpacedFaceFor is FaceFor with spacing pixels added after each letter.
 func (f *Font) SpacedFaceFor(size float64, weight Weight, spacing float64, emoji *EmojiChoice) text.Face {
 	f = f.Resolve()
+	f.mu.Lock()
+	noFb := f.noFallback.Load()
 	key := faceKey{size: size, weight: weight, spacing: spacing}
-	if !f.noFallback {
+	if !noFb {
 		key.emoji = emoji
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
 	if gen := generation.Load(); f.generation != gen {
 		f.faces, f.oldFaces = nil, nil
 		f.generation = gen
 	}
 	f.used = true
 	if face, ok := f.faces[key]; ok {
+		f.mu.Unlock()
 		return face
 	}
-	face, ok := f.oldFaces[key]
-	if !ok {
-		face = f.newFaceLocked(size, weight, spacing, key.emoji)
+	if face, ok := f.oldFaces[key]; ok {
+		f.keepFaceLocked(key, face)
+		f.mu.Unlock()
+		return face
+	}
+	own, axis := f.forWeightLocked(weight)
+	fallbacks := slices.Clone(f.fallbacks)
+	sys := f.systemFallbackLocked()
+	gen := f.generation
+	f.mu.Unlock()
+
+	face := f.buildFace(own, axis, fallbacks, sys, noFb, size, weight, spacing, key.emoji)
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if curGen := generation.Load(); curGen != gen {
+		return face
+	}
+	if existing, ok := f.faces[key]; ok {
+		return existing
 	}
 	f.keepFaceLocked(key, face)
 	return face
@@ -402,24 +450,25 @@ func (f *Font) keepFaceLocked(key faceKey, face text.Face) {
 	f.faces[key] = face
 }
 
-// newFaceLocked makes f's face at size and weight beside emoji, with
-// spacing after each letter, for FaceFor to cache. f.mu must be held.
-func (f *Font) newFaceLocked(size float64, weight Weight, spacing float64, emoji *EmojiChoice) text.Face {
-	fonts, multi := f.chainLocked(weight)
+// buildFace makes f's face at size and weight beside emoji, with spacing
+// after each letter, from a snapshot taken under f.mu so fallback fonts
+// are never locked while f.mu is held.
+func (f *Font) buildFace(own *Font, axis bool, fallbacks []*Font, sys, noFb bool, size float64, weight Weight, spacing float64, emoji *EmojiChoice) text.Face {
+	fonts, multi := f.resolveChain(own, axis, fallbacks, sys, noFb, weight)
 	var face text.Face = fonts[0].Font.chainFace(size, weight, fonts[0].Axis, spacing)
 	if multi {
 		faces := []text.Face{face}
 		for _, cf := range fonts[1:] {
 			faces = append(faces, cf.Font.chainFace(size, weight, cf.Axis, spacing))
 		}
-		if f.systemFallback() {
+		if sys {
 			faces = append(faces, systemFallbackFace(size, weight, spacing, face))
 		}
 		if m, err := text.NewMultiFace(faces...); err == nil {
 			face = m
 		}
 	}
-	if !f.noFallback {
+	if !noFb {
 		face = WithEmoji(face, size, emoji)
 		if ef, ok := face.(*EmojiFace); ok {
 			ef.spacing = spacing
@@ -434,21 +483,20 @@ type ChainFont struct {
 	Axis bool // it draws the weight on its weight axis
 }
 
-// systemFallback reports whether f falls back to the system's fonts: to
-// SystemFonts, and then to any font that has a glyph they lack.
-func (f *Font) systemFallback() bool {
-	return f.fallbacks == nil && !f.noFallback && runtime.GOOS != "js"
+// systemFallbackLocked reports whether f falls back to the system's fonts:
+// to SystemFonts, and then to any font that has a glyph they lack.
+// f.mu must be held.
+func (f *Font) systemFallbackLocked() bool {
+	return f.fallbacks == nil && !f.noFallback.Load() && runtime.GOOS != "js"
 }
 
-// chainLocked returns the fonts f draws weight w with, in order: its own
-// for w, then each fallback's for w. multi reports whether f has
-// fallbacks at all, its own or the system's, which makes the face a
-// fallback chain even when the only one is f itself. f.mu must be held.
-func (f *Font) chainLocked(w Weight) (fonts []ChainFont, multi bool) {
-	own, axis := f.ForWeight(w)
+// resolveChain returns the fonts f draws weight w with, in order: own for w,
+// then each fallback's for w. multi reports whether f has fallbacks at all,
+// its own or the system's, which makes the face a fallback chain even when
+// the only one is f itself.
+func (f *Font) resolveChain(own *Font, axis bool, fallbacks []*Font, sys, noFb bool, w Weight) (fonts []ChainFont, multi bool) {
 	fonts = []ChainFont{{own, axis}}
-	fallbacks := f.fallbacks
-	if fallbacks == nil && !f.noFallback {
+	if fallbacks == nil && !noFb {
 		fallbacks = SystemFonts()
 	}
 	for _, fb := range fallbacks {
@@ -457,5 +505,5 @@ func (f *Font) chainLocked(w Weight) (fonts []ChainFont, multi bool) {
 			fonts = append(fonts, ChainFont{fbFont, fbAxis})
 		}
 	}
-	return fonts, len(fallbacks) > 0 || f.systemFallback()
+	return fonts, len(fallbacks) > 0 || sys
 }

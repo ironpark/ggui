@@ -431,8 +431,9 @@ func (s *ScrollWidget) thumbLength() float64 {
 func (s *ScrollWidget) paintBar(dst *ggui.Canvas, r ggui.Rect) {
 	s.thumbHit = ggui.Rect{}
 	track, content := s.extent(r.Size), s.extent(s.childSize)
+	maxOff := s.maxOffset()
 	bar := ggui.ResolveColor(s.bar, s.barEnv)
-	if bar == nil || content-track < scrollSlack || track <= 0 {
+	if bar == nil || content-track < scrollSlack || track <= 0 || maxOff <= 0 {
 		s.dragging, s.thumbHovered = false, false
 		return
 	}
@@ -445,7 +446,7 @@ func (s *ScrollWidget) paintBar(dst *ggui.Canvas, r ggui.Rect) {
 		fill = ggui.LerpColor(bar, style.HoverColor, amount*gem.Pick(s.dragging, .28, .18))
 	}
 	thumb := s.thumbLength()
-	at := (track - thumb) * s.position() / s.maxOffset()
+	at := (track - thumb) * s.position() / maxOff
 	var visual ggui.Rect
 	visual, s.thumbHit = thumbRects(style, r, s.horizontal, at, thumb, amount)
 	// Register after the content so grabbing the thumb never activates a row.
@@ -563,7 +564,11 @@ func (s *ScrollWidget) HandlePointer(ev ggui.PointerEvent) bool {
 		travel := s.extent(s.rect.Size) - s.thumbLength()
 		s.phys.input(s)
 		if travel > 0 {
+			before := s.position()
 			s.scrollTo(s.dragOffset + (axis-s.dragStart)*s.maxOffset()/travel)
+			if moved := s.position() - before; moved != 0 {
+				s.phys.dir = math.Copysign(1, moved)
+			}
 		}
 		return true
 	case ggui.PointerUp:
@@ -1219,10 +1224,16 @@ func (s *StickyWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s.headerSize = child(s.header, stretch)
 	s.bodySize = child(s.body, stretch)
 	if stretch == 0 {
-		// Unbounded across: both take the wider of the two.
-		w := max(gem.Pick(s.horizontal, s.headerSize.H, s.headerSize.W), gem.Pick(s.horizontal, s.bodySize.H, s.bodySize.W))
-		s.headerSize = child(s.header, w)
-		s.bodySize = child(s.body, w)
+		// Unbounded across: stretch whichever child came out narrower to match the wider.
+		hw := gem.Pick(s.horizontal, s.headerSize.H, s.headerSize.W)
+		bw := gem.Pick(s.horizontal, s.bodySize.H, s.bodySize.W)
+		w := max(hw, bw)
+		if hw < w {
+			s.headerSize = child(s.header, w)
+		}
+		if bw < w {
+			s.bodySize = child(s.body, w)
+		}
 	}
 	if s.horizontal {
 		return c.Constrain(ggui.Sz(s.headerSize.W+s.bodySize.W, max(s.headerSize.H, s.bodySize.H)))

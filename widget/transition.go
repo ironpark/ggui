@@ -126,6 +126,9 @@ func (t *TransitionWidget) Duration(d time.Duration) *TransitionWidget {
 
 // Easing sets the curve; see EaseLinear, EaseIn, EaseOut, EaseInOut.
 func (t *TransitionWidget) Easing(e ggui.Easing) *TransitionWidget {
+	if e == nil {
+		e = ggui.EaseLinear
+	}
 	defer property.Watch(&t.props, &t.ease)()
 	t.ease = e
 	return t
@@ -193,7 +196,10 @@ func (t *TransitionWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		target = dst.Inert()
 	}
 	fade, slide, scale := t.effects()
-	e := t.ease(p)
+	e := p
+	if t.ease != nil {
+		e = t.ease(p)
+	}
 	at := r
 	if slide {
 		at.Origin = at.Origin.Add(ggui.Pt((1-e)*t.dx, (1-e)*t.dy))
@@ -236,14 +242,13 @@ func Presence(show ggui.Readable[bool], child ggui.Widget) ggui.Widget {
 	}
 	return ggui.Component(func() ggui.Widget {
 		var initial float64
-		ggui.Untrack(func() struct {
-		} {
+		ggui.Untrack(func() struct{} {
 			if show.Get() {
 				initial = 1
 			}
-			return struct {
-			}{}
+			return struct{}{}
 		})
+		var reduced bool
 		// The tween is linear: the Transition applies its easing to the
 		// progress it is driven with, and a curve here would apply twice.
 		p := ggui.Tween(initial, t.duration).Easing(ggui.EaseLinear)
@@ -251,17 +256,50 @@ func Presence(show ggui.Readable[bool], child ggui.Widget) ggui.Widget {
 		// Duration set from Layout — a theme token, say — is not frozen to
 		// whatever it was on the first frame. Tweened.Set reads it here too,
 		// so nothing changes under a run already in flight.
-		ggui.Watch(show, func(v bool) { p.Duration(t.duration).Set(gem.Pick(v, 1.0, 0.0)) })
-		return ggui.Reactive(func() ggui.Widget {
+		ggui.Watch(show, func(v bool) {
+			target := gem.Pick(v, 1.0, 0.0)
+			if reduced || t.reduced {
+				p.Jump(target)
+				return
+			}
+			p.Duration(t.duration).Set(target)
+		})
+		inner := ggui.Reactive(func() ggui.Widget {
 			shown, v := show.Get(), p.Get()
-			if !shown && v == 0 {
+			if !shown && (v == 0 || reduced || t.reduced) {
 				return Box()
 			}
-			t.drive(v, !shown)
+			t.drive(gem.Pick(reduced || t.reduced, 1.0, v), !shown)
 			return t
 		})
+		return &presenceWidget{
+			inner: inner,
+			onLayout: func(env ggui.Env) {
+				reduced = env.ReducedMotion()
+				if reduced {
+					target := gem.Pick(ggui.Untrack(show.Get), 1.0, 0.0)
+					if ggui.Untrack(p.Get) != target || p.Target() != target {
+						p.Jump(target)
+					}
+				}
+			},
+		}
 	})
 }
+
+type presenceWidget struct {
+	inner    ggui.Widget
+	onLayout func(ggui.Env)
+}
+
+func (w *presenceWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	w.onLayout(env)
+	return w.inner.Layout(c, env)
+}
+
+func (w *presenceWidget) Baseline() (float64, bool) { return ggui.BaselineOf(w.inner) }
+
+func (w *presenceWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(w.inner, r) }
 
 // SwitcherWidget shows the subtree built for the current key and animates
 // between subtrees when the key changes: the new one plays its enter
@@ -394,6 +432,9 @@ func (s *SwitcherWidget[K]) Sequential() *SwitcherWidget[K] {
 
 // Easing sets the curve, EaseOut by default.
 func (s *SwitcherWidget[K]) Easing(e ggui.Easing) *SwitcherWidget[K] {
+	if e == nil {
+		e = ggui.EaseLinear
+	}
 	s.ease = e
 	return s
 }

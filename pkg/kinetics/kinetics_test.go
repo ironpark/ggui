@@ -43,6 +43,18 @@ func TestRubberFollowsInsideAndResistsPast(t *testing.T) {
 	if got := Rubber(-100, 30, lo, hi, extent, false); got != -70 {
 		t.Fatalf("moving back from before the start went to %v, want -70", got)
 	}
+	// Crossing from past lo all the way past hi must resist past hi from edge=hi.
+	if got := Rubber(-10, 1200, lo, hi, extent, false); got <= hi || got >= hi+reach {
+		t.Fatalf("crossing from <lo past >hi gave %v, want in (%v, %v)", got, hi, hi+reach)
+	} else if want := Rubber(hi, 190, lo, hi, extent, false); math.Abs(got-want) > 1e-9 {
+		t.Fatalf("crossing from <lo past >hi gave %v, want same as from hi by 190 (%v)", got, want)
+	}
+	// And vice versa from >hi past <lo.
+	if got := Rubber(1010, -1200, lo, hi, extent, false); got >= lo || got <= lo-reach {
+		t.Fatalf("crossing from >hi past <lo gave %v, want in (%v, %v)", got, lo-reach, lo)
+	} else if want := Rubber(lo, -190, lo, hi, extent, false); math.Abs(got-want) > 1e-9 {
+		t.Fatalf("crossing from >hi past <lo gave %v, want same as from lo by -190 (%v)", got, want)
+	}
 }
 
 func TestStretchGrowsToHalfAgain(t *testing.T) {
@@ -104,6 +116,23 @@ func TestFlingIsIndependentOfTheStep(t *testing.T) {
 	want := (1000 - FlingMinSpeed*1000/math.Hypot(300, 1000)) / FlingFriction
 	if math.Abs(-a.Y-want) > 1e-6 {
 		t.Fatalf("travelled %v vertically, want %v", -a.Y, want)
+	}
+}
+
+func TestFlingGuardsBelowMinSpeedAndNonPositiveDt(t *testing.T) {
+	t.Parallel()
+	for _, v := range []layout.Point{{}, layout.Pt(3, 4), layout.Pt(math.NaN(), 0)} {
+		travel, next, done := Fling(v, 1.0/60)
+		if travel != (layout.Point{}) || next != (layout.Point{}) || !done {
+			t.Fatalf("Fling(%v, 1/60) = (%v, %v, %v), want (0, 0, true)", v, travel, next, done)
+		}
+	}
+	v := layout.Pt(0, 100)
+	for _, dt := range []float64{0, -0.5, math.NaN()} {
+		travel, next, done := Fling(v, dt)
+		if travel != (layout.Point{}) || next != v || done {
+			t.Fatalf("Fling(%v, %v) = (%v, %v, %v), want (0, %v, false)", v, dt, travel, next, done, v)
+		}
 	}
 }
 

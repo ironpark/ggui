@@ -1957,3 +1957,55 @@ func TestPlaceholderLines(t *testing.T) {
 		}
 	}
 }
+
+func TestTextInputShiftClickIMEReplaceAndClipboardCommit(t *testing.T) {
+	t.Parallel()
+	// 1. Shift+Click extends selection.
+	v := ggui.State("hello world")
+	w := TextInput(v)
+	p := ggui.NewProbe(w, ggui.Sz(200, 40))
+	defer p.Close()
+	p.Frame()
+	w.Select(0, 0)
+	w.HandlePointer(ggui.PointerEvent{
+		Kind:   ggui.PointerDown,
+		Button: ggui.MouseButtonLeft,
+		Pos:    ggui.Pt(w.rect.Origin.X+w.advance("hello"), w.rect.Origin.Y+5),
+		Mods:   ggui.Mods{Shift: true},
+	})
+	if got := w.ed.Selected(); got != "hello" {
+		t.Fatalf("Shift+Click selected %q, want \"hello\"", got)
+	}
+
+	// 2. imeReplace clamps stale imeStart/imeEnd and records undo.
+	w.imeStart, w.imeEnd = -5, 999
+	w.imeReplace("hi", "!", "")
+	if w.ed.Text != "hi!" || w.ed.Caret != 3 {
+		t.Fatalf("imeReplace with out-of-range bounds gave %q caret %d", w.ed.Text, w.ed.Caret)
+	}
+	if !w.ed.Undo() || w.ed.Text != "hello world" {
+		t.Fatalf("Undo after imeReplace gave %q, want \"hello world\"", w.ed.Text)
+	}
+
+	// 3. Unmodified A/C/X/V and Cmd+A/Cmd+C do not trigger commit/filter.
+	filterCalls := 0
+	w.Filter(func(s string) string { filterCalls++; return s })
+	w.key(ggui.KeyA, ggui.Mods{})
+	w.key(ggui.KeyC, ggui.Mods{})
+	w.key(ggui.KeyA, cmd)
+	w.key(ggui.KeyC, cmd)
+	w.key(ggui.KeyArrowLeft, ggui.Mods{})
+	if filterCalls != 0 {
+		t.Fatalf("non-mutating keys triggered commit/filter %d times, want 0", filterCalls)
+	}
+
+	// 4. Multiline layout grows for IME composition.
+	mv := ggui.State("short")
+	mw := TextInput(mv).Lines(1)
+	h0 := mw.Layout(ggui.Loose(ggui.Sz(80, ggui.Unbounded)), ggui.Env{}).H
+	mw.imeComposition(" a long preedit phrase that wraps across lines", 0)
+	h1 := mw.Layout(ggui.Loose(ggui.Sz(80, ggui.Unbounded)), ggui.Env{}).H
+	if h1 <= h0 {
+		t.Fatalf("multiline height with IME composition %v <= without %v", h1, h0)
+	}
+}

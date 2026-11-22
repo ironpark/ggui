@@ -59,10 +59,32 @@ func (p *Paragraph) StyleOf(i int) Style {
 // face returns run i's face at scale 1, or the base style's for -1.
 func (p *Paragraph) face(i int) text.Face { return p.StyleOf(i).Face(1) }
 
+// firstRunAfter returns the smallest index i in p.Runs with p.Runs[i].End > pos,
+// or len(p.Runs) when none.
+func (p *Paragraph) firstRunAfter(pos int) int {
+	lo, hi := 0, len(p.Runs)
+	for lo < hi {
+		mid := int(uint(lo+hi) >> 1)
+		if p.Runs[mid].End <= pos {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
+	return lo
+}
+
 // width measures Text[a:b], each run's part in its own face.
 func (p *Paragraph) width(a, b int) float64 {
+	if a >= b {
+		return 0
+	}
 	w := 0.0
-	for i, r := range p.Runs {
+	for i := p.firstRunAfter(a); i < len(p.Runs); i++ {
+		r := p.Runs[i]
+		if r.Start >= b {
+			break
+		}
 		lo, hi := max(a, r.Start), min(b, r.End)
 		if lo < hi {
 			w += textlayout.Width(p.Text[lo:hi], p.face(i))
@@ -81,20 +103,34 @@ func (p *Paragraph) prefix(a, b int) func(x int) float64 {
 	}
 	var parts []part
 	total := 0.0
-	for i, r := range p.Runs {
-		lo, hi := max(a, r.Start), min(b, r.End)
-		if lo >= hi {
-			continue
+	if a < b {
+		for i := p.firstRunAfter(a); i < len(p.Runs); i++ {
+			r := p.Runs[i]
+			if r.Start >= b {
+				break
+			}
+			lo, hi := max(a, r.Start), min(b, r.End)
+			if lo >= hi {
+				continue
+			}
+			w := textlayout.PrefixWidths(p.Text[lo:hi], p.face(i))
+			parts = append(parts, part{lo, hi, total, w})
+			total += w(hi - lo)
 		}
-		w := textlayout.PrefixWidths(p.Text[lo:hi], p.face(i))
-		parts = append(parts, part{lo, hi, total, w})
-		total += w(hi - lo)
 	}
 	return func(x int) float64 {
-		for _, pt := range parts {
-			if x <= pt.hi {
-				return pt.before + pt.w(max(x-pt.lo, 0))
+		lo, hi := 0, len(parts)
+		for lo < hi {
+			mid := int(uint(lo+hi) >> 1)
+			if parts[mid].hi < x {
+				lo = mid + 1
+			} else {
+				hi = mid
 			}
+		}
+		if lo < len(parts) {
+			pt := parts[lo]
+			return pt.before + pt.w(max(x-pt.lo, 0))
 		}
 		return total
 	}
@@ -103,17 +139,16 @@ func (p *Paragraph) prefix(a, b int) func(x int) float64 {
 // RunAt returns the run holding offset pos, the one before it when pos
 // ends the text or falls in an empty run, or -1 when there is none.
 func (p *Paragraph) RunAt(pos int) int {
-	at := -1
-	for i, r := range p.Runs {
-		if r.Start > pos {
-			break
-		}
-		at = i
-		if pos < r.End {
-			break
+	lo, hi := 0, len(p.Runs)
+	for lo < hi {
+		mid := int(uint(lo+hi) >> 1)
+		if p.Runs[mid].Start <= pos {
+			lo = mid + 1
+		} else {
+			hi = mid
 		}
 	}
-	return at
+	return lo - 1
 }
 
 // Layout breaks the text into lines no wider than maxW, as Text does: at
@@ -196,12 +231,18 @@ func (p *Paragraph) cut(a, b int, maxW float64) (int, int) {
 // "…" drawn in run ell's style, or the base style for -1.
 func (p *Paragraph) buildLine(ln *Line, cut bool, ell int) {
 	ln.S = p.Text[ln.Start:ln.End]
-	for i, r := range p.Runs {
-		lo, hi := max(ln.Start, r.Start), min(ln.End, r.End)
-		if lo >= hi {
-			continue
+	if ln.Start < ln.End {
+		for i := p.firstRunAfter(ln.Start); i < len(p.Runs); i++ {
+			r := p.Runs[i]
+			if r.Start >= ln.End {
+				break
+			}
+			lo, hi := max(ln.Start, r.Start), min(ln.End, r.End)
+			if lo >= hi {
+				continue
+			}
+			ln.Styles = append(ln.Styles, LineStyle{Start: lo - ln.Start, End: hi - ln.Start, Style: r.Style, Run: i})
 		}
-		ln.Styles = append(ln.Styles, LineStyle{Start: lo - ln.Start, End: hi - ln.Start, Style: r.Style, Run: i})
 	}
 	if cut {
 		n := len(ln.S)

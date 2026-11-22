@@ -1403,3 +1403,34 @@ func TestScrollEasingPastWhatItsContentReachesSettles(t *testing.T) {
 		t.Fatalf("the scroll is at %v, past where its content is long enough to reach", v)
 	}
 }
+
+func TestScrollThumbDragUpdatesDirAndStickyRelayoutsNarrowerOnly(t *testing.T) {
+	t.Parallel()
+	s := Scroll(Box().Size(100, 400)).Paging()
+	p := ggui.NewProbe(s, ggui.Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	thumbPt := s.thumbHit.Center()
+	p.Press(thumbPt)
+	p.Move(thumbPt.Add(ggui.Pt(0, 15)))
+	if s.phys.dir <= 0 {
+		t.Fatalf("thumb drag downward left phys.dir = %v, want > 0", s.phys.dir)
+	}
+	p.Release(thumbPt.Add(ggui.Pt(0, 15)))
+
+	// Sticky with unbounded cross axis only re-lays out the narrower child.
+	headerLayouts, bodyLayouts := 0, 0
+	hdr := ggui.FromFuncs(func(c ggui.Constraints, _ ggui.Env) ggui.Size {
+		headerLayouts++
+		return c.Constrain(ggui.Sz(40, 20))
+	}, func(*ggui.Canvas, ggui.Rect) {})
+	body := ggui.FromFuncs(func(c ggui.Constraints, _ ggui.Env) ggui.Size {
+		bodyLayouts++
+		return c.Constrain(ggui.Sz(120, 80))
+	}, func(*ggui.Canvas, ggui.Rect) {})
+	st := Sticky(hdr, body)
+	st.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, 200)), ggui.Env{})
+	if headerLayouts != 2 || bodyLayouts != 1 {
+		t.Fatalf("Sticky layouts: header=%d body=%d, want 2 and 1", headerLayouts, bodyLayouts)
+	}
+}

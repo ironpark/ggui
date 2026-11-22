@@ -70,7 +70,14 @@ func Flinging(v layout.Point) bool { return math.Hypot(v.X, v.Y) >= FlingMinSpee
 // up to the exact time the fling slows to FlingMinSpeed, so the distance a
 // fling covers is the same whatever steps it is advanced in.
 func Fling(v layout.Point, dt float64) (travel, next layout.Point, done bool) {
-	stopAfter := math.Log(math.Hypot(v.X, v.Y)/FlingMinSpeed) / FlingFriction
+	speed := math.Hypot(v.X, v.Y)
+	if !(speed >= FlingMinSpeed) {
+		return layout.Point{}, layout.Point{}, true
+	}
+	if !(dt > 0) {
+		return layout.Point{}, v, false
+	}
+	stopAfter := math.Log(speed/FlingMinSpeed) / FlingFriction
 	done = dt >= stopAfter
 	dt = min(dt, stopAfter)
 	decay := math.Exp(-FlingFriction * dt)

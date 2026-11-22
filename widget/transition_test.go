@@ -84,3 +84,40 @@ func TestTransitionFadeHoldsALayerOnlyWhileAnimating(t *testing.T) {
 		}
 	})
 }
+
+func TestTransitionNilEasingAndPresenceReducedMotion(t *testing.T) {
+	t.Parallel()
+	tr := Transition(Box().Size(20, 20)).Fade().Easing(nil)
+	p1 := ggui.NewProbe(tr, ggui.Sz(50, 50))
+	defer p1.Close()
+	p1.Frame()
+
+	key := ggui.State(1)
+	sw := Switcher(key, func(int) ggui.Widget { return Box().Size(20, 20) }).Easing(nil)
+	p2 := ggui.NewProbe(sw, ggui.Sz(50, 50))
+	defer p2.Close()
+	p2.Frame()
+	key.Set(2)
+	p2.Advance(50 * time.Millisecond)
+
+	// Presence under ReducedMotion jumps immediately when hidden.
+	show := ggui.State(true)
+	painted := 0
+	child := ggui.FromFuncs(
+		func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(20, 20)) },
+		func(*ggui.Canvas, ggui.Rect) { painted++ },
+	)
+	pres := Presence(show, Transition(child).Fade().Duration(time.Second))
+	p3 := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, pres), ggui.Sz(50, 50))
+	defer p3.Close()
+	p3.Frame()
+	if painted == 0 {
+		t.Fatal("Presence child did not paint while shown")
+	}
+	painted = 0
+	show.Set(false)
+	p3.Frame()
+	if painted != 0 {
+		t.Fatalf("Presence under ReducedMotion still painted %d times after hiding", painted)
+	}
+}

@@ -94,6 +94,25 @@ func TestAbsentAndZeroSizedChildrenHaveDifferentGaps(t *testing.T) {
 	}
 }
 
+func TestAbsentRigidChildFreesGapForFollowingRigidChildren(t *testing.T) {
+	var scratch layout.Scratch
+	var budgets []float64
+	got := scratch.Flow(layout.Loose(layout.Sz(100, 40)), layout.FlowStyle{Axis: layout.Horizontal, Gap: 20}, make([]layout.Item, 3), func(i int, c layout.Constraints) layout.Measurement {
+		budgets = append(budgets, c.MaxW)
+		if i < 2 {
+			return layout.Measurement{Absent: true}
+		}
+		return layout.Measurement{Size: c.Constrain(layout.Sz(100, 10))}
+	})
+	// Child 0 sees 100 - 40 = 60, is absent -> frees 20;
+	// Child 1 sees 100 - 20 = 80, is absent -> frees 20;
+	// Child 2 sees full 100 and is not squeezed.
+	want := []float64{60, 80, 100}
+	if !reflect.DeepEqual(budgets, want) || got.Size.W != 100 {
+		t.Fatalf("budgets = %v (want %v), size = %+v", budgets, want, got.Size)
+	}
+}
+
 func TestUnboundedFlowMeasuresFlexNaturally(t *testing.T) {
 	var scratch layout.Scratch
 	got := scratch.Flow(layout.Loose(layout.Sz(math.Inf(1), 100)), layout.FlowStyle{Axis: layout.Horizontal, Justify: layout.SpaceBetween, Align: layout.AlignStretch}, []layout.Item{{Weight: 1}, {}}, fixed(layout.Sz(10, 5), layout.Sz(20, 8)))

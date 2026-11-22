@@ -447,3 +447,21 @@ func TestTextBidiFractionalScaleConsistency(t *testing.T) {
 		p.Close()
 	}
 }
+
+func TestSelectableTextColorUpdatesConcreteColor(t *testing.T) {
+	t.Parallel()
+	red := color.NRGBA{R: 255, A: 255}
+	blue := color.NRGBA{B: 255, A: 255}
+	txt := Text("hello").Color(red).Selectable()
+	p := ggui.NewProbe(txt, ggui.Sz(200, 60))
+	defer p.Close()
+	p.Frame()
+	if got := txt.rich.w.styles[0].Color; got != red {
+		t.Fatalf("initial selectable color = %v, want red", got)
+	}
+	txt.Color(blue)
+	p.Frame()
+	if got := txt.rich.w.styles[0].Color; got != blue {
+		t.Fatalf("updated selectable color = %v, want blue", got)
+	}
+}
