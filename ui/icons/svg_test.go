@@ -216,3 +216,36 @@ func TestAnIconsLinesFollowItsSize(t *testing.T) {
 		}
 	}
 }
+
+// Regression test pinning icons.Parse alpha output for a currentColor icon
+// containing both filled and stroked shapes so ggfx/svg currentColor support
+// never alters icon alpha coverage.
+func TestParseCurrentColorAlphaRegression(t *testing.T) {
+	t.Parallel()
+	const iconXML = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">` +
+		`<rect x="2" y="2" width="8" height="8" fill="currentColor"/>` +
+		`<path d="M14 4v16" fill="none" stroke="currentColor" stroke-width="2"/>` +
+		`</svg>`
+	asset, err := Parse([]byte(iconXML))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	img := asset.Image(24)
+	if img == nil || img.Bounds() != image.Rect(0, 0, 24, 24) {
+		t.Fatalf("unexpected image bounds: %v", img)
+	}
+	// Inside the filled currentColor rect: opaque white mask (R==G==B==A==255).
+	if got := img.RGBAAt(6, 6); got != (color.RGBA{R: 255, G: 255, B: 255, A: 255}) {
+		t.Fatalf("filled rect center (6,6) = %v, want opaque white", got)
+	}
+	// On the stroked currentColor vertical line at x=14: full alpha coverage.
+	if got := img.RGBAAt(14, 12); got.A < 250 || got.R != got.A || got.G != got.A || got.B != got.A {
+		t.Fatalf("stroked path (14,12) = %v, want white coverage mask", got)
+	}
+	// Outside both shapes: completely transparent.
+	for _, pt := range []image.Point{{0, 0}, {11, 11}, {20, 20}, {6, 18}} {
+		if got := img.RGBAAt(pt.X, pt.Y); got.A != 0 {
+			t.Fatalf("background (%d,%d) = %v, want transparent", pt.X, pt.Y, got)
+		}
+	}
+}

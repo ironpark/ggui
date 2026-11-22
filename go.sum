@@ -4,8 +4,8 @@ github.com/ebitengine/purego v0.11.1 h1:2zpWRSQNVKN4eKsKO9eM1ILDgWfYMY9GwqRmK6Xe
 github.com/ebitengine/purego v0.11.1/go.mod h1:DCHPP08djqhNSoTfImcnHYQRZmd0qhakvrozqaEYhGQ=
 github.com/gogpu/naga v0.21.10 h1:UVh0wPGsLOvYfbGj29w7/EDI1+Zz0fJ2/rbmhUsTDiA=
 github.com/gogpu/naga v0.21.10/go.mod h1:15sQaHKkbqXcwTN+hHYGLsA0WBBnkmYzne/eF5p5WEg=
-github.com/ironpark/ggfx v0.0.0-20261122101835-96cb5098aa06 h1:QB9tthW4gI+9Bg+4PFHg/aWe4RrZCTP9j9uWWsk6SS0=
-github.com/ironpark/ggfx v0.0.0-20261122101835-96cb5098aa06/go.mod h1:G7y8LVFwSREKYSRFWmd0ZXhmxzw1u/1q1QwnSd3Kb8U=
+github.com/ironpark/ggfx v0.0.0-20261122131222-c9829636a084 h1:6tS9t80rsRqayTLzFPsK88cFwiZeSflqVSQNC1vQ72k=
+github.com/ironpark/ggfx v0.0.0-20261122131222-c9829636a084/go.mod h1:G7y8LVFwSREKYSRFWmd0ZXhmxzw1u/1q1QwnSd3Kb8U=
 github.com/ironpark/ggwd v0.0.0-20261120121552-0b5175d66b9d h1:JWZ/iuz/llfiaacIuxOscROpLZEzGR/C0Zpqd8BsRwY=
 github.com/ironpark/ggwd v0.0.0-20261120121552-0b5175d66b9d/go.mod h1:Y5DMejijiO0BiRt1+BNV5Wh1wLhmTGwzlql3EryWOJQ=
 golang.org/x/image v0.46.0 h1:b1+oYj0Jbp6K5MDT4i4/eZpYlk3V8SJhhDKh6LBHAyQ=
