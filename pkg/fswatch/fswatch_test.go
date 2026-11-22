@@ -332,16 +332,20 @@ func TestTruncatedSave(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "main.src")
 	const src = "one\ntwo\n"
 	touch(t, path, src)
-	w := New(Options{NoNotify: true, Content: commentBlind})
+	w := New(Options{NoNotify: true, Content: commentBlind, Steady: 2 * time.Second})
 	w.Add(path)
 	w.bg.Wait() // the fingerprint is taken
 
 	touch(t, path, "")
+	done := make(chan error, 1)
 	go func() {
 		time.Sleep(10 * time.Millisecond)
-		os.WriteFile(path, []byte(src+"# A comment.\n"), 0o644)
+		done <- retry(func() error { return os.WriteFile(path, []byte(src+"# A comment.\n"), 0o644) })
 	}()
 	got := w.Sync(context.Background()).Changes
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
 	if !slices.Equal(got, []Event{{Path: path, Op: Write, Same: true}}) {
 		t.Errorf("got %v, want the comment's edit the same", got)
 	}
@@ -361,12 +365,22 @@ func TestSteady(t *testing.T) {
 	w.Add(path)
 
 	touch(t, path, "")
+	done := make(chan error, 1)
 	go func() {
 		time.Sleep(20 * time.Millisecond)
-		touch(t, path, "the whole of it")
+		const data = "the whole of it"
+		err := retry(func() error { return os.WriteFile(path, []byte(data), 0o644) })
+		if err == nil {
+			future := time.Now().Add(time.Duration(len(data)+1) * time.Second)
+			err = retry(func() error { return os.Chtimes(path, future, future) })
+		}
+		done <- err
 	}()
 	if got := w.Sync(context.Background()).Changes; !slices.Equal(got, []Event{ev(Write, path)}) {
 		t.Errorf("got %v, want one write", got)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 	if got := w.Sync(context.Background()).Changes; len(got) > 0 {
 		t.Errorf("the save was reported in two parts: %v", got)
