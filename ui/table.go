@@ -701,30 +701,38 @@ func (r *tableRow[T, K]) HandleKey(ev ggui.KeyEvent) {
 	if ev.Kind == ggui.KeyFocus {
 		t.nav.active = at(r.key)
 	}
-	if ev.Kind == ggui.KeyPress {
-		i, n := ggui.Untrack(r.index.Get), len(ggui.Untrack(t.rows.Get))
-		if to, ok := t.target(ev.Key, i, n); ok {
-			t.move(to, ev.Mods.Shift)
-			return
-		}
-		switch ev.Key {
-		case ggui.KeyA:
-			if t.selection != nil && ev.Mods.Cmd() {
-				all := make(map[K]bool, n)
-				for _, item := range ggui.Untrack(t.rows.Get) {
-					all[t.key(item)] = true
-				}
-				t.selection.Set(all)
-				return
-			}
-		case ggui.KeySpace:
-			if t.selection != nil {
-				t.selectAt(ggui.Untrack(t.rows.Get), i, false, true)
-				return
-			}
-		}
+	if ev.Kind == ggui.KeyPress && r.keySelect(ev) {
+		return
 	}
 	r.Keyboard(ev, r.pick)
+}
+
+// keySelect moves between rows on the arrows, Home, End and the Page keys,
+// selects every row on ⌘A and toggles the row on Space, and reports
+// whether the key did any of it. ⌘A and Space need a selection bound.
+func (r *tableRow[T, K]) keySelect(ev ggui.KeyEvent) bool {
+	t := r.table
+	i, n := ggui.Untrack(r.index.Get), len(ggui.Untrack(t.rows.Get))
+	if to, ok := t.target(ev.Key, i, n); ok {
+		t.move(to, ev.Mods.Shift)
+		return true
+	}
+	if t.selection == nil {
+		return false
+	}
+	switch {
+	case ev.Key == ggui.KeyA && ev.Mods.Cmd():
+		all := make(map[K]bool, n)
+		for _, item := range ggui.Untrack(t.rows.Get) {
+			all[t.key(item)] = true
+		}
+		t.selection.Set(all)
+		return true
+	case ev.Key == ggui.KeySpace:
+		t.selectAt(ggui.Untrack(t.rows.Get), i, false, true)
+		return true
+	}
+	return false
 }
 
 // ConsumesKey implements ggui.KeyConsumer: the keys that move between rows
