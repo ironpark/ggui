@@ -358,8 +358,40 @@ func TestViewLifecycle(t *testing.T) {
 	p.Frame()
 	mustPanic(t, "after View", func() { r.History(Memory("/")) })
 	p.Close()
+	if r.root.Get() != nil {
+		t.Fatal("r.root was not cleared on View cleanup")
+	}
 	if err := r.Navigate("/"); err != ErrNotMounted {
 		t.Fatalf("Navigate after disposal = %v", err)
+	}
+}
+
+func TestActiveComparesDecodedPaths(t *testing.T) {
+	t.Parallel()
+	r := New(
+		Page("/", text("home")),
+		Page("/docs/*rest", text("docs")),
+	)
+	r.History(Memory("/docs/hello%20world/guide"))
+	p := ggui.NewProbe(r.View(), ggui.Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+
+	if !r.Active("/docs/hello%20world").Get() {
+		t.Fatal("Active did not match identical escaped path")
+	}
+	if !r.Active("/docs/hello world").Get() {
+		t.Fatal("Active did not match equivalent unescaped path")
+	}
+	if r.Active("/docs/hello").Get() {
+		t.Fatal("Active matched partial segment")
+	}
+	if err := r.Navigate("/docs/%61/page"); err != nil {
+		t.Fatal(err)
+	}
+	p.Frame()
+	if !r.Active("/docs/a").Get() {
+		t.Fatal("Active did not compare decoded segments for %61 vs a")
 	}
 }
 

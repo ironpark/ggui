@@ -334,11 +334,32 @@ func (f *Frame) SemanticAt(p Point) int {
 // SemanticChain describes accessibility node i and everything it is inside
 // of, outermost first and indented, which is what a screen reader walks.
 func (f *Frame) SemanticChain(i int) []string {
-	if f.Sem == nil || i < 0 {
+	if f.Sem == nil {
+		return nil
+	}
+	total := f.Sem.Len()
+	if i < 0 || i >= total {
 		return nil
 	}
 	var chain []int
-	for ; i >= 0; i = f.Sem.Ref(i).Parent {
+	var seen map[int]struct{}
+	for ; i >= 0 && i < total; i = f.Sem.Ref(i).Parent {
+		if len(chain) < 16 {
+			if slices.Contains(chain, i) {
+				break
+			}
+		} else {
+			if seen == nil {
+				seen = make(map[int]struct{}, len(chain)+1)
+				for _, prev := range chain {
+					seen[prev] = struct{}{}
+				}
+			}
+			if _, dup := seen[i]; dup {
+				break
+			}
+			seen[i] = struct{}{}
+		}
 		chain = append(chain, i)
 	}
 	lines := make([]string, 0, len(chain))

@@ -99,3 +99,53 @@ func TestDetailsPanes(t *testing.T) {
 		t.Fatal("formatting helpers changed")
 	}
 }
+
+func TestSemanticChainBoundsAndCycles(t *testing.T) {
+	t.Parallel()
+	// Out-of-bounds start index and out-of-bounds parent link.
+	oob := a11y.Build([]a11y.SemNode{
+		{Role: a11y.RoleButton, Name: "Orphan", Parent: -1},
+	}, -1)
+	oob.Ref(0).Parent = 99
+	f := &Frame{Sem: oob}
+	if got := f.SemanticChain(-1); got != nil {
+		t.Fatalf("SemanticChain(-1) = %v, want nil", got)
+	}
+	if got := f.SemanticChain(1); got != nil {
+		t.Fatalf("SemanticChain(len) = %v, want nil", got)
+	}
+	if got := f.SemanticChain(0); len(got) != 1 {
+		t.Fatalf("SemanticChain(0) with OOB parent = %v, want 1 line", got)
+	}
+
+	// Self-cycle and 2-node cycle terminate cleanly.
+	cyclic := a11y.Build([]a11y.SemNode{
+		{Role: a11y.RoleGroup, Name: "A", Parent: -1},
+		{Role: a11y.RoleGroup, Name: "B", Parent: -1},
+		{Role: a11y.RoleButton, Name: "Self", Parent: -1},
+	}, -1)
+	cyclic.Ref(0).Parent = 1
+	cyclic.Ref(1).Parent = 0
+	cyclic.Ref(2).Parent = 2
+	fc := &Frame{Sem: cyclic}
+	if got := fc.SemanticChain(0); len(got) != 2 {
+		t.Fatalf("2-node cycle SemanticChain = %v, want 2 lines", got)
+	}
+	if got := fc.SemanticChain(2); len(got) != 1 {
+		t.Fatalf("self-cycle SemanticChain = %v, want 1 line", got)
+	}
+
+	// Deep cycle (> 16 nodes) exercises the map-backed cycle guard.
+	deepNodes := make([]a11y.SemNode, 20)
+	for i := range deepNodes {
+		deepNodes[i] = a11y.SemNode{Role: a11y.RoleGroup, Name: "N", Parent: -1}
+	}
+	deep := a11y.Build(deepNodes, -1)
+	for i := range deepNodes {
+		deep.Ref(i).Parent = (i + 1) % len(deepNodes)
+	}
+	fd := &Frame{Sem: deep}
+	if got := fd.SemanticChain(0); len(got) != len(deepNodes) {
+		t.Fatalf("deep cycle SemanticChain = %d lines, want %d", len(got), len(deepNodes))
+	}
+}

@@ -131,3 +131,47 @@ func TestNoChannel(t *testing.T) {
 		t.Error("a session without ggui dev")
 	}
 }
+
+func TestOnUIUnblocksOnTimeoutAndClose(t *testing.T) {
+	prevDispatch := Dispatch
+	prevTimeout := dispatchTimeout
+	defer func() {
+		Dispatch = prevDispatch
+		dispatchTimeout = prevTimeout
+	}()
+
+	// Dispatch accepts the callback but never executes it (simulating shutdown).
+	Dispatch = func(func()) bool { return true }
+
+	t.Run("timeout", func(t *testing.T) {
+		dispatchTimeout = 50 * time.Millisecond
+		s := newSession(nil)
+		start := time.Now()
+		st, ok := s.onUI()
+		if ok || st != nil {
+			t.Fatalf("onUI() = (%v, %v), want (nil, false)", st, ok)
+		}
+		if d := time.Since(start); d > 2*time.Second {
+			t.Fatalf("onUI waited %s, past dispatchTimeout", d)
+		}
+	})
+
+	t.Run("session close", func(t *testing.T) {
+		dispatchTimeout = 10 * time.Second
+		s := newSession(nil)
+		done := make(chan bool, 1)
+		go func() {
+			_, ok := s.onUI()
+			done <- ok
+		}()
+		s.close()
+		select {
+		case ok := <-done:
+			if ok {
+				t.Fatal("onUI returned ok=true after session close")
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("onUI did not unblock when session closed")
+		}
+	})
+}

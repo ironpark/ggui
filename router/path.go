@@ -99,7 +99,12 @@ type parsedURL struct {
 func (u parsedURL) path() string { return "/" + strings.Join(u.raw, "/") }
 
 func (u parsedURL) location() Location {
-	return Location{Path: u.path(), RawQuery: u.rawQuery, Fragment: u.fragment}
+	loc := Location{Path: u.path(), RawQuery: u.rawQuery, Fragment: u.fragment}
+	if u.rawQuery != "" {
+		v, _ := url.ParseQuery(u.rawQuery)
+		loc.parsed = &parsedQuery{raw: u.rawQuery, values: v}
+	}
+	return loc
 }
 
 var errNotAbsolute = errors.New("router: URL must be application-absolute, such as /settings")

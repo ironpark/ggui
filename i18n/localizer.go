@@ -95,11 +95,9 @@ func From(env ggui.Env) *Localizer {
 // with returns env with l and the language lang provided: the Localizer,
 // ggui.LanguageKey and ggui.DirectionKey.
 func with(env ggui.Env, l *Localizer, lang string) ggui.Env {
-	env = env.With(localizerKey, l)
-	if lang == "" {
-		return env
-	}
-	return env.With(ggui.LanguageKey, lang).With(ggui.DirectionKey, Direction(lang))
+	return env.With(localizerKey, l).
+		With(ggui.LanguageKey, lang).
+		With(ggui.DirectionKey, Direction(lang))
 }
 
 // Provide gives the subtree under child the Localizer l: the Messages
@@ -167,10 +165,14 @@ func Watch(l *Localizer, fn func(*Localizer)) (dispose func()) {
 // tag, from l's catalogs and then the built-in ones, and the tag of the
 // language it was found in.
 func (l *Localizer) lookup(tag, key, ctx string) (string, string, bool) {
+	var cats map[string]*Catalog
+	if l != nil {
+		cats = l.cats
+	}
 	tags := fallbacks(tag)
 	for _, k := range keys(key, ctx) {
 		for _, t := range tags {
-			if c := l.cats[t]; c != nil {
+			if c := cats[t]; c != nil {
 				if s, ok := c.Messages[k]; ok && s != "" {
 					return s, t, true
 				}
@@ -185,24 +187,35 @@ func (l *Localizer) lookup(tag, key, ctx string) (string, string, bool) {
 	return "", "", false
 }
 
-// lookupPlural is lookup for a plural message, by its singular key.
-func (l *Localizer) lookupPlural(tag, key, ctx string) (Forms, string, bool) {
+// lookupPlural is lookup for a plural message, by its singular key and count.
+// Entries whose selected form and Other fallback are empty are skipped so
+// broader fallback catalogs still apply.
+func (l *Localizer) lookupPlural(tag string, n int, key, ctx string) (string, string, bool) {
+	var cats map[string]*Catalog
+	if l != nil {
+		cats = l.cats
+	}
 	tags := fallbacks(tag)
 	for _, k := range keys(key, ctx) {
 		for _, t := range tags {
-			if c := l.cats[t]; c != nil {
+			cat := pluralOf(t, n)
+			if c := cats[t]; c != nil {
 				if f, ok := c.Plurals[k]; ok {
-					return f, t, true
+					if s := f.pick(cat); s != "" {
+						return s, t, true
+					}
 				}
 			}
 			if c := builtin[t]; c != nil {
 				if f, ok := c.Plurals[k]; ok {
-					return f, t, true
+					if s := f.pick(cat); s != "" {
+						return s, t, true
+					}
 				}
 			}
 		}
 	}
-	return Forms{}, "", false
+	return "", "", false
 }
 
 // keys returns the keys a message is looked up under: with its context,
@@ -247,16 +260,14 @@ func (l *Localizer) message(m Message) string {
 	return m.key
 }
 
-// plural resolves a plural message: the form of n's category in tag, with
-// n the first argument.
+// plural resolves a plural message: the form of n's category in the matched
+// catalog's language, with n the first argument.
 func (l *Localizer) plural(tag string, n int, singular, plural, ctx string, args []any) string {
 	all := append([]any{n}, args...)
-	if forms, found, ok := l.lookupPlural(tag, singular, ctx); ok {
-		if f := forms.pick(pluralOf(tag, n)); f != "" {
-			return l.format(found, f, all)
-		}
+	if f, found, ok := l.lookupPlural(tag, n, singular, ctx); ok {
+		return l.format(found, f, all)
 	}
-	if n == 1 {
+	if n == 1 || n == -1 {
 		return l.format("", singular, all)
 	}
 	return l.format("", plural, all)

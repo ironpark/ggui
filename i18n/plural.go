@@ -15,7 +15,7 @@ const (
 // The CLDR cardinal plural rules of each language, for whole numbers: the
 // category a count n, never negative, falls in. A language missing here
 // has Other alone.
-var pluralRules = map[string]func(n int) category{
+var pluralRules = map[string]func(n uint) category{
 	// One for 1 alone.
 	"en": oneIsOne, "de": oneIsOne, "nl": oneIsOne, "sv": oneIsOne,
 	"da": oneIsOne, "nb": oneIsOne, "no": oneIsOne, "nn": oneIsOne,
@@ -51,23 +51,23 @@ var pluralRules = map[string]func(n int) category{
 	"cy": welsh,
 }
 
-func none(int) category { return other }
+func none(uint) category { return other }
 
-func oneIsOne(n int) category {
+func oneIsOne(n uint) category {
 	if n == 1 {
 		return one
 	}
 	return other
 }
 
-func zeroOne(n int) category {
+func zeroOne(n uint) category {
 	if n <= 1 {
 		return one
 	}
 	return other
 }
 
-func oneMillions(n int) category {
+func oneMillions(n uint) category {
 	switch {
 	case n == 1:
 		return one
@@ -77,7 +77,7 @@ func oneMillions(n int) category {
 	return other
 }
 
-func zeroOneMillions(n int) category {
+func zeroOneMillions(n uint) category {
 	switch {
 	case n <= 1:
 		return one
@@ -87,7 +87,7 @@ func zeroOneMillions(n int) category {
 	return other
 }
 
-func eastSlavic(n int) category {
+func eastSlavic(n uint) category {
 	switch d, h := n%10, n%100; {
 	case d == 1 && h != 11:
 		return one
@@ -97,7 +97,7 @@ func eastSlavic(n int) category {
 	return many
 }
 
-func polish(n int) category {
+func polish(n uint) category {
 	switch d, h := n%10, n%100; {
 	case n == 1:
 		return one
@@ -107,7 +107,7 @@ func polish(n int) category {
 	return many
 }
 
-func westSlavic(n int) category {
+func westSlavic(n uint) category {
 	switch {
 	case n == 1:
 		return one
@@ -117,7 +117,7 @@ func westSlavic(n int) category {
 	return other
 }
 
-func lithuanian(n int) category {
+func lithuanian(n uint) category {
 	switch d, h := n%10, n%100; {
 	case d == 1 && (h < 11 || h > 19):
 		return one
@@ -127,7 +127,7 @@ func lithuanian(n int) category {
 	return other
 }
 
-func latvian(n int) category {
+func latvian(n uint) category {
 	switch d, h := n%10, n%100; {
 	case d == 0 || (h >= 11 && h <= 19):
 		return zero
@@ -137,17 +137,17 @@ func latvian(n int) category {
 	return other
 }
 
-func romanian(n int) category {
+func romanian(n uint) category {
 	switch h := n % 100; {
 	case n == 1:
 		return one
-	case n == 0 || (h >= 2 && h <= 19):
+	case n == 0 || (h >= 1 && h <= 19):
 		return few
 	}
 	return other
 }
 
-func southSlavic(n int) category {
+func southSlavic(n uint) category {
 	switch d, h := n%10, n%100; {
 	case d == 1 && h != 11:
 		return one
@@ -157,7 +157,7 @@ func southSlavic(n int) category {
 	return other
 }
 
-func slovenian(n int) category {
+func slovenian(n uint) category {
 	switch h := n % 100; {
 	case h == 1:
 		return one
@@ -169,7 +169,7 @@ func slovenian(n int) category {
 	return other
 }
 
-func arabic(n int) category {
+func arabic(n uint) category {
 	switch h := n % 100; {
 	case n == 0:
 		return zero
@@ -185,7 +185,7 @@ func arabic(n int) category {
 	return other
 }
 
-func hebrew(n int) category {
+func hebrew(n uint) category {
 	switch n {
 	case 1:
 		return one
@@ -195,7 +195,7 @@ func hebrew(n int) category {
 	return other
 }
 
-func irish(n int) category {
+func irish(n uint) category {
 	switch {
 	case n == 1:
 		return one
@@ -209,7 +209,7 @@ func irish(n int) category {
 	return other
 }
 
-func welsh(n int) category {
+func welsh(n uint) category {
 	switch n {
 	case 0:
 		return zero
@@ -229,12 +229,15 @@ func welsh(n int) category {
 // the most specific of its fallbacks that has one, and Other in a language
 // with none.
 func pluralOf(tag string, n int) category {
+	var u uint
 	if n < 0 {
-		n = -n
+		u = uint(-(n + 1)) + 1
+	} else {
+		u = uint(n)
 	}
 	for _, t := range fallbacks(tag) {
 		if rule, ok := pluralRules[t]; ok {
-			return rule(n)
+			return rule(u)
 		}
 	}
 	return other

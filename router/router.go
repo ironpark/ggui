@@ -6,7 +6,7 @@ package router
 import (
 	"errors"
 	"fmt"
-	"strings"
+	"slices"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/devstate"
@@ -119,6 +119,7 @@ func (r *Router) View() ggui.Widget {
 			r.mounted = false
 			r.current = nil
 			r.kept = nil
+			r.root.Set(nil)
 		})
 		r.traverse(r.start())
 		return ggui.Key(r.root, r.build)
@@ -288,6 +289,12 @@ func (r *Router) build(e *entry) ggui.Widget {
 		return nil
 	}
 	c := &Context{r: r, inst: e.inst, owner: reactive.CurrentOwner()}
+	if c.owner != nil {
+		ggui.OnCleanup(func() {
+			c.disposed = true
+			c.queries = nil
+		})
+	}
 	rt := e.inst.route
 	if rt.kind == kindLayout {
 		return rt.layout(c, ggui.Key(e.child, r.build))
@@ -327,17 +334,23 @@ func (r *Router) CanForward() ggui.Readable[bool] {
 }
 
 // Active reports whether the current path is path or lies below it, by
-// whole segments. It ignores query and fragment.
+// whole decoded segments. It ignores query and fragment.
 func (r *Router) Active(path string) ggui.Readable[bool] {
 	u, err := parseURL(path)
 	if err != nil {
 		panic(err)
 	}
-	prefix := u.path()
-	below := prefix + "/"
+	want := u.decoded
 	return reader[bool](func() bool {
 		p := r.path.Get()
-		return prefix == "/" || p == prefix || strings.HasPrefix(p, below)
+		if len(want) == 0 {
+			return true
+		}
+		cur, err := parseURL(p)
+		if err != nil || len(cur.decoded) < len(want) {
+			return false
+		}
+		return slices.Equal(cur.decoded[:len(want)], want)
 	})
 }
 

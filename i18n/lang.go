@@ -15,8 +15,9 @@ func normalize(tag string) string {
 	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(tag), "_", "-"))
 }
 
-// base returns the language subtag of a normalized tag: "pt" of "pt-br".
+// base returns the language subtag of tag, normalized: "pt" of "pt_BR" or "PT-br".
 func base(tag string) string {
+	tag = normalize(tag)
 	if before, _, ok := strings.Cut(tag, "-"); ok {
 		return before
 	}

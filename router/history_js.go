@@ -3,7 +3,9 @@
 package router
 
 import (
+	"fmt"
 	"strings"
+	"sync"
 	"syscall/js"
 )
 
@@ -61,16 +63,17 @@ func Browser(basePath string) *BrowserHistory {
 // session drives the document's history for both browser adapters, which
 // differ only in where the application URL sits in the browser's.
 type session struct {
-	history js.Value
-	read    func() string           // the application URL the browser shows
-	write   func(url string) string // the browser URL for an application URL
-	current Entry
-	index   int
-	length  int
-	nextID  uint64
-	post    func(func())
-	subs    subscribers
-	listen  js.Func
+	history   js.Value
+	read      func() string           // the application URL the browser shows
+	write     func(url string) string // the browser URL for an application URL
+	current   Entry
+	index     int
+	length    int
+	nextID    uint64
+	post      func(func())
+	subs      subscribers
+	listen    js.Func
+	listening bool
 }
 
 func (h *session) init(read func() string, write func(string) string) {
@@ -98,33 +101,66 @@ func (h *session) adopt(state js.Value) {
 	}
 	h.index++
 	h.length = h.index + 1
-	h.current = h.tag(url, "replaceState", state)
+	if e, err := h.tag(url, "replaceState", state, h.index); err == nil {
+		h.current = e
+	} else {
+		h.nextID++
+		h.current = Entry{URL: url, ID: h.nextID}
+	}
+}
+
+// callHistory invokes history.pushState or history.replaceState, recovering
+// browser DOMExceptions such as SecurityError as a Go error.
+func (h *session) callHistory(method string, state js.Value, target string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if je, ok := r.(error); ok {
+				err = je
+			} else {
+				err = fmt.Errorf("router: history.%s: %v", method, r)
+			}
+		}
+	}()
+	h.history.Call(method, state, "", target)
+	return nil
 }
 
 // tag writes an entry with our keys merged into the page's state.
-func (h *session) tag(url, method string, prev js.Value) Entry {
-	h.nextID++
+func (h *session) tag(url, method string, prev js.Value, index int) (Entry, error) {
+	id := h.nextID + 1
 	state := js.Global().Get("Object").New()
 	if prev.Type() == js.TypeObject {
 		js.Global().Get("Object").Call("assign", state, prev)
 	}
-	state.Set(stateID, float64(h.nextID))
-	state.Set(stateIndex, h.index)
-	h.history.Call(method, state, "", h.write(url))
-	return Entry{URL: url, ID: h.nextID}
+	state.Set(stateID, float64(id))
+	state.Set(stateIndex, index)
+	if err := h.callHistory(method, state, h.write(url)); err != nil {
+		return Entry{}, err
+	}
+	h.nextID = id
+	return Entry{URL: url, ID: id}, nil
 }
 
 func (h *session) Current() Entry { return h.current }
 
 func (h *session) Push(url string) (Entry, error) {
-	h.index++
+	nextIndex := h.index + 1
+	e, err := h.tag(url, "pushState", js.Null(), nextIndex)
+	if err != nil {
+		return Entry{}, err
+	}
+	h.index = nextIndex
 	h.length = h.index + 1
-	h.current = h.tag(url, "pushState", js.Null())
+	h.current = e
 	return h.current, nil
 }
 
 func (h *session) Replace(url string) (Entry, error) {
-	h.current = h.tag(url, "replaceState", h.history.Get("state"))
+	e, err := h.tag(url, "replaceState", h.history.Get("state"), h.index)
+	if err != nil {
+		return Entry{}, err
+	}
+	h.current = e
 	return h.current, nil
 }
 
@@ -143,7 +179,7 @@ func (h *session) Position() (index, length int) { return h.index, h.length }
 // router installs, so subscribers run on the UI thread.
 func (h *session) Subscribe(fn func(Entry)) (stop func()) {
 	id := h.subs.add(fn)
-	if len(h.subs.fns) == 1 {
+	if !h.listening {
 		h.listen = js.FuncOf(func(this js.Value, args []js.Value) any {
 			state := args[0].Get("state")
 			deliver := func() {
@@ -158,13 +194,18 @@ func (h *session) Subscribe(fn func(Entry)) (stop func()) {
 			return nil
 		})
 		js.Global().Call("addEventListener", "popstate", h.listen)
+		h.listening = true
 	}
+	var once sync.Once
 	return func() {
-		delete(h.subs.fns, id)
-		if len(h.subs.fns) == 0 {
-			js.Global().Call("removeEventListener", "popstate", h.listen)
-			h.listen.Release()
-		}
+		once.Do(func() {
+			delete(h.subs.fns, id)
+			if len(h.subs.fns) == 0 && h.listening {
+				h.listening = false
+				js.Global().Call("removeEventListener", "popstate", h.listen)
+				h.listen.Release()
+			}
+		})
 	}
 }
 

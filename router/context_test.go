@@ -100,3 +100,51 @@ func TestLocationStringEscapesTheFragment(t *testing.T) {
 		}
 	}
 }
+
+func TestDisposedContextQueryAndLocationCache(t *testing.T) {
+	t.Parallel()
+	var oldCtx *Context
+	r := New(
+		Page("/", func(c *Context) ggui.Widget {
+			oldCtx = c
+			_ = c.Query("q")
+			return widget.Text("home")
+		}),
+		Page("/other", text("other")),
+	)
+	r.History(Memory("/?q=one&tag=x"))
+	p := ggui.NewProbe(r.View(), ggui.Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+
+	// Location caches parsed query values and remains comparable.
+	loc := r.Location()
+	if loc.parsed == nil || loc.Query("q") != "one" || !loc.HasQuery("tag") {
+		t.Fatalf("expected cached parsed query on Location: %+v", loc)
+	}
+	if loc != r.Location() {
+		t.Fatal("identical Location values did not compare equal")
+	}
+	mut := loc
+	mut.RawQuery = "q=two"
+	if got := mut.Query("q"); got != "two" {
+		t.Fatalf("mutated RawQuery returned stale cache %q, want two", got)
+	}
+
+	if err := r.Navigate("/other?q=after"); err != nil {
+		t.Fatal(err)
+	}
+	p.Frame()
+	if !oldCtx.disposed || oldCtx.queries != nil {
+		t.Fatal("departed Context was not marked disposed and cleared")
+	}
+	if got := oldCtx.Query("q"); got != "after" {
+		t.Fatalf("disposed Context.Query = %q, want after", got)
+	}
+	if got := oldCtx.QueryValue("q").Get(); got != "after" {
+		t.Fatalf("disposed Context.QueryValue = %q, want after", got)
+	}
+	if oldCtx.queries != nil {
+		t.Fatal("disposed Context.query attached a derived computation to a dead owner")
+	}
+}

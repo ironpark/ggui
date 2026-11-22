@@ -382,3 +382,30 @@ func TestParseFrameAndBackdrop(t *testing.T) {
 		t.Error("a frame named round")
 	}
 }
+
+func TestRecordRegressions(t *testing.T) {
+	// Traffic-light rect clipping: tiny window with Margin(0) and large ButtonInset must not panic.
+	tour := Tour{Size: ggui.Sz(20, 20), Scale: 1, Frame: FrameMacHidden, ButtonInset: 100}
+	o := resolve([]Option{Margin(0)})
+	l := tour.layout(o)
+	f := newFramer(l, "", "", o)
+	_ = f.draw(fill(l.content.Dx(), l.content.Dy(), white), white, ggui.TextStyle{})
+
+	// newBox handles near-zero / floating-point negative error without picking wrong cut.
+	b := newBox([]entry{
+		{n: 10, c: [3]float64{0.1, 0.1, 0.1}},
+		{n: 10, c: [3]float64{0.9, 0.9, 0.9}},
+		{n: 10, c: [3]float64{0.9, 0.9, 0.9}},
+	})
+	if b.cut != 1 || b.splitError < 0 {
+		t.Errorf("newBox cut=%d splitError=%g, want cut=1 splitError>=0", b.cut, b.splitError)
+	}
+
+	// changed compares RGBA consistently across row and column scans.
+	a := fill(10, 10, color.RGBA{R: 10, G: 20, B: 30, A: 0xff})
+	bImg := fill(10, 10, color.RGBA{R: 10, G: 20, B: 30, A: 0xff})
+	bImg.SetRGBA(4, 5, color.RGBA{R: 10, G: 20, B: 30, A: 0x80})
+	if got := changed(a, bImg); got != image.Rect(4, 5, 5, 6) {
+		t.Errorf("changed alpha-only pixel = %v, want (4,5)-(5,6)", got)
+	}
+}
