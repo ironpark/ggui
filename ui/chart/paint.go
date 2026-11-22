@@ -120,26 +120,7 @@ func (c *Widget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		return
 	}
 	c.geometryFor(r.Size)
-	c.plot = ggui.Rct(r.Origin.Add(ggui.Pt(12., 12.)), ggui.Sz(max(0, r.Size.W-24), max(0, r.Size.H-24)))
-	if c.kind.polar() {
-		c.plot = r
-	}
-	// Measuring the legend shapes every label, so do it once and reuse the
-	// height for both the plot inset and the legend rect below.
-	legendH := 0.
-	if c.legend {
-		legendH = c.legendHeight(r.Size.W)
-		c.plot.Size.H = max(0, c.plot.Size.H-legendH)
-	}
-	if !c.kind.polar() {
-		if c.xAxis {
-			c.plot.Size.H = max(0, c.plot.Size.H-28)
-		}
-		if c.yAxis || c.horizontal && c.xAxis {
-			c.plot.Origin.X += 40
-			c.plot.Size.W = max(0, c.plot.Size.W-40)
-		}
-	}
+	legendH := c.placePlot(r)
 	if c.plot.Empty() {
 		return
 	}
@@ -163,15 +144,44 @@ func (c *Widget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 }
 
+// placePlot insets the plot within r, leaving room for the legend and the
+// axes, and returns the legend's height. Measuring the legend shapes every
+// label, so it is done once and the height reused for both the plot inset
+// and the legend rect.
+func (c *Widget) placePlot(r ggui.Rect) float64 {
+	c.plot = ggui.Rct(r.Origin.Add(ggui.Pt(12., 12.)), ggui.Sz(max(0, r.Size.W-24), max(0, r.Size.H-24)))
+	if c.kind.polar() {
+		c.plot = r
+	}
+	legendH := 0.
+	if c.legend {
+		legendH = c.legendHeight(r.Size.W)
+		c.plot.Size.H = max(0, c.plot.Size.H-legendH)
+	}
+	if c.kind.polar() {
+		return legendH
+	}
+	if c.xAxis {
+		c.plot.Size.H = max(0, c.plot.Size.H-28)
+	}
+	if c.yAxis || c.horizontal && c.xAxis {
+		c.plot.Origin.X += 40
+		c.plot.Size.W = max(0, c.plot.Size.W-40)
+	}
+	return legendH
+}
+
 // paintBars draws one series of bars. Bars and curves are unrelated algorithms,
 // so paintCartesian dispatches here rather than inlining both in one loop.
-func (c *Widget) paintBars(dst, clipped *ggui.Canvas, r ggui.Rect, s chartSeriesGeometry, j, m int, progress float64) {
+func (c *Widget) paintBars(dst, clipped *ggui.Canvas, j int, progress float64) {
+	r := c.plot
+	s := c.geometry.series[j]
 	n := len(c.data)
 	band := r.Size.W / float64(n)
 	if c.horizontal {
 		band = r.Size.H / float64(n)
 	}
-	groups := m
+	groups := len(c.config)
 	group := j
 	if c.stack != StackUnstacked {
 		groups, group = 1, 0
@@ -229,9 +239,15 @@ func (c *Widget) paintAxes(dst *ggui.Canvas) {
 			c.text(dst, label, ggui.Pt(r.Origin.X-10, y-6), 12, c.theme.MutedFg, 1)
 		}
 	}
-	if !c.xAxis {
-		return
+	if c.xAxis {
+		c.paintCategoryAxis(dst)
 	}
+}
+
+// paintCategoryAxis names the categories along the axis, every one that
+// fits, evenly apart.
+func (c *Widget) paintCategoryAxis(dst *ggui.Canvas) {
+	r := c.plot
 	span := r.Size.W
 	if c.horizontal {
 		span = r.Size.H
@@ -303,10 +319,29 @@ func (c *Widget) paintDot(dst *ggui.Canvas, ctx PointContext) {
 	}
 }
 func (c *Widget) paintCartesian(dst *ggui.Canvas, progress float64) {
+	c.paintCursor(dst)
+	if c.kind != KindBar {
+		c.prepareCurves()
+	}
+	clipped := dst.Clip(c.plot)
+	for j := range c.geometry.series {
+		if c.kind == KindBar {
+			c.paintBars(dst, clipped, j, progress)
+			continue
+		}
+		c.paintCurveSeries(dst, clipped, j, progress)
+	}
+}
+
+// paintCursor marks the active category behind the series: a muted band
+// across a bar chart, a line across any other.
+func (c *Widget) paintCursor(dst *ggui.Canvas) {
 	r := c.plot
 	n := len(c.data)
-	m := len(c.config)
-	if c.active >= 0 && c.active < n && c.tooltipCursor && c.kind == KindBar {
+	if c.active < 0 || c.active >= n || !c.tooltipCursor {
+		return
+	}
+	if c.kind == KindBar {
 		band := r.Size.W / float64(n)
 		h := ggui.Rct(ggui.Pt(r.Origin.X+float64(c.active)*band, r.Origin.Y), ggui.Sz(band, r.Size.H))
 		if c.horizontal {
@@ -314,76 +349,86 @@ func (c *Widget) paintCartesian(dst *ggui.Canvas, progress float64) {
 			h = ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+float64(c.active)*band), ggui.Sz(r.Size.W, band))
 		}
 		dst.FillRect(h, c.theme.Muted)
+		return
 	}
 	// A line or area chart's cursor is one border-coloured line behind the
 	// series, drawn once: a translucent border stroked again for each series
 	// would brighten with their number.
-	if c.active >= 0 && c.active < n && c.tooltipCursor && c.kind != KindBar {
-		for _, s := range c.geometry.series {
-			if s.valid[c.active] {
-				x := chartPosition(r, s.top[c.active]).X
-				dst.StrokeLine(ggui.Pt(x, r.Origin.Y), ggui.Pt(x, r.Origin.Y+r.Size.H), c.theme.BorderWidth, c.theme.Border)
-				break
-			}
+	for _, s := range c.geometry.series {
+		if s.valid[c.active] {
+			x := chartPosition(r, s.top[c.active]).X
+			dst.StrokeLine(ggui.Pt(x, r.Origin.Y), ggui.Pt(x, r.Origin.Y+r.Size.H), c.theme.BorderWidth, c.theme.Border)
+			return
 		}
 	}
-	if c.kind != KindBar {
-		c.prepareCurves()
-	}
-	clipped := dst.Clip(r)
-	for j, s := range c.geometry.series {
-		if c.kind == KindBar {
-			c.paintBars(dst, clipped, r, s, j, m, progress)
-			continue
-		}
-		reveal := clipped
-		if progress < 1 && c.kind == KindArea {
-			reveal = dst.Clip(ggui.Rct(r.Origin, ggui.Sz(r.Size.W*progress, r.Size.H)))
-		}
-		totalLength := 0.
-		if c.kind == KindLine && progress < 1 {
-			for k := range c.curves[j] {
-				totalLength += c.curves[j][k].length
-			}
-		}
-		remaining := totalLength * progress
-		col, opacity := c.seriesColor(j), c.seriesOpacity(j)
-		reveal.Transform(ggui.Affine{}.Translate(r.Origin.X, r.Origin.Y), func(dst *ggui.Canvas) {
-			for k := range c.curves[j] {
-				paths := &c.curves[j][k]
-				if c.kind == KindLine && progress < 1 {
-					if remaining <= 0 {
-						break
-					}
-					if remaining < paths.length {
-						paths.strokePrefix(dst, remaining, c.stroke, col)
-						break
-					}
-					remaining -= paths.length
-				}
-				c.paintCurvePaths(dst, paths, col, opacity)
-			}
-		})
+}
 
-		if progress == 1 && (c.dots || c.labels) {
-			for _, i := range s.indices {
-				if !s.valid[i] {
-					continue
-				}
-				p := chartPosition(r, s.top[i])
-				ctx := c.context(i, j, p)
-				if c.dots {
-					c.paintDot(dst, ctx)
-				}
-				if c.labels {
-					c.paintLabel(dst, ctx)
-				}
+// paintCurveSeries draws series j's line or area, as much of it as the
+// entrance at progress has revealed, and its dots and labels.
+func (c *Widget) paintCurveSeries(dst, clipped *ggui.Canvas, j int, progress float64) {
+	r := c.plot
+	reveal := clipped
+	if progress < 1 && c.kind == KindArea {
+		reveal = dst.Clip(ggui.Rct(r.Origin, ggui.Sz(r.Size.W*progress, r.Size.H)))
+	}
+	col, opacity := c.seriesColor(j), c.seriesOpacity(j)
+	reveal.Transform(ggui.Affine{}.Translate(r.Origin.X, r.Origin.Y), func(dst *ggui.Canvas) {
+		if c.kind == KindLine && progress < 1 {
+			c.strokeLineEntrance(dst, c.curves[j], progress, col)
+			return
+		}
+		for k := range c.curves[j] {
+			c.paintCurvePaths(dst, &c.curves[j][k], col, opacity)
+		}
+	})
+	c.paintCurveMarks(dst, j, progress)
+}
+
+// strokeLineEntrance strokes the share progress of a line's length, chunk
+// by chunk from its start, as a line chart's entrance draws it.
+func (c *Widget) strokeLineEntrance(dst *ggui.Canvas, chunks []chartCurvePaths, progress float64, col color.Color) {
+	total := 0.
+	for k := range chunks {
+		total += chunks[k].length
+	}
+	remaining := total * progress
+	for k := range chunks {
+		paths := &chunks[k]
+		if remaining <= 0 {
+			return
+		}
+		if remaining < paths.length {
+			paths.strokePrefix(dst, remaining, c.stroke, col)
+			return
+		}
+		remaining -= paths.length
+		dst.StrokePath(&paths.line, c.stroke, col)
+	}
+}
+
+// paintCurveMarks draws series j's dots and labels once the entrance is
+// over, and the active point's dot throughout.
+func (c *Widget) paintCurveMarks(dst *ggui.Canvas, j int, progress float64) {
+	r := c.plot
+	s := c.geometry.series[j]
+	if progress == 1 && (c.dots || c.labels) {
+		for _, i := range s.indices {
+			if !s.valid[i] {
+				continue
+			}
+			p := chartPosition(r, s.top[i])
+			ctx := c.context(i, j, p)
+			if c.dots {
+				c.paintDot(dst, ctx)
+			}
+			if c.labels {
+				c.paintLabel(dst, ctx)
 			}
 		}
-		if c.active >= 0 && c.active < n && s.valid[c.active] {
-			p := chartPosition(r, s.top[c.active])
-			c.paintDot(dst, c.context(c.active, j, p))
-		}
+	}
+	if c.active >= 0 && c.active < len(c.data) && s.valid[c.active] {
+		p := chartPosition(r, s.top[c.active])
+		c.paintDot(dst, c.context(c.active, j, p))
 	}
 }
 
@@ -527,7 +572,6 @@ func (c *Widget) prepareCurves() {
 		return
 	}
 	c.curveSize = c.plot.Size
-	localPlot := ggui.Rct(ggui.Pt(0, 0), c.plot.Size)
 	c.curves = make([][]chartCurvePaths, len(c.geometry.series))
 	for j, s := range c.geometry.series {
 		for start := 0; start < len(s.indices); {
@@ -539,38 +583,46 @@ func (c *Widget) prepareCurves() {
 				end++
 			}
 			if end-start > 1 {
-				// Bound stencil winding complexity for dense, oscillating curves.
-				// Adjacent chunks share their endpoint so the chart stays continuous.
-				for first := start; first < end-1; {
-					last := min(first+25, end)
-					ids := s.indices[first:last]
-					top := make([]ggui.Point, len(ids))
-					base := make([]ggui.Point, len(ids))
-					for k, i := range ids {
-						top[k] = chartPosition(localPlot, s.top[i])
-						base[len(ids)-1-k] = chartPosition(localPlot, s.base[i])
-					}
-					paths := chartCurvePaths{}
-					curvePath(&paths.line, top, c.curve, true, func(p ggui.Point) {
-						if len(paths.samples) > 0 {
-							q := paths.samples[len(paths.samples)-1]
-							paths.length += math.Hypot(p.X-q.X, p.Y-q.Y)
-						}
-						paths.samples = append(paths.samples, p)
-						paths.lengths = append(paths.lengths, paths.length)
-					})
-					if c.kind == KindArea {
-						curvePath(&paths.fill, top, c.curve, true, nil)
-						curvePath(&paths.fill, base, c.curve, false, nil)
-						paths.fill.Close()
-					}
-					c.curves[j] = append(c.curves[j], paths)
-					first = last - 1
-				}
+				c.curves[j] = c.appendCurveRun(c.curves[j], s, s.indices[start:end])
 			}
 			start = end + 1
 		}
 	}
+}
+
+// appendCurveRun appends to chunks the paths through run, an unbroken
+// stretch of the series s's sampled points. Chunks bound stencil winding
+// complexity for dense, oscillating curves; adjacent chunks share their
+// endpoint so the chart stays continuous.
+func (c *Widget) appendCurveRun(chunks []chartCurvePaths, s chartSeriesGeometry, run []int) []chartCurvePaths {
+	localPlot := ggui.Rct(ggui.Pt(0, 0), c.plot.Size)
+	for first := 0; first < len(run)-1; {
+		last := min(first+25, len(run))
+		ids := run[first:last]
+		top := make([]ggui.Point, len(ids))
+		base := make([]ggui.Point, len(ids))
+		for k, i := range ids {
+			top[k] = chartPosition(localPlot, s.top[i])
+			base[len(ids)-1-k] = chartPosition(localPlot, s.base[i])
+		}
+		paths := chartCurvePaths{}
+		curvePath(&paths.line, top, c.curve, true, func(p ggui.Point) {
+			if len(paths.samples) > 0 {
+				q := paths.samples[len(paths.samples)-1]
+				paths.length += math.Hypot(p.X-q.X, p.Y-q.Y)
+			}
+			paths.samples = append(paths.samples, p)
+			paths.lengths = append(paths.lengths, paths.length)
+		})
+		if c.kind == KindArea {
+			curvePath(&paths.fill, top, c.curve, true, nil)
+			curvePath(&paths.fill, base, c.curve, false, nil)
+			paths.fill.Close()
+		}
+		chunks = append(chunks, paths)
+		first = last - 1
+	}
+	return chunks
 }
 func (c *Widget) paintCurvePaths(dst *ggui.Canvas, paths *chartCurvePaths, col color.Color, opacity float64) {
 	if c.kind == KindArea {
@@ -590,19 +642,7 @@ func (c *Widget) paintBar(dst *ggui.Canvas, bar ggui.Rect, i, j int, col color.C
 		return
 	}
 	v, _ := c.value(i, j)
-	before, after := false, false
-	for k := range c.config {
-		other, ok := c.value(i, k)
-		if !ok || other == 0 || v*other < 0 {
-			continue
-		}
-		if k < j {
-			before = true
-		}
-		if k > j {
-			after = true
-		}
-	}
+	before, after := c.stackNeighbours(i, j, v)
 	// Square only internal joins. The two exposed ends retain their rounding.
 	first, last := before, after
 	if (!c.horizontal && v >= 0) || (c.horizontal && v < 0) {
@@ -623,6 +663,25 @@ func (c *Widget) paintBar(dst *ggui.Canvas, bar ggui.Rect, i, j int, col color.C
 			dst.FillRect(ggui.Rct(bar.Origin.Add(ggui.Pt(0., bar.Size.H-radius)), ggui.Sz(bar.Size.W, radius)), col)
 		}
 	}
+}
+
+// stackNeighbours reports whether category i holds, in a series before j
+// and in one after it, a nonzero value whose sign does not oppose v's: the
+// bars stacked against bar (i, j) on either side.
+func (c *Widget) stackNeighbours(i, j int, v float64) (before, after bool) {
+	for k := range c.config {
+		other, ok := c.value(i, k)
+		if !ok || other == 0 || v*other < 0 {
+			continue
+		}
+		if k < j {
+			before = true
+		}
+		if k > j {
+			after = true
+		}
+	}
+	return before, after
 }
 
 func (p *chartCurvePaths) strokePrefix(dst *ggui.Canvas, length, width float64, col color.Color) {

@@ -242,45 +242,61 @@ func (c *Widget) paintTooltipContent(dst *ggui.Canvas, r ggui.Rect, index int, r
 	for _, row := range rows {
 		x, mid := left, y+chartTipRow/2
 		if !c.tooltip.HideIndicator {
-			w := chartIndicatorWidth(c.tooltip.Indicator, row.icon != "")
-			switch {
-			case row.icon != "":
-				ui.PaintIcon(dst, c.env, row.icon, ggui.Rct(ggui.Pt(x, mid-w/2), ggui.Sz(w, w)), row.col, 0)
-			case c.tooltip.Indicator == IndicatorLine:
-				dst.FillRoundRect(ggui.Rct(ggui.Pt(x, y), ggui.Sz(w, chartTipRow)), 2, row.col)
-			case c.tooltip.Indicator == IndicatorDashed:
-				for k := range 3 {
-					dst.FillRect(ggui.Rct(ggui.Pt(x, y+float64(k)*4.5), ggui.Sz(w, 3.)), row.col)
-				}
-			default:
-				dst.FillRoundRect(ggui.Rct(ggui.Pt(x, mid-w/2), ggui.Sz(w, w)), 2, row.col)
-			}
-			x += w + t.Space
+			x += c.paintIndicator(dst, row, ggui.Pt(x, y)) + t.Space
 		}
 		c.textMiddle(dst, row.label, ggui.Pt(x, mid), chartRegular, t.MutedFg, 0)
 		c.textMiddle(dst, row.value, ggui.Pt(right, mid), chartMono, t.Fg, 1)
 		y += chartTipRow + chartTipGap
 	}
 	if c.tooltip.ShowTotal {
-		dst.StrokeLine(ggui.Pt(left, y), ggui.Pt(right, y), t.BorderWidth, fade(t.Border, .5))
-		y += chartTipGap
-		total := 0.
-		for j := range c.config {
-			if v, ok := c.value(index, j); ok {
-				total += v
-			}
-		}
-		label := c.tooltip.TotalLabel
-		if label == "" {
-			label = c.words.OrDefault().ChartTotal
-		}
-		value := fmt.Sprintf("%g", total)
-		if len(c.config) > 0 {
-			value = c.formatValue(index, 0, total)
-		}
-		c.textMiddle(dst, label, ggui.Pt(left, y+chartTipRow/2), chartMedium, t.Fg, 0)
-		c.textMiddle(dst, value, ggui.Pt(right, y+chartTipRow/2), chartMono, t.Fg, 1)
+		c.paintTooltipTotal(dst, index, left, right, y)
 	}
+}
+
+// paintIndicator draws the mark before a tooltip row whose line starts at
+// top: the row's icon, or the swatch the tooltip's Indicator names. It
+// returns the mark's width.
+func (c *Widget) paintIndicator(dst *ggui.Canvas, row chartContentRow, top ggui.Point) float64 {
+	x, y := top.X, top.Y
+	mid := y + chartTipRow/2
+	w := chartIndicatorWidth(c.tooltip.Indicator, row.icon != "")
+	switch {
+	case row.icon != "":
+		ui.PaintIcon(dst, c.env, row.icon, ggui.Rct(ggui.Pt(x, mid-w/2), ggui.Sz(w, w)), row.col, 0)
+	case c.tooltip.Indicator == IndicatorLine:
+		dst.FillRoundRect(ggui.Rct(ggui.Pt(x, y), ggui.Sz(w, chartTipRow)), 2, row.col)
+	case c.tooltip.Indicator == IndicatorDashed:
+		for k := range 3 {
+			dst.FillRect(ggui.Rct(ggui.Pt(x, y+float64(k)*4.5), ggui.Sz(w, 3.)), row.col)
+		}
+	default:
+		dst.FillRoundRect(ggui.Rct(ggui.Pt(x, mid-w/2), ggui.Sz(w, w)), 2, row.col)
+	}
+	return w
+}
+
+// paintTooltipTotal draws the tooltip's total row under a rule at y, the
+// label from left and the summed value up to right.
+func (c *Widget) paintTooltipTotal(dst *ggui.Canvas, index int, left, right, y float64) {
+	t := c.theme
+	dst.StrokeLine(ggui.Pt(left, y), ggui.Pt(right, y), t.BorderWidth, fade(t.Border, .5))
+	y += chartTipGap
+	total := 0.
+	for j := range c.config {
+		if v, ok := c.value(index, j); ok {
+			total += v
+		}
+	}
+	label := c.tooltip.TotalLabel
+	if label == "" {
+		label = c.words.OrDefault().ChartTotal
+	}
+	value := fmt.Sprintf("%g", total)
+	if len(c.config) > 0 {
+		value = c.formatValue(index, 0, total)
+	}
+	c.textMiddle(dst, label, ggui.Pt(left, y+chartTipRow/2), chartMedium, t.Fg, 0)
+	c.textMiddle(dst, value, ggui.Pt(right, y+chartTipRow/2), chartMono, t.Fg, 1)
 }
 func (c *Widget) paintTooltip(dst *ggui.Canvas, r ggui.Rect) {
 	index := c.active
