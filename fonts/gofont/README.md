@@ -16,5 +16,15 @@ look on every platform. `gofont.Font()` and `gofont.Mono()` return the fonts
 without making them the defaults.
 
 The fonts add about 650 KB to the binary; an app that does not import the
-package does not embed them. They come from `golang.org/x/image/font/gofont`
-and are licensed under its BSD-style license.
+package does not embed them. `ui/theme` does not import `fonts/gofont`
+automatically either; to use `theme.FontSans` or `theme.FontMono` in
+`theme.Config`, or `Go` / `Go Mono` in `theme.ApplyCSS`/`FromCSS`, register
+them explicitly:
+
+```go
+theme.RegisterFont("Go", gofont.Font)
+theme.RegisterFont("Go Mono", gofont.Mono)
+```
+
+They come from `golang.org/x/image/font/gofont` and are licensed under its
+BSD-style license.

@@ -18,6 +18,16 @@ import (
 	"github.com/ironpark/ggui/ui/theme"
 )
 
+func init() {
+	theme.RegisterFont("Inter", inter.Font)
+	theme.RegisterFont("Geist", geist.Font)
+	theme.RegisterFont("Geist Sans", geist.Font)
+	theme.RegisterFont("Geist Mono", geist.Mono)
+	theme.RegisterFont("Go", gofont.Font)
+	theme.RegisterFont("Go Sans", gofont.Font)
+	theme.RegisterFont("Go Mono", gofont.Mono)
+}
+
 func TestConfigZeroPreservesPresetAndDefaults(t *testing.T) {
 	t.Parallel()
 	light, dark := theme.Default(), theme.Dark()
@@ -225,11 +235,43 @@ func TestConfigGoCodeCompilesAndReproducesTheme(t *testing.T) {
 			t.Fatalf("invalid exported expression: %v", err)
 		}
 	}
-	// Compile the actual exported expression against this checkout, so renamed
-	// fields, omitted font choices or a wrong appearance are observable failures.
+	// Compile the actual exported expression against this checkout in a clean
+	// process: first verify fonts are opt-in (only FontDefault until registered,
+	// unregistered FontInter panics), then register fonts and verify exported
+	// expressions compile and reproduce the exact themes.
 	source := fmt.Sprintf(`package main
-import("fmt"; "github.com/ironpark/ggui/ui/theme")
+import (
+ "fmt"
+ "slices"
+ "github.com/ironpark/ggui"
+ "github.com/ironpark/ggui/fonts/gofont"
+ "github.com/ironpark/ggui/fonts/inter"
+ "github.com/ironpark/ggui/ui/theme"
+)
 func main(){
+ if got := theme.Fonts(); !slices.Equal(got, []theme.FontFamily{theme.FontDefault}) {
+  panic(fmt.Sprintf("unregistered Fonts() = %%v, want [FontDefault]", got))
+ }
+ panicked := false
+ func() {
+  defer func() {
+   if recover() != nil {
+    panicked = true
+   }
+  }()
+  _ = (theme.Config{Font: theme.FontInter}).Light()
+ }()
+ if !panicked { panic("unregistered FontInter did not panic") }
+ loaded := 0
+ theme.RegisterFont("Go", func() *ggui.Font { loaded++; return gofont.Font() })
+ theme.RegisterFont("Go Mono", func() *ggui.Font { loaded++; return gofont.Mono() })
+ theme.RegisterFont("Inter", func() *ggui.Font { loaded++; return inter.Font() })
+ if got, want := theme.Fonts(), []theme.FontFamily{theme.FontDefault, theme.FontSans, theme.FontMono, theme.FontInter}; !slices.Equal(got, want) {
+  panic(fmt.Sprintf("registered Fonts() = %%v, want %%v", got, want))
+ }
+ if loaded != 0 {
+  panic(fmt.Sprintf("Fonts() invoked font loader %%d times", loaded))
+ }
  got := %s
  want := (theme.Config{Preset:theme.Preset{Base:theme.BaseOlive,Accent:theme.AccentCyan,Style:theme.StyleRhea},Chart:theme.AccentAmber,Radius:theme.RadiusSmall,Font:theme.FontMono,Heading:theme.FontSans,MenuAccent:theme.MenuAccentBold,MenuColor:theme.MenuColorInverted}).Dark()
  if got.Accent != got.Primary { panic("exported configuration lost its bold menus") }

@@ -9,6 +9,16 @@ import (
 	"github.com/ironpark/ggui/fonts/inter"
 )
 
+func init() {
+	RegisterFont("Inter", inter.Font)
+	RegisterFont("Geist", geist.Font)
+	RegisterFont("Geist Sans", geist.Font)
+	RegisterFont("Geist Mono", geist.Mono)
+	RegisterFont("Go", gofont.Font)
+	RegisterFont("Go Sans", gofont.Font)
+	RegisterFont("Go Mono", gofont.Mono)
+}
+
 // The font variables select registered families by name, the first one the
 // list has, and leave the font alone when it names none.
 func TestApplyCSSMapsFontVariablesToRegisteredFonts(t *testing.T) {
@@ -48,5 +58,34 @@ func TestApplyCSSMapsFontVariablesToRegisteredFonts(t *testing.T) {
 	light, dark, err := FromCSS(`:root { --font-sans: Geist, sans-serif; } .dark { --font-mono: "Geist Mono"; }`)
 	if err != nil || light.Text.Font != geist.Font() || dark.Text.Font != geist.Font() || dark.Mono.Font != geist.Mono() || light.Mono.Font == geist.Mono() {
 		t.Errorf("FromCSS did not carry the fonts into both themes: %v", err)
+	}
+}
+
+func TestRegisterFontNilUnregistersAndCustomConfigFont(t *testing.T) {
+	t.Parallel()
+	const family = "Temp Unregister Grotesk"
+	custom := gofont.Mono()
+	RegisterFont(family, func() *ggui.Font { return custom })
+	if !hasFontNamed(family) || !hasConfigFont(FontFamily(family)) {
+		t.Fatal("registered custom font was not detected")
+	}
+	if got := (Config{Font: FontFamily(family)}).Light().Text.Font; got != custom {
+		t.Fatal("Config did not select custom registered font")
+	}
+	RegisterFont(family, nil)
+	if hasFontNamed(family) || hasConfigFont(FontFamily(family)) || fontNamed(family) != nil {
+		t.Fatal("RegisterFont(name, nil) did not remove the registration")
+	}
+	panicked := false
+	func() {
+		defer func() {
+			if recover() != nil {
+				panicked = true
+			}
+		}()
+		_ = (Config{Font: FontFamily(family)}).Light()
+	}()
+	if !panicked {
+		t.Fatal("unregistered custom font did not panic")
 	}
 }

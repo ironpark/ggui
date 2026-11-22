@@ -18,11 +18,19 @@ label := widget.Text("Contribution History").Style(ggui.TextStyle{
 })
 ```
 
-The theme builder exposes the same family through `theme.FontInter` for body or
-heading fonts. The default theme and zero `theme.Config` retain their existing
-fonts. All four font files total 1,669,112 bytes (about 1.59 MiB); their data is
-embedded in binaries that link this package, including `ui/theme` for its Inter
-option. No runtime font download or system installation is needed.
+`ui/theme` does not import or embed `fonts/inter` automatically. To use
+`theme.FontInter` in `theme.Config` or `Inter` in `theme.ApplyCSS`/`FromCSS`,
+register it explicitly:
+
+```go
+theme.RegisterFont("Inter", inter.Font)
+recipe := theme.Config{Font: theme.FontInter, Heading: theme.FontInter}
+```
+
+The default theme and zero `theme.Config` retain their existing fonts. All four
+font files total 1,669,112 bytes (about 1.59 MiB); their data is embedded only
+in binaries that import this package. No runtime font download or system
+installation is needed.
 
 ## Source and license
 

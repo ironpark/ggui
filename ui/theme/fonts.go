@@ -5,39 +5,40 @@ import (
 	"sync"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/fonts/geist"
-	"github.com/ironpark/ggui/fonts/gofont"
-	"github.com/ironpark/ggui/fonts/inter"
 )
 
 // fontFamilies are the fonts RegisterFont knows, by familyKey of their name.
 var fontFamilies sync.Map // string -> func() *ggui.Font
 
-func init() {
-	RegisterFont("Inter", inter.Font)
-	RegisterFont("Geist", geist.Font)
-	RegisterFont("Geist Sans", geist.Font)
-	RegisterFont("Geist Mono", geist.Mono)
-	RegisterFont("Go", gofont.Font)
-	RegisterFont("Go Sans", gofont.Font)
-	RegisterFont("Go Mono", gofont.Mono)
+// RegisterFont names a font family for ApplyCSS, FromCSS, Config.Font,
+// Config.Heading and Fonts:
+//
+//	theme.RegisterFont("Inter", inter.Font)
+//	theme.RegisterFont("Geist", geist.Font)
+//	theme.RegisterFont("Geist Mono", geist.Mono)
+//	theme.RegisterFont("Go", gofont.Font)
+//	theme.RegisterFont("Go Mono", gofont.Mono)
+//	t, err := theme.Default().ApplyCSS(`--font-sans: "Inter", sans-serif;`)
+//
+// ui/theme does not import or pre-register any embedded font packages, so
+// applications only link the font packs they register. The name is matched
+// without regard to case, quotes, a trailing "Variable" or whether its words
+// are joined by spaces or hyphens. font is called when a theme or stylesheet
+// first asks for the family and should return the same Font each time, since
+// text styles compare fonts by identity. Registering a name again replaces it;
+// passing a nil font removes the registration.
+func RegisterFont(family string, font func() *ggui.Font) {
+	if font == nil {
+		fontFamilies.Delete(familyKey(family))
+		return
+	}
+	fontFamilies.Store(familyKey(family), font)
 }
 
-// RegisterFont names a font family for ApplyCSS and FromCSS, so that a
-// stylesheet's --font-sans, --font-heading or --font-mono naming it selects
-// font's result:
-//
-//	theme.RegisterFont("Figtree", figtree.Font)
-//	t, err := theme.Default().ApplyCSS(`--font-sans: "Figtree", sans-serif;`)
-//
-// The name is matched without regard to case, quotes, a trailing "Variable"
-// or whether its words are joined by spaces or hyphens. font is called when
-// a stylesheet first asks for the family and should return the same Font
-// each time, since text styles compare fonts by identity. Inter, Geist,
-// Geist Mono, Go and Go Mono are registered already; registering a name
-// again replaces it.
-func RegisterFont(family string, font func() *ggui.Font) {
-	fontFamilies.Store(familyKey(family), font)
+// hasFontNamed reports whether a family is registered without calling its loader.
+func hasFontNamed(family string) bool {
+	_, ok := fontFamilies.Load(familyKey(family))
+	return ok
 }
 
 // familyKey is a CSS font family name as fontFamilies keys it.

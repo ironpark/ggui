@@ -15,6 +15,9 @@ import (
 	"strings"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/fonts/geist"
+	"github.com/ironpark/ggui/fonts/gofont"
+	"github.com/ironpark/ggui/fonts/inter"
 	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
@@ -23,6 +26,14 @@ import (
 	"github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
+
+func init() {
+	theme.RegisterFont("Inter", inter.Font)
+	theme.RegisterFont("Geist", geist.Font)
+	theme.RegisterFont("Geist Mono", geist.Mono)
+	theme.RegisterFont("Go", gofont.Font)
+	theme.RegisterFont("Go Mono", gofont.Mono)
+}
 
 // customization is everything the playground edits: the recipe, which
 // carries the icon library and the menu accent, and the appearance the
@@ -309,32 +320,70 @@ func validateCustomization(s customization) (err error) {
 	return nil
 }
 
+func fontSetup(fonts ...theme.FontFamily) (imports, registers []string) {
+	type spec struct {
+		pkg  string
+		call string
+	}
+	specs := map[theme.FontFamily]spec{
+		theme.FontSans:      {pkg: "github.com/ironpark/ggui/fonts/gofont", call: `theme.RegisterFont("Go", gofont.Font)`},
+		theme.FontMono:      {pkg: "github.com/ironpark/ggui/fonts/gofont", call: `theme.RegisterFont("Go Mono", gofont.Mono)`},
+		theme.FontInter:     {pkg: "github.com/ironpark/ggui/fonts/inter", call: `theme.RegisterFont("Inter", inter.Font)`},
+		theme.FontGeist:     {pkg: "github.com/ironpark/ggui/fonts/geist", call: `theme.RegisterFont("Geist", geist.Font)`},
+		theme.FontGeistMono: {pkg: "github.com/ironpark/ggui/fonts/geist", call: `theme.RegisterFont("Geist Mono", geist.Mono)`},
+	}
+	for _, f := range fonts {
+		sp, ok := specs[f]
+		if !ok {
+			continue
+		}
+		if !slices.Contains(imports, sp.pkg) {
+			imports = append(imports, sp.pkg)
+		}
+		if !slices.Contains(registers, sp.call) {
+			registers = append(registers, sp.call)
+		}
+	}
+	slices.Sort(imports)
+	slices.Sort(registers)
+	return imports, registers
+}
+
 // sourceCode is a Go file that applies the recipe: it links the icon
-// library the recipe names, which registers it, then follows the chosen
-// mode.
+// library the recipe names, registers any bundled fonts it uses, and
+// applies the theme in the chosen mode.
 func sourceCode(s customization) string {
 	library := string(s.Theme.Icons)
 	recipe := strings.TrimSuffix(s.Theme.GoCode(false), ".For(false)")
 	apply := fmt.Sprintf("theme.Set(recipe.%s())", title(s.Mode))
-	imports := ""
+	fontImports, fontRegisters := fontSetup(s.Theme.Font, s.Theme.Heading)
+	var imports strings.Builder
 	if s.Mode == theme.ModeSystem {
-		imports = ` "github.com/ironpark/ggui"
-`
+		imports.WriteString(` "github.com/ironpark/ggui"` + "\n")
 		apply = "theme.Bind(ggui.SystemDark(), recipe.Dark(), recipe.Light())"
+	}
+	for _, pkg := range fontImports {
+		fmt.Fprintf(&imports, " %q\n", pkg)
+	}
+	if library != "" {
+		fmt.Fprintf(&imports, " _ \"github.com/ironpark/ggui/ui/icons/%s\"\n", library)
+	}
+	imports.WriteString(` "github.com/ironpark/ggui/ui/theme"` + "\n")
+	var registers strings.Builder
+	for _, call := range fontRegisters {
+		registers.WriteString(" " + call + "\n")
 	}
 	code := fmt.Sprintf(`package main
 
 import (
-%s _ "github.com/ironpark/ggui/ui/icons/%s"
- "github.com/ironpark/ggui/ui/theme"
-)
+%s)
 
 // Call applyTheme from your application's Setup.
 func applyTheme() {
- recipe := %s
+%s recipe := %s
  %s
 }
-`, imports, library, recipe, apply)
+`, imports.String(), registers.String(), recipe, apply)
 	formatted, err := format.Source([]byte(code))
 	if err != nil {
 		panic(err)

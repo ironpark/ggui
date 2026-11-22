@@ -112,6 +112,20 @@ import "github.com/ironpark/ggui/fonts/gofont"
 gofont.Enable() // Go Regular, Medium and Bold, and Go Mono; before building the app
 ```
 
+The optional bundled font packages (`fonts/gofont`, `fonts/inter`, and
+`fonts/geist`) are not imported or embedded by `ui/theme` automatically. To use
+them with `theme.Config` (`theme.FontSans`, `theme.FontMono`, `theme.FontInter`,
+`theme.FontGeist`, `theme.FontGeistMono`) or `theme.ApplyCSS`/`theme.FromCSS`,
+register the families your application needs with `theme.RegisterFont`:
+
+```go
+theme.RegisterFont("Inter", inter.Font)
+theme.RegisterFont("Geist", geist.Font)
+theme.RegisterFont("Geist Mono", geist.Mono)
+theme.RegisterFont("Go", gofont.Font)
+theme.RegisterFont("Go Mono", gofont.Mono)
+```
+
 ### Add color emoji
 
 `Text` and `widget.TextInput` render color emoji as part of ordinary strings. Emoji
