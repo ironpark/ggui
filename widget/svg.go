@@ -386,6 +386,36 @@ func (w *SVGWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		return
 	}
 
+	w.retainSlot(dst, r)
+	tl := w.timeline()
+	ph := w.playhead(tl)
+
+	// Offscreen pause: reset clock anchor, avoid waking the frame clock, skip
+	// rasterization, while keeping the retained slot alive.
+	frameNow := ggui.FrameTime()
+	if dst != nil && dst.Visible(r).Empty() {
+		ph.markOffscreen(frameNow)
+		return
+	}
+	ph.markVisible(frameNow)
+	w.advancePlayhead(ph, tl, frameNow)
+
+	postDone = w.deliverDone(ph)
+
+	frame := w.resolveFrame(ph.evalTime(tl))
+
+	// Headless probes without RenderTo still run clock, state and semantics
+	// above, but skip GPU rasterization and texture allocation.
+	if dst == nil || dst.Image == nil {
+		return
+	}
+	w.paintFrame(dst, r, frame)
+}
+
+// retainSlot adopts the state a widget showing the same document at the
+// same anchor retained, or starts its own, and retains it for the next
+// paint.
+func (w *SVGWidget) retainSlot(dst *ggui.Canvas, r ggui.Rect) {
 	atAnchor := ggui.Anchor{Rect: r, ID: w.id}
 	if w.slot == nil {
 		if prev, ok := dst.Retained(atAnchor, svgSlot); ok && prev != nil && prev.doc == w.doc {
@@ -395,8 +425,12 @@ func (w *SVGWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 	}
 	dst.Retain(atAnchor, svgSlot, w.slot)
+}
 
-	tl := w.timeline()
+// playhead returns the playhead this paint moves, the controller's or the
+// slot's own, started on first use: playing at once when it auto-plays
+// and nothing drives its time.
+func (w *SVGWidget) playhead(tl svg.Timeline) *svgPlayhead {
 	var ph *svgPlayhead
 	if w.ctrl != nil {
 		// Mark controller mounted without recording in Layout.
@@ -426,17 +460,13 @@ func (w *SVGWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			ph.playing = true
 		}
 	}
+	return ph
+}
 
-	// Offscreen pause: reset clock anchor, avoid waking the frame clock, skip
-	// rasterization, while keeping the retained slot alive.
-	frameNow := ggui.FrameTime()
-	if dst != nil && dst.Visible(r).Empty() {
-		ph.markOffscreen(frameNow)
-		return
-	}
-	ph.markVisible(frameNow)
-
-	// Advance or evaluate playhead.
+// advancePlayhead advances or evaluates ph for this frame: it sets it to
+// the bound time or progress, rests it where reduced motion asks, or moves
+// it on by the time played.
+func (w *SVGWidget) advancePlayhead(ph *svgPlayhead, tl svg.Timeline, now time.Time) {
 	switch {
 	case w.drive != svgDriveNone && (w.ctrl == nil || !w.ctrl.releasedBound):
 		if w.drive == svgDriveTime {
@@ -449,82 +479,101 @@ func (w *SVGWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		ph.anchor = time.Time{}
 
 	case w.reduced:
-		ph.anchor = time.Time{}
-		wasPlaying := ph.playing
-		if w.reducedAtSet {
-			ph.pos = w.reducedAt
-			ph.playing = false
-			if wasPlaying && !tl.Infinite && w.loop >= 0 && w.animated() {
-				ph.markDone()
-			}
-		} else if wasPlaying {
-			if tl.Infinite || w.loop < 0 {
-				ph.pos = 0
-				ph.playing = false
-			} else {
-				if ph.dir < 0 {
-					ph.pos = 0
-				} else {
-					ph.pos = tl.Span
-				}
-				ph.playing = false
-				if w.animated() {
-					ph.markDone()
-				}
-			}
-		}
+		w.restReduced(ph, tl)
 
 	case ph.playing:
-		if tl.Span <= 0 && !tl.Infinite {
+		w.stepPlaying(ph, tl, now)
+	}
+}
+
+// restReduced rests ph where reduced motion holds it: at ReducedMotionAt
+// when set, else, when it was playing, at the start of an endless run or
+// at the end a finite one plays toward, which completes the run.
+func (w *SVGWidget) restReduced(ph *svgPlayhead, tl svg.Timeline) {
+	ph.anchor = time.Time{}
+	wasPlaying := ph.playing
+	if w.reducedAtSet {
+		ph.pos = w.reducedAt
+		ph.playing = false
+		if wasPlaying && !tl.Infinite && w.loop >= 0 && w.animated() {
+			ph.markDone()
+		}
+	} else if wasPlaying {
+		if tl.Infinite || w.loop < 0 {
+			ph.pos = 0
 			ph.playing = false
-			ph.anchor = time.Time{}
 		} else {
-			fps := w.maxFPS
-			if fps <= 0 {
-				fps = 60
+			if ph.dir < 0 {
+				ph.pos = 0
+			} else {
+				ph.pos = tl.Span
 			}
-			step := time.Second / time.Duration(fps)
-			q := frameNow.Truncate(step)
-			if !ph.anchor.IsZero() && q.After(ph.anchor) && w.speed > 0 {
-				dt := time.Duration(float64(q.Sub(ph.anchor)) * w.speed)
-				if ph.advance(dt, tl, w.loop, w.alternate) {
-					ph.markDone()
-				}
-			}
-			ph.anchor = q
-			if ph.playing && w.speed > 0 {
-				ggui.Paced(step)
+			ph.playing = false
+			if w.animated() {
+				ph.markDone()
 			}
 		}
 	}
+}
 
-	postDone = w.deliverDone(ph)
-
-	evalT := ph.evalTime(tl)
-
-	// Resolve root color and all controller node bindings in Paint.
-	col := resolveSVGColor(w.color.Get(), w.env)
-	if col == nil {
-		col = resolveSVGColor(w.ink, w.env)
+// stepPlaying moves a playing ph on by the frame time since its anchor,
+// quantized to MaxFPS and scaled by Speed, and paces the next frame. A
+// timeline with nothing to play stops it.
+func (w *SVGWidget) stepPlaying(ph *svgPlayhead, tl svg.Timeline, now time.Time) {
+	if tl.Span <= 0 && !tl.Infinite {
+		ph.playing = false
+		ph.anchor = time.Time{}
+		return
 	}
-	if col == nil {
-		col = color.Black
+	fps := w.maxFPS
+	if fps <= 0 {
+		fps = 60
 	}
+	step := time.Second / time.Duration(fps)
+	q := now.Truncate(step)
+	if !ph.anchor.IsZero() && q.After(ph.anchor) && w.speed > 0 {
+		dt := time.Duration(float64(q.Sub(ph.anchor)) * w.speed)
+		if ph.advance(dt, tl, w.loop, w.alternate) {
+			ph.markDone()
+		}
+	}
+	ph.anchor = q
+	if ph.playing && w.speed > 0 {
+		ggui.Paced(step)
+	}
+}
 
-	hasOverrides := false
+// svgFrame is what a paint resolves before it rasterizes: the document
+// time, the colour currentColor takes, and whether controller overrides
+// apply.
+type svgFrame struct {
+	t         time.Duration
+	color     color.Color
+	overrides bool
+}
+
+// resolveFrame resolves, in Paint, the root colour and every controller
+// node binding for the frame at document time t.
+func (w *SVGWidget) resolveFrame(t time.Duration) svgFrame {
+	f := svgFrame{t: t, color: resolveSVGColor(w.color.Get(), w.env)}
+	if f.color == nil {
+		f.color = resolveSVGColor(w.ink, w.env)
+	}
+	if f.color == nil {
+		f.color = color.Black
+	}
 	if w.ctrl != nil {
-		hasOverrides = w.ctrl.resolveInto(&w.slot.overrides, &w.slot.nodesRev, w.env)
+		f.overrides = w.ctrl.resolveInto(&w.slot.overrides, &w.slot.nodesRev, w.env)
 	} else if len(w.slot.overrides) > 0 {
 		clear(w.slot.overrides)
 		w.slot.nodesRev++
 	}
+	return f
+}
 
-	// Headless probes without RenderTo still run clock, state and semantics
-	// above, but skip GPU rasterization and texture allocation.
-	if dst == nil || dst.Image == nil {
-		return
-	}
-
+// paintFrame rasterizes frame at the pixel size its fit in r takes and
+// draws it there, clipped to r.
+func (w *SVGWidget) paintFrame(dst *ggui.Canvas, r ggui.Rect, frame svgFrame) {
 	nat := w.natural()
 	if nat.W <= 0 || nat.H <= 0 {
 		return
@@ -544,37 +593,7 @@ func (w *SVGWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	geoM.Translate(-vx, -vy)
 	geoM.Scale(float64(pw)/vw, float64(phPx)/vh)
 
-	var img *ggfx.Image
-	isStatic := !w.animated() && !hasOverrides
-	if isStatic {
-		var colKey uint32
-		if w.doc.UsesCurrentColor() {
-			colKey = packRGBA8(col)
-		}
-		if w.slot.surface != nil {
-			w.slot.surface.releaseTexture()
-		}
-		img, _ = svgTextures.getStatic(w.doc, pw, phPx, colKey, col, geoM)
-	} else {
-		if w.slot.surface == nil {
-			w.slot.surface = newSVGSurface(w.doc)
-		}
-		key := svgKey{
-			doc:   w.doc,
-			w:     int32(pw),
-			h:     int32(phPx),
-			t:     evalT,
-			color: packRGBA8(col),
-			nodes: w.slot.nodesRev,
-		}
-		opts := svg.DrawOptions{
-			Time:         evalT,
-			CurrentColor: col,
-			Overrides:    w.slot.overrides,
-		}
-		img = w.slot.surface.render(key, geoM, &opts)
-	}
-
+	img := w.texture(pw, phPx, geoM, frame)
 	if img == nil {
 		return
 	}
@@ -585,6 +604,40 @@ func (w *SVGWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	target.DrawImage(img, at, ggui.ImageOptions{Fit: ggui.FitFill})
 	runtime.KeepAlive(w.slot.surface)
 	runtime.KeepAlive(w.doc)
+}
+
+// texture returns frame rasterized pw by phPx pixels through geoM: from
+// the shared cache for a static document, else in the slot's own surface.
+func (w *SVGWidget) texture(pw, phPx int, geoM ggfx.GeoM, frame svgFrame) *ggfx.Image {
+	isStatic := !w.animated() && !frame.overrides
+	if isStatic {
+		var colKey uint32
+		if w.doc.UsesCurrentColor() {
+			colKey = packRGBA8(frame.color)
+		}
+		if w.slot.surface != nil {
+			w.slot.surface.releaseTexture()
+		}
+		img, _ := svgTextures.getStatic(w.doc, pw, phPx, colKey, frame.color, geoM)
+		return img
+	}
+	if w.slot.surface == nil {
+		w.slot.surface = newSVGSurface(w.doc)
+	}
+	key := svgKey{
+		doc:   w.doc,
+		w:     int32(pw),
+		h:     int32(phPx),
+		t:     frame.t,
+		color: packRGBA8(frame.color),
+		nodes: w.slot.nodesRev,
+	}
+	opts := svg.DrawOptions{
+		Time:         frame.t,
+		CurrentColor: frame.color,
+		Overrides:    w.slot.overrides,
+	}
+	return w.slot.surface.render(key, geoM, &opts)
 }
 
 func (w *SVGWidget) deliverDone(ph *svgPlayhead) func() {

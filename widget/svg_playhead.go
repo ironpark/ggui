@@ -71,20 +71,7 @@ func (p *svgPlayhead) advance(dt time.Duration, tl svg.Timeline, loop int, alter
 	// Authored infinite timeline (loop == 0 && tl.Infinite): play indefinitely
 	// when moving forward, or stop at 0 when reversing.
 	if loop == 0 && tl.Infinite {
-		if p.dir > 0 {
-			p.pos += dt
-			if tl.Loop > 0 && p.pos >= tl.LoopStart {
-				p.pos = tl.LoopStart + (p.pos-tl.LoopStart)%tl.Loop
-			}
-			return false
-		}
-		if dt >= p.pos {
-			p.pos = 0
-			p.playing = false
-			return true
-		}
-		p.pos -= dt
-		return false
+		return p.advanceAuthored(dt, tl)
 	}
 
 	if span <= 0 {
@@ -93,42 +80,17 @@ func (p *svgPlayhead) advance(dt time.Duration, tl svg.Timeline, loop int, alter
 		return false
 	}
 
+	run := svgRun{span: span, alternate: alternate}
 	// Infinite looping over [0, span] (loop < 0).
 	if loop < 0 {
 		cycle := span
 		if alternate {
 			cycle = 2 * span
 		}
-		rem := dt % cycle
-		for rem > 0 {
-			if p.dir > 0 {
-				toEnd := span - p.pos
-				if rem < toEnd {
-					p.pos += rem
-					rem = 0
-				} else {
-					rem -= toEnd
-					if alternate {
-						p.pos = span
-						p.dir = -1
-					} else {
-						p.pos = 0
-					}
-				}
-			} else {
-				toStart := p.pos
-				if rem < toStart {
-					p.pos -= rem
-					rem = 0
-				} else {
-					rem -= toStart
-					if alternate {
-						p.pos = 0
-						p.dir = 1
-					} else {
-						p.pos = span
-					}
-				}
+		for rem := dt % cycle; rem > 0; {
+			var reached bool
+			if rem, reached = p.stepPass(rem, span); reached {
+				p.turn(run)
 			}
 		}
 		return false
@@ -139,86 +101,117 @@ func (p *svgPlayhead) advance(dt time.Duration, tl svg.Timeline, loop int, alter
 	if totalPasses == 0 {
 		totalPasses = 1
 	}
-	rem := dt
+	return p.runPasses(dt, run, totalPasses)
+}
+
+// svgRun is how a playhead plays a finite timeline: over span, and every
+// other pass backwards when alternate.
+type svgRun struct {
+	span      time.Duration
+	alternate bool
+}
+
+// advanceAuthored steps p by dt over an authored infinite timeline: on and
+// on, round its loop, when moving forward, or back to a stop at 0, when it
+// reports true.
+func (p *svgPlayhead) advanceAuthored(dt time.Duration, tl svg.Timeline) bool {
+	if p.dir > 0 {
+		p.pos += dt
+		if tl.Loop > 0 && p.pos >= tl.LoopStart {
+			p.pos = tl.LoopStart + (p.pos-tl.LoopStart)%tl.Loop
+		}
+		return false
+	}
+	if dt >= p.pos {
+		p.pos = 0
+		p.playing = false
+		return true
+	}
+	p.pos -= dt
+	return false
+}
+
+// runPasses steps p by rem through a finite run of passes passes, and
+// reports true when the run reaches its end.
+func (p *svgPlayhead) runPasses(rem time.Duration, run svgRun, passes int) bool {
 	for rem > 0 {
 		// Fast-forward full passes if starting from an endpoint.
-		if (p.pos == 0 && p.dir > 0) || (p.pos == span && p.dir < 0) {
-			full := int(rem / span)
-			left := totalPasses - p.pass
-			if full >= left {
-				// Consume all remaining passes and land on the final endpoint.
-				finalDir := p.dir
-				if alternate && (left-1)%2 == 1 {
-					finalDir = -finalDir
-				}
-				p.pass = totalPasses
-				if finalDir > 0 {
-					p.pos = span
-				} else {
-					p.pos = 0
-				}
-				p.playing = false
-				return true
-			}
-			if full > 0 {
-				p.pass += full
-				rem -= time.Duration(full) * span
-				if alternate && full%2 == 1 {
-					p.dir = -p.dir
-					if p.dir > 0 {
-						p.pos = 0
-					} else {
-						p.pos = span
-					}
-				}
-				if rem == 0 {
-					return false
-				}
+		if (p.pos == 0 && p.dir > 0) || (p.pos == run.span && p.dir < 0) {
+			var finished bool
+			if rem, finished = p.skipPasses(rem, run, passes); finished || rem == 0 {
+				return finished
 			}
 		}
-		if p.dir > 0 {
-			toEnd := span - p.pos
-			if rem < toEnd {
-				p.pos += rem
-				rem = 0
-			} else {
-				rem -= toEnd
-				p.pass++
-				if p.pass >= totalPasses {
-					p.pos = span
-					p.playing = false
-					return true
-				}
-				if alternate {
-					p.pos = span
-					p.dir = -1
-				} else {
-					p.pos = 0
-				}
-			}
-		} else {
-			toStart := p.pos
-			if rem < toStart {
-				p.pos -= rem
-				rem = 0
-			} else {
-				rem -= toStart
-				p.pass++
-				if p.pass >= totalPasses {
-					p.pos = 0
-					p.playing = false
-					return true
-				}
-				if alternate {
-					p.pos = 0
-					p.dir = 1
-				} else {
-					p.pos = span
-				}
-			}
+		var reached bool
+		if rem, reached = p.stepPass(rem, run.span); !reached {
+			continue
 		}
+		p.pass++
+		if p.pass >= passes {
+			p.pos = gem.Pick(p.dir > 0, run.span, 0)
+			p.playing = false
+			return true
+		}
+		p.turn(run)
 	}
 	return false
+}
+
+// skipPasses fast-forwards p, at the endpoint a pass starts from, past the
+// whole passes rem covers, and returns what is left of rem. When those are
+// all the passes left, it lands on the run's final endpoint and reports
+// true.
+func (p *svgPlayhead) skipPasses(rem time.Duration, run svgRun, passes int) (time.Duration, bool) {
+	full := int(rem / run.span)
+	left := passes - p.pass
+	if full >= left {
+		// Consume all remaining passes and land on the final endpoint.
+		finalDir := p.dir
+		if run.alternate && (left-1)%2 == 1 {
+			finalDir = -finalDir
+		}
+		p.pass = passes
+		p.pos = gem.Pick(finalDir > 0, run.span, 0)
+		p.playing = false
+		return 0, true
+	}
+	if full > 0 {
+		p.pass += full
+		rem -= time.Duration(full) * run.span
+		if run.alternate && full%2 == 1 {
+			p.turn(run)
+		}
+	}
+	return rem, false
+}
+
+// stepPass moves p by up to rem toward the end of its pass, in its
+// direction, and returns what is left of rem and whether it reached that
+// end, where it leaves pos for the caller to set.
+func (p *svgPlayhead) stepPass(rem, span time.Duration) (time.Duration, bool) {
+	if p.dir > 0 {
+		toEnd := span - p.pos
+		if rem < toEnd {
+			p.pos += rem
+			return 0, false
+		}
+		return rem - toEnd, true
+	}
+	toStart := p.pos
+	if rem < toStart {
+		p.pos -= rem
+		return 0, false
+	}
+	return rem - toStart, true
+}
+
+// turn starts the next pass at the end p reached: back the way it came
+// when the run alternates, else over again from the start.
+func (p *svgPlayhead) turn(run svgRun) {
+	if run.alternate {
+		p.dir = -p.dir
+	}
+	p.pos = gem.Pick(p.dir > 0, 0, run.span)
 }
 
 // evalTime returns the document timestamp corresponding to p's current position.

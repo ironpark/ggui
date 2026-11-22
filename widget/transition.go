@@ -715,8 +715,8 @@ func (a *AnimatedBoxWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	b.Border(a.borderWidthTo.follow(env, a.borderWidth.Get(), d, a.ease, ggui.LerpFloat),
 		a.borderTo.follow(env, ggui.ResolveColor(a.border.Get(), env), d, a.ease, ggui.LerpColor))
 	b.Radius(a.radiusTo.follow(env, a.radius.Get(), d, a.ease, ggui.LerpFloat))
-	b.Width(a.boxSize(followSize(env, &a.widthTo, a.width.Get(), a.size.W, d, a.ease, a.collapsible)))
-	b.Height(a.boxSize(followSize(env, &a.heightTo, a.height.Get(), a.size.H, d, a.ease, a.collapsible)))
+	b.Width(a.boxSize(a.followSize(env, &a.widthTo, a.width.Get(), a.size.W, d)))
+	b.Height(a.boxSize(a.followSize(env, &a.heightTo, a.height.Get(), a.size.H, d)))
 	b.Padding(a.paddingTo.follow(env, a.padding.Get(), d, a.ease, ggui.LerpInsets))
 	a.size = b.Layout(c, env)
 	return a.size
@@ -793,9 +793,9 @@ func (a *AnimatedBoxWidget) boxSize(v float64) float64 {
 // but "as the child sizes it": a move to zero lands at once, and a move
 // away from it starts at shown, the size the box last had. A collapsible
 // box's zero is a number like any other.
-func followSize(env ggui.Env, f *follower[float64], target, shown float64, d time.Duration, e ggui.Easing, collapsible bool) float64 {
-	if collapsible {
-		return f.follow(env, target, d, e, ggui.LerpFloat)
+func (a *AnimatedBoxWidget) followSize(env ggui.Env, f *follower[float64], target, shown float64, d time.Duration) float64 {
+	if a.collapsible {
+		return f.follow(env, target, d, a.ease, ggui.LerpFloat)
 	}
 	if target <= 0 {
 		d = 0
@@ -803,5 +803,5 @@ func followSize(env ggui.Env, f *follower[float64], target, shown float64, d tim
 		f.jump(shown)
 		f.set = true
 	}
-	return f.follow(env, target, d, e, ggui.LerpFloat)
+	return f.follow(env, target, d, a.ease, ggui.LerpFloat)
 }

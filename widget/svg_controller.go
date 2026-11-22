@@ -235,21 +235,10 @@ func (c *SVGController) resolveInto(dst *svg.Overrides, rev *uint64, env ggui.En
 			continue
 		}
 		ov := n.resolve(env)
-		if ov.IsZero() {
-			if *dst != nil {
-				if _, existed := (*dst)[id]; existed {
-					delete(*dst, id)
-					changed = true
-				}
-			}
-			continue
+		if !ov.IsZero() {
+			activeCount++
 		}
-		activeCount++
-		if *dst == nil {
-			*dst = make(svg.Overrides, len(c.nodes))
-		}
-		if prev, ok := (*dst)[id]; !ok || !ov.Equal(prev) {
-			(*dst)[id] = ov
+		if c.setOverride(dst, id, ov) {
 			changed = true
 		}
 	}
@@ -268,6 +257,27 @@ func (c *SVGController) resolveInto(dst *svg.Overrides, rev *uint64, env ggui.En
 		*rev++
 	}
 	return activeCount > 0
+}
+
+// setOverride writes node id's resolved override into *dst: a zero one is
+// deleted, any other stored when it differs, the map made on first use.
+// It reports whether *dst changed.
+func (c *SVGController) setOverride(dst *svg.Overrides, id string, ov svg.NodeOverride) bool {
+	if ov.IsZero() {
+		if _, existed := (*dst)[id]; !existed {
+			return false
+		}
+		delete(*dst, id)
+		return true
+	}
+	if *dst == nil {
+		*dst = make(svg.Overrides, len(c.nodes))
+	}
+	if prev, ok := (*dst)[id]; ok && ov.Equal(prev) {
+		return false
+	}
+	(*dst)[id] = ov
+	return true
 }
 
 type svgScaleMode uint8
@@ -689,25 +699,7 @@ func (n *SVGNode) resetFields() bool {
 // resolve evaluates all configured literals and bound readers against env and
 // returns the corresponding svg.NodeOverride.
 func (n *SVGNode) resolve(env ggui.Env) svg.NodeOverride {
-	var ov svg.NodeOverride
-	if n.hasOffset {
-		p := n.offset.Get()
-		ov = ov.Translate(p.X, p.Y)
-	}
-	if n.hasRotate {
-		ov = ov.Rotate(n.rotate.Get())
-	}
-	switch n.scaleMode {
-	case svgScaleUniform:
-		s := n.scaleUniform.Get()
-		ov = ov.Scale(s, s)
-	case svgScaleXY:
-		p := n.scaleXY.Get()
-		ov = ov.Scale(p.X, p.Y)
-	}
-	if n.hasRotate || n.scaleMode != svgScaleUnset || n.hasPivot {
-		ov = ov.Pivot(n.pivot)
-	}
+	ov := n.transform()
 	if n.hasOpacity {
 		ov = ov.Opacity(n.opacity.Get())
 	}
@@ -733,6 +725,31 @@ func (n *SVGNode) resolve(env ggui.Env) svg.NodeOverride {
 			end = n.trimEnd.Get()
 		}
 		ov = ov.Trim(start, end, 0)
+	}
+	return ov
+}
+
+// transform returns the override that moves the node: its configured
+// translation, rotation and scale, about its pivot.
+func (n *SVGNode) transform() svg.NodeOverride {
+	var ov svg.NodeOverride
+	if n.hasOffset {
+		p := n.offset.Get()
+		ov = ov.Translate(p.X, p.Y)
+	}
+	if n.hasRotate {
+		ov = ov.Rotate(n.rotate.Get())
+	}
+	switch n.scaleMode {
+	case svgScaleUniform:
+		s := n.scaleUniform.Get()
+		ov = ov.Scale(s, s)
+	case svgScaleXY:
+		p := n.scaleXY.Get()
+		ov = ov.Scale(p.X, p.Y)
+	}
+	if n.hasRotate || n.scaleMode != svgScaleUnset || n.hasPivot {
+		ov = ov.Pivot(n.pivot)
 	}
 	return ov
 }
