@@ -903,7 +903,7 @@ func (t *RichTextWidget) HandleKey(ev ggui.KeyEvent) {
 			t.ed.MoveTo(t.ed.Caret, false)
 		case ggui.KeyArrowLeft, ggui.KeyArrowRight:
 			if m.Shift {
-				t.ed.MoveBy(gem.Pick(ev.Key == ggui.KeyArrowLeft, -1, 1), textedit.WordWise(m.Alt, m.Ctrl, m.Meta), true)
+				t.ed.MoveBy(gem.Pick(ev.Key == ggui.KeyArrowLeft, -1, 1), wordWise(m), true)
 			}
 		case ggui.KeyHome, ggui.KeyEnd:
 			if m.Shift {

@@ -425,9 +425,7 @@ func (t *TextInputWidget) bidiStyle() paragraph.Style {
 // face is the face the text is drawn in at scale times its size, its
 // tracking with it.
 func (t *TextInputWidget) face(scale float64) text.Face {
-	st := t.textStyle()
-	size := st.Size * scale
-	return st.Font.SpacedFaceFor(size, st.Weight, st.Tracking*size, st.Emoji)
+	return faceOf(t.textStyle(), scale)
 }
 
 // advance is the logical width of s as drawn.
