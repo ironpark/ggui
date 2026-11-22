@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/chat"
 	"github.com/ironpark/ggui/widget"
 )
 
@@ -267,7 +268,7 @@ func TestLoopsShowingTogetherShareTheirFrames(t *testing.T) {
 		return widget.Column(
 			ui.Spinner(),
 			ui.Skeleton(120, 16),
-			ui.Attachment("report.pdf", "1 MB").State(ui.AttachmentUploading).Width(220),
+			chat.Attachment("report.pdf", "1 MB").State(chat.AttachmentUploading).Width(220),
 			widget.Box().Size(600, 400),
 		)
 	}, ggui.Sz(600, 600))
@@ -295,11 +296,11 @@ func TestLoopsShowingTogetherShareTheirFrames(t *testing.T) {
 // A wheel's snap in an attachment strip waits for the wheel to stop with
 // no frames, then snaps in one.
 func TestAnAttachmentStripSnapsAfterTheWheelWithoutWatching(t *testing.T) {
-	var cards []*ui.AttachmentWidget
+	var cards []*chat.AttachmentWidget
 	for i := range 4 {
-		cards = append(cards, ui.Attachment(fmt.Sprintf("File %d", i), "PDF").Width(180))
+		cards = append(cards, chat.Attachment(fmt.Sprintf("File %d", i), "PDF").Width(180))
 	}
-	group := ui.AttachmentGroup(cards...)
+	group := chat.AttachmentGroup(cards...)
 	p := ggui.NewWindowProbe(func() ggui.Widget { return widget.Column(group) }, ggui.Sz(230, 140))
 	defer p.Close()
 	atRest(t, p)
@@ -314,12 +315,20 @@ func TestAnAttachmentStripSnapsAfterTheWheelWithoutWatching(t *testing.T) {
 	}
 }
 
+func transcript(n int) []chat.MessageEntry {
+	out := make([]chat.MessageEntry, 0, n)
+	for i := range n {
+		out = append(out, chat.MessageEntry{ID: fmt.Sprint(i), Content: widget.Box(widget.Text(fmt.Sprint(i))).Height(80)})
+	}
+	return out
+}
+
 // A transcript scrolls a wheel's notch as far as the platform does, eased,
 // with the next notch adding to where the last was heading, and follows a
 // trackpad at once.
 func TestAMessageScrollerEasesAWheelsNotchAndFollowsATrackpad(t *testing.T) {
 	rows := ggui.State(transcript(12))
-	s := ui.MessageScroller(rows).Height(200).Gap(10)
+	s := chat.MessageScroller(rows).Height(200).Gap(10)
 	p := ggui.NewWindowProbe(func() ggui.Widget { return s }, ggui.Sz(300, 200))
 	defer p.Close()
 	p.Run(frameStep, 10)

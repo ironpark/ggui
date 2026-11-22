@@ -1,33 +1,36 @@
-package ui_test
+package chat_test
 
 import (
+	"fmt"
 	"image"
+	"math"
 	"slices"
 	"testing"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/chat"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // surveyQuestions is a three-step questionnaire: a required single choice
 // with a disabled option and a freeform slot, a multiple choice, and an
 // optional single choice.
-func surveyQuestions() []ui.Question {
-	return []ui.Question{
-		{Name: "one", Title: "First", Required: true, InputLabel: "Other", Choices: []ui.QuestionOption{{Value: "a", Label: "Alpha"}, {Value: "x", Label: "Off", Disabled: true}, {Value: "b", Label: "Beta"}}},
-		{Name: "two", Title: "Second", Multiple: true, Choices: []ui.QuestionOption{{Value: "c", Label: "Gamma"}, {Value: "d", Label: "Delta"}}},
-		{Name: "three", Title: "Third", Choices: []ui.QuestionOption{{Value: "e", Label: "Epsilon"}}},
+func surveyQuestions() []chat.Question {
+	return []chat.Question{
+		{Name: "one", Title: "First", Required: true, InputLabel: "Other", Choices: []chat.QuestionOption{{Value: "a", Label: "Alpha"}, {Value: "x", Label: "Off", Disabled: true}, {Value: "b", Label: "Beta"}}},
+		{Name: "two", Title: "Second", Multiple: true, Choices: []chat.QuestionOption{{Value: "c", Label: "Gamma"}, {Value: "d", Label: "Delta"}}},
+		{Name: "three", Title: "Third", Choices: []chat.QuestionOption{{Value: "e", Label: "Epsilon"}}},
 	}
 }
 
 func TestQuestionnaireCallbacksFollowNavigationAndStatus(t *testing.T) {
 	t.Parallel()
-	answers := ggui.State(ui.QuestionAnswers{})
+	answers := ggui.State(chat.QuestionAnswers{})
 	var items []string
 	var statuses []string
-	q := ui.Questionnaire(answers, surveyQuestions()...).Name("Survey").SubmitLabel("Send").
+	q := chat.Questionnaire(answers, surveyQuestions()...).Name("Survey").SubmitLabel("Send").
 		OnItemChange(func(name string) { items = append(items, name) }).
-		OnStatusChange(func(name string, s ui.QuestionStatus) { statuses = append(statuses, name+"="+string(s)) })
+		OnStatusChange(func(name string, s chat.QuestionStatus) { statuses = append(statuses, name+"="+string(s)) })
 	p := ggui.NewProbe(q, ggui.Sz(450, 500))
 	defer p.Close()
 	if _, ok := p.Semantics().Find(ggui.RoleGroup, "Survey"); !ok {
@@ -56,8 +59,8 @@ func TestQuestionnaireCallbacksFollowNavigationAndStatus(t *testing.T) {
 
 func TestQuestionnaireArrowsWalkChoicesIntoTheFreeformSlot(t *testing.T) {
 	t.Parallel()
-	answers := ggui.State(ui.QuestionAnswers{})
-	q := ui.Questionnaire(answers, surveyQuestions()...)
+	answers := ggui.State(chat.QuestionAnswers{})
+	q := chat.Questionnaire(answers, surveyQuestions()...)
 	p := ggui.NewProbe(q, ggui.Sz(450, 500))
 	defer p.Close()
 	chosen := func() []string { return ggui.Untrack(answers.Get)["one"].Values }
@@ -90,8 +93,8 @@ func TestQuestionnaireArrowsWalkChoicesIntoTheFreeformSlot(t *testing.T) {
 
 func TestQuestionnaireChoiceActionsSelectAndToggle(t *testing.T) {
 	t.Parallel()
-	answers := ggui.State(ui.QuestionAnswers{})
-	q := ui.Questionnaire(answers, surveyQuestions()...).Active("two")
+	answers := ggui.State(chat.QuestionAnswers{})
+	q := chat.Questionnaire(answers, surveyQuestions()...).Active("two")
 	p := ggui.NewProbe(q, ggui.Sz(450, 500))
 	defer p.Close()
 	act := func(name string, kind ggui.ActionSet) {
@@ -127,9 +130,9 @@ func TestQuestionnaireChoiceActionsSelectAndToggle(t *testing.T) {
 
 func TestQuestionnaireButtonArrowsGoBackAndForth(t *testing.T) {
 	t.Parallel()
-	answers := ggui.State(ui.QuestionAnswers{"one": {Values: []string{"a"}}})
+	answers := ggui.State(chat.QuestionAnswers{"one": {Values: []string{"a"}}})
 	active := ggui.State("two")
-	q := ui.Questionnaire(answers, surveyQuestions()...).BindActive(active)
+	q := chat.Questionnaire(answers, surveyQuestions()...).BindActive(active)
 	p := ggui.NewProbe(q, ggui.Sz(450, 500))
 	defer p.Close()
 	p.Tap("Skip")
@@ -213,8 +216,8 @@ func TestQuestionnaireFreeformTakesKorean(t *testing.T) {
 		imes = append(imes, k)
 		return k
 	}))
-	answers := ggui.State(ui.QuestionAnswers{})
-	q := ui.Questionnaire(answers, surveyQuestions()...)
+	answers := ggui.State(chat.QuestionAnswers{})
+	q := chat.Questionnaire(answers, surveyQuestions()...)
 	p := ggui.NewProbe(q, ggui.Sz(450, 500))
 	defer p.Close()
 	field, ok := p.Find("Other")
@@ -237,5 +240,85 @@ func TestQuestionnaireFreeformTakesKorean(t *testing.T) {
 	step("글", "")
 	if got := ggui.Untrack(answers.Get)["one"].Text; got != "한글" || early != 0 {
 		t.Fatalf("typed %q, with %d compositions committed early; want 한글 and none", got, early)
+	}
+}
+
+// shadcn's Questionnaire and its item are both flex-col gap-4, and the
+// item is a fieldset whose title is its legend, which no flex gap reaches:
+// 16 from the progress to the title, the description straight under the
+// title, 16 on to the choices, and the title's mb-4 in the description's
+// place where there is none.
+func TestQuestionnairePartsAreAGapApartAndTheDescriptionUnderTheTitle(t *testing.T) {
+	t.Parallel()
+	rects := func(q chat.Question) (progress, title, description, choice ggui.Rect) {
+		w := chat.Questionnaire(ggui.State(chat.QuestionAnswers{}), q)
+		p := ggui.NewProbe(w, ggui.Sz(450, 450))
+		defer p.Close()
+		for _, n := range p.Semantics().All() {
+			switch {
+			case n.Role == ggui.RoleProgress:
+				progress = n.Rect
+			case n.Name == q.Title:
+				title = n.Rect
+			case q.Description != "" && n.Name == q.Description:
+				description = n.Rect
+			case n.Name == "Task A":
+				choice = n.Rect
+			}
+		}
+		return
+	}
+	bottom := func(r ggui.Rect) float64 { return r.Origin.Y + r.Size.H }
+	choices := []chat.QuestionOption{{Value: "a", Label: "Task A"}}
+	progress, title, description, choice := rects(chat.Question{Name: "one", Title: "Choose a task", Description: "Pick the one to start with.", Choices: choices})
+	if title.Size.H == 0 || description.Size.H == 0 || choice.Size.H == 0 {
+		t.Fatalf("the parts were not found: %v %v %v", title, description, choice)
+	}
+	if got := title.Origin.Y - bottom(progress); math.Abs(got-16) > .01 {
+		t.Errorf("the title is %v under the progress, want 16", got)
+	}
+	if got := description.Origin.Y - bottom(title); math.Abs(got) > .01 {
+		t.Errorf("the description is %v under the title, want 0", got)
+	}
+	if got := choice.Origin.Y - bottom(description); math.Abs(got-16) > .01 {
+		t.Errorf("the choices are %v under the description, want 16", got)
+	}
+	_, title, _, choice = rects(chat.Question{Name: "one", Title: "Choose a task", Choices: choices})
+	if got := choice.Origin.Y - bottom(title); math.Abs(got-16) > .01 {
+		t.Errorf("with no description the choices are %v under the title, want 16", got)
+	}
+}
+
+type measuredWidget struct {
+	ggui.Widget
+	size ggui.Size
+}
+
+func (m *measuredWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	m.size = m.Widget.Layout(c.Loosen(), env)
+	return m.size
+}
+
+func TestQuestionChoiceKeptPartsFollowTheTheme(t *testing.T) {
+	t.Parallel()
+	var options []chat.QuestionOption
+	for i := range 3 {
+		options = append(options, chat.QuestionOption{Value: fmt.Sprint(i), Label: fmt.Sprint("Option ", i), Description: "Details"})
+	}
+	q := chat.Questionnaire(ggui.State(chat.QuestionAnswers{}), chat.Question{Name: "q", Title: "Pick", Choices: options})
+	scale := ggui.State(1.)
+	m := &measuredWidget{Widget: q}
+	p := ggui.NewProbe(uitheme.With(uitheme.Default(), ggui.Reactive(func() ggui.Widget {
+		return ggui.Provide(ggui.TextScaleKey, scale.Get(), ggui.Widget(m))
+	})), ggui.Sz(500, 4000))
+	defer p.Close()
+	p.Frame()
+	before := m.size
+	if _, ok := p.FindRole(ggui.RoleRadio, "Option 1"); !ok {
+		t.Fatal("choice missing")
+	}
+	scale.Set(2)
+	if p.Frame(); m.size.H <= before.H {
+		t.Fatalf("choices kept their measurement under a larger text scale: %v <= %v", m.size.H, before.H)
 	}
 }

@@ -74,5 +74,7 @@ Package-specific READMEs remain beside their code and assets:
 - [Optional Noto Color Emoji font, a module of its own](../fonts/notoemoji/README.md)
 - [Optional Go fonts, with bold, for every platform](../fonts/gofont/README.md)
 - [Gallery chat assets and licenses](../examples/gallery/assets/chat/README.md)
+- [Charts subpackage and migration](../ui/chart/README.md)
+- [Chat subpackage and migration](../ui/chat/README.md)
 - [Theme package and migration](../ui/theme/README.md)
 - [Vendored theme palettes and sources](../ui/theme/README.md#palette-sources)

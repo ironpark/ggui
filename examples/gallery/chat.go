@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/chat"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
@@ -15,8 +16,8 @@ import (
 // These previews keep transcript and questionnaire instances alive while the
 // gallery filters or theme change. No network or file access is needed.
 func newChatPreviews() func() []ggui.Widget {
-	upload := ggui.State(ui.AttachmentIdle)
-	states := []ui.AttachmentState{ui.AttachmentIdle, ui.AttachmentUploading, ui.AttachmentProcessing, ui.AttachmentError, ui.AttachmentDone}
+	upload := ggui.State(chat.AttachmentIdle)
+	states := []chat.AttachmentState{chat.AttachmentIdle, chat.AttachmentUploading, chat.AttachmentProcessing, chat.AttachmentError, chat.AttachmentDone}
 	files := ggui.State([]string{"brief.pdf", "customers.csv", "renderer.go"})
 	attachmentAction := ggui.State("Open a file preview or remove an attachment.")
 	thumb, desk, office := chatImage("workspace.jpg"), chatImage("desk.jpg"), chatImage("office.jpg")
@@ -33,24 +34,24 @@ func newChatPreviews() func() []ggui.Widget {
 	mdShown, mdStreaming := ggui.State(markdownReply), ggui.State(false)
 	mdAt := len(mdPieces)
 	mdNote := ggui.State("Stream the reply to watch it arrive; open blocks show as closed until it ends.")
-	rows := ggui.State([]ui.MessageEntry{
-		{ID: "welcome", Content: ui.Marker(widget.Text("Today")).Separator()},
-		{ID: "hello", Content: ui.Message(ui.Bubble(widget.Text("Can you review this patch?")).End()).End(), Anchor: true},
-		{ID: "reply", Content: ui.Message(ui.Bubble(widget.Text("I will check the implementation and tests.")).Secondary()).Avatar(ui.Avatar("Reviewer").Size(32))},
+	rows := ggui.State([]chat.MessageEntry{
+		{ID: "welcome", Content: chat.Marker(widget.Text("Today")).Separator()},
+		{ID: "hello", Content: chat.Message(chat.Bubble(widget.Text("Can you review this patch?")).End()).End(), Anchor: true},
+		{ID: "reply", Content: chat.Message(chat.Bubble(widget.Text("I will check the implementation and tests.")).Secondary()).Avatar(ui.Avatar("Reviewer").Size(32))},
 	})
-	scroller := ui.MessageScroller(rows).Height(260).AutoScroll(true).Name("Preview conversation")
+	scroller := chat.MessageScroller(rows).Height(260).AutoScroll(true).Name("Preview conversation")
 	sequence, history := 0, 0
-	var saved ui.TranscriptPosition
+	var saved chat.TranscriptPosition
 	scrollNote := ggui.State("Scroll up to pause following. Jump to the end to resume.")
-	answers := ggui.State(ui.QuestionAnswers{})
+	answers := ggui.State(chat.QuestionAnswers{})
 	submission := ggui.State("Your answers stay local to this preview.")
-	questionnaire := ui.Questionnaire(answers,
-		ui.Question{
+	questionnaire := chat.Questionnaire(answers,
+		chat.Question{
 			Name:        "scope",
 			Title:       "What should the agent build next?",
 			Description: "Choose a direction or describe another task.",
 			Required:    true,
-			Choices: []ui.QuestionOption{
+			Choices: []chat.QuestionOption{
 				{
 					Value:       "timeline",
 					Label:       "Tool call timeline",
@@ -70,32 +71,32 @@ func newChatPreviews() func() []ggui.Widget {
 			InputLabel:  "Another feature",
 			Placeholder: "Describe another feature…",
 		},
-		ui.Question{
+		chat.Question{
 			Name:        "updates",
 			Title:       "What should updates include?",
 			Description: "Select multiple items, or explicitly skip this step.",
 			Multiple:    true,
-			Choices: []ui.QuestionOption{
+			Choices: []chat.QuestionOption{
 				{Value: "progress", Label: "Progress updates"},
 				{Value: "decisions", Label: "Decisions"},
 				{Value: "risks", Label: "Risks"},
 			},
 		},
-		ui.Question{
+		chat.Question{
 			Name:        "context",
 			Title:       "Who will use this?",
 			Description: "Add a short audience description.",
 			Required:    true,
 			InputLabel:  "Audience",
 			Placeholder: "EachKeyed example, our support team",
-			Validate: func(a ui.QuestionAnswer) string {
+			Validate: func(a chat.QuestionAnswer) string {
 				if len([]rune(a.Text)) < 3 {
 					return "Please use at least three characters."
 				}
 				return ""
 			},
 		},
-	).Shortcuts(ui.QuestionLetters).SubmitLabel("Save answers").OnSubmit(func(a ui.QuestionAnswers) {
+	).Shortcuts(chat.QuestionLetters).SubmitLabel("Save answers").OnSubmit(func(a chat.QuestionAnswers) {
 		submission.Set(fmt.Sprintf("Saved %d answers. Audience: %s", len(a), a["context"].Text))
 	})
 
@@ -104,37 +105,37 @@ func newChatPreviews() func() []ggui.Widget {
 		return []ggui.Widget{
 			preview("Attachment", widget.Column(
 				chatSurface(widget.Column(
-					ui.AttachmentGroup(
-						ui.Attachment("workspace.png", "PNG · 820 KB").Image(thumb, "Workspace").Vertical().Trigger("Preview workspace", func() { attachmentAction.Set("Preview opened: workspace.png") }),
-						ui.Attachment("desk-reference.jpg", "JPG · 1.1 MB").Image(desk, "Desk").Vertical(),
-						ui.Attachment("office-reference.jpg", "JPG · 940 KB").Image(office, "Office").Vertical(),
+					chat.AttachmentGroup(
+						chat.Attachment("workspace.png", "PNG · 820 KB").Image(thumb, "Workspace").Vertical().Trigger("Preview workspace", func() { attachmentAction.Set("Preview opened: workspace.png") }),
+						chat.Attachment("desk-reference.jpg", "JPG · 1.1 MB").Image(desk, "Desk").Vertical(),
+						chat.Attachment("office-reference.jpg", "JPG · 940 KB").Image(office, "Office").Vertical(),
 					).Name("Image attachments"),
 					ggui.If(showUpload, func() ggui.Widget {
-						return ui.Attachment("sales-dashboard.pdf", "Uploading · 64%").Media(ui.Spinner().Size(16)).State(ui.AttachmentUploading).
-							Actions(ui.AttachmentAction("Cancel upload", ui.Icon(icons.Close), func() {
+						return chat.Attachment("sales-dashboard.pdf", "Uploading · 64%").Media(ui.Spinner().Size(16)).State(chat.AttachmentUploading).
+							Actions(chat.AttachmentAction("Cancel upload", ui.Icon(icons.Close), func() {
 								showUpload.Set(false)
 								attachmentAction.Set("Upload cancelled.")
 							}))
 					}),
 					ggui.If(showSource, func() ggui.Widget {
-						return ui.Attachment("message-renderer.tsx", "TypeScript · 12 KB").Media(ui.Icon(icons.File)).
-							Actions(ui.AttachmentAction("Remove source attachment", ui.Icon(icons.Close), func() {
+						return chat.Attachment("message-renderer.tsx", "TypeScript · 12 KB").Media(ui.Icon(icons.File)).
+							Actions(chat.AttachmentAction("Remove source attachment", ui.Icon(icons.Close), func() {
 								showSource.Set(false)
 								attachmentAction.Set("Source attachment removed.")
 							}))
 					}),
 				).Gap(12).Stretch()),
 				ui.Select(upload).Options(states).Name("Upload state"),
-				ui.Attachment("design-system.zip", "Choose an upload state above").Media(widget.Text("ZIP").Size(11)).BindState(upload).
-					Actions(ui.AttachmentAction("Retry upload", widget.Text("↻"), func() { upload.Set(ui.AttachmentUploading) })),
-				ggui.View(files, func(names []string) *ui.AttachmentGroupWidget {
-					cards := []*ui.AttachmentWidget{}
+				chat.Attachment("design-system.zip", "Choose an upload state above").Media(widget.Text("ZIP").Size(11)).BindState(upload).
+					Actions(chat.AttachmentAction("Retry upload", widget.Text("↻"), func() { upload.Set(chat.AttachmentUploading) })),
+				ggui.View(files, func(names []string) *chat.AttachmentGroupWidget {
+					cards := []*chat.AttachmentWidget{}
 					for _, name := range names {
-						cards = append(cards, ui.Attachment(name, "Ready to upload").State(ui.AttachmentIdle).Width(180).Media(ui.Icon(icons.File)).
+						cards = append(cards, chat.Attachment(name, "Ready to upload").State(chat.AttachmentIdle).Width(180).Media(ui.Icon(icons.File)).
 							Trigger("Preview "+name, func() { attachmentAction.Set("Preview opened: " + name) }).
-							Actions(ui.AttachmentAction("Remove "+name, ui.Icon(icons.Close), func() { ggui.Remove(files, func(v string) bool { return v == name }) })))
+							Actions(chat.AttachmentAction("Remove "+name, ui.Icon(icons.Close), func() { ggui.Remove(files, func(v string) bool { return v == name }) })))
 					}
-					return ui.AttachmentGroup(cards...).Name("Attached files")
+					return chat.AttachmentGroup(cards...).Name("Attached files")
 				}),
 				ui.CaptionOf(attachmentAction),
 				ui.Button("Restore attachments", func() {
@@ -143,45 +144,45 @@ func newChatPreviews() func() []ggui.Widget {
 					files.Set([]string{"brief.pdf", "customers.csv", "renderer.go"})
 				}).Outline(),
 				ui.Collapsible(attachmentVariants, "Attachment sizes", widget.Wrap(
-					ui.Attachment("Default", "PDF · 2.4 MB"),
-					ui.Attachment("Small", "CSV · 18 KB").Size(ui.AttachmentSmall),
-					ui.Attachment("Extra small", "").Size(ui.AttachmentExtraSmall),
+					chat.Attachment("Default", "PDF · 2.4 MB"),
+					chat.Attachment("Small", "CSV · 18 KB").Size(chat.AttachmentSmall),
+					chat.Attachment("Extra small", "").Size(chat.AttachmentExtraSmall),
 				).Gap(8)),
 			).Gap(12).Stretch()),
 			preview("Bubble", widget.Column(
 				chatSurface(widget.Column(
-					ui.Bubble(widget.Text("Hey there! what's up?")).End(),
-					ui.BubbleGroup(
-						ui.Bubble(widget.Text("Hey! Want to see chat bubbles?")).Muted(),
-						ui.Bubble(widget.Text("I can group messages, switch sides, and keep the whole thread easy to scan.")).Muted().Reactions(widget.Text("👍").Size(20)),
+					chat.Bubble(widget.Text("Hey there! what's up?")).End(),
+					chat.BubbleGroup(
+						chat.Bubble(widget.Text("Hey! Want to see chat bubbles?")).Muted(),
+						chat.Bubble(widget.Text("I can group messages, switch sides, and keep the whole thread easy to scan.")).Muted().Reactions(widget.Text("👍").Size(20)),
 					),
-					ui.Bubble(widget.Text("Sure. Hit me with your best demo.")).End(),
-					ui.Bubble(widget.Text("Yes. You are reading a demo that is demoing itself. Very meta. Very on-brand.")).Muted().Reactions(widget.Row(widget.Text("👍").Size(20), widget.Text("🔥").Size(20), widget.Text("👀").Size(20), widget.Text("+2")).Gap(4)),
+					chat.Bubble(widget.Text("Sure. Hit me with your best demo.")).End(),
+					chat.Bubble(widget.Text("Yes. You are reading a demo that is demoing itself. Very meta. Very on-brand.")).Muted().Reactions(widget.Row(widget.Text("👍").Size(20), widget.Text("🔥").Size(20), widget.Text("👀").Size(20), widget.Text("+2")).Gap(4)),
 				).Gap(32).Stretch()),
 				ui.Collapsible(variants, "More bubble variants", widget.Column(
-					ui.Bubble(widget.Text("Secondary conversation surface.")).Secondary(),
-					ui.Bubble(widget.Text("A subtle primary tint.")).Tinted(),
-					ui.Bubble(widget.Text("Choose this suggestion")).Outline().Action("Choose suggestion", func() { bubbleAction.Set("Suggestion selected.") }),
-					ui.Bubble(widget.Text("Upload failed. Please retry.")).Destructive(),
-					ui.Bubble(widget.Text("Ghost content uses the full width.")).Ghost(),
-					ui.Bubble(ui.Collapsible(expanded, "Show more", widget.Text("Long content keeps its state."))).Secondary().Reactions(ui.ButtonOf(widget.Textf("Like · %d", reaction), func() { ggui.Add(reaction, 1) }).Name("Like bubble").Ghost().Pad(2, 6)),
+					chat.Bubble(widget.Text("Secondary conversation surface.")).Secondary(),
+					chat.Bubble(widget.Text("A subtle primary tint.")).Tinted(),
+					chat.Bubble(widget.Text("Choose this suggestion")).Outline().Action("Choose suggestion", func() { bubbleAction.Set("Suggestion selected.") }),
+					chat.Bubble(widget.Text("Upload failed. Please retry.")).Destructive(),
+					chat.Bubble(widget.Text("Ghost content uses the full width.")).Ghost(),
+					chat.Bubble(ui.Collapsible(expanded, "Show more", widget.Text("Long content keeps its state."))).Secondary().Reactions(ui.ButtonOf(widget.Textf("Like · %d", reaction), func() { ggui.Add(reaction, 1) }).Name("Like bubble").Ghost().Pad(2, 6)),
 					widget.Padding(ui.CaptionOf(bubbleAction), 16, 0, 0, 0),
 				).Gap(16).Stretch()),
 			).Gap(16).Stretch()),
 			preview("Message", chatSurface(widget.Column(
-				ui.Message(ui.Bubble(widget.Text("Deploying to prod real quick."))).End().Avatar(ui.Avatar("You").Image(you).Size(32)),
-				ui.Message(ui.Bubble(widget.Text("It's 4:55 PM. On a Friday.")).Muted()).Avatar(ui.Avatar("Oliver").Image(oliver).Size(32)),
-				ui.Message(ui.Bubble(widget.Text("It's a one-line change."))).End().Avatar(ui.Avatar("You").Image(you).Size(32)).Footer(widget.Text("Delivered")),
-				ui.Message(ui.BubbleGroup(
-					ui.Bubble(widget.Text("It's always a one-line change 😭.")).Muted(),
-					ui.Bubble(widget.Text("Alright, let me take a look.")).Muted().Reactions(widget.Text("👍").Size(20)),
+				chat.Message(chat.Bubble(widget.Text("Deploying to prod real quick."))).End().Avatar(ui.Avatar("You").Image(you).Size(32)),
+				chat.Message(chat.Bubble(widget.Text("It's 4:55 PM. On a Friday.")).Muted()).Avatar(ui.Avatar("Oliver").Image(oliver).Size(32)),
+				chat.Message(chat.Bubble(widget.Text("It's a one-line change."))).End().Avatar(ui.Avatar("You").Image(you).Size(32)).Footer(widget.Text("Delivered")),
+				chat.Message(chat.BubbleGroup(
+					chat.Bubble(widget.Text("It's always a one-line change 😭.")).Muted(),
+					chat.Bubble(widget.Text("Alright, let me take a look.")).Muted().Reactions(widget.Text("👍").Size(20)),
 				)).Avatar(ui.Avatar("Oliver").Image(oliver).Size(32)),
-				ui.Marker(widget.Text("Oliver is typing…")),
+				chat.Marker(widget.Text("Oliver is typing…")),
 			).Gap(24).Stretch())),
 			preview("Markdown", widget.Column(
 				chatSurface(widget.Column(
-					ui.Message(ui.Bubble(widget.Text("How do I show a streaming reply?")).End()).End(),
-					ui.Message(ui.Bubble(ui.Markdown("").BindContent(mdShown).BindStreaming(mdStreaming).
+					chat.Message(chat.Bubble(widget.Text("How do I show a streaming reply?")).End()).End(),
+					chat.Message(chat.Bubble(ui.Markdown("").BindContent(mdShown).BindStreaming(mdStreaming).
 						OnLink(func(url string) { mdNote.Set("Link tapped: " + url) })).Ghost()),
 				).Gap(24).Stretch(), 448),
 				widget.Wrap(
@@ -203,10 +204,10 @@ func newChatPreviews() func() []ggui.Widget {
 				ui.CaptionOf(mdNote),
 			).Gap(12).Stretch()),
 			preview("Marker", chatSurface(widget.Column(
-				ui.Marker(widget.Text("Switched to a new branch")).Icon(&chatIcon{kind: "branch"}),
-				ui.Marker(widget.Text("Thinking…")).Icon(ui.Spinner().Size(16)),
-				ui.Marker(widget.Text("Conversation compacted")).Separator(),
-				ui.Marker(widget.Text("Explored 4 files")).Icon(ui.Icon(icons.Search)),
+				chat.Marker(widget.Text("Switched to a new branch")).Icon(&chatIcon{kind: "branch"}),
+				chat.Marker(widget.Text("Thinking…")).Icon(ui.Spinner().Size(16)),
+				chat.Marker(widget.Text("Conversation compacted")).Separator(),
+				chat.Marker(widget.Text("Explored 4 files")).Icon(ui.Icon(icons.Search)),
 			).Gap(32).Stretch())),
 			preview("Message Scroller", widget.Column(
 				chatSurface(widget.Box(scroller).Border(1, t.Border).Radius(t.Radius)),
@@ -215,8 +216,8 @@ func newChatPreviews() func() []ggui.Widget {
 						sequence++
 						id := fmt.Sprintf("turn-%d", sequence)
 						ggui.Append(rows,
-							ui.MessageEntry{ID: id, Content: ui.Message(ui.Bubble(widget.Text(fmt.Sprintf("Review request %d", sequence))).End()).End(), Anchor: true},
-							ui.MessageEntry{ID: id + "-reply", Content: ui.Message(ui.Bubble(widget.Text("Starting the review…")).Secondary())})
+							chat.MessageEntry{ID: id, Content: chat.Message(chat.Bubble(widget.Text(fmt.Sprintf("Review request %d", sequence))).End()).End(), Anchor: true},
+							chat.MessageEntry{ID: id + "-reply", Content: chat.Message(chat.Bubble(widget.Text("Starting the review…")).Secondary())})
 					}),
 					ui.Button("Stream reply", func() {
 						if len(ggui.Peek(rows)) == 0 {
@@ -225,17 +226,17 @@ func newChatPreviews() func() []ggui.Widget {
 						sequence++
 						// Update copies the slice first: State is shallow, so editing
 						// the entry in place would not publish the change.
-						rows.Update(func(prev []ui.MessageEntry) []ui.MessageEntry {
+						rows.Update(func(prev []chat.MessageEntry) []chat.MessageEntry {
 							next := slices.Clone(prev)
-							next[len(next)-1].Content = ui.Message(ui.Bubble(widget.Text(fmt.Sprintf("Review in progress. Pass %d. ", sequence) + repeatReview(sequence))).Secondary())
+							next[len(next)-1].Content = chat.Message(chat.Bubble(widget.Text(fmt.Sprintf("Review in progress. Pass %d. ", sequence) + repeatReview(sequence))).Secondary())
 							return next
 						})
 					}).Outline(),
 					ui.Button("Load earlier", func() {
 						history++
-						rows.Update(func(prev []ui.MessageEntry) []ui.MessageEntry {
-							note := ui.MessageEntry{ID: fmt.Sprintf("history-%d", history), Content: ui.Marker(widget.Text(fmt.Sprintf("Earlier note %d: the reader stays in place.", history))).Border()}
-							return append([]ui.MessageEntry{note}, prev...)
+						rows.Update(func(prev []chat.MessageEntry) []chat.MessageEntry {
+							note := chat.MessageEntry{ID: fmt.Sprintf("history-%d", history), Content: chat.Marker(widget.Text(fmt.Sprintf("Earlier note %d: the reader stays in place.", history))).Border()}
+							return append([]chat.MessageEntry{note}, prev...)
 						})
 					}).Outline(),
 					ui.Button("Save position", func() {

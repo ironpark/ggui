@@ -1,54 +1,58 @@
-package ui
+package chart
 
 import (
 	"fmt"
 	"image/color"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
-// ChartTooltipContent is reusable tooltip content configured for a chart. It
+// TooltipContent is reusable tooltip content configured for a chart. It
 // uses the same data/config labels, colors, icons and formatters as hover.
-func ChartTooltipContent(chart *ChartWidget, index int) ggui.Widget {
-	return &chartContent{chart: chart, index: index}
+func TooltipContent(c *Widget, index int) ggui.Widget {
+	return &chartContent{chart: c, index: index}
 }
 
-// ChartTooltip is the standalone form of ChartTooltipContent. The chart's
+// Tooltip is the standalone form of TooltipContent. The chart's
 // Tooltip setter controls the built-in floating tooltip.
-func ChartTooltip(chart *ChartWidget, index int) ggui.Widget {
-	return ChartTooltipContent(chart, index)
+func Tooltip(c *Widget, index int) ggui.Widget {
+	return TooltipContent(c, index)
 }
 
-// ChartLegendContent renders the chart's series or category legend on its own.
-func ChartLegendContent(chart *ChartWidget) ggui.Widget {
-	return &chartContent{chart: chart, legend: true}
+// LegendContent renders the chart's series or category legend on its own.
+func LegendContent(c *Widget) ggui.Widget {
+	return &chartContent{chart: c, legend: true}
 }
-func ChartLegend(chart *ChartWidget) ggui.Widget { return ChartLegendContent(chart) }
+
+// Legend renders the chart's series or category legend on its own.
+func Legend(c *Widget) ggui.Widget { return LegendContent(c) }
 
 type chartContent struct {
-	chart   *ChartWidget
+	chart   *Widget
 	index   int
 	legend  bool
-	context ChartWidget
+	context Widget
 	rows    []chartContentRow
 }
 
 func (w *chartContent) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
-	// The legend and tooltip renderers are ChartWidget methods, but they read
+	// The legend and tooltip renderers are Widget methods, but they read
 	// only the fields below. Listing them beats copying the whole widget: the
 	// standalone content then shares no interaction, animation or geometry
-	// state with the live chart, and a new ChartWidget field cannot silently
+	// state with the live chart, and a new Widget field cannot silently
 	// join the copy.
 	c := w.chart
-	w.context = ChartWidget{
+	w.context = Widget{
 		kind:           c.kind,
 		data:           c.data,
 		config:         c.config,
 		tooltip:        c.tooltip,
 		categoryColors: c.categoryColors,
 		active:         c.active,
+		words:          ui.StringsOf(env),
 		env:            env,
 		theme:          uitheme.Of(env),
 		// The labels measured at the last layout carry over, to re-measure
@@ -73,8 +77,8 @@ func (w *chartContent) Paint(dst *ggui.Canvas, r ggui.Rect) {
 
 // categoryLegend reports whether the legend and tooltip name categories rather
 // than series, which pie and radial charts do when colored per category.
-func (c *ChartWidget) categoryLegend() bool {
-	return c.categoryColors && (c.kind == ChartPie || c.kind == ChartRadial)
+func (c *Widget) categoryLegend() bool {
+	return c.categoryColors && (c.kind == KindPie || c.kind == KindRadial)
 }
 
 type chartContentRow struct {
@@ -83,7 +87,7 @@ type chartContentRow struct {
 	icon         icons.Role
 }
 
-func (c *ChartWidget) legendRows() []chartContentRow {
+func (c *Widget) legendRows() []chartContentRow {
 	rows := make([]chartContentRow, 0, len(c.config))
 	if c.categoryLegend() {
 		for i, d := range c.data {
@@ -98,7 +102,7 @@ func (c *ChartWidget) legendRows() []chartContentRow {
 	}
 	return rows
 }
-func (c *ChartWidget) legendHeight(width float64) float64 {
+func (c *Widget) legendHeight(width float64) float64 {
 	x := 0.
 	lines := 1
 	for _, row := range c.legendRows() {
@@ -127,18 +131,18 @@ const (
 )
 
 // chartIndicatorWidth is how wide the mark before a tooltip row is.
-func chartIndicatorWidth(kind ChartIndicator, icon bool) float64 {
+func chartIndicatorWidth(kind Indicator, icon bool) float64 {
 	switch {
 	case icon:
 		return 10
-	case kind == ChartIndicatorLine:
+	case kind == IndicatorLine:
 		return 4
-	case kind == ChartIndicatorDashed:
+	case kind == IndicatorDashed:
 		return 3
 	}
 	return 10
 }
-func (c *ChartWidget) paintLegend(dst *ggui.Canvas, r ggui.Rect) {
+func (c *Widget) paintLegend(dst *ggui.Canvas, r ggui.Rect) {
 	rows := c.legendRows()
 	widths := make([]float64, len(rows))
 	for i, row := range rows {
@@ -155,7 +159,7 @@ func (c *ChartWidget) paintLegend(dst *ggui.Canvas, r ggui.Rect) {
 		for i := start; i < end; i++ {
 			row := rows[i]
 			if row.icon != "" {
-				paintIcon(dst, c.env, row.icon, ggui.Rct(ggui.Pt(x, y-6), ggui.Sz(12., 12.)), row.col, 0)
+				ui.PaintIcon(dst, c.env, row.icon, ggui.Rct(ggui.Pt(x, y-6), ggui.Sz(12., 12.)), row.col, 0)
 			} else {
 				dst.FillRoundRect(ggui.Rct(ggui.Pt(x, y-4), ggui.Sz(8., 8.)), 2, row.col)
 			}
@@ -166,7 +170,7 @@ func (c *ChartWidget) paintLegend(dst *ggui.Canvas, r ggui.Rect) {
 		start = end
 	}
 }
-func (c *ChartWidget) tooltipRows(index int) ([]chartContentRow, ggui.Size) {
+func (c *Widget) tooltipRows(index int) ([]chartContentRow, ggui.Size) {
 	if index < 0 || index >= len(c.data) {
 		return nil, ggui.Size{}
 	}
@@ -206,7 +210,7 @@ func (c *ChartWidget) tooltipRows(index int) ([]chartContentRow, ggui.Size) {
 	}
 	return rows, ggui.Sz(width, height)
 }
-func (c *ChartWidget) tooltipLabel(index int) string {
+func (c *Widget) tooltipLabel(index int) string {
 	label := c.data[index].Label
 	if c.tooltip.Label != "" {
 		label = c.tooltip.Label
@@ -219,7 +223,7 @@ func (c *ChartWidget) tooltipLabel(index int) string {
 
 // paintTooltipContent draws rows, which the caller sized with tooltipRows.
 // Taking them as a parameter keeps that measuring pass to once per frame.
-func (c *ChartWidget) paintTooltipContent(dst *ggui.Canvas, r ggui.Rect, index int, rows []chartContentRow) {
+func (c *Widget) paintTooltipContent(dst *ggui.Canvas, r ggui.Rect, index int, rows []chartContentRow) {
 	if len(rows) == 0 {
 		return
 	}
@@ -240,10 +244,10 @@ func (c *ChartWidget) paintTooltipContent(dst *ggui.Canvas, r ggui.Rect, index i
 			w := chartIndicatorWidth(c.tooltip.Indicator, row.icon != "")
 			switch {
 			case row.icon != "":
-				paintIcon(dst, c.env, row.icon, ggui.Rct(ggui.Pt(x, mid-w/2), ggui.Sz(w, w)), row.col, 0)
-			case c.tooltip.Indicator == ChartIndicatorLine:
+				ui.PaintIcon(dst, c.env, row.icon, ggui.Rct(ggui.Pt(x, mid-w/2), ggui.Sz(w, w)), row.col, 0)
+			case c.tooltip.Indicator == IndicatorLine:
 				dst.FillRoundRect(ggui.Rct(ggui.Pt(x, y), ggui.Sz(w, chartTipRow)), 2, row.col)
-			case c.tooltip.Indicator == ChartIndicatorDashed:
+			case c.tooltip.Indicator == IndicatorDashed:
 				for k := range 3 {
 					dst.FillRect(ggui.Rct(ggui.Pt(x, y+float64(k)*4.5), ggui.Sz(w, 3.)), row.col)
 				}
@@ -267,7 +271,7 @@ func (c *ChartWidget) paintTooltipContent(dst *ggui.Canvas, r ggui.Rect, index i
 		}
 		label := c.tooltip.TotalLabel
 		if label == "" {
-			label = c.words.orDefault().ChartTotal
+			label = c.words.OrDefault().ChartTotal
 		}
 		value := fmt.Sprintf("%g", total)
 		if len(c.config) > 0 {
@@ -276,14 +280,13 @@ func (c *ChartWidget) paintTooltipContent(dst *ggui.Canvas, r ggui.Rect, index i
 		c.textMiddle(dst, label, ggui.Pt(left, y+chartTipRow/2), chartMedium, t.Fg, 0)
 		c.textMiddle(dst, value, ggui.Pt(right, y+chartTipRow/2), chartMono, t.Fg, 1)
 	}
-
 }
-func (c *ChartWidget) paintTooltip(dst *ggui.Canvas, r ggui.Rect) {
+func (c *Widget) paintTooltip(dst *ggui.Canvas, r ggui.Rect) {
 	index := c.active
 	rows, size := c.tooltipRows(index)
 	var custom ggui.Widget
 	if c.tooltip.Content != nil {
-		custom = c.tooltip.Content(ChartTooltipPayload{index, c.data[index], append(ChartConfig(nil), c.config...)})
+		custom = c.tooltip.Content(TooltipPayload{index, c.data[index], append(Config(nil), c.config...)})
 		if custom != nil {
 			size = custom.Layout(ggui.Loose(dst.Size()), c.env)
 		}

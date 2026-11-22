@@ -4,10 +4,10 @@
 
 Build attachments, conversations, Markdown replies, transcript scrolling, and validated questionnaires.
 
-Examples use `ggui`, `widget` and `ui` imports and application-defined placeholders.
+Examples use `ggui`, `widget`, `ui` and `chat` (`github.com/ironpark/ggui/ui/chat`) imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
-The chat controls follow the [shadcn/ui chat components](https://ui.shadcn.com/docs/changelog/2026-06-chat-components)
+The chat controls live in `github.com/ironpark/ggui/ui/chat` and follow the [shadcn/ui chat components](https://ui.shadcn.com/docs/changelog/2026-06-chat-components)
 and [Questionnaire](https://ui.shadcn.com/docs/components/base/questionnaire)
 contracts with native Go widgets, bindings and callbacks. Surface colors come
 from the current theme; typography uses the application's native font. The
@@ -35,11 +35,11 @@ widgets continue to use the host theme and font. Sources and licenses are listed
 ## Attachments
 
 ```go
-state := ggui.State(ui.AttachmentIdle)
-file := ui.Attachment("report.pdf", "PDF · 2.4 MB").
+state := ggui.State(chat.AttachmentIdle)
+file := chat.Attachment("report.pdf", "PDF · 2.4 MB").
     Media(widget.Text("PDF").Size(11)).BindState(state).
     Trigger("Preview report.pdf", previewReport).
-    Actions(ui.AttachmentAction("Remove report.pdf", widget.Text("×"), removeReport))
+    Actions(chat.AttachmentAction("Remove report.pdf", widget.Text("×"), removeReport))
 ```
 
 `State` sets a fixed state and replaces `BindState`. The five states are `AttachmentIdle`
@@ -91,7 +91,7 @@ the theme's typography:
 ```go
 reply := ggui.State("")
 streaming := ggui.State(true)
-answer := ui.Bubble(ui.Markdown("").BindContent(reply).BindStreaming(streaming)).Ghost()
+answer := chat.Bubble(ui.Markdown("").BindContent(reply).BindStreaming(streaming)).Ghost()
 // As each piece arrives: reply.Set(ggui.Peek(reply) + piece)
 // When the stream ends:  streaming.Set(false)
 ```
@@ -143,11 +143,11 @@ parses a grown source again from its last blocks.
 ## Transcript scrolling
 
 ```go
-rows := ggui.State([]ui.MessageEntry{
-    {ID: "question", Content: ui.Message(ui.Bubble(widget.Text("Review this?"))).End(), Anchor: true},
-    {ID: "reply", Content: ui.Message(ui.Bubble(widget.Text("Reviewing…")).Secondary())},
+rows := ggui.State([]chat.MessageEntry{
+    {ID: "question", Content: chat.Message(chat.Bubble(widget.Text("Review this?"))).End(), Anchor: true},
+    {ID: "reply", Content: chat.Message(chat.Bubble(widget.Text("Reviewing…")).Secondary())},
 })
-transcript := ui.MessageScroller(rows).Height(320).AutoScroll(true)
+transcript := chat.MessageScroller(rows).Height(320).AutoScroll(true)
 ```
 
 ### Update transcript rows
@@ -184,18 +184,18 @@ are measured, not virtualized; paginate the bound collection for very long chats
 ## Questionnaires
 
 ```go
-answers := ggui.State(ui.QuestionAnswers{})
-form := ui.Questionnaire(answers,
-    ui.Question{
+answers := ggui.State(chat.QuestionAnswers{})
+form := chat.Questionnaire(answers,
+    chat.Question{
         Name: "scope", Title: "What should we build?", Required: true,
-        Choices: []ui.QuestionOption{
+        Choices: []chat.QuestionOption{
             {Value: "small", Label: "Small change", Description: "Keep the scope focused."},
             {Value: "full", Label: "Complete feature"},
         },
         InputLabel: "Another answer", Placeholder: "Describe your idea…",
     },
-    ui.Question{Name: "notes", Title: "Any constraints?", InputLabel: "Notes"},
-).Shortcuts(ui.QuestionNumbers).OnSubmit(func(values ui.QuestionAnswers) {
+    chat.Question{Name: "notes", Title: "Any constraints?", InputLabel: "Notes"},
+).Shortcuts(chat.QuestionNumbers).OnSubmit(func(values chat.QuestionAnswers) {
     // Persist or send the validated answers here.
 })
 ```

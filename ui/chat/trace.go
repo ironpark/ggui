@@ -1,4 +1,4 @@
-package ui
+package chat
 
 import (
 	"image/color"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
+	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
@@ -64,8 +65,8 @@ type TraceWidget struct {
 	steps    property.Value[[]TraceStep]
 	expanded ggui.Binding[map[string]bool]
 	name     string
-	named    bool     // Name was called; otherwise the Strings name the list
-	words    *Strings // the Strings of the layout running
+	named    bool        // Name was called; otherwise the Strings name the list
+	words    *ui.Strings // the Strings of the layout running
 	onToggle func(string, bool)
 	rows     map[string]*traceRow
 	list     traceList
@@ -132,7 +133,7 @@ func (t *TraceWidget) build(steps []TraceStep, seen map[string]bool) []*traceRow
 	rows := make([]*traceRow, 0, len(steps))
 	for _, step := range steps {
 		if step.ID == "" || seen[step.ID] {
-			panic("ui: Trace requires nonempty, globally unique step IDs")
+			panic("chat: Trace requires nonempty, globally unique step IDs")
 		}
 		seen[step.ID] = true
 		row := t.rows[step.ID]
@@ -147,7 +148,7 @@ func (t *TraceWidget) build(steps []TraceStep, seen map[string]bool) []*traceRow
 		row.Role = pick(row.expandable(), ggui.RoleDisclosure, ggui.RoleButton)
 		row.SetName(step.Title)
 		// Said once a layout: a running step paints every frame.
-		row.described, row.statusName = row.description(), step.Title+": "+t.words.orDefault().traceStatus(step.Status)
+		row.described, row.statusName = row.description(), step.Title+": "+traceStatus(t.words, step.Status)
 		row.shown = row.caption()
 		row.title.Content(step.Title)
 		row.run.Content(row.shown)
@@ -159,7 +160,7 @@ func (t *TraceWidget) build(steps []TraceStep, seen map[string]bool) []*traceRow
 // Layout implements Widget.
 func (t *TraceWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer t.props.Layout().EndLayout()
-	t.words = stringsOf(env)
+	t.words = ui.StringsOf(env)
 	seen := make(map[string]bool)
 	t.list.rows = t.build(t.steps.Get(), seen)
 	for id := range t.rows {
@@ -167,7 +168,7 @@ func (t *TraceWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 			delete(t.rows, id)
 		}
 	}
-	t.list.name = pick(t.named, t.name, stringsOf(env).TraceName)
+	t.list.name = pick(t.named, t.name, t.words.TraceName)
 	return t.list.Layout(cs, env)
 }
 
@@ -254,7 +255,7 @@ func (r *traceRow) actionable() bool { return r.expandable() || r.step.OnActivat
 func (r *traceRow) open() bool { return r.trace.expanded.Get()[r.id] }
 
 func (r *traceRow) metadata() string {
-	description := r.trace.words.orDefault().traceStatus(r.step.Status)
+	description := traceStatus(r.trace.words, r.step.Status)
 	if r.step.Duration > 0 {
 		if description != "" {
 			description += " · "
@@ -423,7 +424,7 @@ func (r *traceRow) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 		}
 		x := header.Origin.X
 		if r.lead > 0 {
-			paintIcon(dst, r.env, r.step.Icon, ggui.Rct(ggui.Pt(x, header.Origin.Y+(r.line.H-t.IconSize)/2), ggui.Sz(t.IconSize, t.IconSize)), ink, 0)
+			ui.PaintIcon(dst, r.env, r.step.Icon, ggui.Rct(ggui.Pt(x, header.Origin.Y+(r.line.H-t.IconSize)/2), ggui.Sz(t.IconSize, t.IconSize)), ink, 0)
 			x += r.lead
 		}
 		titleRect := ggui.Rct(ggui.Pt(x, header.Origin.Y+(r.line.H-r.titleSize.H)/2), r.titleSize)

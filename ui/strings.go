@@ -393,59 +393,29 @@ func BindStrings(r ggui.Readable[Strings], child ggui.Widget) *ggui.EnvWidget {
 // your own reads its words here in Layout.
 func StringsFrom(env ggui.Env) Strings { return *stringsOf(env) }
 
-// stringsOf is StringsFrom without the copy, for the controls of this
-// package. Treat what it returns as read-only.
-func stringsOf(env ggui.Env) *Strings {
+// StringsOf returns the Strings the tree under env is worded in as a shared
+// read-only pointer (avoiding a struct copy on every layout). Treat the
+// returned value as immutable; use StringsFrom when a mutable copy is needed.
+func StringsOf(env ggui.Env) *Strings {
 	if s, ok := env.Get(stringsKey); ok {
 		return s
 	}
 	return english()
 }
 
-// traceStatus is how s words the status of a Trace step.
-func (s *Strings) traceStatus(status TraceStatus) string {
-	switch status {
-	case TracePending:
-		return s.TraceStatusPending
-	case TraceRunning:
-		return s.TraceStatusRunning
-	case TraceCompleted:
-		return s.TraceStatusCompleted
-	case TraceFailed:
-		return s.TraceStatusFailed
-	case TraceError:
-		return s.TraceStatusError
-	case TraceSkipped:
-		return s.TraceStatusSkipped
-	}
-	return string(status)
-}
+// stringsOf is StringsOf, kept for package-internal callers.
+func stringsOf(env ggui.Env) *Strings { return StringsOf(env) }
 
-// attachmentState is how s words the upload state of an Attachment.
-func (s *Strings) attachmentState(state AttachmentState) string {
-	switch state {
-	case AttachmentIdle:
-		return s.AttachmentStatusIdle
-	case AttachmentUploading:
-		return s.AttachmentStatusUploading
-	case AttachmentProcessing:
-		return s.AttachmentStatusProcessing
-	case AttachmentError:
-		return s.AttachmentStatusError
-	case AttachmentDone:
-		return s.AttachmentStatusDone
-	}
-	return string(state)
-}
-
-// orDefault returns s, or the English Strings when s is nil: the words of
-// a control not yet laid out.
-func (s *Strings) orDefault() *Strings {
+// OrDefault returns s, or the English Strings when s is nil: the words of a
+// control not yet laid out.
+func (s *Strings) OrDefault() *Strings {
 	if s == nil {
 		return english()
 	}
 	return s
 }
+
+func (s *Strings) orDefault() *Strings { return s.OrDefault() }
 
 // localized lays its child out after apply has worded it in the Strings of
 // the Env it is laid out in: for the parts a control builds before it has

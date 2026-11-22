@@ -15,6 +15,8 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/chart"
+	"github.com/ironpark/ggui/ui/chat"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -114,17 +116,17 @@ var localized = []struct {
 	{name: "code block", build: func() ggui.Widget { return ui.CodeBlock("x := 1") },
 		want: []string{tr("Copy code"), tr("Code content"), tr("Code")}},
 	{name: "questionnaire", build: func() ggui.Widget {
-		return ui.Questionnaire(ggui.State(ui.QuestionAnswers{}),
-			ui.Question{Name: "a", Title: "A", Choices: []ui.QuestionOption{{Value: "x", Label: "X"}}},
-			ui.Question{Name: "b", Title: "B", Required: true, Choices: []ui.QuestionOption{{Value: "y", Label: "Y"}}})
+		return chat.Questionnaire(ggui.State(chat.QuestionAnswers{}),
+			chat.Question{Name: "a", Title: "A", Choices: []chat.QuestionOption{{Value: "x", Label: "X"}}},
+			chat.Question{Name: "b", Title: "B", Required: true, Choices: []chat.QuestionOption{{Value: "y", Label: "Y"}}})
 	}, act: func(p *ggui.Probe, say func(string) string) { p.Tap(say(tr("Next"))) },
 		want: []string{tr("Questionnaire"), fmt.Sprintf(tr("Question %d of %d"), 1, 2), tr("Skip"), tr("Next"),
 			tr("Choose an answer or skip this question."), tr("Questionnaire progress")}},
 	{name: "questionnaire submit", build: func() ggui.Widget {
-		return ui.Questionnaire(ggui.State(ui.QuestionAnswers{}),
-			ui.Question{Name: "a", Title: "A", Required: true, Choices: []ui.QuestionOption{{Value: "x", Label: "X"}}})
+		return chat.Questionnaire(ggui.State(chat.QuestionAnswers{}),
+			chat.Question{Name: "a", Title: "A", Required: true, Choices: []chat.QuestionOption{{Value: "x", Label: "X"}}})
 	}, want: []string{tr("Submit")}},
-	{name: "no questions", build: func() ggui.Widget { return ui.Questionnaire(ggui.State(ui.QuestionAnswers{})) },
+	{name: "no questions", build: func() ggui.Widget { return chat.Questionnaire(ggui.State(chat.QuestionAnswers{})) },
 		want: []string{tr("No questions"), tr("There are no enabled questions.")}},
 	{name: "alert dialog", build: func() ggui.Widget { return ui.AlertDialog(open(), "Delete?", "Gone for good.") },
 		want: []string{tr("Continue"), tr("Cancel")}},
@@ -136,7 +138,7 @@ var localized = []struct {
 	{name: "number input", build: func() ggui.Widget { return ui.NumberInput(ggui.State(1.0)) },
 		want: []string{tr("Decrement"), tr("Increment")}},
 	{name: "message scroller", build: func() ggui.Widget {
-		return ui.MessageScroller(ggui.State([]ui.MessageEntry{{ID: "1", Content: widget.Text("hi")}}))
+		return chat.MessageScroller(ggui.State([]chat.MessageEntry{{ID: "1", Content: widget.Text("hi")}}))
 	}, want: []string{tr("Conversation")}},
 	{name: "theme switch", build: func() ggui.Widget { return ui.ThemeSwitch(ggui.State(false)) },
 		want: []string{tr("Dark mode")}},
@@ -159,13 +161,13 @@ var localized = []struct {
 			ui.Menubar(ui.Menu("File", ui.MenuItem("New", nil))),
 			ui.NavigationMenu(ui.NavigationMenuLink("Home", nil)),
 			ui.InputOTP(ggui.State(""), 4),
-			ui.AttachmentGroup(ui.Attachment("a.txt", "")),
-			ui.Trace(ui.TraceStep{ID: "run", Title: "Run", Status: ui.TraceRunning}),
+			chat.AttachmentGroup(chat.Attachment("a.txt", "")),
+			chat.Trace(chat.TraceStep{ID: "run", Title: "Run", Status: chat.TraceRunning}),
 		)
 	}, want: []string{tr("Accordion"), tr("Context menu"), tr("Menubar"), tr("Navigation"), tr("One-time password"),
 		fmt.Sprintf(tr("%d-character code"), 4), tr("Attachments"), tr("done"), tr("Execution trace"), "Run: " + tr("running")}},
 	{name: "chart", build: func() ggui.Widget {
-		return ui.BarChart([]ui.ChartDatum{{Label: "a", Values: map[string]float64{"v": 1}}}, ui.ChartConfig{{Key: "v"}})
+		return chart.Bar([]chart.Datum{{Label: "a", Values: map[string]float64{"v": 1}}}, chart.Config{{Key: "v"}})
 	}, want: []string{tr("Chart"), tr("Chart. Use arrow keys to explore values; Enter selects a category.")}},
 	{name: "range slider", build: func() ggui.Widget { return ui.RangeSlider(ggui.State([]float64{20, 60}), 0, 100) },
 		want: []string{fmt.Sprintf(tr("%s %d"), tr("Value"), 1)}},
@@ -285,8 +287,8 @@ func TestStringsLoseToSetters(t *testing.T) {
 			return ui.DatePicker(ggui.State(time.Time{})).Name("When")
 		}, []string{"When"}, []string{tr("Choose date")}},
 		{"questionnaire", func() ggui.Widget {
-			return ui.Questionnaire(ggui.State(ui.QuestionAnswers{}),
-				ui.Question{Name: "a", Title: "A", Required: true, Choices: []ui.QuestionOption{{Value: "x", Label: "X"}}}).
+			return chat.Questionnaire(ggui.State(chat.QuestionAnswers{}),
+				chat.Question{Name: "a", Title: "A", Required: true, Choices: []chat.QuestionOption{{Value: "x", Label: "X"}}}).
 				SubmitLabel("Send").Name("Survey")
 		}, []string{"Send", "Survey"}, []string{tr("Submit"), tr("Questionnaire")}},
 		{"alert dialog", func() ggui.Widget {
@@ -305,7 +307,7 @@ func TestStringsLoseToSetters(t *testing.T) {
 		}, []string{"Look", "M:light"}, []string{tr("Theme"), tr("Light")}},
 		{"groups", func() ggui.Widget {
 			return widget.Column(ui.ButtonGroup(ui.Button("A", nil)).Name("Tools"), ui.Breadcrumb(ui.Crumb("Home", nil)).Name("Path"),
-				ui.Trace(ui.TraceStep{ID: "run", Title: "Run"}).Name("Log"))
+				chat.Trace(chat.TraceStep{ID: "run", Title: "Run"}).Name("Log"))
 		}, []string{"Tools", "Path", "Log"}, []string{tr("Actions"), tr("Breadcrumb"), tr("Execution trace")}},
 	}
 	for _, tc := range cases {
@@ -381,7 +383,7 @@ func TestNoBuiltInWordOutsideTheStrings(t *testing.T) {
 	// The calls whose first argument is shown or said, and the fields of a
 	// node that are.
 	says := []string{"Name", "SetName", "Placeholder", "Alt", "Empty", "Labels", "HintLabels", "SubmitLabel",
-		"Content", "Text", "Caption", "Heading", "Button", "MenuItem", "Menu", "Checkbox", "Switch", "Tooltip", "Toast", "relabel"}
+		"Content", "Text", "Caption", "Heading", "Button", "MenuItem", "Menu", "Checkbox", "Switch", "Tooltip", "Toast", "Relabel", "relabel"}
 	fields := []string{"Name", "Description", "Value"}
 	hasLetter := func(lit *ast.BasicLit) bool {
 		if lit.Kind != token.STRING {
@@ -391,7 +393,7 @@ func TestNoBuiltInWordOutsideTheStrings(t *testing.T) {
 		return err == nil && strings.IndexFunc(s, unicode.IsLetter) >= 0
 	}
 	fset := token.NewFileSet()
-	for name, file := range parseSources(t, fset, parser.SkipObjectResolution, false) {
+	for name, file := range parseControlSources(t, fset, parser.SkipObjectResolution, false) {
 		if name == "strings.go" {
 			continue
 		}

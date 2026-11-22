@@ -10,7 +10,7 @@ import (
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/examples/internal/offscreen"
-	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/chart"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -53,7 +53,7 @@ func (g *renderGame) step() (done bool, err error) {
 		dst := &ggui.Canvas{Image: img}
 		w.Paint(dst, ggui.Rct(ggui.Point{}, size))
 		if strings.Contains(e.Name, "tooltip") {
-			content := decorateChart(ui.ChartTooltipContent(buildChart(e), 1))
+			content := decorateChart(chart.TooltipContent(buildChart(e), 1))
 			tipSize := content.Layout(ggui.Loose(ggui.Sz(400, 240)), env)
 			content.Paint(dst, ggui.Rct(ggui.Pt(180., 180.), tipSize))
 		}

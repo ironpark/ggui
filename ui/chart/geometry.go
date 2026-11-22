@@ -1,8 +1,9 @@
-package ui
+package chart
 
 import (
-	"github.com/ironpark/ggui"
 	"math"
+
+	"github.com/ironpark/ggui"
 )
 
 type chartGeometry struct {
@@ -17,7 +18,7 @@ type chartSeriesGeometry struct {
 
 // geometryFor prepares normalized points once per data/size change. Paint only
 // transforms those points; input lookup never scans Cartesian data.
-func (c *ChartWidget) geometryFor(size ggui.Size) {
+func (c *Widget) geometryFor(size ggui.Size) {
 	if c.cacheSize == size && c.cacheRevision == c.revision {
 		return
 	}
@@ -28,7 +29,7 @@ func (c *ChartWidget) geometryFor(size ggui.Size) {
 	g := chartGeometry{lo: 0, hi: 0, series: make([]chartSeriesGeometry, len(c.config))}
 	pos, neg := make([]float64, n), make([]float64, n)
 	sums := make([]float64, n)
-	if c.stack == ChartExpanded {
+	if c.stack == StackExpanded {
 		for i := range c.data {
 			for j := range c.config {
 				if v, ok := c.value(i, j); ok {
@@ -45,11 +46,11 @@ func (c *ChartWidget) geometryFor(size ggui.Size) {
 			if !ok {
 				continue
 			}
-			if c.stack == ChartExpanded && sums[i] > 0 {
+			if c.stack == StackExpanded && sums[i] > 0 {
 				v /= sums[i]
 			}
 			base := 0.
-			if c.stack != ChartUnstacked {
+			if c.stack != StackUnstacked {
 				if v >= 0 {
 					base = pos[i]
 					pos[i] += v
@@ -68,7 +69,7 @@ func (c *ChartWidget) geometryFor(size ggui.Size) {
 	}
 	if c.domainSet {
 		g.lo, g.hi = c.domainMin, c.domainMax
-	} else if c.stack == ChartExpanded {
+	} else if c.stack == StackExpanded {
 		if g.hi > 0 {
 			g.hi = 1
 		}
@@ -106,7 +107,7 @@ func (c *ChartWidget) geometryFor(size ggui.Size) {
 			}
 		}
 		s.indices = chartSamples(s.top, s.valid, buckets)
-		if c.stack != ChartUnstacked {
+		if c.stack != StackUnstacked {
 			s.indices = mergeChartSamples(s.indices, chartSamples(s.base, s.valid, buckets))
 		}
 	}
@@ -205,7 +206,7 @@ func radarAngle(i, n int) float64 { return 90 - float64(i)*360/float64(n) }
 
 // positiveTotal sums the positive values of one series. Pie and radial share it
 // with the hit test, so painting and hovering agree on what counts.
-func (c *ChartWidget) positiveTotal(j int) float64 {
+func (c *Widget) positiveTotal(j int) float64 {
 	total := 0.
 	for i := range c.data {
 		if v, ok := c.value(i, j); ok && v > 0 {
@@ -218,9 +219,9 @@ func (c *ChartWidget) positiveTotal(j int) float64 {
 // categoryFraction maps a category index to its 0..1 position across the plot.
 // Bars sit at the center of their band; every other kind sits on the gridline.
 // categoryIndex inverts it, so geometry, axis ticks and hit-testing cannot drift.
-func (c *ChartWidget) categoryFraction(i int) float64 {
+func (c *Widget) categoryFraction(i int) float64 {
 	n := len(c.data)
-	if c.kind == ChartBar {
+	if c.kind == KindBar {
 		return (float64(i) + .5) / float64(n)
 	}
 	if n > 1 {
@@ -229,19 +230,19 @@ func (c *ChartWidget) categoryFraction(i int) float64 {
 	return .5
 }
 
-func (c *ChartWidget) categoryIndex(f float64) int {
+func (c *Widget) categoryIndex(f float64) int {
 	n := len(c.data)
 	i := int(math.Round(f * float64(n-1)))
-	if c.kind == ChartBar {
+	if c.kind == KindBar {
 		i = int(f * float64(n))
 	}
 	return min(n-1, max(0, i))
 }
 
-func (c *ChartWidget) polarBounds() (ggui.Point, float64) {
+func (c *Widget) polarBounds() (ggui.Point, float64) {
 	return c.plot.Center(), max(0, min(c.plot.Size.W, c.plot.Size.H)/2*c.outer)
 }
-func (c *ChartWidget) hitIndex(p ggui.Point) int {
+func (c *Widget) hitIndex(p ggui.Point) int {
 	if !c.plot.Contains(p) || len(c.data) == 0 || len(c.config) == 0 {
 		return -1
 	}
@@ -254,7 +255,7 @@ func (c *ChartWidget) hitIndex(p ggui.Point) int {
 			return -1
 		}
 		angle := math.Atan2(dy, dx) * 180 / math.Pi
-		if c.kind == ChartRadar {
+		if c.kind == KindRadar {
 			return int(math.Round(math.Mod(90-angle+360, 360)/360*float64(n))) % n
 		}
 		if distance < radius*c.inner {
@@ -271,7 +272,7 @@ func (c *ChartWidget) hitIndex(p ggui.Point) int {
 		if offset > math.Abs(sweep) {
 			return -1
 		}
-		if c.kind == ChartRadial && c.stack == ChartUnstacked {
+		if c.kind == KindRadial && c.stack == StackUnstacked {
 			return min(n-1, max(0, int((distance-radius*c.inner)/(radius*(1-c.inner))*float64(n))))
 		}
 		total := c.positiveTotal(0)

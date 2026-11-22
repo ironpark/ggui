@@ -1,4 +1,4 @@
-package ui_test
+package chat_test
 
 import (
 	"testing"
@@ -6,15 +6,16 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/chat"
 	"github.com/ironpark/ggui/widget"
 )
 
 func TestTraceNestedDisclosuresAndAccessibleActions(t *testing.T) {
 	t.Parallel()
-	trace := ui.Trace(ui.TraceStep{ID: "run", Title: "Run", Status: ui.TraceRunning, Duration: 1500 * time.Millisecond,
-		Details: widget.Text("Run details"), Children: []ui.TraceStep{
-			{ID: "fetch", Title: "Fetch", Status: ui.TraceCompleted, Details: widget.Text("Fetched two files")},
-			{ID: "save", Title: "Save", Status: ui.TracePending},
+	trace := chat.Trace(chat.TraceStep{ID: "run", Title: "Run", Status: chat.TraceRunning, Duration: 1500 * time.Millisecond,
+		Details: widget.Text("Run details"), Children: []chat.TraceStep{
+			{ID: "fetch", Title: "Fetch", Status: chat.TraceCompleted, Details: widget.Text("Fetched two files")},
+			{ID: "save", Title: "Save", Status: chat.TracePending},
 		}})
 	p := ggui.NewProbe(widget.Column(trace), ggui.Sz(400, 400))
 	defer p.Close()
@@ -58,9 +59,9 @@ func TestTraceKeyboardDetailsAndImmutableExpansionBinding(t *testing.T) {
 	expanded := ggui.State(initial)
 	var toggles []string
 	clicked := 0
-	trace := ui.Trace(
-		ui.TraceStep{ID: "a", Title: "First", Details: ui.Button("Inspect", func() { clicked++ })},
-		ui.TraceStep{ID: "b", Title: "Second", Details: widget.Text("Second details")},
+	trace := chat.Trace(
+		chat.TraceStep{ID: "a", Title: "First", Details: ui.Button("Inspect", func() { clicked++ })},
+		chat.TraceStep{ID: "b", Title: "Second", Details: widget.Text("Second details")},
 	).BindExpanded(expanded).OnToggle(func(id string, open bool) { toggles = append(toggles, id) })
 	p := ggui.NewProbe(widget.Column(trace), ggui.Sz(350, 300))
 	defer p.Close()
@@ -87,19 +88,19 @@ func TestTraceKeyboardDetailsAndImmutableExpansionBinding(t *testing.T) {
 
 func TestTraceUpdatesKeepKeyedFocusAndExpansion(t *testing.T) {
 	t.Parallel()
-	steps := ggui.State([]ui.TraceStep{
-		{ID: "a", Title: "Compile", Status: ui.TraceRunning, Details: widget.Text("Compiling")},
-		{ID: "b", Title: "Test", Status: ui.TracePending, Details: widget.Text("Waiting")},
+	steps := ggui.State([]chat.TraceStep{
+		{ID: "a", Title: "Compile", Status: chat.TraceRunning, Details: widget.Text("Compiling")},
+		{ID: "b", Title: "Test", Status: chat.TracePending, Details: widget.Text("Waiting")},
 	})
-	trace := ui.Trace().BindSteps(steps)
+	trace := chat.Trace().BindSteps(steps)
 	p := ggui.NewProbe(widget.Column(trace), ggui.Sz(350, 300))
 	defer p.Close()
 	p.Tap("Compile")
 	p.Advance(300 * time.Millisecond)
 	before := node(t, p.Semantics(), ggui.RoleDisclosure, "Compile")
-	steps.Set([]ui.TraceStep{
-		{ID: "b", Title: "Test", Status: ui.TraceRunning, Details: widget.Text("Running tests")},
-		{ID: "a", Title: "Compiled", Status: ui.TraceCompleted, Duration: 42 * time.Millisecond, Details: widget.Text("Finished")},
+	steps.Set([]chat.TraceStep{
+		{ID: "b", Title: "Test", Status: chat.TraceRunning, Details: widget.Text("Running tests")},
+		{ID: "a", Title: "Compiled", Status: chat.TraceCompleted, Duration: 42 * time.Millisecond, Details: widget.Text("Finished")},
 	})
 	p.Frame()
 	after := node(t, p.Semantics(), ggui.RoleDisclosure, "Compiled")
@@ -113,7 +114,7 @@ func TestTraceUpdatesKeepKeyedFocusAndExpansion(t *testing.T) {
 	if n := node(t, p.Semantics(), ggui.RoleListItem, "Compiled"); n.Description != "completed · 42ms" {
 		t.Fatal("stale status or duration", n)
 	}
-	trace.Steps([]ui.TraceStep{{ID: "c", Title: "Skipped", Status: ui.TraceSkipped}})
+	trace.Steps([]chat.TraceStep{{ID: "c", Title: "Skipped", Status: chat.TraceSkipped}})
 	steps.Set(nil)
 	p.Frame()
 	node(t, p.Semantics(), ggui.RoleListItem, "Skipped")
@@ -124,15 +125,15 @@ func TestTraceUpdatesKeepKeyedFocusAndExpansion(t *testing.T) {
 
 func TestTraceOwnsLiteralSlicesAndValidatesIDs(t *testing.T) {
 	t.Parallel()
-	steps := []ui.TraceStep{{ID: "root", Title: "Root", Children: []ui.TraceStep{{ID: "child", Title: "Child"}}}}
-	trace := ui.Trace(steps...).Expanded(map[string]bool{"root": true})
+	steps := []chat.TraceStep{{ID: "root", Title: "Root", Children: []chat.TraceStep{{ID: "child", Title: "Child"}}}}
+	trace := chat.Trace(steps...).Expanded(map[string]bool{"root": true})
 	steps[0].Children[0].Title = "Mutated"
 	p := ggui.NewProbe(widget.Column(trace), ggui.Sz(280, 200))
 	node(t, p.Semantics(), ggui.RoleListItem, "Child")
 	p.Close()
-	for _, invalid := range [][]ui.TraceStep{
+	for _, invalid := range [][]chat.TraceStep{
 		{{Title: "Missing ID"}},
-		{{ID: "same", Children: []ui.TraceStep{{ID: "same"}}}},
+		{{ID: "same", Children: []chat.TraceStep{{ID: "same"}}}},
 	} {
 		func() {
 			defer func() {
@@ -140,20 +141,20 @@ func TestTraceOwnsLiteralSlicesAndValidatesIDs(t *testing.T) {
 					t.Error("invalid IDs were accepted")
 				}
 			}()
-			ui.Trace(invalid...).Layout(ggui.Loose(ggui.Sz(300, 200)), ggui.Env{})
+			chat.Trace(invalid...).Layout(ggui.Loose(ggui.Sz(300, 200)), ggui.Env{})
 		}()
 	}
 }
 
 func TestTraceEmptyAndNarrowLayout(t *testing.T) {
 	t.Parallel()
-	empty := ui.Trace().Name("Build trace")
+	empty := chat.Trace().Name("Build trace")
 	p := ggui.NewProbe(empty, ggui.Sz(200, 100))
 	if n := node(t, p.Semantics(), ggui.RoleList, "Build trace"); n.Max != 0 {
 		t.Fatal(n)
 	}
 	p.Close()
-	trace := ui.Trace(ui.TraceStep{ID: "step", Title: "A long execution step title", Status: ui.TraceFailed, Duration: time.Second,
+	trace := chat.Trace(chat.TraceStep{ID: "step", Title: "A long execution step title", Status: chat.TraceFailed, Duration: time.Second,
 		Details: widget.Text("Long details that should wrap in a narrow view")}).Expanded(map[string]bool{"step": true})
 	for _, size := range []ggui.Size{ggui.Sz(0, 0), ggui.Sz(50, 50), ggui.Sz(200, 300)} {
 		got := trace.Layout(ggui.Loose(size), ggui.Env{})
@@ -166,9 +167,9 @@ func TestTraceEmptyAndNarrowLayout(t *testing.T) {
 func TestTraceDescriptionsAndActionRows(t *testing.T) {
 	t.Parallel()
 	activated := 0
-	trace := ui.Trace(
-		ui.TraceStep{ID: "plain", Title: "Complete", Description: "Two files written"},
-		ui.TraceStep{ID: "error", Title: "Failed build", Description: "Open diagnostics", Status: ui.TraceError, OnActivate: func() { activated++ }},
+	trace := chat.Trace(
+		chat.TraceStep{ID: "plain", Title: "Complete", Description: "Two files written"},
+		chat.TraceStep{ID: "error", Title: "Failed build", Description: "Open diagnostics", Status: chat.TraceError, OnActivate: func() { activated++ }},
 	)
 	p := ggui.NewProbe(widget.Column(trace), ggui.Sz(300, 200))
 	defer p.Close()

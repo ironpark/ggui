@@ -10,6 +10,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/chart"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
@@ -21,15 +22,15 @@ var previewGain = color.NRGBA{R: 34, G: 197, B: 94, A: 255}
 // previewBars is a bar chart of one series over labels, with the reference's
 // faint grid and its category names under the plot.
 func (p *previewModel) previewBars(name string, height float64, labels []string, values []float64) ggui.Widget {
-	data := make([]ui.ChartDatum, len(labels))
+	data := make([]chart.Datum, len(labels))
 	names := make([]ggui.Widget, len(labels))
 	for i, label := range labels {
-		data[i] = ui.ChartDatum{Label: label, Values: map[string]float64{"value": values[i]}}
+		data[i] = chart.Datum{Label: label, Values: map[string]float64{"value": values[i]}}
 		names[i] = widget.Expanded(widget.Center(ui.Caption(label).Size(12)))
 	}
-	chart := ui.BarChart(data, ui.ChartConfig{{Key: "value", Label: name, ColorIndex: 2}}).
+	bars := chart.Bar(data, chart.Config{{Key: "value", Label: name, ColorIndex: 2}}).
 		Name(name).Key(p.key(name)).Height(height).Grid(true).Axes(false, false).CornerRadius(4).Domain(0, slices.Max(values))
-	return widget.Column(chart, widget.Padding(widget.Row(names...), 0, 12)).Gap(0).Stretch()
+	return widget.Column(bars, widget.Padding(widget.Row(names...), 0, 12)).Gap(0).Stretch()
 }
 
 func (p *previewModel) scanCard() ggui.Widget {
@@ -656,21 +657,21 @@ func (p *previewModel) stockCard() ggui.Widget {
 		"VIG":  {168, 172, 165, 176, 181, 179},
 		"AAPL": {185, 172, 169, 190, 204, 213},
 	}
-	series := func(ticker string) []ui.ChartDatum {
-		data := make([]ui.ChartDatum, len(months))
+	series := func(ticker string) []chart.Datum {
+		data := make([]chart.Datum, len(months))
 		for i, month := range months {
-			data[i] = ui.ChartDatum{Label: month, Values: map[string]float64{"price": prices[ticker][i]}}
+			data[i] = chart.Datum{Label: month, Values: map[string]float64{"price": prices[ticker][i]}}
 		}
 		return data
 	}
 	ticker := ggui.State("VOO")
-	chart := ui.AreaChart(series("VOO"), ui.ChartConfig{{Key: "price", Label: "Price", ColorIndex: 2}}).
+	area := chart.Area(series("VOO"), chart.Config{{Key: "price", Label: "Price", ColorIndex: 2}}).
 		Name("Price history").Key(p.key("stock-chart")).Height(196).Grid(true).Axes(true, false).Domain(0, 480).FillOpacity(.6).
-		Tooltip(ui.ChartTooltipOptions{FormatValue: func(value float64, _ ui.ChartSeries, _ ui.ChartDatum) string { return previewMoney("USD", value) }})
+		Tooltip(chart.TooltipOptions{FormatValue: func(value float64, _ chart.Series, _ chart.Datum) string { return previewMoney("USD", value) }})
 	picker := ui.Select(ticker).Options([]string{"VOO", "VIG", "AAPL"}).Name("Ticker").Key(p.key("stock-ticker")).
-		OnChange(func(t string) { chart.Data(series(t)).Domain(0, 1.05*slices.Max(prices[t])) })
+		OnChange(func(t string) { area.Data(series(t)).Domain(0, 1.05*slices.Max(prices[t])) })
 	return previewCard("Stock Performance", "6-month price history.", widget.Column(
-		ui.Field("Ticker", picker), ui.Divider(), chart,
+		ui.Field("Ticker", picker), ui.Divider(), area,
 	).Gap(16).Stretch())
 }
 

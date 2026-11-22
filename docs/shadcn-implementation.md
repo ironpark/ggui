@@ -36,17 +36,17 @@ explicit composition already exists, not that every optional web prop is covered
 | [Alert](https://ui.shadcn.com/docs/components/base/alert) | `Alert` | Existing; icon and top-right action added |
 | [Alert Dialog](https://ui.shadcn.com/docs/components/base/alert-dialog) | `AlertDialog` | Existing; `Small` and `Media` added |
 | [Aspect Ratio](https://ui.shadcn.com/docs/components/base/aspect-ratio) | `AspectRatio` | Existing |
-| [Attachment](https://ui.shadcn.com/docs/components/base/attachment) | `Attachment / AttachmentGroup` | Existing |
+| [Attachment](https://ui.shadcn.com/docs/components/base/attachment) | `chat.Attachment / chat.AttachmentGroup` (`ui/chat`) | Existing |
 | [Avatar](https://ui.shadcn.com/docs/components/base/avatar) | `Avatar / AvatarGroup` | Existing; sizes, badges and groups added |
 | [Badge](https://ui.shadcn.com/docs/components/base/badge) | `Badge` | Existing; ghost/link variants and icons added |
 | [Breadcrumb](https://ui.shadcn.com/docs/components/base/breadcrumb) | `Breadcrumb / Crumb` | Existing; chevron separator and `SeparatorOf` added |
-| [Bubble](https://ui.shadcn.com/docs/components/base/bubble) | `Bubble` | Existing |
+| [Bubble](https://ui.shadcn.com/docs/components/base/bubble) | `chat.Bubble` (`ui/chat`) | Existing |
 | [Button](https://ui.shadcn.com/docs/components/base/button) | `Button / ButtonOf` | Existing; leading and trailing icons added |
 | [Button Group](https://ui.shadcn.com/docs/components/base/button-group) | `ButtonGroup / ButtonGroupText / ButtonGroupSeparator` | Existing; joined children, text and separators added |
 | [Calendar](https://ui.shadcn.com/docs/components/base/calendar) | `Calendar / CalendarRange / CalendarMultiple` | Existing; selection modes, `Months(n)` and caption dropdowns added |
 | [Card](https://ui.shadcn.com/docs/components/base/card) | `Card / CardHeader / CardContent / CardFooter` | Existing; sections and small size added |
 | [Carousel](https://ui.shadcn.com/docs/components/base/carousel) | `Carousel` | Existing |
-| [Chart](https://ui.shadcn.com/docs/components/base/chart) | `AreaChart / BarChart / LineChart / PieChart / RadarChart / RadialChart` | Existing |
+| [Chart](https://ui.shadcn.com/docs/components/base/chart) | `chart.Area / chart.Bar / chart.Line / chart.Pie / chart.Radar / chart.Radial` (`ui/chart`) | Existing |
 | [Checkbox](https://ui.shadcn.com/docs/components/base/checkbox) | `Checkbox` | Existing |
 | [Code Block](https://ui.shadcn.com/docs/components/base/code-block) | `CodeBlock / CodeBlockOf` | Added |
 | [Collapsible](https://ui.shadcn.com/docs/components/base/collapsible) | `Collapsible / CollapsibleOf` | Existing; custom trigger added |
@@ -68,16 +68,16 @@ explicit composition already exists, not that every optional web prop is covered
 | [Item](https://ui.shadcn.com/docs/components/base/item) | `Item / ItemGroup / ItemSeparator` | Existing; media icons, header/footer, sizes and groups added |
 | [Kbd](https://ui.shadcn.com/docs/components/base/kbd) | `Kbd / KbdGroup` | Existing; groups added |
 | [Label](https://ui.shadcn.com/docs/components/base/label) | `Label` | Added |
-| [Marker](https://ui.shadcn.com/docs/components/base/marker) | `Marker` | Existing |
+| [Marker](https://ui.shadcn.com/docs/components/base/marker) | `chat.Marker` (`ui/chat`) | Existing |
 | [Menubar](https://ui.shadcn.com/docs/components/base/menubar) | `Menubar / AppMenubar` | Existing |
-| [Message](https://ui.shadcn.com/docs/components/base/message) | `Message` | Existing |
-| [Message Scroller](https://ui.shadcn.com/docs/components/base/message-scroller) | `MessageScroller` | Existing |
+| [Message](https://ui.shadcn.com/docs/components/base/message) | `chat.Message` (`ui/chat`) | Existing |
+| [Message Scroller](https://ui.shadcn.com/docs/components/base/message-scroller) | `chat.MessageScroller` (`ui/chat`) | Existing |
 | [Native Select](https://ui.shadcn.com/docs/components/base/native-select) | `NativeSelect` | Added |
 | [Navigation Menu](https://ui.shadcn.com/docs/components/base/navigation-menu) | `NavigationMenu` | Added; hover-open added |
 | [Pagination](https://ui.shadcn.com/docs/components/base/pagination) | `Pagination` | Existing |
 | [Popover](https://ui.shadcn.com/docs/components/base/popover) | `Popover / PopoverOf` | Added; sides added |
 | [Progress](https://ui.shadcn.com/docs/components/base/progress) | `Progress / ProgressRing` | Existing; label and value added |
-| [Questionnaire](https://ui.shadcn.com/docs/components/base/questionnaire) | `Questionnaire` | Existing |
+| [Questionnaire](https://ui.shadcn.com/docs/components/base/questionnaire) | `chat.Questionnaire` (`ui/chat`) | Existing |
 | [Radio Group](https://ui.shadcn.com/docs/components/base/radio-group) | `Radios / Radio` | Existing; vertical default and invalid state added |
 | [Resizable](https://ui.shadcn.com/docs/components/base/resizable) | `Resizable` | Existing |
 | [Scroll Area](https://ui.shadcn.com/docs/components/base/scroll-area) | `widget.Scroll` | Existing core widget |
@@ -96,7 +96,7 @@ explicit composition already exists, not that every optional web prop is covered
 | [Toggle](https://ui.shadcn.com/docs/components/base/toggle) | `Toggle / ToggleOf` | Added; icon content added |
 | [Toggle Group](https://ui.shadcn.com/docs/components/base/toggle-group) | `ToggleGroup / ToggleGroupMultiple` | Existing; multiple selection, outline and joined spacing added |
 | [Tooltip](https://ui.shadcn.com/docs/components/base/tooltip) | `Tooltip` | Existing; arrow and sides added |
-| [Trace](https://ui.shadcn.com/docs/components/base/trace) | `Trace` | Added |
+| [Trace](https://ui.shadcn.com/docs/components/base/trace) | `chat.Trace` (`ui/chat`) | Added |
 | [Typography](https://ui.shadcn.com/docs/components/base/typography) | `widget.Text / RichText, Title / Heading / Caption / Mono` | Existing composition |
 
 ## Native APIs implemented

@@ -12,6 +12,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/chart"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
@@ -72,24 +73,24 @@ func short(s string) string {
 	}
 	return title(s)
 }
-func buildChart(e chartExample) *ui.ChartWidget {
-	kind := ui.ChartArea
+func buildChart(e chartExample) *chart.Widget {
+	kind := chart.KindArea
 	switch strings.Split(e.Name, "-")[1] {
 	case "bar", "tooltip":
-		kind = ui.ChartBar
+		kind = chart.KindBar
 	case "line":
-		kind = ui.ChartLine
+		kind = chart.KindLine
 	case "pie":
-		kind = ui.ChartPie
+		kind = chart.KindPie
 	case "radar":
-		kind = ui.ChartRadar
+		kind = chart.KindRadar
 	case "radial":
-		kind = ui.ChartRadial
+		kind = chart.KindRadial
 	}
 	data := nextData(e)
-	config := make(ui.ChartConfig, len(e.Keys))
+	config := make(chart.Config, len(e.Keys))
 	for i, k := range e.Keys {
-		config[i] = ui.ChartSeries{Key: k, Label: title(k), ColorIndex: e.Colors[k]}
+		config[i] = chart.Series{Key: k, Label: title(k), ColorIndex: e.Colors[k]}
 		if opacity, ok := e.Opacities[k]; ok {
 			config[i].FillOpacity = &opacity
 		}
@@ -98,7 +99,7 @@ func buildChart(e chartExample) *ui.ChartWidget {
 	has := func(s string) bool { return strings.Contains(name, s) }
 	if has("icons") {
 		roles := []icons.Role{"chart-trending-down", "chart-trending-up"}
-		if kind == ui.ChartRadar {
+		if kind == chart.KindRadar {
 			roles = []icons.Role{"chart-arrow-down", "chart-arrow-up"}
 		}
 		if has("tooltip") {
@@ -127,30 +128,30 @@ func buildChart(e chartExample) *ui.ChartWidget {
 		}
 	}
 
-	c := ui.ChartContainer(kind, data, config).Name(e.Title).Height(240).TickFormatter(short)
-	tooltip := ui.ChartTooltipOptions{}
-	if kind == ui.ChartArea {
-		tooltip.Indicator = ui.ChartIndicatorLine
+	c := chart.Container(kind, data, config).Name(e.Title).Height(240).TickFormatter(short)
+	tooltip := chart.TooltipOptions{}
+	if kind == chart.KindArea {
+		tooltip.Indicator = chart.IndicatorLine
 		c.TooltipCursor(false)
 	}
 	switch e.Curve {
 	case "linear":
-		c.Curve(ui.ChartLinear)
+		c.Curve(chart.CurveLinear)
 	case "step":
-		c.Curve(ui.ChartStep)
+		c.Curve(chart.CurveStep)
 	case "monotone":
-		c.Curve(ui.ChartMonotone)
+		c.Curve(chart.CurveMonotone)
 	}
 	if e.Stacked || has("stacked") || has("tooltip") {
-		c.Stack(ui.ChartStacked)
+		c.Stack(chart.StackStacked)
 	}
 	if has("expand") {
-		c.Stack(ui.ChartExpanded)
+		c.Stack(chart.StackExpanded)
 	}
 	if has("gradient") || has("area-interactive") {
 		c.Gradient(true)
 	}
-	if has("legend") || has("icons") && (kind == ui.ChartArea || kind == ui.ChartRadar) || has("bar-stacked") || has("area-interactive") {
+	if has("legend") || has("icons") && (kind == chart.KindArea || kind == chart.KindRadar) || has("bar-stacked") || has("area-interactive") {
 		c.Legend(true)
 	}
 	if has("axes") {
@@ -172,15 +173,15 @@ func buildChart(e chartExample) *ui.ChartWidget {
 		c.Labels(true)
 	}
 	if has("line-label-custom") || has("pie-label-list") {
-		c.LabelFormatter(func(ctx ui.ChartPointContext) string { return title(ctx.Datum.Label) })
+		c.LabelFormatter(func(ctx chart.PointContext) string { return title(ctx.Datum.Label) })
 	}
 	if has("dots-custom") {
-		c.DotPainter(func(dst *ggui.Canvas, ctx ui.ChartPointContext) {
+		c.DotPainter(func(dst *ggui.Canvas, ctx chart.PointContext) {
 			chartIcons["chart-commit"].Draw(dst, ggui.Rct(ctx.Position.Add(ggui.Pt(-10., -10.)), ggui.Sz(20., 20.)), ctx.Color, 0)
 		})
 	}
 
-	if kind == ui.ChartPie {
+	if kind == chart.KindPie {
 		c.CategoryColors(true).Height(250)
 		tooltip.HideLabel = true
 		if has("donut") || has("interactive") {
@@ -200,9 +201,9 @@ func buildChart(e chartExample) *ui.ChartWidget {
 			c.ActiveIndex(0).ActiveRing(true).CenterText(fmt.Sprintf("%g", data[0].Values[e.Keys[0]]), "Visitors")
 		}
 	}
-	if kind == ui.ChartRadar {
+	if kind == chart.KindRadar {
 		c.Height(250).StrokeWidth(0).TickFormatter(func(s string) string { return s })
-		grid := ui.ChartPolarGrid{Circle: has("circle"), Fill: has("fill"), HideSpokes: has("no-lines") || has("grid-custom")}
+		grid := chart.PolarGrid{Circle: has("circle"), Fill: has("fill"), HideSpokes: has("no-lines") || has("grid-custom")}
 		if has("grid-custom") {
 			grid.Rings = 1
 		}
@@ -230,24 +231,24 @@ func buildChart(e chartExample) *ui.ChartWidget {
 		c.InsideLabels(true)
 	}
 	if has("bar-negative") {
-		c.Grid(false).Axes(false, false).LabelFormatter(func(ctx ui.ChartPointContext) string { return short(ctx.Datum.Label) })
+		c.Grid(false).Axes(false, false).LabelFormatter(func(ctx chart.PointContext) string { return short(ctx.Datum.Label) })
 	}
 	if has("bar-label-custom") {
-		c.Axes(false, false).Grid(true).LabelPainter(func(dst *ggui.Canvas, ctx ui.ChartPointContext) {
+		c.Axes(false, false).Grid(true).LabelPainter(func(dst *ggui.Canvas, ctx chart.PointContext) {
 			t := uitheme.Of(ctx.Env)
 			demoText(dst, ctx.Env, short(ctx.Datum.Label), ggui.Pt(ctx.Plot.Origin.X+8, ctx.Position.Y-7), t.PrimaryFg, 0)
 			demoText(dst, ctx.Env, fmt.Sprintf("%g", ctx.Value), ctx.Position.Add(ggui.Pt(8., -7.)), t.Fg, 0)
 		})
 	}
 	if has("radar-label-custom") {
-		c.TickPainter(func(dst *ggui.Canvas, ctx ui.ChartPointContext) {
+		c.TickPainter(func(dst *ggui.Canvas, ctx chart.PointContext) {
 			env := ctx.Env
 			w := widget.Column(widget.Text(fmt.Sprintf("%g / %g", ctx.Datum.Values["desktop"], ctx.Datum.Values["mobile"])).Size(12).Color(ctx.Color), ui.Caption(ctx.Datum.Label).Size(11)).Align(widget.AlignCenter)
 			size := w.Layout(ggui.Loose(ggui.Sz(120, 50)), env)
 			dst.Paint(w, ggui.Rct(ctx.Position.Add(ggui.Pt(-size.W/2, -size.H/2)), size))
 		})
 	}
-	if kind == ui.ChartRadial {
+	if kind == chart.KindRadial {
 		c.Height(250).OuterRadius(.88).CategoryColors(true).InnerRadius(.27).CornerRadius(0).Grid(false)
 		tooltip.HideLabel = true
 		if has("grid") {
@@ -277,7 +278,7 @@ func buildChart(e chartExample) *ui.ChartWidget {
 		})
 		switch {
 		case has("indicator-line"):
-			tooltip.Indicator = ui.ChartIndicatorLine
+			tooltip.Indicator = chart.IndicatorLine
 		case has("indicator-none"):
 			tooltip.HideIndicator = true
 		case has("label-none"):
@@ -285,7 +286,7 @@ func buildChart(e chartExample) *ui.ChartWidget {
 			tooltip.HideIndicator = true
 		case has("label-custom"):
 			tooltip.Label = "Activities"
-			tooltip.Indicator = ui.ChartIndicatorLine
+			tooltip.Indicator = chart.IndicatorLine
 		case has("label-formatter"):
 			tooltip.FormatLabel = func(s string) string {
 				d, err := time.Parse("2006-01-02", s)
@@ -296,7 +297,7 @@ func buildChart(e chartExample) *ui.ChartWidget {
 			}
 		case has("formatter") || has("advanced"):
 			tooltip.HideLabel = true
-			tooltip.FormatValue = func(v float64, _ ui.ChartSeries, _ ui.ChartDatum) string { return fmt.Sprintf("%g kcal", v) }
+			tooltip.FormatValue = func(v float64, _ chart.Series, _ chart.Datum) string { return fmt.Sprintf("%g kcal", v) }
 		}
 	}
 	if has("tooltip-icons") {
@@ -311,7 +312,7 @@ func buildChart(e chartExample) *ui.ChartWidget {
 // chartCard builds a complete example with interactive controls where the reference
 // exposes a date range, series selector or persistent active category.
 func chartCard(e chartExample) ggui.Widget {
-	chart := buildChart(e)
+	c := buildChart(e)
 	description := "January - June 2024"
 	footer := "Showing total visitors for the last 6 months"
 	if strings.Contains(e.Name, "area") || strings.Contains(e.Name, "radar") {
@@ -335,7 +336,7 @@ func chartCard(e chartExample) ggui.Widget {
 				} else if v == "Last 7 days" {
 					copy.Data = e.Data[max(0, len(e.Data)-7):]
 				}
-				chart.Data(nextData(copy))
+				c.Data(nextData(copy))
 			}))
 		} else if strings.Contains(e.Name, "pie") {
 			names := make([]string, len(e.Data))
@@ -346,8 +347,8 @@ func chartCard(e chartExample) ggui.Widget {
 			widgets = append(widgets, ui.Select(selected).Options(names).OnChange(func(s string) {
 				for i, name := range names {
 					if s == name {
-						chart.ActiveIndex(i)
-						chart.CenterText(fmt.Sprintf("%g", nextData(e)[i].Values[e.Keys[0]]), "Visitors")
+						c.ActiveIndex(i)
+						c.CenterText(fmt.Sprintf("%g", nextData(e)[i].Values[e.Keys[0]]), "Visitors")
 					}
 				}
 			}))
@@ -358,17 +359,17 @@ func chartCard(e chartExample) ggui.Widget {
 			mobile.Keys = []string{"mobile"}
 			selection := ggui.State("desktop")
 			widgets = append(widgets, widget.Row(ui.Button("Desktop", func() { selection.Set("desktop") }), ui.Button("Mobile", func() { selection.Set("mobile") })).Gap(8))
-			widgets = append(widgets, ggui.View(selection, func(s string) *ui.ChartWidget {
+			widgets = append(widgets, ggui.View(selection, func(s string) *chart.Widget {
 				if s == "mobile" {
 					return buildChart(mobile)
 				}
 				return buildChart(desktop)
 			}))
-			chart = nil
+			c = nil
 		}
 	}
-	if chart != nil {
-		widgets = append(widgets, chart)
+	if c != nil {
+		widgets = append(widgets, c)
 	}
 	if !strings.Contains(e.Name, "tooltip") {
 		widgets = append(widgets, widget.Text("Trending up by 5.2% this month ↗").Size(14), ui.Caption(footer))
@@ -383,10 +384,10 @@ func chartCard(e chartExample) ggui.Widget {
 	column := widget.Column(widgets...).Gap(12).Stretch()
 	return decorateChart(ui.Card(column).Pad(24))
 }
-func nextData(e chartExample) []ui.ChartDatum {
-	data := make([]ui.ChartDatum, len(e.Data))
+func nextData(e chartExample) []chart.Datum {
+	data := make([]chart.Datum, len(e.Data))
 	for i, row := range e.Data {
-		data[i] = ui.ChartDatum{Values: map[string]float64{}}
+		data[i] = chart.Datum{Values: map[string]float64{}}
 		for k, v := range row {
 			switch v := v.(type) {
 			case float64:

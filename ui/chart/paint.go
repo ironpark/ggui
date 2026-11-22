@@ -1,4 +1,4 @@
-package ui
+package chart
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/widget"
 )
 
@@ -34,7 +35,7 @@ type chartText struct {
 	layout uint64 // the chart's textLayout this was measured at
 }
 
-func (c *ChartWidget) text(dst *ggui.Canvas, text string, p ggui.Point, size float64, col color.Color, align float64) {
+func (c *Widget) text(dst *ggui.Canvas, text string, p ggui.Point, size float64, col color.Color, align float64) {
 	if col == nil {
 		return
 	}
@@ -44,17 +45,17 @@ func (c *ChartWidget) text(dst *ggui.Canvas, text string, p ggui.Point, size flo
 
 // textMiddle is text in face, centered vertically on p.Y: the rows of a
 // tooltip and a legend place their labels by the middle of the row.
-func (c *ChartWidget) textMiddle(dst *ggui.Canvas, text string, p ggui.Point, face chartFace, col color.Color, align float64) {
+func (c *Widget) textMiddle(dst *ggui.Canvas, text string, p ggui.Point, face chartFace, col color.Color, align float64) {
 	if col == nil {
 		return
 	}
 	t := c.measuredFace(text, 12, col, face)
 	dst.Paint(t.widget, ggui.Rct(ggui.Pt(p.X-align*t.size.W, p.Y-t.size.H/2), t.size))
 }
-func (c *ChartWidget) measuredText(text string, size float64, col color.Color) *chartText {
+func (c *Widget) measuredText(text string, size float64, col color.Color) *chartText {
 	return c.measuredFace(text, size, col, chartRegular)
 }
-func (c *ChartWidget) measuredFace(text string, size float64, col color.Color, face chartFace) *chartText {
+func (c *Widget) measuredFace(text string, size float64, col color.Color, face chartFace) *chartText {
 	if col == nil {
 		col = color.Transparent
 	}
@@ -113,7 +114,7 @@ func chartDrawPath(dst *ggui.Canvas, path *ggui.Path, fill, stroke color.Color, 
 	dst.FillPath(path, fill)
 	dst.StrokePath(path, width, stroke)
 }
-func (c *ChartWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+func (c *Widget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	c.Hit(dst, r, c, ggui.CursorShapeDefault)
 	if r.Empty() {
 		return
@@ -144,7 +145,7 @@ func (c *ChartWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	progress := c.progress()
 	if len(c.data) == 0 || len(c.config) == 0 {
-		c.text(dst, c.words.orDefault().ChartNoData, r.Center().Add(ggui.Pt(0., -7.)), 12, c.theme.MutedFg, .5)
+		c.text(dst, c.words.OrDefault().ChartNoData, r.Center().Add(ggui.Pt(0., -7.)), 12, c.theme.MutedFg, .5)
 		return
 	}
 	if c.kind.polar() {
@@ -156,7 +157,7 @@ func (c *ChartWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if c.legend {
 		c.paintLegend(dst, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+r.Size.H-legendH), ggui.Sz(r.Size.W, legendH)))
 	}
-	controlFocusRing(dst, &c.Interactive, c.theme, r, c.theme.RadiusSm, c.theme.Ring, c.env.Motion(c.theme.MotionFast))
+	ui.FocusRing(dst, &c.Interactive, c.theme, r, c.theme.RadiusSm, c.theme.Ring, c.env.Motion(c.theme.MotionFast))
 	if c.active >= 0 && c.active < len(c.data) && !c.tooltip.Disabled {
 		c.paintTooltip(dst, r)
 	}
@@ -164,7 +165,7 @@ func (c *ChartWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 
 // paintBars draws one series of bars. Bars and curves are unrelated algorithms,
 // so paintCartesian dispatches here rather than inlining both in one loop.
-func (c *ChartWidget) paintBars(dst, clipped *ggui.Canvas, r ggui.Rect, s chartSeriesGeometry, j, m int, progress float64) {
+func (c *Widget) paintBars(dst, clipped *ggui.Canvas, r ggui.Rect, s chartSeriesGeometry, j, m int, progress float64) {
 	n := len(c.data)
 	band := r.Size.W / float64(n)
 	if c.horizontal {
@@ -172,7 +173,7 @@ func (c *ChartWidget) paintBars(dst, clipped *ggui.Canvas, r ggui.Rect, s chartS
 	}
 	groups := m
 	group := j
-	if c.stack != ChartUnstacked {
+	if c.stack != StackUnstacked {
 		groups, group = 1, 0
 	}
 	width := max(.75, (band*.8)/float64(groups)-2)
@@ -206,7 +207,7 @@ func (c *ChartWidget) paintBars(dst, clipped *ggui.Canvas, r ggui.Rect, s chartS
 	}
 }
 
-func (c *ChartWidget) paintAxes(dst *ggui.Canvas) {
+func (c *Widget) paintAxes(dst *ggui.Canvas) {
 	r := c.plot
 	g := c.geometry
 	for k := 0; k <= 4; k++ {
@@ -222,7 +223,7 @@ func (c *ChartWidget) paintAxes(dst *ggui.Canvas) {
 		}
 		if c.yAxis && !c.horizontal {
 			label := fmt.Sprintf("%g", g.lo+(g.hi-g.lo)*f)
-			if c.stack == ChartExpanded {
+			if c.stack == StackExpanded {
 				label = fmt.Sprintf("%.0f%%", (g.lo+(g.hi-g.lo)*f)*100)
 			}
 			c.text(dst, label, ggui.Pt(r.Origin.X-10, y-6), 12, c.theme.MutedFg, 1)
@@ -271,11 +272,11 @@ func (c *ChartWidget) paintAxes(dst *ggui.Canvas) {
 		}
 	}
 }
-func (c *ChartWidget) context(i, j int, p ggui.Point) ChartPointContext {
+func (c *Widget) context(i, j int, p ggui.Point) PointContext {
 	v, _ := c.value(i, j)
-	return ChartPointContext{c.plot, c.env, i, j, c.data[i], c.config[j], v, p, c.pointColor(i, j), c.active == i || c.selected == i}
+	return PointContext{c.plot, c.env, i, j, c.data[i], c.config[j], v, p, c.pointColor(i, j), c.active == i || c.selected == i}
 }
-func (c *ChartWidget) paintLabel(dst *ggui.Canvas, ctx ChartPointContext) {
+func (c *Widget) paintLabel(dst *ggui.Canvas, ctx PointContext) {
 	if c.labelPaint != nil {
 		c.labelPaint(dst, ctx)
 		return
@@ -284,13 +285,13 @@ func (c *ChartWidget) paintLabel(dst *ggui.Canvas, ctx ChartPointContext) {
 	if c.labelFormat != nil {
 		label = c.labelFormat(ctx)
 	}
-	if c.kind == ChartBar && c.horizontal {
+	if c.kind == KindBar && c.horizontal {
 		c.text(dst, label, ctx.Position.Add(ggui.Pt(8., -7.)), 12, c.theme.Fg, 0)
 	} else {
 		c.text(dst, label, ctx.Position.Add(ggui.Pt(0., -22.)), 12, c.theme.Fg, .5)
 	}
 }
-func (c *ChartWidget) paintDot(dst *ggui.Canvas, ctx ChartPointContext) {
+func (c *Widget) paintDot(dst *ggui.Canvas, ctx PointContext) {
 	if c.dotPaint != nil {
 		c.dotPaint(dst, ctx)
 		return
@@ -301,11 +302,11 @@ func (c *ChartWidget) paintDot(dst *ggui.Canvas, ctx ChartPointContext) {
 		dst.FillCircle(ctx.Position, 3.5, ctx.Color)
 	}
 }
-func (c *ChartWidget) paintCartesian(dst *ggui.Canvas, progress float64) {
+func (c *Widget) paintCartesian(dst *ggui.Canvas, progress float64) {
 	r := c.plot
 	n := len(c.data)
 	m := len(c.config)
-	if c.active >= 0 && c.active < n && c.tooltipCursor && c.kind == ChartBar {
+	if c.active >= 0 && c.active < n && c.tooltipCursor && c.kind == KindBar {
 		band := r.Size.W / float64(n)
 		h := ggui.Rct(ggui.Pt(r.Origin.X+float64(c.active)*band, r.Origin.Y), ggui.Sz(band, r.Size.H))
 		if c.horizontal {
@@ -317,7 +318,7 @@ func (c *ChartWidget) paintCartesian(dst *ggui.Canvas, progress float64) {
 	// A line or area chart's cursor is one border-coloured line behind the
 	// series, drawn once: a translucent border stroked again for each series
 	// would brighten with their number.
-	if c.active >= 0 && c.active < n && c.tooltipCursor && c.kind != ChartBar {
+	if c.active >= 0 && c.active < n && c.tooltipCursor && c.kind != KindBar {
 		for _, s := range c.geometry.series {
 			if s.valid[c.active] {
 				x := chartPosition(r, s.top[c.active]).X
@@ -326,21 +327,21 @@ func (c *ChartWidget) paintCartesian(dst *ggui.Canvas, progress float64) {
 			}
 		}
 	}
-	if c.kind != ChartBar {
+	if c.kind != KindBar {
 		c.prepareCurves()
 	}
 	clipped := dst.Clip(r)
 	for j, s := range c.geometry.series {
-		if c.kind == ChartBar {
+		if c.kind == KindBar {
 			c.paintBars(dst, clipped, r, s, j, m, progress)
 			continue
 		}
 		reveal := clipped
-		if progress < 1 && c.kind == ChartArea {
+		if progress < 1 && c.kind == KindArea {
 			reveal = dst.Clip(ggui.Rct(r.Origin, ggui.Sz(r.Size.W*progress, r.Size.H)))
 		}
 		totalLength := 0.
-		if c.kind == ChartLine && progress < 1 {
+		if c.kind == KindLine && progress < 1 {
 			for k := range c.curves[j] {
 				totalLength += c.curves[j][k].length
 			}
@@ -350,7 +351,7 @@ func (c *ChartWidget) paintCartesian(dst *ggui.Canvas, progress float64) {
 		reveal.Transform(ggui.Affine{}.Translate(r.Origin.X, r.Origin.Y), func(dst *ggui.Canvas) {
 			for k := range c.curves[j] {
 				paths := &c.curves[j][k]
-				if c.kind == ChartLine && progress < 1 {
+				if c.kind == KindLine && progress < 1 {
 					if remaining <= 0 {
 						break
 					}
@@ -388,7 +389,7 @@ func (c *ChartWidget) paintCartesian(dst *ggui.Canvas, progress float64) {
 
 // curvePath uses natural cubic splines (the reference's default), monotone
 // Hermite tangents, straight lines, or midpoint steps. Coordinates are logical.
-func curvePath(path *ggui.Path, points []ggui.Point, curve ChartCurve, move bool, trace func(ggui.Point)) {
+func curvePath(path *ggui.Path, points []ggui.Point, curve Curve, move bool, trace func(ggui.Point)) {
 	n := len(points)
 	if n == 0 {
 		return
@@ -424,7 +425,7 @@ func curvePath(path *ggui.Path, points []ggui.Point, curve ChartCurve, move bool
 	if n == 1 {
 		return
 	}
-	if curve == ChartNatural && n > 2 {
+	if curve == CurveNatural && n > 2 {
 		control := naturalControls(points)
 		for i := 0; i < n-1; i++ {
 			q := ggui.Pt((points[n-1].X+control[n-2].X)/2, (points[n-1].Y+control[n-2].Y)/2)
@@ -437,18 +438,18 @@ func curvePath(path *ggui.Path, points []ggui.Point, curve ChartCurve, move bool
 		return
 	}
 	var slopes []float64
-	if curve == ChartMonotone {
+	if curve == CurveMonotone {
 		slopes = monotoneSlopes(points)
 	}
 	for i := 1; i < n; i++ {
 		p, q := points[i-1], points[i]
 		switch curve {
-		case ChartStep:
+		case CurveStep:
 			mid := (p.X + q.X) / 2
 			lineTo(mid, p.Y)
 			lineTo(mid, q.Y)
 			lineTo(q.X, q.Y)
-		case ChartMonotone:
+		case CurveMonotone:
 			dx := (q.X - p.X) / 3
 			cubicTo(p.X+dx, p.Y+slopes[i-1]*dx, q.X-dx, q.Y-slopes[i]*dx, q.X, q.Y)
 		default:
@@ -521,7 +522,7 @@ type chartCurvePaths struct {
 	length              float64
 }
 
-func (c *ChartWidget) prepareCurves() {
+func (c *Widget) prepareCurves() {
 	if c.curves != nil && c.curveSize == c.plot.Size {
 		return
 	}
@@ -558,7 +559,7 @@ func (c *ChartWidget) prepareCurves() {
 						paths.samples = append(paths.samples, p)
 						paths.lengths = append(paths.lengths, paths.length)
 					})
-					if c.kind == ChartArea {
+					if c.kind == KindArea {
 						curvePath(&paths.fill, top, c.curve, true, nil)
 						curvePath(&paths.fill, base, c.curve, false, nil)
 						paths.fill.Close()
@@ -571,8 +572,8 @@ func (c *ChartWidget) prepareCurves() {
 		}
 	}
 }
-func (c *ChartWidget) paintCurvePaths(dst *ggui.Canvas, paths *chartCurvePaths, col color.Color, opacity float64) {
-	if c.kind == ChartArea {
+func (c *Widget) paintCurvePaths(dst *ggui.Canvas, paths *chartCurvePaths, col color.Color, opacity float64) {
+	if c.kind == KindArea {
 		if c.gradient {
 			dst.FillPathGradient(&paths.fill, ggui.Rct(ggui.Pt(0, 0), c.plot.Size), fade(col, .8), fade(col, .05))
 		} else {
@@ -582,10 +583,10 @@ func (c *ChartWidget) paintCurvePaths(dst *ggui.Canvas, paths *chartCurvePaths, 
 	dst.StrokePath(&paths.line, c.stroke, col)
 }
 
-func (c *ChartWidget) paintBar(dst *ggui.Canvas, bar ggui.Rect, i, j int, col color.Color) {
+func (c *Widget) paintBar(dst *ggui.Canvas, bar ggui.Rect, i, j int, col color.Color) {
 	radius := min(c.corner, bar.Size.W/2, bar.Size.H/2)
 	dst.FillRoundRect(bar, radius, col)
-	if c.stack == ChartUnstacked || radius <= 0 {
+	if c.stack == StackUnstacked || radius <= 0 {
 		return
 	}
 	v, _ := c.value(i, j)

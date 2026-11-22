@@ -239,9 +239,10 @@ The handle also offers keyboard and accessibility resizing.
 ui.CodeBlock(source).Header("main.go").Language("go").LineNumbers(true).
     StartLine(1).Wrap(false).Height(320)
 
-ui.Trace(
-    ui.TraceStep{ID: "fetch", Title: "Fetch source", Status: ui.TraceCompleted},
-    ui.TraceStep{ID: "build", Title: "Build", Status: ui.TraceRunning,
+// Trace lives in github.com/ironpark/ggui/ui/chat.
+chat.Trace(
+    chat.TraceStep{ID: "fetch", Title: "Fetch source", Status: chat.TraceCompleted},
+    chat.TraceStep{ID: "build", Title: "Build", Status: chat.TraceRunning,
         Details: ui.CodeBlock(buildLog)},
 )
 ```

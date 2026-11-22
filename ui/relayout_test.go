@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/ironpark/ggui"
@@ -33,43 +32,6 @@ func TestSelectKeptLabelFollowsTheValue(t *testing.T) {
 	p.Frame()
 	if s.text != label || s.textSize.W <= short {
 		t.Fatal("label lost its value when disabled")
-	}
-}
-
-func TestChartCachedLabelsRemeasureUnderANewEnv(t *testing.T) {
-	t.Parallel()
-	c := LineChart(chartTestData(), chartTestConfig)
-	cs := ggui.Loose(ggui.Sz(400, 240))
-	env := uitheme.Default().Apply(ggui.Env{})
-	c.Layout(cs, env)
-	first := c.measuredText("Jan", 12, c.theme.Fg)
-	small := first.size
-	c.Layout(cs, env)
-	if c.measuredText("Jan", 12, c.theme.Fg) != first {
-		t.Fatal("a relayout dropped the measured label")
-	}
-	c.Layout(cs, env.With(ggui.TextScaleKey, 2.))
-	if got := c.measuredText("Jan", 12, c.theme.Fg).size; got.W < small.W*1.5 || got.H < small.H*1.5 {
-		t.Fatalf("label kept its measurement under a larger text scale: %v, was %v", got, small)
-	}
-	dark := uitheme.Dark().Apply(ggui.Env{})
-	c.Layout(cs, dark)
-	if got := c.measuredText("Jan", 12, c.theme.Fg).size; got != small {
-		t.Fatalf("label after a theme switch measured %v, want %v", got, small)
-	}
-}
-
-func TestChartTooltipContentRemeasuresUnderANewEnv(t *testing.T) {
-	t.Parallel()
-	w := ChartTooltipContent(LineChart(chartTestData(), chartTestConfig), 0)
-	env := uitheme.Default().Apply(ggui.Env{})
-	cs := ggui.Loose(ggui.Sz(1000, 1000))
-	small := w.Layout(cs, env)
-	if big := w.Layout(cs, env.With(ggui.TextScaleKey, 2.)); big.W <= small.W {
-		t.Fatalf("tooltip kept its measurement under a larger text scale: %v, was %v", big, small)
-	}
-	if again := w.Layout(cs, env); again != small {
-		t.Fatalf("tooltip %v, want %v", again, small)
 	}
 }
 
@@ -155,34 +117,10 @@ func TestCommandKeptPanelFollowsItsOptions(t *testing.T) {
 	}
 }
 
-func TestQuestionChoiceKeptPartsFollowTheTheme(t *testing.T) {
-	t.Parallel()
-	var options []QuestionOption
-	for i := range 3 {
-		options = append(options, QuestionOption{Value: fmt.Sprint(i), Label: fmt.Sprint("Option ", i), Description: "Details"})
-	}
-	q := Questionnaire(ggui.State(QuestionAnswers{}), Question{Name: "q", Title: "Pick", Choices: options})
-	scale := ggui.State(1.)
-	m := &measured{Widget: q}
-	p := ggui.NewProbe(uitheme.With(uitheme.Default(), ggui.Reactive(func() ggui.Widget {
-		return ggui.Provide(ggui.TextScaleKey, scale.Get(), ggui.Widget(m))
-	})), ggui.Sz(500, 4000))
-	defer p.Close()
-	p.Frame()
-	before := m.size
-	if _, ok := p.FindRole(ggui.RoleRadio, "Option 1"); !ok {
-		t.Fatal("choice missing")
-	}
-	scale.Set(2)
-	if p.Frame(); m.size.H <= before.H {
-		t.Fatalf("choices kept their measurement under a larger text scale: %v <= %v", m.size.H, before.H)
-	}
-}
-
-// A chart and twenty selects laid out again at a width one pixel apart, as
-// a window resize does: what keeping their labels across layouts saves.
-func BenchmarkRelayoutChartAndSelects(b *testing.B) {
-	widgets := []ggui.Widget{LineChart(chartTestData(), chartTestConfig).Animation(0)}
+// Twenty selects laid out again at a width one pixel apart, as a window
+// resize does: what keeping their labels across layouts saves.
+func BenchmarkRelayoutSelects(b *testing.B) {
+	var widgets []ggui.Widget
 	for range 20 {
 		widgets = append(widgets, Select(ggui.State("alpha")).Options([]string{"alpha", "beta", "gamma"}))
 	}

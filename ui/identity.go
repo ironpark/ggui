@@ -33,13 +33,7 @@ func ownerOf(i *ggui.Interactive, self any) any {
 func (w *AccordionWidget) Key(k any) *AccordionWidget { w.Interactive.SetKey(k); return w }
 
 // Key assigns this control an input identity. Configure it before mount.
-func (w *AttachmentGroupWidget) Key(k any) *AttachmentGroupWidget { w.Interactive.SetKey(k); return w }
-
-// Key assigns this control an input identity. Configure it before mount.
 func (w *BadgeWidget) Key(k any) *BadgeWidget { w.Interactive.SetKey(k); return w }
-
-// Key assigns this control an input identity. Configure it before mount.
-func (w *BubbleWidget) Key(k any) *BubbleWidget { w.Interactive.SetKey(k); return w }
 
 // Key assigns this control an input identity. Configure it before mount.
 func (w *ButtonWidget) Key(k any) *ButtonWidget { w.Interactive.SetKey(k); return w }
@@ -58,9 +52,6 @@ func (w *CarouselNavigationWidget) Key(k any) *CarouselNavigationWidget {
 	w.Interactive.SetKey(k)
 	return w
 }
-
-// Key assigns this control an input identity. Configure it before mount.
-func (w *ChartWidget) Key(k any) *ChartWidget { w.Interactive.SetKey(k); return w }
 
 // Key assigns this control an input identity. Configure it before mount.
 func (w *CheckboxWidget) Key(k any) *CheckboxWidget { w.Interactive.SetKey(k); return w }
@@ -90,13 +81,7 @@ func (w *MenuItemWidget) Key(k any) *MenuItemWidget { w.Interactive.SetKey(k); r
 func (w *MenubarWidget) Key(k any) *MenubarWidget { w.Interactive.SetKey(k); return w }
 
 // Key assigns this control an input identity. Configure it before mount.
-func (w *MessageScrollerWidget) Key(k any) *MessageScrollerWidget { w.Interactive.SetKey(k); return w }
-
-// Key assigns this control an input identity. Configure it before mount.
 func (w *PaginationWidget) Key(k any) *PaginationWidget { w.Interactive.SetKey(k); return w }
-
-// Key assigns this control an input identity. Configure it before mount.
-func (w *QuestionnaireWidget) Key(k any) *QuestionnaireWidget { w.Interactive.SetKey(k); return w }
 
 // Key assigns this control an input identity. Configure it before mount.
 func (w *RadioWidget[T]) Key(k any) *RadioWidget[T] { w.Interactive.SetKey(k); return w }
@@ -131,21 +116,6 @@ func (w *AccordionWidget) BindName(r ggui.Readable[string]) *AccordionWidget {
 	return w
 }
 
-// BindName follows a non-nil accessible-name reader.
-func (w *AttachmentGroupWidget) BindName(r ggui.Readable[string]) *AttachmentGroupWidget {
-	w.Interactive.BindName(r)
-	return w
-}
-
-// Name sets the accessible name.
-func (w *BubbleWidget) Name(name string) *BubbleWidget { w.SetName(name); return w }
-
-// BindName follows a non-nil accessible-name reader.
-func (w *BubbleWidget) BindName(r ggui.Readable[string]) *BubbleWidget {
-	w.Interactive.BindName(r)
-	return w
-}
-
 // Name sets the accessible name: of the button a card with OnTap is, or of
 // the group a card is without it.
 func (w *CardWidget) Name(name string) *CardWidget { w.SetName(name); return w }
@@ -176,12 +146,6 @@ func (w *CarouselNavigationWidget) Name(name string) *CarouselNavigationWidget {
 
 // BindName follows a non-nil accessible-name reader.
 func (w *CarouselNavigationWidget) BindName(r ggui.Readable[string]) *CarouselNavigationWidget {
-	w.Interactive.BindName(r)
-	return w
-}
-
-// BindName follows a non-nil accessible-name reader.
-func (w *ChartWidget) BindName(r ggui.Readable[string]) *ChartWidget {
 	w.Interactive.BindName(r)
 	return w
 }
@@ -240,23 +204,11 @@ func (w *MenubarWidget) BindName(r ggui.Readable[string]) *MenubarWidget {
 	return w
 }
 
-// BindName follows a non-nil accessible-name reader.
-func (w *MessageScrollerWidget) BindName(r ggui.Readable[string]) *MessageScrollerWidget {
-	w.Interactive.BindName(r)
-	return w
-}
-
 // Name sets the accessible name.
 func (w *PaginationWidget) Name(name string) *PaginationWidget { w.SetName(name); return w }
 
 // BindName follows a non-nil accessible-name reader.
 func (w *PaginationWidget) BindName(r ggui.Readable[string]) *PaginationWidget {
-	w.Interactive.BindName(r)
-	return w
-}
-
-// BindName follows a non-nil accessible-name reader.
-func (w *QuestionnaireWidget) BindName(r ggui.Readable[string]) *QuestionnaireWidget {
 	w.Interactive.BindName(r)
 	return w
 }

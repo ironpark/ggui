@@ -574,10 +574,16 @@ func (b *ButtonWidget) HandlePointer(ev ggui.PointerEvent) bool { return b.Point
 
 // relabel puts s on a text button and names it with it, as Button does:
 // for a button of this package's own whose word comes from the Strings.
-func (b *ButtonWidget) relabel(s string) {
-	b.label.Content(s)
+// Relabel updates a text button's visible label and accessible name.
+func (b *ButtonWidget) Relabel(s string) *ButtonWidget {
+	if b.label != nil {
+		b.label.Content(s)
+	}
 	b.SetName(s)
+	return b
 }
+
+func (b *ButtonWidget) relabel(s string) { b.Relabel(s) }
 
 func (b *ButtonWidget) name() string {
 	return pick(b.SemanticName() != "", b.SemanticName(), b.defaultName)

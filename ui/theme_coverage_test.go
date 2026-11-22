@@ -21,7 +21,11 @@ func TestEveryThemeTokenIsDrawn(t *testing.T) {
 	t.Parallel()
 	// DestructiveFg is retained for source compatibility with solid custom variants.
 	read := map[string]bool{"DestructiveFg": true}
-	files, _ := filepath.Glob("*.go")
+	var files []string
+	for _, pattern := range []string{"*.go", filepath.Join("chart", "*.go"), filepath.Join("chat", "*.go")} {
+		matches, _ := filepath.Glob(pattern)
+		files = append(files, matches...)
+	}
 	files = append(files, filepath.Join("theme", "environment.go"), filepath.Join("theme", "color.go"))
 	fset := token.NewFileSet()
 	for _, name := range files {

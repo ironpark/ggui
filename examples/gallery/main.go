@@ -15,6 +15,7 @@ import (
 	"github.com/ironpark/ggui"
 	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/chat"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
@@ -241,7 +242,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					ui.Button("Primary action", func() { themeAction.Set("Primary action selected.") }),
 					ui.Button("Secondary action", func() { themeAction.Set("Secondary action selected.") }).Secondary(),
 				).Gap(8),
-				ui.Bubble(widget.Text("Theme tokens also shape chat bubbles 👍")).End(),
+				chat.Bubble(widget.Text("Theme tokens also shape chat bubbles 👍")).End(),
 				ui.CaptionOf(themeAction),
 			).Gap(12).Stretch()),
 			preview("Icons", iconDemo),

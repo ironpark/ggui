@@ -4,10 +4,10 @@
 
 Create native charts, configure their appearance, and support interactive data exploration.
 
-Examples use `ggui`, `widget` and `ui` imports and application-defined placeholders.
+Examples use `ggui`, `widget`, `ui` and `chart` (`github.com/ironpark/ggui/ui/chart`) imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
-`ui` provides native area, bar, line, pie/donut, radar and radial charts. They
+`ui/chart` provides native area, bar, line, pie/donut, radar and radial charts. They
 render through ggui's Canvas, inherit `Theme.Chart`, support pointer and keyboard
 exploration, and respect `ReducedMotionKey`. No WebView, JavaScript runtime or
 additional dependency is required.
@@ -29,30 +29,30 @@ Typography and control styling use the application's ggui theme.
 ## A first chart
 
 ```go
-config := ui.ChartConfig{
+config := chart.Config{
     {Key: "desktop", Label: "Desktop", ColorIndex: 1},
     {Key: "mobile", Label: "Mobile", ColorIndex: 2},
 }
-data := []ui.ChartDatum{
+data := []chart.Datum{
     {Label: "January", Values: map[string]float64{"desktop": 186, "mobile": 80}},
     {Label: "February", Values: map[string]float64{"desktop": 305, "mobile": 200}},
     {Label: "March", Values: map[string]float64{"desktop": 237, "mobile": 120}},
 }
-chart := ui.BarChart(data, config).
+visitors := chart.Bar(data, config).
     Name("Monthly visitors").
     Height(240).
     Legend(true).
     TickFormatter(func(s string) string { return s[:3] }).
-    Tooltip(ui.ChartTooltipOptions{Indicator: ui.ChartIndicatorLine})
+    Tooltip(chart.TooltipOptions{Indicator: chart.IndicatorLine})
 
 panel := ui.Card(widget.Column(
     ui.Title("Visitors"),
     ui.Caption("January – March"),
-    chart,
+    visitors,
 ).Gap(12).Stretch())
 ```
 
-`ChartConfig` is ordered: the order determines series, stacking and legend order.
+`chart.Config` is ordered: the order determines series, stacking and legend order.
 Keys map to numeric values; labels, colors and icons are independent of the data.
 Missing, NaN and infinite values create gaps in Cartesian charts. An explicit zero
 remains a real observation. Pie/radial sectors omit non-positive values. Empty
@@ -62,22 +62,22 @@ charts show “No data”. Radar charts require at least three categories.
 
 | Constructor | Options |
 | --- | --- |
-| `AreaChart` | Natural, linear, midpoint-step and monotone curves; multiple series; stacking; normalized stacks; gradients; axes; legends |
-| `BarChart` | Vertical or horizontal; grouped or stacked; signed values; rounded ends; category colors; labels; persistent selection |
-| `LineChart` | All four curves; multiple series; dots; category-colored dots; custom point painters and labels |
-| `PieChart` | Pie, donut, concentric series, separators, inside/outside labels, center text, active sectors and active rings |
-| `RadarChart` | Multiple series; polygon/circular grids; filled grids; spokes/rings toggles; dots; radius labels; custom category labels |
-| `RadialChart` | Concentric bars, stacked sectors, start/end angles, background tracks, rounded corners, arc labels and center text |
+| `chart.Area` | Natural, linear, midpoint-step and monotone curves; multiple series; stacking; normalized stacks; gradients; axes; legends |
+| `chart.Bar` | Vertical or horizontal; grouped or stacked; signed values; rounded ends; category colors; labels; persistent selection |
+| `chart.Line` | All four curves; multiple series; dots; category-colored dots; custom point painters and labels |
+| `chart.Pie` | Pie, donut, concentric series, separators, inside/outside labels, center text, active sectors and active rings |
+| `chart.Radar` | Multiple series; polygon/circular grids; filled grids; spokes/rings toggles; dots; radius labels; custom category labels |
+| `chart.Radial` | Concentric bars, stacked sectors, start/end angles, background tracks, rounded corners, arc labels and center text |
 
-`ChartContainer(kind, data, config)` is the common constructor. Charts fill a
+`chart.Container(kind, data, config)` is the common constructor. Charts fill a
 bounded width and default to 240 pixels tall (400 pixels wide when unbounded).
 `Height` sets a logical height. Use `widget.Box` and the normal layout widgets to
 constrain size or create an aspect ratio.
 
 ### Configure the plot
 
-- `Curve(ChartNatural | ChartLinear | ChartStep | ChartMonotone)` selects interpolation.
-- `Stack(ChartUnstacked | ChartStacked | ChartExpanded)` controls accumulation.
+- `Curve(chart.CurveNatural | chart.CurveLinear | chart.CurveStep | chart.CurveMonotone)` selects interpolation.
+- `Stack(chart.StackUnstacked | chart.StackStacked | chart.StackExpanded)` controls accumulation.
   Positive and negative stacks have separate baselines. Expanded stacks divide
   by the sum of absolute values in each category.
 - `Grid`, `Axes`, `Domain`, `TickFormatter`, `Legend` configure chart furniture.
@@ -94,12 +94,12 @@ constrain size or create an aspect ratio.
 - `Angles` uses degrees counter-clockwise from three o'clock, with a maximum
   full revolution in either direction. `CenterText`, `Separators`, `InsideLabels`,
   `ActiveRing`, `RadialTrack` and `CornerRadius` customize polar charts.
-- `PolarGrid(ChartPolarGrid{...})` selects circular/polygonal grids, fill, ring
+- `PolarGrid(chart.PolarGrid{...})` selects circular/polygonal grids, fill, ring
   count and spoke visibility. `TickPainter` customizes radar category labels.
 
 ### Choose series and category colors
 
-`ChartSeries.Color` overrides its palette token. `ColorIndex` selects one of the
+`chart.Series.Color` overrides its palette token. `ColorIndex` selects one of the
 five theme tokens (1-based); zero uses series order. `ThemeColor` can resolve a
 custom color from the current theme. A datum can also override its color or token.
 `CategoryColors(true)` uses successive tokens for categories. Optional series
@@ -108,7 +108,7 @@ lookup in both tooltips and legends.
 
 ## Tooltip and legend components
 
-The built-in tooltip is configured with `Tooltip(ChartTooltipOptions{...})`:
+The built-in tooltip is configured with `Tooltip(chart.TooltipOptions{...})`:
 
 - Dot, line or dashed indicators; `HideLabel`, `HideIndicator`, `Disabled`.
 - `Label`, `FormatLabel`, `FormatName`, `FormatValue` for typed label/name/value
@@ -121,8 +121,8 @@ the viewport, and overlays paint above surrounding content. `TooltipCursor(false
 hides the category band/crosshair. `DefaultTooltipIndex` supplies initial tooltip
 state without selecting a shape.
 
-`ChartTooltip(chart, index)` / `ChartTooltipContent(chart, index)` render the built-in
-content as a standalone widget. `ChartLegend(chart)` / `ChartLegendContent(chart)`
+`chart.Tooltip(c, index)` / `chart.TooltipContent(c, index)` render the built-in
+content as a standalone widget. `chart.Legend(c)` / `chart.LegendContent(c)`
 render a standalone legend. They have independent layout/theme contexts, so they
 can be placed outside the chart. Built-in legends wrap at narrow widths.
 
@@ -171,7 +171,7 @@ The headless number excludes GPU submission and text drawing; it is not an FPS
 claim. Run the benchmarks on the target device:
 
 ```sh
-go test ./ui -run '^$' -bench BenchmarkChart -benchmem
+go test ./ui/chart -run '^$' -bench BenchmarkChart -benchmem
 ```
 
 ## Complete reference catalog and visual validation

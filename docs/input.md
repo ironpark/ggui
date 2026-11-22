@@ -80,8 +80,8 @@ the platform's.
 
 `.FollowEnd()` keeps the window at the end as the content grows, as a build
 log or a terminal does: scrolling back stops following and scrolling to the
-end again resumes it, with no sentinel offset to manage. `ui.MessageScroller`
-is the chat-transcript version, with anchors and a jump-to-latest button.
+end again resumes it, with no sentinel offset to manage. `chat.MessageScroller`
+(`github.com/ironpark/ggui/ui/chat`) is the chat-transcript version, with anchors and a jump-to-latest button.
 
 `.Overscroll(widget.OverscrollBounce)` lets a pull past either end follow
 the input with growing resistance and spring back when it stops, as iOS

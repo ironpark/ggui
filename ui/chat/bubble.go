@@ -1,4 +1,4 @@
-package ui
+package chat
 
 import (
 	"image/color"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
+	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -44,6 +45,18 @@ func Bubble(content ggui.Widget) *BubbleWidget {
 	b.box = widget.Box(b.content)
 	b.Role = ggui.RoleButton
 	b.AutoKey()
+	return b
+}
+
+// Key assigns this control an input identity. Configure it before mount.
+func (b *BubbleWidget) Key(k any) *BubbleWidget { b.Interactive.SetKey(k); return b }
+
+// Name sets the accessible name.
+func (b *BubbleWidget) Name(name string) *BubbleWidget { b.SetName(name); return b }
+
+// BindName follows a non-nil accessible-name reader.
+func (b *BubbleWidget) BindName(r ggui.Readable[string]) *BubbleWidget {
+	b.Interactive.BindName(r)
 	return b
 }
 
@@ -276,7 +289,7 @@ func (b *BubbleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	dst.Paint(b.box, body)
 	if b.action != nil {
-		controlFocusRing(dst, &b.Interactive, b.theme, body, pick(b.variant == "ghost", 0, b.theme.Chat.BubbleRadius), b.theme.Ring, b.motion)
+		ui.FocusRing(dst, &b.Interactive, b.theme, body, pick(b.variant == "ghost", 0, b.theme.Chat.BubbleRadius), b.theme.Ring, b.motion)
 	}
 	if b.reactionBox != nil {
 		x := body.Origin.X + body.Size.W - b.reactionSize.W - 12

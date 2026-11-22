@@ -1,4 +1,7 @@
-package ui
+// Package chart renders native area, bar, line, pie, radar, and radial charts
+// directly through ggui's GPU canvas, sharing theme tokens, tooltips, legends,
+// keyboard navigation, and reduced-motion support.
+package chart
 
 import (
 	"fmt"
@@ -10,60 +13,61 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
+	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
-// ChartKind selects a native chart renderer. All kinds share config, tooltips,
+// Kind selects a native chart renderer. All kinds share config, tooltips,
 // legends, keyboard navigation, theme tokens and reduced-motion support.
-type ChartKind uint8
+type Kind uint8
 
 const (
-	ChartArea ChartKind = iota
-	ChartBar
-	ChartLine
-	ChartPie
-	ChartRadar
-	ChartRadial
+	KindArea Kind = iota
+	KindBar
+	KindLine
+	KindPie
+	KindRadar
+	KindRadial
 )
 
 // polar reports whether the kind renders around a center rather than on x/y
-// axes. Kinds ask through this rather than comparing against ChartLine, so the
+// axes. Kinds ask through this rather than comparing against KindLine, so the
 // iota order of the block above stays an implementation detail.
-func (k ChartKind) polar() bool { return k == ChartPie || k == ChartRadar || k == ChartRadial }
+func (k Kind) polar() bool { return k == KindPie || k == KindRadar || k == KindRadial }
 
-// ChartCurve controls interpolation between observations.
-type ChartCurve uint8
+// Curve controls interpolation between observations.
+type Curve uint8
 
 const (
-	ChartNatural ChartCurve = iota
-	ChartLinear
-	ChartStep
-	ChartMonotone
+	CurveNatural Curve = iota
+	CurveLinear
+	CurveStep
+	CurveMonotone
 )
 
-// ChartStack controls series accumulation. Positive and negative values have
+// Stack controls series accumulation. Positive and negative values have
 // separate baselines; expanded stacks normalize each category to 100 percent.
-type ChartStack uint8
+type Stack uint8
 
 const (
-	ChartUnstacked ChartStack = iota
-	ChartStacked
-	ChartExpanded
+	StackUnstacked Stack = iota
+	StackStacked
+	StackExpanded
 )
 
-// ChartIndicator selects the tooltip's series marker.
-type ChartIndicator uint8
+// Indicator selects the tooltip's series marker.
+type Indicator uint8
 
 const (
-	ChartIndicatorDot ChartIndicator = iota
-	ChartIndicatorLine
-	ChartIndicatorDashed
+	IndicatorDot Indicator = iota
+	IndicatorLine
+	IndicatorDashed
 )
 
-// ChartSeries describes one numeric data key. Zero-valued colors use Theme.Chart.
+// Series describes one numeric data key. Zero-valued colors use Theme.Chart.
 // Icon is optional and is shared by tooltip and legend.
-type ChartSeries struct {
+type Series struct {
 	// ColorIndex is a 1-based Theme.Chart token; zero uses the series order.
 	ColorIndex int
 	ThemeColor func(*uitheme.Theme) color.Color
@@ -74,11 +78,13 @@ type ChartSeries struct {
 	Color                    color.Color
 	Icon                     icons.Role
 }
-type ChartConfig []ChartSeries
 
-// ChartDatum is a category and its keyed values. Missing/non-finite values are
+// Config is an ordered list of chart series.
+type Config []Series
+
+// Datum is a category and its keyed values. Missing/non-finite values are
 // gaps, never zero. Color and Icon optionally override a category's appearance.
-type ChartDatum struct {
+type Datum struct {
 	ColorIndex int
 	Label      string
 	Values     map[string]float64
@@ -86,79 +92,79 @@ type ChartDatum struct {
 	Icon       icons.Role
 }
 
-// ChartTooltipOptions customize the built-in content without affecting hit tests.
+// TooltipOptions customize the built-in content without affecting hit tests.
 // FormatValue and FormatLabel also format the accessible data description.
 // Formatters and content callbacks must treat the supplied data as read-only.
-type ChartTooltipOptions struct {
+type TooltipOptions struct {
 	ShowTotal  bool
 	TotalLabel string
-	FormatName func(ChartSeries, ChartDatum) string
+	FormatName func(Series, Datum) string
 	// Content replaces the popup body with any ggui widget.
-	Content                            func(ChartTooltipPayload) ggui.Widget
+	Content                            func(TooltipPayload) ggui.Widget
 	HideLabel, HideIndicator, Disabled bool
-	Indicator                          ChartIndicator
+	Indicator                          Indicator
 	Label                              string
 	FormatLabel                        func(string) string
-	FormatValue                        func(float64, ChartSeries, ChartDatum) string
+	FormatValue                        func(float64, Series, Datum) string
 }
 
-// ChartTooltipPayload provides typed data to custom tooltip content.
-type ChartTooltipPayload struct {
+// TooltipPayload provides typed data to custom tooltip content.
+type TooltipPayload struct {
 	Index  int
-	Datum  ChartDatum
-	Config ChartConfig
+	Datum  Datum
+	Config Config
 }
 
-// ChartPolarGrid describes radar grid variants. Rings defaults to 5.
-type ChartPolarGrid struct {
+// PolarGrid describes radar grid variants. Rings defaults to 5.
+type PolarGrid struct {
 	Circle, Fill, HideSpokes, HideRings bool
 	Rings                               int
 }
 
-// ChartPointContext is passed to optional custom point and label painters.
-type ChartPointContext struct {
+// PointContext is passed to optional custom point and label painters.
+type PointContext struct {
 	Plot               ggui.Rect
 	Env                ggui.Env
 	Index, SeriesIndex int
-	Datum              ChartDatum
-	Series             ChartSeries
+	Datum              Datum
+	Series             Series
 	Value              float64
 	Position           ggui.Point
 	Color              color.Color
 	Active             bool
 }
 
-// ChartWidget renders charts directly through ggui's GPU canvas. It owns a
+// Widget renders charts directly through ggui's GPU canvas. It owns a
 // snapshot of data; Data replaces it and invalidates cached geometry. Configure
 // a widget before mounting, or use a reactive boundary to replace its options.
-type ChartWidget struct {
+type Widget struct {
 	props       property.Owner
-	words       *Strings // the Strings of the last layout
+	words       *ui.Strings // the Strings of the last layout
 	pointer     pointerMotion
-	tickPaint   func(*ggui.Canvas, ChartPointContext)
+	tickPaint   func(*ggui.Canvas, PointContext)
 	activeRing  bool
 	radialTrack bool
 	labelInside bool
 	ggui.Interactive
-	kind                                                           ChartKind
-	data                                                           []ChartDatum
-	config                                                         ChartConfig
+	kind                                                           Kind
+	data                                                           []Datum
+	config                                                         Config
 	height                                                         float64
-	curve                                                          ChartCurve
-	stack                                                          ChartStack
+	curve                                                          Curve
+	stack                                                          Stack
 	horizontal, grid, xAxis, yAxis, legend, dots, labels, gradient bool
 	categoryColors, separators, tooltipCursor                      bool
 	inner, outer, startAngle, endAngle, corner, stroke, opacity    float64
 	domainMin, domainMax                                           float64
 	domainSet                                                      bool
 	centerValue, centerLabel                                       string
-	polarGrid                                                      ChartPolarGrid
-	tooltip                                                        ChartTooltipOptions
+	polarGrid                                                      PolarGrid
+	tooltip                                                        TooltipOptions
 	tickFormat                                                     func(string) string
-	labelFormat                                                    func(ChartPointContext) string
-	dotPaint                                                       func(*ggui.Canvas, ChartPointContext)
-	labelPaint                                                     func(*ggui.Canvas, ChartPointContext)
-	onSelect                                                       func(int, ChartDatum)
+	labelFormat                                                    func(PointContext) string
+	dotPaint                                                       func(*ggui.Canvas, PointContext)
+	labelPaint                                                     func(*ggui.Canvas, PointContext)
+	onSelect                                                       func(int, Datum)
 	duration                                                       time.Duration
 	delay                                                          time.Duration
 	env                                                            ggui.Env
@@ -177,56 +183,79 @@ type ChartWidget struct {
 	curveSize                                                      ggui.Size
 }
 
-// ChartContainer creates a responsive chart. The default height is 240 logical
+// Container creates a responsive chart. The default height is 240 logical
 // pixels; an unbounded width falls back to 400. Constructors below select a kind.
-func ChartContainer(kind ChartKind, data []ChartDatum, config ChartConfig) *ChartWidget {
-	c := &ChartWidget{kind: kind, config: append(ChartConfig(nil), config...), height: 240,
-		radialTrack: true, grid: true, xAxis: true, curve: ChartNatural, inner: 0, outer: .8, startAngle: 0, endAngle: 360,
+func Container(kind Kind, data []Datum, config Config) *Widget {
+	c := &Widget{kind: kind, config: append(Config(nil), config...), height: 240,
+		radialTrack: true, grid: true, xAxis: true, curve: CurveNatural, inner: 0, outer: .8, startAngle: 0, endAngle: 360,
 		corner: 4, stroke: 2, opacity: .4, separators: true, tooltipCursor: true, duration: 1500 * time.Millisecond,
 		active: -1, selected: -1, cacheRevision: ^uint64(0)}
 	c.Role = ggui.RoleGroup
 	c.AutoKey()
 	switch kind {
-	case ChartBar:
+	case KindBar:
 		c.duration = 400 * time.Millisecond
-	case ChartPie:
+	case KindPie:
 		c.delay = 400 * time.Millisecond
-	case ChartArea:
+	case KindArea:
 		c.stroke = 1
-	case ChartRadar:
+	case KindRadar:
 		c.opacity = .6
 	}
 	c.Data(data)
 	return c
 }
-func AreaChart(data []ChartDatum, config ChartConfig) *ChartWidget {
-	return ChartContainer(ChartArea, data, config)
+
+// Area creates an area chart.
+func Area(data []Datum, config Config) *Widget {
+	return Container(KindArea, data, config)
 }
-func BarChart(data []ChartDatum, config ChartConfig) *ChartWidget {
-	return ChartContainer(ChartBar, data, config)
+
+// Bar creates a bar chart.
+func Bar(data []Datum, config Config) *Widget {
+	return Container(KindBar, data, config)
 }
-func LineChart(data []ChartDatum, config ChartConfig) *ChartWidget {
-	return ChartContainer(ChartLine, data, config)
+
+// Line creates a line chart.
+func Line(data []Datum, config Config) *Widget {
+	return Container(KindLine, data, config)
 }
-func PieChart(data []ChartDatum, config ChartConfig) *ChartWidget {
-	return ChartContainer(ChartPie, data, config).CategoryColors(true)
+
+// Pie creates a pie chart with category colors enabled.
+func Pie(data []Datum, config Config) *Widget {
+	return Container(KindPie, data, config).CategoryColors(true)
 }
-func RadarChart(data []ChartDatum, config ChartConfig) *ChartWidget {
-	return ChartContainer(ChartRadar, data, config)
+
+// Radar creates a radar chart.
+func Radar(data []Datum, config Config) *Widget {
+	return Container(KindRadar, data, config)
 }
-func RadialChart(data []ChartDatum, config ChartConfig) *ChartWidget {
-	return ChartContainer(ChartRadial, data, config).InnerRadius(.25).CategoryColors(true)
+
+// Radial creates a radial bar chart with a 0.25 inner radius and category colors enabled.
+func Radial(data []Datum, config Config) *Widget {
+	return Container(KindRadial, data, config).InnerRadius(.25).CategoryColors(true)
 }
-func (c *ChartWidget) Name(s string) *ChartWidget { c.SetName(s); return c }
+
+// Key assigns this control an input identity. Configure it before mount.
+func (c *Widget) Key(k any) *Widget { c.Interactive.SetKey(k); return c }
+
+// Name sets the accessible name.
+func (c *Widget) Name(s string) *Widget { c.SetName(s); return c }
+
+// BindName follows a non-nil accessible-name reader.
+func (c *Widget) BindName(r ggui.Readable[string]) *Widget {
+	c.Interactive.BindName(r)
+	return c
+}
 
 // Data copies input, preventing caller mutation from corrupting geometry caches.
-func (c *ChartWidget) Data(data []ChartDatum) *ChartWidget {
+func (c *Widget) Data(data []Datum) *Widget {
 	defer property.Watch(&c.props, &c.active)()
 	defer property.Watch(&c.props, &c.data)()
 	defer property.Watch(&c.props, &c.selected)()
 	defer property.Watch(&c.props, &c.started)()
 	defer property.Watch(&c.props, &c.textCache)()
-	c.data = make([]ChartDatum, len(data))
+	c.data = make([]Datum, len(data))
 	for i, d := range data {
 		c.data[i] = d
 		c.data[i].Values = make(map[string]float64, len(d.Values))
@@ -239,30 +268,30 @@ func (c *ChartWidget) Data(data []ChartDatum) *ChartWidget {
 	c.textCache = nil
 	return c
 }
-func (c *ChartWidget) Height(v float64) *ChartWidget {
+func (c *Widget) Height(v float64) *Widget {
 	defer property.Watch(&c.props, &c.height)()
 	c.height = max(0, v)
 	return c
 }
-func (c *ChartWidget) Curve(v ChartCurve) *ChartWidget {
+func (c *Widget) Curve(v Curve) *Widget {
 	defer property.Watch(&c.props, &c.curve)()
 	c.curve = v
 	c.revision++
 	return c
 }
-func (c *ChartWidget) Stack(v ChartStack) *ChartWidget {
+func (c *Widget) Stack(v Stack) *Widget {
 	defer property.Watch(&c.props, &c.stack)()
 	c.stack = v
 	c.revision++
 	return c
 }
-func (c *ChartWidget) Horizontal(v bool) *ChartWidget { c.horizontal = v; c.revision++; return c }
-func (c *ChartWidget) Grid(v bool) *ChartWidget {
+func (c *Widget) Horizontal(v bool) *Widget { c.horizontal = v; c.revision++; return c }
+func (c *Widget) Grid(v bool) *Widget {
 	defer property.Watch(&c.props, &c.grid)()
 	c.grid = v
 	return c
 }
-func (c *ChartWidget) Axes(x, y bool) *ChartWidget {
+func (c *Widget) Axes(x, y bool) *Widget {
 	defer property.Watch(&c.props, &c.xAxis)()
 	defer property.Watch(&c.props, &c.yAxis)()
 	c.xAxis = x
@@ -270,50 +299,50 @@ func (c *ChartWidget) Axes(x, y bool) *ChartWidget {
 	c.revision++
 	return c
 }
-func (c *ChartWidget) Legend(v bool) *ChartWidget {
+func (c *Widget) Legend(v bool) *Widget {
 	defer property.Watch(&c.props, &c.legend)()
 	c.legend = v
 	c.revision++
 	return c
 }
-func (c *ChartWidget) Dots(v bool) *ChartWidget {
+func (c *Widget) Dots(v bool) *Widget {
 	defer property.Watch(&c.props, &c.dots)()
 	c.dots = v
 	return c
 }
-func (c *ChartWidget) Labels(v bool) *ChartWidget {
+func (c *Widget) Labels(v bool) *Widget {
 	defer property.Watch(&c.props, &c.labels)()
 	c.labels = v
 	return c
 }
-func (c *ChartWidget) Gradient(v bool) *ChartWidget {
+func (c *Widget) Gradient(v bool) *Widget {
 	defer property.Watch(&c.props, &c.gradient)()
 	c.gradient = v
 	return c
 }
-func (c *ChartWidget) CategoryColors(v bool) *ChartWidget {
+func (c *Widget) CategoryColors(v bool) *Widget {
 	defer property.Watch(&c.props, &c.categoryColors)()
 	c.categoryColors = v
 	return c
 }
-func (c *ChartWidget) Separators(v bool) *ChartWidget {
+func (c *Widget) Separators(v bool) *Widget {
 	defer property.Watch(&c.props, &c.separators)()
 	c.separators = v
 	return c
 }
-func (c *ChartWidget) InnerRadius(fraction float64) *ChartWidget {
+func (c *Widget) InnerRadius(fraction float64) *Widget {
 	defer property.Watch(&c.props, &c.inner)()
 	c.inner = clamp(fraction, 0, .95)
 	return c
 }
-func (c *ChartWidget) OuterRadius(fraction float64) *ChartWidget {
+func (c *Widget) OuterRadius(fraction float64) *Widget {
 	defer property.Watch(&c.props, &c.outer)()
 	c.outer = clamp(fraction, .05, 1)
 	return c
 }
 
 // Angles are degrees, counter-clockwise from three o'clock, like Recharts.
-func (c *ChartWidget) Angles(start, end float64) *ChartWidget {
+func (c *Widget) Angles(start, end float64) *Widget {
 	defer property.Watch(&c.props, &c.endAngle)()
 	defer property.Watch(&c.props, &c.startAngle)()
 	if finite(start) && finite(end) {
@@ -322,22 +351,22 @@ func (c *ChartWidget) Angles(start, end float64) *ChartWidget {
 	}
 	return c
 }
-func (c *ChartWidget) CornerRadius(v float64) *ChartWidget {
+func (c *Widget) CornerRadius(v float64) *Widget {
 	defer property.Watch(&c.props, &c.corner)()
 	c.corner = max(0, v)
 	return c
 }
-func (c *ChartWidget) StrokeWidth(v float64) *ChartWidget {
+func (c *Widget) StrokeWidth(v float64) *Widget {
 	defer property.Watch(&c.props, &c.stroke)()
 	c.stroke = max(0, v)
 	return c
 }
-func (c *ChartWidget) FillOpacity(v float64) *ChartWidget {
+func (c *Widget) FillOpacity(v float64) *Widget {
 	defer property.Watch(&c.props, &c.opacity)()
 	c.opacity = clamp(v, 0, 1)
 	return c
 }
-func (c *ChartWidget) Domain(lo, hi float64) *ChartWidget {
+func (c *Widget) Domain(lo, hi float64) *Widget {
 	defer property.Watch(&c.props, &c.domainMax)()
 	defer property.Watch(&c.props, &c.domainMin)()
 	defer property.Watch(&c.props, &c.domainSet)()
@@ -347,74 +376,74 @@ func (c *ChartWidget) Domain(lo, hi float64) *ChartWidget {
 	c.revision++
 	return c
 }
-func (c *ChartWidget) CenterText(value, label string) *ChartWidget {
+func (c *Widget) CenterText(value, label string) *Widget {
 	defer property.Watch(&c.props, &c.centerLabel)()
 	defer property.Watch(&c.props, &c.centerValue)()
 	c.centerValue = value
 	c.centerLabel = label
 	return c
 }
-func (c *ChartWidget) PolarGrid(v ChartPolarGrid) *ChartWidget {
+func (c *Widget) PolarGrid(v PolarGrid) *Widget {
 	defer property.Watch(&c.props, &c.polarGrid)()
 	c.polarGrid = v
 	return c
 }
-func (c *ChartWidget) Tooltip(v ChartTooltipOptions) *ChartWidget {
+func (c *Widget) Tooltip(v TooltipOptions) *Widget {
 	defer property.Watch(&c.props, &c.tooltip)()
 	c.tooltip = v
 	return c
 }
-func (c *ChartWidget) TooltipCursor(v bool) *ChartWidget {
+func (c *Widget) TooltipCursor(v bool) *Widget {
 	defer property.Watch(&c.props, &c.tooltipCursor)()
 	c.tooltipCursor = v
 	return c
 }
-func (c *ChartWidget) TickFormatter(fn func(string) string) *ChartWidget { c.tickFormat = fn; return c }
-func (c *ChartWidget) LabelFormatter(fn func(ChartPointContext) string) *ChartWidget {
+func (c *Widget) TickFormatter(fn func(string) string) *Widget { c.tickFormat = fn; return c }
+func (c *Widget) LabelFormatter(fn func(PointContext) string) *Widget {
 	c.labelFormat = fn
 	c.labels = true
 	return c
 }
-func (c *ChartWidget) DotPainter(fn func(*ggui.Canvas, ChartPointContext)) *ChartWidget {
+func (c *Widget) DotPainter(fn func(*ggui.Canvas, PointContext)) *Widget {
 	c.dotPaint = fn
 	c.dots = true
 	return c
 }
-func (c *ChartWidget) LabelPainter(fn func(*ggui.Canvas, ChartPointContext)) *ChartWidget {
+func (c *Widget) LabelPainter(fn func(*ggui.Canvas, PointContext)) *Widget {
 	c.labelPaint = fn
 	c.labels = true
 	return c
 }
-func (c *ChartWidget) OnSelect(fn func(int, ChartDatum)) *ChartWidget { c.onSelect = fn; return c }
+func (c *Widget) OnSelect(fn func(int, Datum)) *Widget { c.onSelect = fn; return c }
 
 // ActiveIndex selects a persistent shape, independent of transient hover.
-func (c *ChartWidget) ActiveIndex(index int) *ChartWidget {
+func (c *Widget) ActiveIndex(index int) *Widget {
 	defer property.Watch(&c.props, &c.selected)()
 	c.selected = index
 	return c
 }
-func (c *ChartWidget) Animation(d time.Duration) *ChartWidget {
+func (c *Widget) Animation(d time.Duration) *Widget {
 	defer property.Watch(&c.props, &c.duration)()
 	c.duration = max(0, d)
 	return c
 }
 
 // AnimationDelay overrides the entrance delay (400ms for pies, zero otherwise).
-func (c *ChartWidget) AnimationDelay(d time.Duration) *ChartWidget {
+func (c *Widget) AnimationDelay(d time.Duration) *Widget {
 	defer property.Watch(&c.props, &c.delay)()
 	c.delay = max(0, d)
 	return c
 }
 
 // Replay restarts the entrance without rebuilding or copying the data.
-func (c *ChartWidget) Replay() {
+func (c *Widget) Replay() {
 	c.started = time.Time{}
 	ggui.Invalidate(c.env)
 }
-func (c *ChartWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
+func (c *Widget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
 	c.env = env
-	c.words = stringsOf(env)
+	c.words = ui.StringsOf(env)
 	c.theme = uitheme.Of(env)
 	c.reduced = env.ReducedMotion()
 	c.gridLine = fade(c.theme.Border, .5) // shadcn strokes the grid at border/50
@@ -422,14 +451,14 @@ func (c *ChartWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	return cs.Constrain(ggui.Sz(bounded(cs.MaxW, 400), c.height))
 }
 func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
-func (c *ChartWidget) value(i, j int) (float64, bool) {
+func (c *Widget) value(i, j int) (float64, bool) {
 	if i < 0 || i >= len(c.data) || j < 0 || j >= len(c.config) {
 		return 0, false
 	}
 	v, ok := c.data[i].Values[c.config[j].Key]
 	return v, ok && finite(v)
 }
-func (c *ChartWidget) seriesColor(j int) color.Color {
+func (c *Widget) seriesColor(j int) color.Color {
 	s := c.config[j]
 	if s.ThemeColor != nil {
 		if col := s.ThemeColor(c.theme); col != nil {
@@ -445,10 +474,10 @@ func (c *ChartWidget) seriesColor(j int) color.Color {
 
 // chartToken picks the i'th palette token, wrapping, and falls back to the
 // primary color when the theme leaves the slot unset.
-func (c *ChartWidget) chartToken(i int) color.Color {
+func (c *Widget) chartToken(i int) color.Color {
 	return colorOr(c.theme.Chart[i%len(c.theme.Chart)], c.theme.Primary)
 }
-func (c *ChartWidget) pointColor(i, j int) color.Color {
+func (c *Widget) pointColor(i, j int) color.Color {
 	d := c.data[i]
 	if d.Color != nil {
 		return d.Color
@@ -461,7 +490,7 @@ func (c *ChartWidget) pointColor(i, j int) color.Color {
 	}
 	return c.seriesColor(j)
 }
-func (c *ChartWidget) seriesOpacity(j int) float64 {
+func (c *Widget) seriesOpacity(j int) float64 {
 	if c.config[j].FillOpacity != nil {
 		return clamp(*c.config[j].FillOpacity, 0, 1)
 	}
@@ -469,58 +498,58 @@ func (c *ChartWidget) seriesOpacity(j int) float64 {
 }
 
 // TickPainter customizes polar category labels, including icons and multiple lines.
-func (c *ChartWidget) TickPainter(fn func(*ggui.Canvas, ChartPointContext)) *ChartWidget {
+func (c *Widget) TickPainter(fn func(*ggui.Canvas, PointContext)) *Widget {
 	c.tickPaint = fn
 	return c
 }
 
 // ActiveRing draws an additional outer ring around a selected pie sector.
-func (c *ChartWidget) ActiveRing(v bool) *ChartWidget {
+func (c *Widget) ActiveRing(v bool) *Widget {
 	defer property.Watch(&c.props, &c.activeRing)()
 	c.activeRing = v
 	return c
 }
 
 // RadialTrack toggles the muted full-circle track behind radial bars.
-func (c *ChartWidget) RadialTrack(v bool) *ChartWidget {
+func (c *Widget) RadialTrack(v bool) *Widget {
 	defer property.Watch(&c.props, &c.radialTrack)()
 	c.radialTrack = v
 	return c
 }
 
 // InsideLabels places pie labels inside sectors; otherwise labels sit outside.
-func (c *ChartWidget) InsideLabels(v bool) *ChartWidget {
+func (c *Widget) InsideLabels(v bool) *Widget {
 	defer property.Watch(&c.props, &c.labelInside)()
 	c.labelInside = v
 	return c
 }
 
 // DefaultTooltipIndex sets initial tooltip state without selecting a shape.
-func (c *ChartWidget) DefaultTooltipIndex(i int) *ChartWidget {
+func (c *Widget) DefaultTooltipIndex(i int) *Widget {
 	defer property.Watch(&c.props, &c.active)()
 	c.active = i
 	return c
 }
-func (c *ChartWidget) formatValue(i, j int, v float64) string {
+func (c *Widget) formatValue(i, j int, v float64) string {
 	if c.tooltip.FormatValue != nil {
 		return c.tooltip.FormatValue(v, c.config[j], c.data[i])
 	}
 	return fmt.Sprintf("%g", v)
 }
-func seriesLabel(s ChartSeries) string {
+func seriesLabel(s Series) string {
 	if s.Label != "" {
 		return s.Label
 	}
 	return s.Key
 }
-func (c *ChartWidget) name() string {
-	return pick(c.SemanticName() != "", c.SemanticName(), c.words.orDefault().ChartName)
+func (c *Widget) name() string {
+	return pick(c.SemanticName() != "", c.SemanticName(), c.words.OrDefault().ChartName)
 }
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.
-func (c *ChartWidget) Semantics() (ggui.Role, string) { return c.Role, c.name() }
+func (c *Widget) Semantics() (ggui.Role, string) { return c.Role, c.name() }
 
-func (c *ChartWidget) Describe() ggui.Node {
+func (c *Widget) Describe() ggui.Node {
 	var b strings.Builder
 	i := c.active
 	if i < 0 {
@@ -534,26 +563,21 @@ func (c *ChartWidget) Describe() ggui.Node {
 			}
 		}
 	}
-	return ggui.Node{Role: ggui.RoleGroup, Name: c.name(), Value: b.String(), Description: c.words.orDefault().ChartHelp, Min: 0, Max: float64(max(0, len(c.data)-1)), Now: float64(max(0, i)), Actions: ggui.ActionFocus | ggui.ActionIncrement | ggui.ActionDecrement | ggui.ActionSetValue}
+	return ggui.Node{Role: ggui.RoleGroup, Name: c.name(), Value: b.String(), Description: c.words.OrDefault().ChartHelp, Min: 0, Max: float64(max(0, len(c.data)-1)), Now: float64(max(0, i)), Actions: ggui.ActionFocus | ggui.ActionIncrement | ggui.ActionDecrement | ggui.ActionSetValue}
 }
 
 // Act lets assistive technologies explore chart categories without a pointer.
-func (c *ChartWidget) Act(a ggui.Action) bool {
+func (c *Widget) Act(a ggui.Action) bool {
 	if len(c.data) == 0 {
 		return false
 	}
 	switch a.Kind {
 	case ggui.ActionIncrement:
-		c.active = stepIndex(c.active, 1, len(c.data), nil)
+		c.active = stepIndex(c.active, 1, len(c.data))
 	case ggui.ActionDecrement:
-		c.active = stepIndex(c.active, -1, len(c.data), nil)
+		c.active = stepIndex(c.active, -1, len(c.data))
 	case ggui.ActionSetValue:
 		if !finite(a.Num) {
-			return false
-		}
-		// An empty chart has no index to set: clamp would otherwise
-		// report 0, which is not a category either.
-		if len(c.data) == 0 {
 			return false
 		}
 		c.active = int(clamp(a.Num, 0, float64(len(c.data)-1)))
@@ -562,23 +586,23 @@ func (c *ChartWidget) Act(a ggui.Action) bool {
 	}
 	return true
 }
-func (c *ChartWidget) ConsumesKey(ev ggui.KeyEvent) bool {
+func (c *Widget) ConsumesKey(ev ggui.KeyEvent) bool {
 	switch ev.Key {
 	case ggui.KeyArrowLeft, ggui.KeyArrowRight, ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd, ggui.KeyEscape, ggui.KeyEnter:
 		return ev.Kind == ggui.KeyPress
 	}
 	return false
 }
-func (c *ChartWidget) HandleKey(ev ggui.KeyEvent) {
+func (c *Widget) HandleKey(ev ggui.KeyEvent) {
 	c.Keyboard(ev, nil)
 	if ev.Kind != ggui.KeyPress || len(c.data) == 0 {
 		return
 	}
 	switch ev.Key {
 	case ggui.KeyArrowLeft, ggui.KeyArrowDown:
-		c.active = stepIndex(c.active, -1, len(c.data), nil)
+		c.active = stepIndex(c.active, -1, len(c.data))
 	case ggui.KeyArrowRight, ggui.KeyArrowUp:
-		c.active = stepIndex(c.active, 1, len(c.data), nil)
+		c.active = stepIndex(c.active, 1, len(c.data))
 	case ggui.KeyHome:
 		c.active = 0
 	case ggui.KeyEnd:
@@ -589,7 +613,7 @@ func (c *ChartWidget) HandleKey(ev ggui.KeyEvent) {
 		c.selectActive()
 	}
 }
-func (c *ChartWidget) selectActive() {
+func (c *Widget) selectActive() {
 	if c.active >= 0 && c.active < len(c.data) {
 		c.selected = c.active
 		if c.onSelect != nil {
@@ -597,7 +621,7 @@ func (c *ChartWidget) selectActive() {
 		}
 	}
 }
-func (c *ChartWidget) HandlePointer(ev ggui.PointerEvent) bool {
+func (c *Widget) HandlePointer(ev ggui.PointerEvent) bool {
 	if ev.Kind == ggui.PointerScroll {
 		return false
 	}
@@ -623,7 +647,7 @@ func (c *ChartWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	}
 	return true
 }
-func (c *ChartWidget) progress() float64 {
+func (c *Widget) progress() float64 {
 	if c.reduced || c.duration <= 0 {
 		return 1
 	}

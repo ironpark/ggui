@@ -1,10 +1,11 @@
-package ui
+package chat
 
 import (
 	"math"
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -13,7 +14,7 @@ import (
 // itself is focusable so even a row of noninteractive files can be scrolled.
 type AttachmentGroupWidget struct {
 	ggui.Interactive
-	words                     *Strings // the Strings of the last layout
+	words                     *ui.Strings // the Strings of the last layout
 	children                  []*AttachmentWidget
 	sizes                     []ggui.Size
 	starts                    []float64
@@ -36,8 +37,17 @@ func AttachmentGroup(cards ...*AttachmentWidget) *AttachmentGroupWidget {
 	return g
 }
 
+// Key assigns this control an input identity. Configure it before mount.
+func (g *AttachmentGroupWidget) Key(k any) *AttachmentGroupWidget { g.Interactive.SetKey(k); return g }
+
 // Name names the scrollable strip for keyboard users and assistive technology.
 func (g *AttachmentGroupWidget) Name(s string) *AttachmentGroupWidget { g.SetName(s); return g }
+
+// BindName follows a non-nil accessible-name reader.
+func (g *AttachmentGroupWidget) BindName(r ggui.Readable[string]) *AttachmentGroupWidget {
+	g.Interactive.BindName(r)
+	return g
+}
 
 // Position returns the current scroll offset in logical pixels.
 func (g *AttachmentGroupWidget) Position() float64 { return g.offset }
@@ -48,7 +58,7 @@ func (g *AttachmentGroupWidget) scrollTo(v float64) { g.offset = max(0, min(v, g
 // Layout implements Widget.
 func (g *AttachmentGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	g.theme = uitheme.Of(env)
-	g.words = stringsOf(env)
+	g.words = ui.StringsOf(env)
 	g.gap, g.padY, g.fadeLen = g.theme.Space*1.5, g.theme.Space/2, g.theme.Space*2
 	g.sizes, g.starts = g.sizes[:0], g.starts[:0]
 	width, height := 0.0, 0.0
@@ -114,7 +124,7 @@ func (g *AttachmentGroupWidget) paintCards(dst *ggui.Canvas) {
 }
 
 func (g *AttachmentGroupWidget) name() string {
-	return pick(g.SemanticName() != "", g.SemanticName(), g.words.orDefault().AttachmentsName)
+	return pick(g.SemanticName() != "", g.SemanticName(), g.words.OrDefault().AttachmentsName)
 }
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.
