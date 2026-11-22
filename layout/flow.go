@@ -96,83 +96,88 @@ func (s *Scratch) Flow(c Constraints, f FlowStyle, items []Item, measure Measure
 	n := len(items)
 	s.reset(n)
 	s.mainBounds = slices.Grow(s.mainBounds[:0], n)[:n]
-	mainMax, crossMax := f.main(c.Max()), f.cross(c.Max())
-	crossMin := f.stretched(crossMax, 0)
-	gaps := f.Gap * float64(max(n-1, 0))
-	used, totalFlex, present := gaps, 0.0, n
-	flexible := !math.IsInf(mainMax, 1)
+	b := flowBounds{mainMax: f.main(c.Max()), crossMax: f.cross(c.Max())}
+	b.crossMin = f.stretched(b.crossMax, 0)
+	space := s.measureRigid(f, items, measure, b)
+	s.measureFlexible(f, items, measure, space, b)
+	if f.Align == AlignStretch && math.IsInf(b.crossMax, 1) {
+		s.stretchUnbounded(f, f.cross(Size{W: c.MinW, H: c.MinH}), measure)
+	}
+	return s.place(f, c, b, space)
+}
+
+// flowBounds are the main- and cross-axis limits Flow measures
+// against.
+type flowBounds struct{ mainMax, crossMin, crossMax float64 }
+
+// flowSpace is what measuring the rigid children left for placing: the
+// free main-axis space the flexible children share, and the gaps and
+// count the absent ones left.
+type flowSpace struct {
+	free, totalFlex float64
+	gaps            float64
+	present         int
+	flexible        bool
+}
+
+// measureRigid measures each rigid child against the remaining main
+// space, in input order, and returns the space the flexible children
+// share.
+func (s *Scratch) measureRigid(f FlowStyle, items []Item, measure MeasureFunc, b flowBounds) flowSpace {
+	space := flowSpace{gaps: f.Gap * float64(max(len(items)-1, 0)), present: len(items), flexible: !math.IsInf(b.mainMax, 1)}
+	used := space.gaps
 	for i, item := range items {
-		if item.Weight > 0 && flexible {
-			totalFlex += item.Weight
+		if item.Weight > 0 && space.flexible {
+			space.totalFlex += item.Weight
 			continue
 		}
-		s.mainBounds[i] = [2]float64{0, max(mainMax-used, 0)}
-		m := measure(i, f.constraints(0, s.mainBounds[i][1], crossMin, crossMax))
+		s.mainBounds[i] = [2]float64{0, max(b.mainMax-used, 0)}
+		m := measure(i, f.constraints(0, s.mainBounds[i][1], b.crossMin, b.crossMax))
 		s.measured[i] = m
 		used += f.main(m.Size)
 		if m.Absent {
-			present--
-			settled := f.Gap * float64(max(present-1, 0))
-			used += settled - gaps
-			gaps = settled
+			space.present--
+			settled := f.Gap * float64(max(space.present-1, 0))
+			used += settled - space.gaps
+			space.gaps = settled
 		}
 	}
-	free := max(mainMax-used, 0)
+	space.free = max(b.mainMax-used, 0)
+	return space
+}
+
+// measureFlexible measures each weighted child against its share of the
+// free space.
+func (s *Scratch) measureFlexible(f FlowStyle, items []Item, measure MeasureFunc, space flowSpace, b flowBounds) {
 	for i, item := range items {
-		if item.Weight > 0 && flexible {
-			extent := free * item.Weight / totalFlex
+		if item.Weight > 0 && space.flexible {
+			extent := space.free * item.Weight / space.totalFlex
 			minimum := extent
 			if item.Loose {
 				minimum = 0
 			}
 			s.mainBounds[i] = [2]float64{minimum, extent}
-			s.measured[i] = measure(i, f.constraints(minimum, extent, crossMin, crossMax))
+			s.measured[i] = measure(i, f.constraints(minimum, extent, b.crossMin, b.crossMax))
 		}
 	}
-	if f.Align == AlignStretch && math.IsInf(crossMax, 1) {
-		s.stretchUnbounded(f, f.cross(Size{W: c.MinW, H: c.MinH}), measure)
-	}
-	content, crossUsed := gaps, 0.0
-	for _, m := range s.measured {
-		content += f.main(m.Size)
-		crossUsed = max(crossUsed, f.cross(m.Size))
-	}
+}
+
+// place positions the measured children and returns the result.
+func (s *Scratch) place(f FlowStyle, c Constraints, b flowBounds, space flowSpace) Result {
+	content, crossUsed := s.extent(f, space.gaps)
 	baseline := f.Axis == Horizontal && f.Align == AlignBaseline
-	above, below := 0.0, 0.0
+	above := 0.0
 	if baseline {
-		for _, m := range s.measured {
-			b := baselineOrBottom(m)
-			if !m.Absent {
-				above = max(above, b)
-				below = max(below, m.Size.H-b)
-			}
-		}
+		var below float64
+		above, below = s.baselineExtents()
 		crossUsed = above + below
 	}
 	mainTotal := content
-	if totalFlex > 0 || f.Justify != JustifyStart {
-		mainTotal = bounded(mainMax, content)
+	if space.totalFlex > 0 || f.Justify != JustifyStart {
+		mainTotal = bounded(b.mainMax, content)
 	}
-	size := c.Constrain(f.size(mainTotal, f.stretched(crossMax, crossUsed)))
-	lead, between := 0.0, f.Gap
-	if slack := max(f.main(size)-content, 0); present > 0 {
-		switch f.Justify {
-		case JustifyCenter:
-			lead = slack / 2
-		case JustifyEnd:
-			lead = slack
-		case SpaceBetween:
-			if present > 1 {
-				between += slack / float64(present-1)
-			}
-		case SpaceAround:
-			lead = slack / float64(present) / 2
-			between += slack / float64(present)
-		case SpaceEvenly:
-			lead = slack / float64(present+1)
-			between += slack / float64(present+1)
-		}
-	}
+	size := c.Constrain(f.size(mainTotal, f.stretched(b.crossMax, crossUsed)))
+	lead, between := s.leading(f, size, content, space)
 	pos := lead
 	for i, m := range s.measured {
 		crossOff := (f.cross(size) - f.cross(m.Size)) * f.Align.Fraction()
@@ -189,6 +194,55 @@ func (s *Scratch) Flow(c Constraints, f FlowStyle, items []Item, measure Measure
 		}
 	}
 	return s.result(size)
+}
+
+// extent returns the content's main-axis length, gaps included, and the
+// cross-axis size the children need.
+func (s *Scratch) extent(f FlowStyle, gaps float64) (content, crossUsed float64) {
+	content = gaps
+	for _, m := range s.measured {
+		content += f.main(m.Size)
+		crossUsed = max(crossUsed, f.cross(m.Size))
+	}
+	return content, crossUsed
+}
+
+// baselineExtents returns how far the shared baseline sits above the
+// children's tops and below their bottoms.
+func (s *Scratch) baselineExtents() (above, below float64) {
+	for _, m := range s.measured {
+		b := baselineOrBottom(m)
+		if !m.Absent {
+			above = max(above, b)
+			below = max(below, m.Size.H-b)
+		}
+	}
+	return above, below
+}
+
+// leading returns where the first child starts and the gap between
+// children, for the justification.
+func (s *Scratch) leading(f FlowStyle, size Size, content float64, space flowSpace) (lead, between float64) {
+	between = f.Gap
+	if slack := max(f.main(size)-content, 0); space.present > 0 {
+		switch f.Justify {
+		case JustifyCenter:
+			lead = slack / 2
+		case JustifyEnd:
+			lead = slack
+		case SpaceBetween:
+			if space.present > 1 {
+				between += slack / float64(space.present-1)
+			}
+		case SpaceAround:
+			lead = slack / float64(space.present) / 2
+			between += slack / float64(space.present)
+		case SpaceEvenly:
+			lead = slack / float64(space.present+1)
+			between += slack / float64(space.present+1)
+		}
+	}
+	return lead, between
 }
 
 // stretchUnbounded measures again, tight across at the biggest present
