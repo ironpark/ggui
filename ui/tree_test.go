@@ -216,17 +216,17 @@ func TestTreeSemantics(t *testing.T) {
 		t.Fatal("a collapsed subtree's row is present")
 	}
 	veg, _ := sem.Find(ggui.RoleTreeItem, "Vegetables")
-	p.Perform(veg.ID, ggui.Action{Kind: ggui.ActionExpand})
+	p.PerformAction(veg.ID, ggui.Action{Kind: ggui.ActionExpand})
 	if _, ok := p.Semantics().Find(ggui.RoleTreeItem, "Leek"); !ok || !ggui.Untrack(open.Get)["Vegetables"] {
 		t.Fatal("ActionExpand did not open Vegetables through the binding")
 	}
 	fruits, _ := p.Semantics().Find(ggui.RoleTreeItem, "Fruits")
-	p.Perform(fruits.ID, ggui.Action{Kind: ggui.ActionCollapse})
+	p.PerformAction(fruits.ID, ggui.Action{Kind: ggui.ActionCollapse})
 	if got := treeItems(p); !slices.Equal(got, []string{"Fruits", "Vegetables", "Leek", "Bread"}) {
 		t.Fatalf("after collapsing Fruits: %q", got)
 	}
 	bread, _ := p.Semantics().Find(ggui.RoleTreeItem, "Bread")
-	p.Perform(bread.ID, ggui.Action{Kind: ggui.ActionSelect})
+	p.PerformAction(bread.ID, ggui.Action{Kind: ggui.ActionSelect})
 	if bread, _ := p.Semantics().Find(ggui.RoleTreeItem, "Bread"); !bread.Selected {
 		t.Fatal("ActionSelect did not select Bread")
 	}

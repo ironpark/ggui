@@ -15,7 +15,7 @@ func TestPaymentTableFiltersAndRestores(t *testing.T) {
 		if !ok {
 			t.Fatal("missing filter")
 		}
-		p.Perform(n.ID, ggui.Action{Kind: ggui.ActionSetValue, Text: value})
+		p.PerformAction(n.ID, ggui.Action{Kind: ggui.ActionSetValue, Text: value})
 		p.Frame()
 	}
 	set("missing")

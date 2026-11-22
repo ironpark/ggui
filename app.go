@@ -704,8 +704,8 @@ type Host interface {
 	// Clipboard holds the text cut, copy and paste move: the system's under
 	// an App, a runtime.MemoryClipboard of the probe's own under a Probe.
 	Clipboard() runtime.Clipboard
-	// Perform carries out an accessibility action on a node.
-	Perform(id NodeID, act Action)
+	// PerformAction carries out an accessibility action on a node.
+	PerformAction(id NodeID, act Action)
 	// Announce queues text for assistive technology to speak.
 	Announce(text string, politeness Politeness)
 	// Semantics returns the accessibility tree the last frame published.

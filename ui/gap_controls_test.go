@@ -151,7 +151,7 @@ func TestTabsManualVerticalAndDisabledPages(t *testing.T) {
 	if !disabled.Disabled {
 		t.Fatal("disabled state missing")
 	}
-	p.Perform(disabled.ID, ggui.Action{Kind: ggui.ActionSelect})
+	p.PerformAction(disabled.ID, ggui.Action{Kind: ggui.ActionSelect})
 	if selected.Get() != 2 {
 		t.Fatal("disabled page activated")
 	}
@@ -221,7 +221,7 @@ func TestCompositeRovingFocusIsAnnouncedAndDoesNotTrapTab(t *testing.T) {
 		t.Fatalf("Tab did not leave list: %+v", focused)
 	}
 	second := node(t, p.Semantics(), ggui.RoleTab, "Second")
-	p.Perform(second.ID, ggui.Action{Kind: ggui.ActionFocus})
+	p.PerformAction(second.ID, ggui.Action{Kind: ggui.ActionFocus})
 	p.Type(ggui.Mods{}, ggui.KeySpace)
 	if selected.Get() != 1 {
 		t.Fatal("accessibility-focused tab did not activate")

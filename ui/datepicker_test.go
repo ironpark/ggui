@@ -42,11 +42,11 @@ func TestDatePickerExpandAndCollapseActions(t *testing.T) {
 	p := ggui.NewProbe(widget.Column(d), ggui.Sz(380, 450))
 	defer p.Close()
 	trigger, _ := p.Semantics().Find(ggui.RoleButton, "Due")
-	p.Perform(trigger.ID, ggui.Action{Kind: ggui.ActionExpand})
+	p.PerformAction(trigger.ID, ggui.Action{Kind: ggui.ActionExpand})
 	if !d.Popup().IsOpen() {
 		t.Fatal("ActionExpand did not open the calendar")
 	}
-	p.Perform(trigger.ID, ggui.Action{Kind: ggui.ActionCollapse})
+	p.PerformAction(trigger.ID, ggui.Action{Kind: ggui.ActionCollapse})
 	if d.Popup().IsOpen() {
 		t.Fatal("ActionCollapse did not close the calendar")
 	}

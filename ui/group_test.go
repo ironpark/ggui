@@ -54,7 +54,7 @@ func TestToggleGroupVerticalMovesWithUpAndDown(t *testing.T) {
 	if !ok {
 		t.Fatalf("no group named Align:\n%s", p.Semantics())
 	}
-	p.Perform(group.ID, ggui.Action{Kind: ggui.ActionFocus})
+	p.PerformAction(group.ID, ggui.Action{Kind: ggui.ActionFocus})
 	for _, step := range []struct {
 		key  ggui.KeyboardKey
 		want string

@@ -120,7 +120,7 @@ func (g *galleryAudit) step() (bool, error) {
 		if node.Actions&ggui.ActionExpand != 0 {
 			action = ggui.ActionExpand
 		}
-		app.Perform(node.ID, ggui.Action{Kind: action})
+		app.PerformAction(node.ID, ggui.Action{Kind: action})
 	}
 
 	if target, ok := hoverNames[name]; ok {
@@ -164,7 +164,7 @@ func (g *galleryAudit) step() (bool, error) {
 				}
 				return
 			}
-			app.Perform(node.ID, action)
+			app.PerformAction(node.ID, action)
 			draw()
 			now = now.Add(time.Second)
 			draw()

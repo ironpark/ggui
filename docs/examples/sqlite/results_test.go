@@ -100,7 +100,7 @@ func TestQueryResultsUseDataTable(t *testing.T) {
 	if !ok {
 		t.Fatal("query filter missing")
 	}
-	p.Perform(n.ID, ggui.Action{Kind: ggui.ActionSetValue, Text: "12"})
+	p.PerformAction(n.ID, ggui.Action{Kind: ggui.ActionSetValue, Text: "12"})
 	if len(p.FindAll(ggui.RoleRow)) != 1 {
 		t.Fatal("query filter failed")
 	}

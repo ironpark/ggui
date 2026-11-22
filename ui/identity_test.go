@@ -295,7 +295,7 @@ func TestKeySettersKeepFocusAcrossMovingRebuilds(t *testing.T) {
 			if !ok {
 				t.Fatalf("nothing in the control takes focus:\n%s", tree)
 			}
-			p.Perform(target.ID, ggui.Action{Kind: ggui.ActionFocus})
+			p.PerformAction(target.ID, ggui.Action{Kind: ggui.ActionFocus})
 			before, ok := p.Semantics().Focused()
 			if !ok {
 				t.Fatalf("focusing %v left nothing focused:\n%s", target.ID, p.Semantics())
@@ -370,7 +370,7 @@ func TestRadiosKeepFocusedOptionAcrossRebuild(t *testing.T) {
 	}, ggui.Sz(300, 100))
 	defer p.Close()
 	node, _ := p.Semantics().Find(ggui.RoleRadio, "b")
-	p.Perform(node.ID, ggui.Action{Kind: ggui.ActionFocus})
+	p.PerformAction(node.ID, ggui.Action{Kind: ggui.ActionFocus})
 	tick.Set(1)
 	if n, ok := p.Semantics().Focused(); !ok || n.Name != "b" {
 		t.Fatalf("focus after an in-place rebuild = %q (%v), want option b", n.Name, ok)
@@ -390,7 +390,7 @@ func TestQuestionnaireKeyKeepsChoiceFocusAcrossRebuild(t *testing.T) {
 	}, ggui.Sz(400, 400))
 	defer p.Close()
 	node, _ := p.Semantics().Find(ggui.RoleRadio, "B")
-	p.Perform(node.ID, ggui.Action{Kind: ggui.ActionFocus})
+	p.PerformAction(node.ID, ggui.Action{Kind: ggui.ActionFocus})
 	tick.Set(1)
 	if n, ok := p.Semantics().Focused(); !ok || n.Name != "B" {
 		t.Fatalf("focus after an in-place rebuild = %q (%v), want choice B", n.Name, ok)

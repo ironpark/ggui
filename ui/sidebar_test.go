@@ -78,7 +78,7 @@ func TestSidebarSelectActionReportsOnlyRealChanges(t *testing.T) {
 		if !ok {
 			t.Fatalf("no tab %q", name)
 		}
-		p.Perform(n.ID, ggui.Action{Kind: kind})
+		p.PerformAction(n.ID, ggui.Action{Kind: kind})
 	}
 	act("Sent", ggui.ActionSelect)
 	act("Sent", ggui.ActionPress)

@@ -80,7 +80,7 @@ func TestTransformedPressActionTapsInTheChildsCoordinates(t *testing.T) {
 	if !ok || node.Rect != ggui.Rct(ggui.Pt(100, 50), ggui.Sz(40, 20)) {
 		t.Fatalf("node %v %v; want it at the moved Rect", ok, node.Rect)
 	}
-	p.Perform(node.ID, ggui.Action{Kind: ggui.ActionPress})
+	p.PerformAction(node.ID, ggui.Action{Kind: ggui.ActionPress})
 	taps := tg.taps()
 	if len(taps) != 1 || !samePt(taps[0], ggui.Pt(20, 10)) {
 		t.Fatalf("taps %v; want one at the child's own centre", taps)

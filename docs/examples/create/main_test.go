@@ -144,7 +144,7 @@ func TestShuffleRespectsTileLocks(t *testing.T) {
 	if style.Full.Size.H < 48 {
 		t.Fatal("setting is not a two-line tile", style.Full)
 	}
-	p.Perform(style.ID, ggui.Action{Kind: ggui.ActionFocus})
+	p.PerformAction(style.ID, ggui.Action{Kind: ggui.ActionFocus})
 	settle()
 	p.Tap("Lock Style")
 	settle()

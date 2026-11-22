@@ -857,7 +857,7 @@ func TestTextInputBindDisabledStopsInputAndActions(t *testing.T) {
 	if !ok || !node.Disabled {
 		t.Fatalf("a disabled field is described as %+v, want Disabled", node.Node)
 	}
-	p.Perform(node.ID, ggui.Action{Kind: ggui.ActionSetValue, Text: "set"})
+	p.PerformAction(node.ID, ggui.Action{Kind: ggui.ActionSetValue, Text: "set"})
 	if got := ggui.Untrack(value.Get); got != "abc" {
 		t.Fatalf("an assistive action set a disabled field to %q", got)
 	}
@@ -869,7 +869,7 @@ func TestTextInputBindDisabledStopsInputAndActions(t *testing.T) {
 		t.Fatalf("re-enabled field: focused %v, value %q; want focus and \"ab\"", w.Focused(), got)
 	}
 	node, _ = p.Semantics().Find(ggui.RoleTextField, "")
-	p.Perform(node.ID, ggui.Action{Kind: ggui.ActionSetValue, Text: "set"})
+	p.PerformAction(node.ID, ggui.Action{Kind: ggui.ActionSetValue, Text: "set"})
 	if got := ggui.Untrack(value.Get); got != "set" {
 		t.Fatalf("ActionSetValue gave %q, want \"set\"", got)
 	}
@@ -1864,7 +1864,7 @@ func TestAXSetSelectionMovesTheCaret(t *testing.T) {
 		t.Fatal("a text field does not offer its selection")
 	}
 	start, end := a11y.ByteRange(field.Node, 6, 5)
-	p.Perform(field.ID, ggui.Action{Kind: ggui.ActionSetSelection, SelStart: start, SelEnd: end})
+	p.PerformAction(field.ID, ggui.Action{Kind: ggui.ActionSetSelection, SelStart: start, SelEnd: end})
 	after, _ := p.Semantics().Find(ggui.RoleTextField, "")
 	if after.SelStart != 6 || after.SelEnd != 11 {
 		t.Errorf("selection = %d..%d, want 6..11", after.SelStart, after.SelEnd)

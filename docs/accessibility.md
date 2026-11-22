@@ -110,11 +110,11 @@ input := widget.TextInput(text).
 `app.Semantics()` returns the last published `SemTree`. A snapshot may be read
 from any goroutine and retained across frames, but its shared slices must not
 be modified. A window builds the tree only while something reads it: an
-assistive technology, the inspector, a caller of `Semantics`, or a `Perform`
+assistive technology, the inspector, a caller of `Semantics`, or a `PerformAction`
 waiting to be carried out. The first call to `Semantics` turns it on and asks
 for a frame, so the tree it returns may be the last one built, empty before
-any was. A `Perform` keeps the tree on only until it has run.
-`app.Perform(node.ID, action)` queues a supported action on the UI thread;
+any was. A `PerformAction` keeps the tree on only until it has run.
+`app.PerformAction(node.ID, action)` queues a supported action on the UI thread;
 observe the result in a subsequent snapshot. See
 [semantic action tests](testing.md#state-layout-and-semantic-actions) for a
 headless example.
