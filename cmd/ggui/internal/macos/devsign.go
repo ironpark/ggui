@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
+	"sync"
 )
 
 // KeychainIdentity is a valid code-signing identity from the macOS keychain.
@@ -63,21 +65,12 @@ func ResolveDevIdentity(ctx context.Context, req DevSigningRequest) (DevSigning,
 }
 
 func resolveDevIdentity(ctx context.Context, req DevSigningRequest, listFn func(context.Context) ([]KeychainIdentity, error)) (DevSigning, error) {
-	var (
-		ids      []KeychainIdentity
-		listErr  error
-		listed   bool
-		warnings []string
-	)
-	load := func() ([]KeychainIdentity, error) {
-		if !listed {
-			listed = true
-			if listFn != nil {
-				ids, listErr = listFn(ctx)
-			}
+	load := sync.OnceValues(func() ([]KeychainIdentity, error) {
+		if listFn == nil {
+			return nil, nil
 		}
-		return ids, listErr
-	}
+		return listFn(ctx)
+	})
 
 	// 1a. Explicit --sign flag.
 	if req.FlagSet {
@@ -85,39 +78,18 @@ func resolveDevIdentity(ctx context.Context, req DevSigningRequest, listFn func(
 		if want == "" {
 			return DevSigning{}, errors.New(`--sign must name a signing identity, or "-" to sign ad hoc`)
 		}
-		if want == "-" {
-			return DevSigning{Target: "-", Display: "ad hoc", Source: SourceFlag, Entitlements: req.Entitlements}, nil
-		}
-		all, err := load()
-		if err != nil {
-			return DevSigning{}, fmt.Errorf("looking up signing identity %q (from --sign): %w; pass --sign - to sign ad hoc", want, err)
-		}
-		id, ok := matchIdentity(all, want)
-		if !ok {
-			return DevSigning{}, fmt.Errorf("signing identity %q (from --sign) not found in keychain; run `security find-identity -v -p codesigning` to list identities, or pass --sign - to sign ad hoc", want)
-		}
-		return DevSigning{Target: identityTarget(id), Display: id.Description, Source: SourceFlag, Entitlements: req.Entitlements}, nil
+		return namedIdentity(load, want, SourceFlag, req.Entitlements)
 	}
 
 	// 1b. dev.identity in ggui.toml.
 	if want := strings.TrimSpace(req.DevIdentity); want != "" {
-		if want == "-" {
-			return DevSigning{Target: "-", Display: "ad hoc", Source: SourceDevConfig, Entitlements: req.Entitlements}, nil
-		}
-		all, err := load()
-		if err != nil {
-			return DevSigning{}, fmt.Errorf("looking up signing identity %q (from dev.identity): %w; pass --sign - to sign ad hoc", want, err)
-		}
-		id, ok := matchIdentity(all, want)
-		if !ok {
-			return DevSigning{}, fmt.Errorf("signing identity %q (from dev.identity) not found in keychain; run `security find-identity -v -p codesigning` to list identities, or pass --sign - to sign ad hoc", want)
-		}
-		return DevSigning{Target: identityTarget(id), Display: id.Description, Source: SourceDevConfig, Entitlements: req.Entitlements}, nil
+		return namedIdentity(load, want, SourceDevConfig, req.Entitlements)
 	}
 
 	// 2. macos.signing_identity from ggui.toml (if set and not "-").
 	// If missing on a developer's local Mac (e.g. a CI-only Developer ID),
 	// warn and fall through to Apple Development or ad hoc.
+	var warnings []string
 	if want := strings.TrimSpace(req.MacOSIdentity); want != "" && want != "-" {
 		all, err := load()
 		if err == nil {
@@ -132,16 +104,14 @@ func resolveDevIdentity(ctx context.Context, req DevSigningRequest, listFn func(
 
 	// 3. Auto-detect a valid "Apple Development" identity in the keychain.
 	if all, err := load(); err == nil {
-		for _, id := range all {
-			if isAppleDevelopment(id) {
-				return DevSigning{
-					Target:       identityTarget(id),
-					Display:      id.Description,
-					Source:       SourceAutoDetected,
-					Entitlements: req.Entitlements,
-					Warnings:     warnings,
-				}, nil
-			}
+		if i := slices.IndexFunc(all, isAppleDevelopment); i >= 0 {
+			return DevSigning{
+				Target:       identityTarget(all[i]),
+				Display:      all[i].Description,
+				Source:       SourceAutoDetected,
+				Entitlements: req.Entitlements,
+				Warnings:     warnings,
+			}, nil
 		}
 	}
 
@@ -153,6 +123,24 @@ func resolveDevIdentity(ctx context.Context, req DevSigningRequest, listFn func(
 		Entitlements: req.Entitlements,
 		Warnings:     warnings,
 	}, nil
+}
+
+// namedIdentity resolves want, the identity source names: "-" signs ad
+// hoc, and any other name must match an identity in the keychain, which
+// load lists.
+func namedIdentity(load func() ([]KeychainIdentity, error), want string, source DevIdentitySource, entitlements string) (DevSigning, error) {
+	if want == "-" {
+		return DevSigning{Target: "-", Display: "ad hoc", Source: source, Entitlements: entitlements}, nil
+	}
+	all, err := load()
+	if err != nil {
+		return DevSigning{}, fmt.Errorf("looking up signing identity %q (from %s): %w; pass --sign - to sign ad hoc", want, source, err)
+	}
+	id, ok := matchIdentity(all, want)
+	if !ok {
+		return DevSigning{}, fmt.Errorf("signing identity %q (from %s) not found in keychain; run `security find-identity -v -p codesigning` to list identities, or pass --sign - to sign ad hoc", want, source)
+	}
+	return DevSigning{Target: identityTarget(id), Display: id.Description, Source: source, Entitlements: entitlements}, nil
 }
 
 func isAppleDevelopment(id KeychainIdentity) bool {
