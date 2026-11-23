@@ -22,13 +22,13 @@ func TestSync(t *testing.T) {
 	touch(t, a, "a")
 	touch(t, b, "b")
 	w := New(Options{NoNotify: true})
-	w.Set([]string{a, b, c})
+	w.Add(a, b, c)
 	ctx := context.Background()
 	if got := w.Sync(ctx); len(got.Changes) != 0 {
 		t.Fatalf("first scan reported %v", got.Changes)
 	}
-	if n := watched(w); n != 3 {
-		t.Errorf("watched = %d, want 3", n)
+	if w.Len() != 3 {
+		t.Errorf("Len = %d, want 3", w.Len())
 	}
 
 	touch(t, a, "a2")
@@ -89,6 +89,32 @@ func TestSetKeepsStamps(t *testing.T) {
 	}
 }
 
+func TestAddRemove(t *testing.T) {
+	dir := t.TempDir()
+	mkfiles(t, dir, map[string]string{"a": "a", "b": "b", "sub/c": "c"})
+	w := New(Options{NoNotify: true})
+	w.Add(dir)
+	// The directory, its two files and its subdirectory; not what is in
+	// that, without Recursive.
+	if w.Len() != 4 {
+		t.Errorf("Len = %d, want 4", w.Len())
+	}
+	w.Add(filepath.Join(dir, "a")) // given too: no more paths
+	if w.Len() != 4 {
+		t.Errorf("Len after adding an entry = %d, want 4", w.Len())
+	}
+	w.Remove(dir)
+	if w.Len() != 1 {
+		t.Errorf("Len after removing the directory = %d, want the file given", w.Len())
+	}
+	touch(t, filepath.Join(dir, "b"), "b2")
+	touch(t, filepath.Join(dir, "a"), "a2")
+	got := w.Sync(context.Background()).Changes
+	if !slices.Equal(got, []Event{ev(Write, filepath.Join(dir, "a"))}) {
+		t.Errorf("after Remove: %v, want only a", got)
+	}
+}
+
 // A directory given stands for its entries: those added, written and
 // removed, and a rename as a remove and a create.
 func TestDirectory(t *testing.T) {
@@ -96,7 +122,7 @@ func TestDirectory(t *testing.T) {
 		dir := t.TempDir()
 		mkfiles(t, dir, map[string]string{"a": "a"})
 		w := New(testOptions(t, poll))
-		w.Set([]string{dir})
+		w.Add(dir)
 		out := start(t, w)
 		a, x := filepath.Join(dir, "a"), filepath.Join(dir, "x")
 
@@ -132,11 +158,11 @@ func TestRecursive(t *testing.T) {
 		o.Recursive = true
 		o.Ignore = NewIgnore(IgnoreConfig{Patterns: DefaultPatterns, Dirs: []string{filepath.Join(dir, "out")}}).Match
 		w := New(o)
-		w.Set([]string{dir})
+		w.Add(dir)
 		out := start(t, w)
 		// dir, a, a/b, a/b/c
-		if n := watched(w); n != 4 {
-			t.Errorf("watched = %d, want 4", n)
+		if w.Len() != 4 {
+			t.Errorf("Len = %d, want 4", w.Len())
 		}
 
 		c := filepath.Join(dir, "a", "b", "c")
@@ -172,9 +198,9 @@ func TestRenameSave(t *testing.T) {
 		main := filepath.Join(dir, "main.go")
 		write(t, main, "package main\n")
 		o := testOptions(t, poll)
-		o.Ignore = NewIgnore(IgnoreConfig{Patterns: DefaultPatterns}).Match
+		o.Ignore = DefaultIgnore().Match
 		w := New(o)
-		w.Set([]string{dir})
+		w.Add(dir)
 		out := start(t, w)
 		for i, tmp := range []string{main + "~", filepath.Join(dir, ".#main.go"), filepath.Join(dir, "main.go___jb_tmp___")} {
 			write(t, tmp, fmt.Sprintf("package main // %d\n", i))
@@ -201,7 +227,7 @@ func TestCoalesce(t *testing.T) {
 	forBoth(t, func(t *testing.T, poll bool) {
 		dir := t.TempDir()
 		w := New(testOptions(t, poll))
-		w.Set([]string{dir})
+		w.Add(dir)
 		out := start(t, w)
 		var want []Event
 		for i := range 50 {
@@ -265,7 +291,7 @@ func TestContent(t *testing.T) {
 		o := testOptions(t, poll)
 		o.Content = commentBlind
 		w := New(o)
-		w.Set([]string{dir})
+		w.Add(dir)
 		out := start(t, w)
 
 		write(t, src, "# a comment\none\n")
@@ -291,7 +317,7 @@ func TestFilter(t *testing.T) {
 	o.Content = commentBlind
 	o.Filter = func(e Event) bool { return !e.Same }
 	w := New(o)
-	w.Set([]string{dir})
+	w.Add(dir)
 	out := start(t, w)
 	write(t, src, "# a comment\none\n")
 	none(t, out, "a comment, filtered out")
@@ -307,7 +333,7 @@ func TestTruncatedSave(t *testing.T) {
 	const src = "one\ntwo\n"
 	touch(t, path, src)
 	w := New(Options{NoNotify: true, Content: commentBlind, Steady: 2 * time.Second})
-	w.Set([]string{path})
+	w.Add(path)
 	w.bg.Wait() // the fingerprint is taken
 
 	touch(t, path, "")
@@ -336,7 +362,7 @@ func TestSteady(t *testing.T) {
 	path := filepath.Join(dir, "data")
 	touch(t, path, "one")
 	w := New(Options{NoNotify: true, Steady: 200 * time.Millisecond})
-	w.Set([]string{path})
+	w.Add(path)
 
 	touch(t, path, "")
 	done := make(chan error, 1)
@@ -385,7 +411,7 @@ func TestLostEventsRescan(t *testing.T) {
 	withFake(w, src)
 	var fulls atomic.Int32
 	w.onFull = func() { fulls.Add(1) }
-	w.Set([]string{dir})
+	w.Add(dir)
 	out := start(t, w)
 
 	x := filepath.Join(dir, "x")
@@ -401,6 +427,15 @@ func TestLostEventsRescan(t *testing.T) {
 	if fulls.Load() != 1 {
 		t.Errorf("%d full rescans, want 1", fulls.Load())
 	}
+
+	// Rescan does the same.
+	y := filepath.Join(dir, "y")
+	write(t, y, "y")
+	if err := os.Chtimes(dir, fi.ModTime(), fi.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	w.Rescan()
+	expect(t, out, "after Rescan", ev(Create, y))
 }
 
 // A notification about a path in a directory given has the directory
@@ -414,10 +449,10 @@ func TestNotifiedPathRelists(t *testing.T) {
 	}
 	src := newFakeSource()
 	o := testOptions(t, false)
-	o.Ignore = NewIgnore(IgnoreConfig{Patterns: DefaultPatterns}).Match
+	o.Ignore = DefaultIgnore().Match
 	w := New(o)
 	withFake(w, src)
-	w.Set([]string{dir})
+	w.Add(dir)
 	out := start(t, w)
 	if got := <-src.dirs; !slices.Contains(got, dir) {
 		t.Errorf("the source watches %v, want %s among them", got, dir)
@@ -447,7 +482,7 @@ func TestSourceFailureFallsBack(t *testing.T) {
 	}
 	w := New(o)
 	withFake(w, src)
-	w.Set([]string{dir})
+	w.Add(dir)
 	out := start(t, w)
 	src.fail(errors.New("out of watches"))
 	select {
@@ -493,7 +528,7 @@ func TestNoLeaks(t *testing.T) {
 			o.Recursive = true
 			o.Content = commentBlind
 			w := New(o)
-			w.Set([]string{dir})
+			w.Add(dir)
 			ctx, cancel := context.WithCancel(context.Background())
 			out := make(chan Batch)
 			done := make(chan struct{})
@@ -542,8 +577,8 @@ func TestDroppedTreeCompacts(t *testing.T) {
 	}
 	w.Sync(context.Background())
 	w.Set([]string{small})
-	if n := watched(w); n != 2 || w.peak != 2 {
-		t.Errorf("after the tree was dropped: %d paths, peak %d; want 2, 2", n, w.peak)
+	if w.Len() != 2 || w.peak != 2 {
+		t.Errorf("after the tree was dropped: %d paths, peak %d; want 2, 2", w.Len(), w.peak)
 	}
 	touch(t, a, "a2")
 	if got := w.Sync(context.Background()).Changes; !slices.Equal(got, []Event{ev(Write, a)}) {
@@ -569,7 +604,7 @@ func TestQuietScanAllocatesLittle(t *testing.T) {
 	runtime.ReadMemStats(&ms)
 	// os.Stat's own garbage, some 200 bytes a path, is not the scan's;
 	// a map of the stamps alone was more than that again.
-	if per := (ms.TotalAlloc - before) / uint64(watched(w)); per > 400 {
+	if per := (ms.TotalAlloc - before) / uint64(w.Len()); per > 400 {
 		t.Errorf("a quiet scan allocated %d bytes a path", per)
 	}
 }
@@ -580,7 +615,7 @@ func TestSyncConcurrentAndRunExit(t *testing.T) {
 	a := filepath.Join(dir, "a")
 	touch(t, a, "a")
 	w := New(Options{NoNotify: true, Poll: 20 * time.Millisecond})
-	w.Set([]string{a})
+	w.Add(a)
 
 	// Two concurrent Sync calls without Run.
 	var wg sync.WaitGroup
@@ -634,7 +669,7 @@ func TestSyncDrainsPendingNotifications(t *testing.T) {
 	o.Settle = 5 * time.Second // keep settle timer pending when Sync runs
 	w := New(o)
 	withFake(w, src)
-	w.Set([]string{dir})
+	w.Add(dir)
 	_ = start(t, w)
 	<-src.dirs
 
@@ -651,7 +686,7 @@ func TestSyncDrainsPendingNotifications(t *testing.T) {
 	}
 }
 
-// Concurrent Set with fingerprinting racing with Run exit never panics on WaitGroup.
+// Concurrent Add/Set with fingerprinting racing with Run exit never panics on WaitGroup.
 func TestFingerprintRunExitNoRace(t *testing.T) {
 	dir := t.TempDir()
 	files := make([]string, 8)
@@ -670,9 +705,10 @@ func TestFingerprintRunExitNoRace(t *testing.T) {
 		}()
 		var wg sync.WaitGroup
 		wg.Go(func() {
-			for i := range files {
-				w.Set(files[:i+1])
+			for _, f := range files {
+				w.Add(f)
 			}
+			w.Set(files)
 		})
 		cancel()
 		<-done
@@ -710,7 +746,7 @@ func TestSetRewatchCatchesConcurrentChange(t *testing.T) {
 	o := testOptions(t, false)
 	w := New(o)
 	w.newSource = func(bool, func(string) bool) (source, error) { return src, nil }
-	w.Set([]string{dir})
+	w.Add(dir)
 	out := start(t, w)
 	<-src.dirs
 

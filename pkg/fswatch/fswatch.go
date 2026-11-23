@@ -203,7 +203,7 @@ type Options struct {
 	Recursive bool
 	// Ignore reports whether a path found in a directory of the set is
 	// to be left out, with all below it. It is never asked about a path
-	// given to [Watcher.Set], which is watched whatever
+	// given to [Watcher.Add] or [Watcher.Set], which is watched whatever
 	// it says. It is called from more than one goroutine. [Ignore.Match]
 	// is one. Nil leaves nothing out.
 	Ignore func(path string, isDir bool) bool
@@ -264,7 +264,8 @@ type Watcher struct {
 	newSource func(recursive bool, skip func(dir string) bool) (source, error)
 
 	syncs   chan chan Batch // Sync's requests to Run
-	changed chan struct{}   // the set changed shape: Set
+	rescans chan struct{}   // Rescan's
+	changed chan struct{}   // the set changed shape: Add, Remove, Set
 	run     sync.Mutex      // held while Run runs
 	runMu   sync.Mutex      // guards state and stateCh
 	state   runState        // idle, busy (Sync / Run setup-teardown), or running
@@ -296,7 +297,7 @@ type fileSum struct {
 	sum []byte
 }
 
-// New returns a watcher of nothing yet; [Watcher.Set] gives it paths.
+// New returns a watcher of nothing yet; [Watcher.Add] gives it paths.
 func New(opts Options) *Watcher {
 	opts.defaults()
 	return &Watcher{
@@ -304,6 +305,7 @@ func New(opts Options) *Watcher {
 		newSource: newSource,
 		syncs:     make(chan chan Batch),
 		changed:   make(chan struct{}, 1),
+		rescans:   make(chan struct{}, 1),
 		roots:     map[string]bool{},
 		files:     map[string]stamp{},
 		entries:   map[string]map[string]bool{},
@@ -325,6 +327,45 @@ func (w *Watcher) tracef(format string, args ...any) {
 
 func (w *Watcher) ignored(path string, isDir bool) bool {
 	return w.o.Ignore != nil && w.o.Ignore(path, isDir)
+}
+
+// Add watches paths as well. Each is stamped as it is now, a directory's
+// entries with it, and is not reported for existing; a path that does
+// not exist yet is reported when it appears.
+func (w *Watcher) Add(paths ...string) {
+	var stamped []string
+	w.mu.Lock()
+	for _, p := range paths {
+		p = filepath.Clean(p)
+		if !w.roots[p] {
+			w.roots[p] = true
+			w.shape++
+		}
+		if _, ok := w.files[p]; !ok {
+			w.files[p] = stat(p)
+			stamped = append(stamped, p)
+		}
+	}
+	found, _ := w.reconcile()
+	w.mu.Unlock()
+	w.fingerprint(append(stamped, found...))
+	w.reshaped()
+}
+
+// Remove stops watching paths, and what was watched only for being
+// found below them.
+func (w *Watcher) Remove(paths ...string) {
+	w.mu.Lock()
+	for _, p := range paths {
+		p = filepath.Clean(p)
+		if w.roots[p] {
+			delete(w.roots, p)
+			w.shape++
+		}
+	}
+	w.reconcile()
+	w.mu.Unlock()
+	w.reshaped()
 }
 
 // Set replaces the paths watched and returns those new to them, sorted.
@@ -362,10 +403,30 @@ func (w *Watcher) Set(paths []string) (added []string) {
 	return added
 }
 
+// Len returns the number of paths watched: those given, and those found
+// in the directories among them.
+func (w *Watcher) Len() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return len(w.files)
+}
+
 // reshaped tells Run that the directories to watch may have changed.
 func (w *Watcher) reshaped() {
 	select {
 	case w.changed <- struct{}{}:
+	default:
+	}
+}
+
+// Rescan has Run list every directory in the set again and stat every
+// path, as it does when the system says it lost events: for a change
+// that nothing tells of, such as a file system mounted over a directory.
+// It does not wait; asked twice before Run has rescanned, it rescans
+// once.
+func (w *Watcher) Rescan() {
+	select {
+	case w.rescans <- struct{}{}:
 	default:
 	}
 }
@@ -494,6 +555,8 @@ func (w *Watcher) Run(ctx context.Context, out chan<- Batch) {
 			l.onSettle()
 		case <-l.tick.C:
 			l.check(false, nil)
+		case <-w.rescans:
+			l.onRescan()
 		case <-w.changed:
 			l.onChanged()
 		case reply := <-w.syncs:
@@ -651,13 +714,20 @@ func (l *runLoop) onSettle() {
 	}
 }
 
-// onChanged rewatched after Set changed the paths, and scans once, to
-// close the window between Set stamping paths and the new watches
-// being live.
+// onChanged rewatched after Add, Remove or Set changed the paths, and
+// scans once, to close the window between Add and Set stamping paths and
+// the new watches being live.
 func (l *runLoop) onChanged() {
 	if l.rewatch() {
 		l.check(false, nil)
 	}
+}
+
+// onRescan scans everything on request: a change that nothing tells of,
+// as when a file system is mounted over a directory.
+func (l *runLoop) onRescan() {
+	l.w.tracef("asked to rescan everything")
+	l.check(true, nil)
 }
 
 // serve answers a Sync: it takes what the system has gathered, scans
