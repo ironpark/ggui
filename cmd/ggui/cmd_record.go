@@ -239,6 +239,9 @@ func (f *recordFlags) request(name string, proj *project.Project) (recordRequest
 	if req.Format != "list" {
 		req.FPS, req.Width, req.Loop, req.Dither = *f.fps, *f.width, *f.loop, *f.dither
 		req.Lossy = *f.lossy
+		if *f.colors != 256 {
+			req.Colors = *f.colors
+		}
 		req.Frame, req.Backdrop, req.NoCursor = *f.frame, *f.backdrop, !*f.cursor
 	}
 	return req, nil
