@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/ebitengine/purego v0.11.1
 	github.com/ironpark/ggfx v0.0.0-20261122131222-c9829636a084
-	github.com/ironpark/ggwd v0.0.0-20261120121552-0b5175d66b9d
+	github.com/ironpark/ggwd v0.0.0-20261123061616-b9247f21d6b7
 	golang.org/x/image v0.46.0
 	golang.org/x/sys v0.49.0
 	golang.org/x/text v0.43.0
