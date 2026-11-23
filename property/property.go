@@ -122,27 +122,33 @@ func Equal[T any](a, b T) bool {
 	if ok, eq := sameColors(a, b); ok {
 		return eq
 	}
-	switch av := any(a).(type) {
-	case float64:
-		bv, ok := any(b).(float64)
-		return ok && sameNumber(float64(av), float64(bv))
-	case float32:
-		bv, ok := any(b).(float32)
-		return ok && sameNumber(float64(av), float64(bv))
-	}
-	if k := t.Kind(); k == reflect.Float64 || k == reflect.Float32 {
-		av, bv := reflect.ValueOf(a).Float(), reflect.ValueOf(b).Float()
-		return sameNumber(av, bv)
-	}
-	if t.Kind() == reflect.Interface {
-		if eq, ok := sameBoxedFloats(any(a), any(b)); ok {
-			return eq
-		}
+	if eq, ok := sameFloats(t, a, b); ok {
+		return eq
 	}
 	if Same(a, b) {
 		return true
 	}
 	return reflect.DeepEqual(a, b)
+}
+
+// sameFloats compares a and b when they are floats, or interfaces holding
+// floats, so that equal NaNs compare equal; it reports whether they are.
+func sameFloats[T any](t reflect.Type, a, b T) (eq, ok bool) {
+	switch av := any(a).(type) {
+	case float64:
+		bv, ok := any(b).(float64)
+		return ok && sameNumber(av, bv), true
+	case float32:
+		bv, ok := any(b).(float32)
+		return ok && sameNumber(float64(av), float64(bv)), true
+	}
+	switch t.Kind() {
+	case reflect.Float64, reflect.Float32:
+		return sameNumber(reflect.ValueOf(a).Float(), reflect.ValueOf(b).Float()), true
+	case reflect.Interface:
+		return sameBoxedFloats(any(a), any(b))
+	}
+	return false, false
 }
 
 // sameBoxedFloats compares a and b when both hold a float of one type; it
