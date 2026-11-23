@@ -116,64 +116,101 @@ func (t *Tree) Run(ctx context.Context, out chan<- []string) error {
 	}
 	defer src.close()
 
-	var roots []string
-	rewatch := func() error {
-		t.mu.Lock()
-		roots = t.roots
-		t.mu.Unlock()
-		if ts, ok := src.(treeSource); ok {
-			return ts.watchTrees(roots, t.o.MaxDirs)
-		}
-		return src.watch(roots)
+	l := &treeLoop{t: t, src: src, pending: map[string]bool{}, timer: time.NewTimer(t.o.Settle)}
+	l.timer.Stop()
+	defer l.timer.Stop()
+	if err := l.rewatch(); err != nil {
+		return err
 	}
-	if err := rewatch(); err != nil {
-		return fmt.Errorf("%w: %w", ErrUnwatched, err)
-	}
-
-	pending := map[string]bool{}
-	var settle <-chan time.Time
-	settleTimer := time.NewTimer(t.o.Settle)
-	settleTimer.Stop()
-	defer settleTimer.Stop()
 	for {
-		var send chan<- []string
-		var batch []string
-		if settle == nil && len(pending) > 0 {
-			send, batch = out, slices.Sorted(maps.Keys(pending))
-		}
+		send, batch := l.sendable(out)
+		var err error
 		select {
 		case <-ctx.Done():
 			return nil
 		case send <- batch:
-			clear(pending)
+			clear(l.pending)
 		case <-t.changed:
-			if err := rewatch(); err != nil {
-				return fmt.Errorf("%w: %w", ErrUnwatched, err)
-			}
+			err = l.rewatch()
 		case <-src.wake():
-			if settle == nil {
-				settleTimer.Reset(t.o.Settle)
-				settle = settleTimer.C
-			}
-		case <-settle:
-			settle = nil
-			paths, all, err := src.take()
-			switch {
-			case err != nil:
-				return fmt.Errorf("%w: %w", ErrUnwatched, err)
-			case all:
-				for _, r := range roots {
-					pending[r] = true
-				}
-			default:
-				for _, p := range paths {
-					if r, ok := t.rootOf(roots, p); ok {
-						pending[r] = true
-					}
-				}
+			l.woken()
+		case <-l.settle:
+			err = l.onSettle()
+		}
+		if err != nil {
+			return err
+		}
+	}
+}
+
+// treeLoop is the state of one [Tree.Run]: the source it follows, the
+// directories of the set it watches, the ones changed and not yet sent,
+// and the settle timer.
+type treeLoop struct {
+	t       *Tree
+	src     source
+	roots   []string
+	pending map[string]bool
+	timer   *time.Timer
+	settle  <-chan time.Time // the timer's channel while it runs, else nil
+}
+
+// rewatch has the source follow the directories Set gave last.
+func (l *treeLoop) rewatch() error {
+	l.t.mu.Lock()
+	l.roots = l.t.roots
+	l.t.mu.Unlock()
+	var err error
+	if ts, ok := l.src.(treeSource); ok {
+		err = ts.watchTrees(l.roots, l.t.o.MaxDirs)
+	} else {
+		err = l.src.watch(l.roots)
+	}
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrUnwatched, err)
+	}
+	return nil
+}
+
+// sendable is the channel and batch to send: what changed and is not sent
+// yet, once the settle time is over, else a nil channel that is never
+// ready.
+func (l *treeLoop) sendable(out chan<- []string) (chan<- []string, []string) {
+	if l.settle != nil || len(l.pending) == 0 {
+		return nil, nil
+	}
+	return out, slices.Sorted(maps.Keys(l.pending))
+}
+
+// woken starts the settle timer, if it does not run: the system reported
+// changes, which are given time to finish landing.
+func (l *treeLoop) woken() {
+	if l.settle == nil {
+		l.timer.Reset(l.t.o.Settle)
+		l.settle = l.timer.C
+	}
+}
+
+// onSettle takes what the system gathered in the settle time and marks the
+// directories of the set that it changed below.
+func (l *treeLoop) onSettle() error {
+	l.settle = nil
+	paths, all, err := l.src.take()
+	switch {
+	case err != nil:
+		return fmt.Errorf("%w: %w", ErrUnwatched, err)
+	case all:
+		for _, r := range l.roots {
+			l.pending[r] = true
+		}
+	default:
+		for _, p := range paths {
+			if r, ok := l.t.rootOf(l.roots, p); ok {
+				l.pending[r] = true
 			}
 		}
 	}
+	return nil
 }
 
 // rootOf is the directory of roots path is below, unless it is ignored,
