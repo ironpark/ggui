@@ -278,7 +278,7 @@ func setLoginFile(path string, data []byte, enabled bool) error {
 		}
 		return nil
 	}
-	return writeFileReplacing(path, data)
+	return replaceFile(path, data, 0o644)
 }
 
 // loginFileExists reports whether the login item at path is there.
@@ -291,34 +291,4 @@ func loginFileExists(path string) (bool, error) {
 		return false, nil
 	}
 	return false, err
-}
-
-// writeFileReplacing writes data to path through a file beside it, renamed
-// over path once complete, so that a reader never sees half of it, and
-// makes the directory if it is missing.
-func writeFileReplacing(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+"-*")
-	if err != nil {
-		return err
-	}
-	_, err = f.Write(data)
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	if err == nil {
-		err = os.Chmod(f.Name(), 0o644)
-	}
-	if err == nil {
-		err = robustio.Rename(f.Name(), path)
-	}
-	if err != nil {
-		if rerr := os.Remove(f.Name()); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
-			err = errors.Join(err, rerr)
-		}
-	}
-	return err
 }
