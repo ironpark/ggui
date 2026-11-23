@@ -96,6 +96,18 @@ func (b PKGBuilder) Build(ctx context.Context, spec installer.Spec) (installer.R
 	if loc == "" {
 		loc = "/Applications"
 	}
+	licPath := spec.License
+	if licPath == "" && spec.LicenseText != "" {
+		tmp, err := os.MkdirTemp("", "ggui-pkg-lic-")
+		if err != nil {
+			return installer.Result{}, err
+		}
+		defer os.RemoveAll(tmp)
+		licPath = filepath.Join(tmp, "LICENSE.txt")
+		if err := os.WriteFile(licPath, []byte(spec.LicenseText), 0o644); err != nil {
+			return installer.Result{}, err
+		}
+	}
 	out := b.OutputPath(spec)
 	err := MakePKG(ctx, PKG{
 		App:             spec.Artifact,
@@ -105,7 +117,7 @@ func (b PKGBuilder) Build(ctx context.Context, spec installer.Spec) (installer.R
 		MinOS:           spec.MacOS.MinOS,
 		InstallLocation: loc,
 		Scripts:         spec.MacOS.Scripts,
-		License:         spec.License,
+		License:         licPath,
 	})
 	if err != nil {
 		return installer.Result{}, err

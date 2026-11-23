@@ -17,6 +17,7 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/config"
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
 	"github.com/ironpark/ggui/cmd/ggui/internal/i18n"
+	"github.com/ironpark/ggui/cmd/ggui/internal/installer"
 	"github.com/ironpark/ggui/cmd/ggui/internal/linux"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 	"github.com/ironpark/ggui/cmd/ggui/internal/svgicon"
@@ -391,12 +392,11 @@ func checkWindowsBuild(r *Report, proj *project.Project) {
 		}
 		manifest = "the manifest " + m
 	}
-	if cfg.MakeWindowsInstaller() {
-		wi := cfg.ResolvedWindowsInstaller()
-		if wi.License != "" {
-			if _, err := os.Stat(proj.Path(wi.License)); err != nil {
-				problems = append(problems, "installer license: "+err.Error())
-			}
+	mainDir := proj.Path(cfg.App.Package)
+	instCand, instExplicit := installer.CandidateDir(proj.Root, mainDir, cfg.Build.Installer)
+	if instExplicit && !installer.IsMainPackageDir(instCand) {
+		if _, err := os.Stat(instCand); err != nil {
+			problems = append(problems, "build.installer: "+err.Error())
 		}
 	}
 	if len(problems) > 0 {
@@ -416,9 +416,12 @@ func checkWindowsBuild(r *Report, proj *project.Project) {
 		icon = "app.icon"
 	}
 	detail := fmt.Sprintf("%s.exe, %s, with %s, version %s and %s", name, link, icon, cfg.App.Version, manifest)
-	if cfg.MakeWindowsInstaller() {
-		wi := cfg.ResolvedWindowsInstaller()
-		detail += fmt.Sprintf("; %s-Setup.exe (%s installer)", name, wi.Scope)
+	if instCand != "" {
+		rel := instCand
+		if r, err := filepath.Rel(proj.Root, instCand); err == nil && filepath.IsLocal(r) {
+			rel = "./" + filepath.ToSlash(r)
+		}
+		detail += fmt.Sprintf("; Go installer %s", rel)
 	}
 	r.ok("Windows build", detail)
 }

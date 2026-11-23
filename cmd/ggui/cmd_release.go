@@ -15,6 +15,7 @@ import (
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/config"
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
+	"github.com/ironpark/ggui/cmd/ggui/internal/installer"
 	"github.com/ironpark/ggui/cmd/ggui/internal/linux"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 	"github.com/ironpark/ggui/cmd/ggui/internal/release"
@@ -41,10 +42,11 @@ them.
 
   macos    Name.dmg when [macos.dmg] asks for one, else a zip of Name.app;
            one universal build when both amd64 and arm64 are built, plus
-           Name.pkg when [installer], [installer.macos] or [macos.pkg] asks
-           for one. Signed and notarized as [macos] says.
+           Name.pkg when a Go installer package (./cmd/installer, ./installer
+           or build.installer) or [macos.pkg] asks for one. Signed and
+           notarized as [macos] says.
   windows  a zip of Name.exe for each architecture, plus Name-Setup.exe
-           when [installer] or [installer.windows] asks for one.
+           when a Go installer package asks for one.
   linux    the tarball and packages linux.formats names, for each
            architecture.
 
@@ -137,8 +139,11 @@ type releasePlan struct {
 	head      string // the commit released, or "" outside git in a dry run
 	dir       string // build/release/VERSION
 	slug      string // the app's name in file names
-	main      *project.Main
-	assets    []release.Asset
+	main         *project.Main
+	instResolved bool
+	instPkg      *installer.Package
+	instDesc     *installer.Description
+	assets       []release.Asset
 	sums      release.Asset
 	cask      string // the cask's path, when one was written
 	caskToken string
@@ -578,6 +583,14 @@ func (p *releasePlan) buildArch(ctx context.Context, work string, ra releaseArch
 		if p.slug == "" {
 			p.slug = linuxPackage(b.main)
 		}
+	}
+	if !p.instResolved && (ra.target == "macos" || ra.target == "windows") {
+		if err := b.resolveInstaller(ctx, ra.target); err != nil {
+			return err
+		}
+		p.instResolved, p.instPkg, p.instDesc = true, b.instPkg, b.instDesc
+	} else if p.instResolved {
+		b.instResolved, b.instPkg, b.instDesc = true, p.instPkg, p.instDesc
 	}
 	build := func() error {
 		switch ra.target {

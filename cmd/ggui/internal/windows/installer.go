@@ -27,10 +27,12 @@ const (
 // SetupBuilder implements installer.Builder for self-contained Windows
 // ggui-based installers (Name-Setup.exe).
 //
-// The installer embeds a ZIP payload via //go:embed and links its own icon,
-// version info, and UAC manifest via a temporary .syso file inside a short-lived
-// package directory in the project's module, so it cross-builds cleanly on any
-// host (macOS, Linux, or Windows) using the project's own ggui dependency.
+// When spec.Package is set, SetupBuilder compiles the user's own Go installer
+// main package, injecting payload.zip via a -overlay init() that calls
+// installer.SetEmbeddedPayload and temporarily placing a .syso resource object
+// (icon, version info, and UAC manifest) beside the package for the link step.
+// When spec.Package is nil, SetupBuilder compiles a built-in default installer
+// inside a short-lived dot-prefixed package directory in the project's module.
 type SetupBuilder struct{}
 
 var _ installer.Builder = SetupBuilder{}
@@ -86,7 +88,7 @@ func (SetupBuilder) Validate(spec installer.Spec) error {
 	default:
 		return fmt.Errorf("windows installer: scope %q must be %q or %q", spec.Windows.Scope, installer.ScopeUser, installer.ScopeMachine)
 	}
-	if spec.License != "" {
+	if spec.License != "" && spec.LicenseText == "" {
 		if _, err := os.Stat(spec.License); err != nil {
 			return fmt.Errorf("installer license %s: %w", spec.License, err)
 		}
@@ -139,8 +141,119 @@ func (b SetupBuilder) Build(ctx context.Context, spec installer.Spec) (installer
 		return installer.Result{}, err
 	}
 
-	// Go reads .syso files and //go:embed files strictly from the package's
-	// directory on disk (ignoring .syso files provided only via -overlay).
+	out := b.OutputPath(spec)
+	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+		return installer.Result{}, err
+	}
+
+	if spec.Package != nil {
+		return b.buildCustomPackage(ctx, spec, gguiMod, payloadZip, obj, warnings, out)
+	}
+	return b.buildDefaultPackage(ctx, spec, gguiMod, payloadZip, obj, warnings, out)
+}
+
+func (b SetupBuilder) buildCustomPackage(ctx context.Context, spec installer.Spec, gguiMod gotool.Module, payloadZip, obj []byte, warnings []string, out string) (installer.Result, error) {
+	// Canonicalize paths so `go build -overlay` keys match the real filesystem
+	// paths Go uses (important on macOS where /var -> /private/var).
+	workDir := canonicalDir(spec.ProjectDir)
+	pkgArg := spec.Package.Arg
+	if spec.Package.Dir != "" {
+		pkgDir := canonicalDir(spec.Package.Dir)
+		if rel, err := filepath.Rel(workDir, pkgDir); err == nil && filepath.IsLocal(rel) {
+			if rel == "." {
+				pkgArg = "."
+			} else {
+				pkgArg = "." + string(filepath.Separator) + rel
+			}
+		} else {
+			pkgArg = pkgDir
+		}
+	}
+
+	mp, err := gotool.Main(ctx, gotool.ListOptions{
+		Dir:    workDir,
+		GOOS:   "windows",
+		GOARCH: spec.Arch,
+	}, pkgArg)
+	if err != nil {
+		return installer.Result{}, fmt.Errorf("windows installer package %s: %w", spec.Package.Arg, err)
+	}
+	pkgDir := canonicalDir(mp.Dir)
+
+	// Link generated resources unless the user's installer package already
+	// provides its own .syso resource section.
+	hasOwnRsrc := false
+	for _, f := range mp.SysoFiles {
+		if f != SysoName(spec.Arch) && HasResources(filepath.Join(pkgDir, f)) {
+			hasOwnRsrc = true
+			break
+		}
+	}
+	if !hasOwnRsrc {
+		_, _, removeSyso, err := Place(pkgDir, spec.Arch, obj)
+		if err != nil {
+			return installer.Result{}, fmt.Errorf("windows installer resources: %w", err)
+		}
+		defer func() { _ = removeSyso() }()
+	}
+
+	tmp, err := os.MkdirTemp("", "ggui-winsetup-overlay-")
+	if err != nil {
+		return installer.Result{}, err
+	}
+	defer os.RemoveAll(tmp)
+
+	genGo := filepath.Join(tmp, "00_ggui_payload_gen.go")
+	genZip := filepath.Join(tmp, "ggui_payload_gen.zip")
+	if err := os.WriteFile(genGo, []byte(overlayPayloadSource), 0o644); err != nil {
+		return installer.Result{}, err
+	}
+	if err := os.WriteFile(genZip, payloadZip, 0o644); err != nil {
+		return installer.Result{}, err
+	}
+
+	overlay, err := json.Marshal(map[string]map[string]string{
+		"Replace": {
+			filepath.Join(pkgDir, "00_ggui_payload_gen.go"): genGo,
+			filepath.Join(pkgDir, "ggui_payload_gen.zip"):   genZip,
+		},
+	})
+	if err != nil {
+		return installer.Result{}, err
+	}
+	ovPath := filepath.Join(tmp, "overlay.json")
+	if err := os.WriteFile(ovPath, overlay, 0o644); err != nil {
+		return installer.Result{}, err
+	}
+
+	bo := gotool.BuildOptions{
+		Dir:      workDir,
+		Package:  pkgArg,
+		Output:   out,
+		GOOS:     "windows",
+		GOARCH:   spec.Arch,
+		Trimpath: true,
+		LDFlags:  "-s -w -H=windowsgui",
+		Mod:      "readonly",
+		Overlay:  ovPath,
+		TmpDir:   tmp,
+		Env:      []string{"CGO_ENABLED=0"},
+	}
+	if spec.Logf != nil {
+		spec.Logf("%s", bo)
+	}
+	if err := gotool.Build(ctx, bo); err != nil {
+		var be *gotool.BuildError
+		if errors.As(err, &be) && ctx.Err() == nil {
+			return installer.Result{}, setupBuildFailure(gguiMod, string(be.Output))
+		}
+		return installer.Result{}, err
+	}
+	return installer.Result{Path: out, Warnings: warnings}, nil
+}
+
+func (b SetupBuilder) buildDefaultPackage(ctx context.Context, spec installer.Spec, gguiMod gotool.Module, payloadZip, obj []byte, warnings []string, out string) (installer.Result, error) {
+	// Go reads .syso files strictly from the package's directory on disk.
 	// Create a short-lived dot-prefixed package directory inside the project
 	// module so Go resolves github.com/ironpark/ggui/installer from go.mod
 	// while ignoring the directory in ./... pattern walks.
@@ -160,10 +273,6 @@ func (b SetupBuilder) Build(ctx context.Context, spec installer.Spec) (installer
 		return installer.Result{}, err
 	}
 
-	out := b.OutputPath(spec)
-	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
-		return installer.Result{}, err
-	}
 	bo := gotool.BuildOptions{
 		Dir:      spec.ProjectDir,
 		Package:  "." + string(filepath.Separator) + filepath.Base(pkgDir),
@@ -188,6 +297,17 @@ func (b SetupBuilder) Build(ctx context.Context, spec installer.Spec) (installer
 	return installer.Result{Path: out, Warnings: warnings}, nil
 }
 
+func canonicalDir(dir string) string {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return dir
+	}
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		return real
+	}
+	return abs
+}
+
 const setupMainSource = `// Code generated by ggui build for the Windows installer. DO NOT EDIT.
 
 package main
@@ -202,7 +322,25 @@ import (
 var payload []byte
 
 func main() {
-	installer.Main(payload)
+	installer.Main(&installer.App{Payload: payload})
+}
+`
+
+const overlayPayloadSource = `// Code generated by ggui build for the Windows installer. DO NOT EDIT.
+
+package main
+
+import (
+	_ "embed"
+
+	"github.com/ironpark/ggui/installer"
+)
+
+//go:embed ggui_payload_gen.zip
+var gguiEmbeddedPayload []byte
+
+func init() {
+	installer.SetEmbeddedPayload(gguiEmbeddedPayload)
 }
 `
 
@@ -228,8 +366,8 @@ type payloadMetadata struct {
 var payloadZipTime = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 
 func buildPayloadZip(spec installer.Spec, scope string) ([]byte, error) {
-	var licenseText string
-	if spec.License != "" {
+	licenseText := spec.LicenseText
+	if licenseText == "" && spec.License != "" {
 		raw, err := os.ReadFile(spec.License)
 		if err != nil {
 			return nil, fmt.Errorf("reading installer license %s: %w", spec.License, err)

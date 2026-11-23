@@ -47,11 +47,16 @@ func TestBuildInstallerFlagsValidation(t *testing.T) {
 	if code := run([]string{"build", dir, "--target", "macos", "--installer", "--pkg=false"}, &stdout, &stderr); code == 0 || !strings.Contains(stderr.String(), "disagree") {
 		t.Errorf("conflicting --installer and --pkg: exit %d, stderr=%s", code, stderr.String())
 	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"build", dir, "--target", "windows", "--installer=false", "--installer-pkg", "./cmd/installer"}, &stdout, &stderr); code == 0 || !strings.Contains(stderr.String(), "disagree") {
+		t.Errorf("conflicting --installer=false and --installer-pkg: exit %d, stderr=%s", code, stderr.String())
+	}
 }
 
-func TestBuildUnifiedInstallersEndToEnd(t *testing.T) {
+func TestBuildGoCodeInstallersEndToEnd(t *testing.T) {
 	if testing.Short() {
-		t.Skip("cross-compiles ggui apps and installers")
+		t.Skip("cross-compiles ggui apps and Go-authored installers")
 	}
 	root, err := filepath.Abs("../..")
 	if err != nil {
@@ -75,8 +80,8 @@ func TestBuildUnifiedInstallersEndToEnd(t *testing.T) {
 	data = bytes.Replace(data, []byte(`# company = ""`), []byte(`company = "Example Ltd"`), 1)
 	os.WriteFile(tomlPath, data, 0o644)
 
-	// 1. Windows per-user installer via --installer flag (no [installer] table).
-	t.Run("windows user installer via flag", func(t *testing.T) {
+	// 1. Zero-code Windows per-user installer via --installer flag (no Go installer package).
+	t.Run("zero-code windows user installer via flag", func(t *testing.T) {
 		out := t.TempDir()
 		var stdout, stderr bytes.Buffer
 		saved := reportOut
@@ -113,17 +118,55 @@ func TestBuildUnifiedInstallersEndToEnd(t *testing.T) {
 		}
 	})
 
-	// 2. Unified [installer] with shared license + machine scope on Windows + macOS .pkg.
-	os.WriteFile(tomlPath, append(data, []byte(`
-[installer]
-license = "LICENSE.txt"
+	// 2. Add a user-authored Go installer package at ./cmd/installer — zero TOML config!
+	//    Defines machine UAC scope, inline license, custom step marker string,
+	//    AfterInstall hook, and macOS .pkg settings all in Go code.
+	instDir := filepath.Join(dir, "cmd", "installer")
+	if err := os.MkdirAll(instDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const customStepMarker = "CUSTOM_GO_INSTALLER_STEP_MARKER_777"
+	instMain := `package main
 
-[installer.windows]
-scope = "machine"
-desktop_shortcut = true
-`)...), 0o644)
+import (
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/installer"
+	"github.com/ironpark/ggui/ui"
+)
 
-	t.Run("windows machine scope from config and --installer=false override", func(t *testing.T) {
+func main() {
+	installer.Main(&installer.App{
+		License: "MIT License — Defined In Go\n",
+		Windows: installer.WindowsConfig{
+			Scope:           installer.ScopeMachine,
+			DesktopShortcut: installer.Bool(true),
+		},
+		MacOS: installer.MacOSConfig{
+			InstallLocation: "/Applications",
+		},
+		Steps: []installer.Step{
+			installer.LicenseStep(),
+			installer.LocationStep(),
+			installer.CustomStep("opts", "` + customStepMarker + `", func(ctx *installer.Context) ggui.Widget {
+				return ui.Checkbox(ctx.Bool("add_path", true), "Add to PATH")
+			}),
+			installer.ProgressStep(),
+			installer.FinishStep(),
+		},
+		AfterInstall: func(ctx *installer.Context) error {
+			if ctx.GetBool("add_path") {
+				return ctx.AddToUserPath(ctx.Dir())
+			}
+			return nil
+		},
+	})
+}
+`
+	if err := os.WriteFile(filepath.Join(instDir, "main.go"), []byte(instMain), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("auto-discovered Go installer: windows machine scope, overlay embed, and --installer=false override", func(t *testing.T) {
 		out := t.TempDir()
 		var stdout, stderr bytes.Buffer
 		if code := run([]string{"build", dir, "--target", "windows", "--out", out}, &stdout, &stderr); code != 0 {
@@ -133,12 +176,26 @@ desktop_shortcut = true
 		if !bytes.Contains(appInfo.rsrc, []byte(`level="asInvoker"`)) {
 			t.Error("app executable should remain asInvoker")
 		}
-		setupInfo := readExe(t, filepath.Join(out, "Hello World-Setup.exe"))
+		setupPath := filepath.Join(out, "Hello World-Setup.exe")
+		setupInfo := readExe(t, setupPath)
 		if !bytes.Contains(setupInfo.rsrc, []byte(`level="requireAdministrator"`)) {
-			t.Error("machine-scope setup manifest should request requireAdministrator")
+			t.Error("machine-scope setup manifest from Go code should request requireAdministrator")
+		}
+		setupBytes, err := os.ReadFile(setupPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Contains(setupBytes, []byte(customStepMarker)) {
+			t.Error("Hello World-Setup.exe does not contain custom Go installer code")
+		}
+		if !bytes.Contains(setupBytes, []byte("files/Hello World.exe")) {
+			t.Error("Hello World-Setup.exe does not contain overlay-embedded files/Hello World.exe")
+		}
+		if left := sysos(t, instDir); len(left) != 0 {
+			t.Errorf("leftover .syso in user installer dir: %v", left)
 		}
 
-		// --installer=false skips Name-Setup.exe even when [installer] is configured.
+		// --installer=false skips Name-Setup.exe even when ./cmd/installer exists.
 		outSkip := t.TempDir()
 		stdout.Reset()
 		stderr.Reset()
@@ -150,7 +207,7 @@ desktop_shortcut = true
 		}
 	})
 
-	t.Run("macos pkg from unified [installer] config", func(t *testing.T) {
+	t.Run("auto-discovered Go installer produces macos pkg", func(t *testing.T) {
 		out := t.TempDir()
 		var stdout, stderr bytes.Buffer
 		if code := run([]string{"build", dir, "--target", "macos", "--out", out}, &stdout, &stderr); code != 0 {
@@ -158,11 +215,11 @@ desktop_shortcut = true
 		}
 		pkgPath := filepath.Join(out, "Hello World.pkg")
 		if fi, err := os.Stat(pkgPath); err != nil || fi.Size() == 0 {
-			t.Fatalf("unified [installer] did not produce %s: %v", pkgPath, err)
+			t.Fatalf("Go installer package did not produce %s: %v", pkgPath, err)
 		}
 	})
 
-	t.Run("windows zig renderer bundles ggfx_driver.dll into setup", func(t *testing.T) {
+	t.Run("windows zig renderer bundles ggfx_driver.dll into custom Go setup", func(t *testing.T) {
 		out := t.TempDir()
 		var stdout, stderr bytes.Buffer
 		if code := run([]string{"build", dir, "--target", "windows", "--renderer", "zig", "--out", out}, &stdout, &stderr); code != 0 {
@@ -182,7 +239,7 @@ desktop_shortcut = true
 		}
 	})
 
-	t.Run("release dry-run includes windows setup exe", func(t *testing.T) {
+	t.Run("release dry-run includes Go-authored windows setup exe", func(t *testing.T) {
 		out := t.TempDir()
 		var stdout, stderr bytes.Buffer
 		if code := run([]string{"release", dir, "--targets", "windows", "--arches", "amd64", "--publish", "none", "--dry-run", "--out", out}, &stdout, &stderr); code != 0 {

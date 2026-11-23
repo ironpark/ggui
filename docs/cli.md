@@ -463,8 +463,8 @@ on standard output, for scripts.
 
 | Target | Writes |
 | --- | --- |
-| `macos` | `Name.app`: the program in `Contents/MacOS`, `Info.plist` from `[app]` and `[macos]`, and `Contents/Resources/AppIcon.icns` made from `app.icon`, signed with `macos.signing_identity`. With `--dmg` or `[macos.dmg]` also `Name.dmg`, and with `--installer`, `--pkg`, `[installer]`, `[installer.macos]` or `[macos.pkg]` the installer `Name.pkg`; with `--notarize` each is notarized and stapled. See [Shipping to other Macs](#shipping-to-other-macs). |
-| `windows` | `Name.exe`, for the go command's `GOARCH`: `amd64`, `arm64` or `386`. Its icon is made from `app.icon`, its version information from `[app]` and `[windows]`, and it has a manifest; it is a GUI program, which opens no console. With `--installer`, `[installer]` or `[installer.windows]` also `Name-Setup.exe`, a self-contained ggui-based installer and uninstaller. See [The Windows program](#the-windows-program). |
+| `macos` | `Name.app`: the program in `Contents/MacOS`, `Info.plist` from `[app]` and `[macos]`, and `Contents/Resources/AppIcon.icns` made from `app.icon`, signed with `macos.signing_identity`. With `--dmg` or `[macos.dmg]` also `Name.dmg`, and with `--installer`, `--pkg`, a Go installer package (`./cmd/installer`, `./installer`, or `build.installer`), or `[macos.pkg]` the installer `Name.pkg`; with `--notarize` each is notarized and stapled. See [Shipping to other Macs](#shipping-to-other-macs) and [Writing an installer in Go](installer.md). |
+| `windows` | `Name.exe`, for the go command's `GOARCH`: `amd64`, `arm64` or `386`. Its icon is made from `app.icon`, its version information from `[app]` and `[windows]`, and it has a manifest; it is a GUI program, which opens no console. With `--installer` or a Go installer package (`./cmd/installer`, `./installer`, or `build.installer`) also `Name-Setup.exe`, a self-contained ggui-based installer and uninstaller. See [The Windows program](#the-windows-program) and [Writing an installer in Go](installer.md). |
 | `linux` | `name-linux-arch/`, an install tree laid out as under `/`: the program in `usr/bin`, built for the go command's `GOARCH` (`amd64`, `arm64` or `riscv64`) without cgo, a desktop entry, the icon from `app.icon` in the hicolor sizes, and AppStream metadata. Beside it what `--format` or `linux.formats` asks for: `name-version-linux-arch.tar.gz` (the default), a `.deb` and an `.rpm`. See [The Linux packages](#the-linux-packages). |
 | `web` | A directory, `build/web/` by default, for any static host: `index.html`, `main.wasm` and the Go toolchain's `wasm_exec.js`, each beside a gzipped `.gz` copy. |
 | `native` | The program, for the `GOOS` and `GOARCH` the go command builds for, as `go build` makes it: on Windows without an icon or manifest, and opening a console. |
@@ -480,8 +480,9 @@ on standard output, for scripts.
 | `--p12-file file`, `--p12-password-file file` | Sign with this PKCS#12 certificate and its password, replacing `macos.p12_file` and `macos.p12_password_file`. |
 | `--notarize` | Notarize and staple, replacing `macos.notarize`; `--notarize=false` turns it off. |
 | `--notary-profile name`, `--api-key-file file`, `--apple-id id`, `--team-id id` | Notarize with these credentials, replacing those in `[macos.notary]`. |
-| `--dmg`, `--pkg` | Also make the macOS disk image or installer; `--dmg=false` and `--pkg=false` skip the one `[macos.dmg]` or `[macos.pkg]` / `[installer]` asks for. |
-| `--installer` | Also make a platform installer (`Name.pkg` on macOS, `Name-Setup.exe` on Windows); `--installer=false` skips what `[installer]`, `[installer.macos]`, `[installer.windows]` or `[macos.pkg]` asks for. |
+| `--dmg`, `--pkg` | Also make the macOS disk image or installer; `--dmg=false` and `--pkg=false` skip the one `[macos.dmg]`, `[macos.pkg]` or a Go installer package asks for. |
+| `--installer` | Also make a platform installer (`Name.pkg` on macOS, `Name-Setup.exe` on Windows); `--installer=false` skips any Go installer package or `[macos.pkg]`. |
+| `--installer-pkg pkg` | Go main package defining the installer with `github.com/ironpark/ggui/installer`, replacing `build.installer` and auto-discovery (`./cmd/installer` or `./installer`). |
 | `--tags a,b` | Build tags, replacing `build.tags`. |
 | `--renderer go\|zig` | Graphics driver implementation: `go` (default pure-Go driver) or `zig` (native Metal/Direct3D 12/Vulkan driver), replacing `build.renderer`. For `macos`, `windows` and `linux` targets, `ggui` builds with `ggfxzig,ggfxnoembed` and bundles the platform's prebuilt shared library from `github.com/ironpark/ggfx` (`Contents/Frameworks/libggfx_driver.dylib`, `ggfx_driver.dll` beside `Name.exe`, or `usr/lib/<pkg>/libggfx_driver.so`); for `native` it embeds the library with `ggfxzig`. |
 | `--ldflags flags` | Linker flags after `-s -w`, replacing `build.ldflags`. |
@@ -607,10 +608,11 @@ ggui build --identity "Developer ID Application" --notarize --notary-profile ggu
    a 640×480 Finder window unless `[macos.dmg]` lays it out otherwise,
    with the app's icon as the volume's. It is made in Go, without
    `hdiutil`, and signed and notarized as the app is.
-4. **Installer.** `--installer`, `--pkg`, or an `[installer]` / `[installer.macos]` / `[macos.pkg]` table, makes `Name.pkg`,
+4. **Installer.** `--installer`, `--pkg`, a Go installer package (`./cmd/installer`,
+   `./installer`, or `build.installer`), or a `[macos.pkg]` table makes `Name.pkg`,
    which installs the app into `/Applications`. An installer is signed
    with a Developer ID *Installer* identity, a certificate of its own:
-   the keychain's or the `.p12`'s, or `installer.macos.signing_identity`
+   the keychain's or the `.p12`'s, or `MacOS.SigningIdentity` in Go
    (`macos.pkg.signing_identity`). With ad hoc signing it is left unsigned.
 5. **Verifying.** A build signed with an identity ends by checking what
    it made: the bundle, the signature, Developer ID, timestamp, hardened
@@ -751,31 +753,37 @@ has one resource section; ggui says so and adds none.
 
 #### Windows installer (`Name-Setup.exe`)
 
-With `--installer`, `[installer]`, or `[installer.windows]`, `ggui build --target windows`
-also builds `Name-Setup.exe` beside `Name.exe` — a single self-contained,
-ggui-based setup wizard and uninstaller cross-compiled from any host (macOS,
-Linux, or Windows) with no external tools (no Inno Setup, NSIS, or WiX).
+With `--installer` or a Go installer package (`./cmd/installer`, `./installer`,
+`build.installer`, or `--installer-pkg`), `ggui build --target windows` also
+builds `Name-Setup.exe` beside `Name.exe` — a single self-contained, ggui-based
+setup wizard and uninstaller cross-compiled from any host (macOS, Linux, or
+Windows) with no external tools (no Inno Setup, NSIS, or WiX). See
+[Writing an installer in Go](installer.md) for custom steps, themes, lifecycle
+hooks, macOS `.pkg` options, and `ggui dev` live preview.
 
 ```sh
 GOARCH=amd64 ggui build --target windows --installer
 ```
 
 `Name-Setup.exe` embeds `Name.exe` (and `ggfx_driver.dll` when `build.renderer = "zig"`)
-along with the app's icon and metadata via `//go:embed`, carries its own Windows
-icon, `"Name Setup"` version info, and UAC manifest (`asInvoker` for per-user
-installs or `requireAdministrator` for `scope = "machine"`), and requires no
-extra third-party dependencies in `go.mod`.
+along with the app's icon and metadata via `//go:embed` (injected into your Go
+installer package with `-overlay`), carries its own Windows icon, `"Name Setup"`
+version info, and UAC manifest (`asInvoker` for per-user installs or
+`requireAdministrator` for `installer.ScopeMachine`), and requires no extra
+third-party dependencies in `go.mod`.
 
-- **Install scopes.** Default `scope = "user"` installs to
+- **Install scopes.** Default `installer.ScopeUser` installs to
   `%LOCALAPPDATA%\Programs\<Name>` without a UAC prompt and registers under
   `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\<app.id>`. Setting
-  `scope = "machine"` requests elevation (`requireAdministrator`), installs to
-  `%ProgramFiles%\<Name>`, and registers under `HKLM`.
-- **Setup wizard.** Optional scrollable license agreement (`installer.license`
-  or `installer.windows.license`), folder picker (`Browse…`), Start Menu and
-  Desktop `.lnk` shortcuts, automatic upgrade detection (pre-filling the
-  existing `InstallLocation`), progress bar, and optional "Launch `<Name>`"
-  on completion.
+  `WindowsConfig{Scope: installer.ScopeMachine}` requests elevation
+  (`requireAdministrator`), installs to `%ProgramFiles%\<Name>`, and registers
+  under `HKLM`.
+- **Setup wizard.** Built-in steps for scrollable license agreement, folder
+  picker (`Browse…`), Start Menu and Desktop `.lnk` shortcuts, automatic
+  upgrade detection, progress bar, and optional "Launch `<Name>`" on completion
+  — extensible with `installer.CustomStep`, lifecycle hooks (`BeforeInstall`,
+  `AfterInstall`, `BeforeUninstall`, `AfterUninstall`), or a full custom
+  `BuildUI`.
 - **Uninstaller.** Copies itself as `<InstallDir>\Uninstall.exe` and writes
   `install-manifest.json`. Running it from Windows **Settings → Apps →
   Installed apps** (or `Uninstall.exe --uninstall`) relaunches from `%TEMP%` so
@@ -870,8 +878,8 @@ credentials each channel needs and a GitHub Actions workflow.
 
 | Target | Files, for each architecture |
 | --- | --- |
-| `macos` | `name-VERSION-macos-ARCH.dmg` when `[macos.dmg]` asks for a disk image, else `name-VERSION-macos-ARCH.zip` of `Name.app`, as `ditto -c -k --keepParent` lays it out, links and modes kept; `.pkg` too when `[installer]`, `[installer.macos]` or `[macos.pkg]` asks (on macOS). Builds one `universal` binary on any host when both `amd64` and `arm64` are in `arches` (joined in pure Go), signed and notarized as `[macos]` specifies (Apple's tools on macOS, or `rcodesign` on Linux and Windows builds that link it). |
-| `windows` | `name-VERSION-windows-ARCH.zip`, holding `Name.exe` (and `ggfx_driver.dll` when `build.renderer = "zig"`), plus `name-VERSION-windows-ARCH-setup.exe` when `[installer]` or `[installer.windows]` asks for one: `amd64`, `arm64` and `386`. |
+| `macos` | `name-VERSION-macos-ARCH.dmg` when `[macos.dmg]` asks for a disk image, else `name-VERSION-macos-ARCH.zip` of `Name.app`, as `ditto -c -k --keepParent` lays it out, links and modes kept; `.pkg` too when a Go installer package (`./cmd/installer`, `./installer`, or `build.installer`) or `[macos.pkg]` asks (on macOS). Builds one `universal` binary on any host when both `amd64` and `arm64` are in `arches` (joined in pure Go), signed and notarized as `[macos]` specifies (Apple's tools on macOS, or `rcodesign` on Linux and Windows builds that link it). |
+| `windows` | `name-VERSION-windows-ARCH.zip`, holding `Name.exe` (and `ggfx_driver.dll` when `build.renderer = "zig"`), plus `name-VERSION-windows-ARCH-setup.exe` when a Go installer package asks for one: `amd64`, `arm64` and `386`. |
 | `linux` | What `linux.formats` names: the tarball, `.deb` and `.rpm`: `amd64`, `arm64` and `riscv64`. |
 
 `name` is `app.name` lowercased, with hyphens between words. An
@@ -1193,6 +1201,7 @@ base = "/hello/"
 | `ldflags` | `""` | Linker flags added after `-s -w`. |
 | `output` | `"build"` | The directory `ggui build` writes to. |
 | `renderer` | `"go"` | Graphics driver implementation: `"go"` (default pure-Go driver) or `"zig"` (native Zig driver: Metal on macOS, Direct3D 12 on Windows, Vulkan on Linux; requires `ggfx v0.1.0` or later). Release builds bundle the shared library with `ggfxzig,ggfxnoembed` (macOS `Contents/Frameworks/libggfx_driver.dylib`, Windows `ggfx_driver.dll` beside `Name.exe`, Linux `usr/lib/<pkg>/libggfx_driver.so` plus `libvulkan1`/`vulkan-loader` in default package deps); `dev`, `record` and `native` builds embed it with `ggfxzig`, and `ggui dev` builds `ggviewer` with `ggfxzig` too. Same as `--renderer`. |
+| `installer` | auto (`./cmd/installer` or `./installer`) | Go main package defining the application's installer with `github.com/ironpark/ggui/installer`. Leave empty to auto-discover `./cmd/installer` or `./installer` when present as a main package. Same as `--installer-pkg`. See [Writing an installer in Go](installer.md). |
 
 ### [dev]
 
@@ -1350,43 +1359,3 @@ What [`ggui release`](#ggui-release) builds and where it publishes it; see
 | `summary` | `linux.description` | `summary`. |
 | `description` | `summary` | `description`, Markdown. |
 | `source` | `"https://push.chocolatey.org/"` | The feed pushed to; the package goes to `api/v2/package` below it. |
-
-### [installer]
-
-Shared installer settings for both macOS (`Name.pkg`) and Windows
-(`Name-Setup.exe`). Adding `[installer]` enables installers on both targets;
-adding only `[installer.macos]` or `[installer.windows]` enables that target
-alone. `--installer` makes one without the table, `--installer=false` skips it.
-
-| Key | Default | Use |
-| --- | --- | --- |
-| `license` | none | Plain-text license file shown and accepted during installation on both macOS and Windows. |
-
-### [installer.macos]
-
-macOS `.pkg` installer options. Legacy `[macos.pkg]` remains supported and
-takes precedence when both are set.
-
-| Key | Default | Use |
-| --- | --- | --- |
-| `enabled` | `true` when `[installer]` or `[installer.macos]` is present | Set `false` to opt macOS out when `[installer]` is used. |
-| `signing_identity` | the Developer ID Installer identity | The identity the `.pkg` is signed with. |
-| `install_location` | `"/Applications"` | Where the app is installed. |
-| `scripts` | none | A directory with `preinstall` and `postinstall` scripts. |
-| `license` | `installer.license` | Plain-text license shown by the macOS installer. |
-
-### [installer.windows]
-
-Windows ggui-based `Name-Setup.exe` options; see [Windows installer](#windows-installer-name-setupexe).
-
-| Key | Default | Use |
-| --- | --- | --- |
-| `enabled` | `true` when `[installer]` or `[installer.windows]` is present | Set `false` to opt Windows out when `[installer]` is used. |
-| `scope` | `"user"` | `"user"` (`%LOCALAPPDATA%\Programs\Name`, no UAC) or `"machine"` (`%ProgramFiles%\Name`, UAC `requireAdministrator`). |
-| `install_location` | scope default | Default install folder; may contain `%LOCALAPPDATA%` or `%ProgramFiles%`. |
-| `license` | `installer.license` | Plain-text license file shown before installation. |
-| `publisher` | `windows.company` | Publisher recorded in Windows Add/Remove Programs. |
-| `url` | `linux.homepage` | Info URL (`URLInfoAbout`) recorded in Add/Remove Programs. |
-| `start_menu_shortcut` | `true` | Create a Start Menu shortcut by default. |
-| `desktop_shortcut` | `false` | Create a Desktop shortcut by default. |
-| `launch_after` | `true` | Offer to launch the app on the final wizard step. |

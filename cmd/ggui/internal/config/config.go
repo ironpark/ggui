@@ -31,148 +31,15 @@ const FileName = "ggui.toml"
 // Config is the whole file. Paths in it are relative to the directory the
 // file is in, which Project resolves.
 type Config struct {
-	App       App       `toml:"app"`
-	Build     Build     `toml:"build"`
-	Dev       Dev       `toml:"dev"`
-	MacOS     MacOS     `toml:"macos"`
-	Windows   Windows   `toml:"windows"`
-	Linux     Linux     `toml:"linux"`
-	Web       Web       `toml:"web"`
-	I18n      I18n      `toml:"i18n"`
-	Release   Release   `toml:"release"`
-	Installer Installer `toml:"installer"`
-}
-
-// Values installer.windows.scope accepts.
-const (
-	InstallerScopeUser    = "user"
-	InstallerScopeMachine = "machine"
-)
-
-// Installer configures platform installers shared across macOS (.pkg) and
-// Windows (Name-Setup.exe). Adding [installer] enables installers on both
-// targets; adding only [installer.macos] or [installer.windows] enables that
-// target alone. Each platform table can also set enabled = false to opt out.
-type Installer struct {
-	// Make is whether the file explicitly declares [installer] (bare or
-	// with top-level keys such as license).
-	Make bool `toml:"-"`
-	// License is a plain-text license file shown and accepted during
-	// installation on both macOS and Windows.
-	License string           `toml:"license"`
-	MacOS   InstallerMacOS   `toml:"macos"`
-	Windows InstallerWindows `toml:"windows"`
-}
-
-// InstallerMacOS configures macOS .pkg installers under [installer.macos].
-// Keys in the legacy [macos.pkg] table remain supported and take precedence
-// when both are set.
-type InstallerMacOS struct {
-	Make            bool   `toml:"-"`
-	Enabled         *bool  `toml:"enabled"`
-	SigningIdentity string `toml:"signing_identity"`
-	InstallLocation string `toml:"install_location"`
-	Scripts         string `toml:"scripts"`
-	License         string `toml:"license"`
-}
-
-// InstallerWindows configures ggui-based Windows Setup.exe installers under
-// [installer.windows].
-type InstallerWindows struct {
-	Make    bool  `toml:"-"`
-	Enabled *bool `toml:"enabled"`
-	// Scope is "user" (%LOCALAPPDATA%\Programs\<Name>, no UAC prompt) or
-	// "machine" (%ProgramFiles%\<Name>, requires administrator elevation).
-	Scope string `toml:"scope"`
-	// InstallLocation overrides the default install directory (may contain
-	// Windows environment variables like %LOCALAPPDATA% or %ProgramFiles%).
-	InstallLocation string `toml:"install_location"`
-	// License overrides installer.license for Windows.
-	License string `toml:"license"`
-	// Publisher is recorded in Add/Remove Programs; empty falls back to
-	// windows.company.
-	Publisher string `toml:"publisher"`
-	// URL is recorded as URLInfoAbout in Add/Remove Programs; empty falls
-	// back to linux.homepage.
-	URL               string `toml:"url"`
-	StartMenuShortcut bool   `toml:"start_menu_shortcut"`
-	DesktopShortcut   bool   `toml:"desktop_shortcut"`
-	LaunchAfter       bool   `toml:"launch_after"`
-}
-
-// MakeMacOSInstaller reports whether ggui.toml asks for Name.pkg on macOS
-// builds (via [installer], [installer.macos], or legacy [macos.pkg]).
-func (c Config) MakeMacOSInstaller() bool {
-	if c.Installer.MacOS.Enabled != nil {
-		return *c.Installer.MacOS.Enabled
-	}
-	return c.MacOS.PKG.Make || c.Installer.MacOS.Make || c.Installer.Make
-}
-
-// MakeWindowsInstaller reports whether ggui.toml asks for Name-Setup.exe on
-// Windows builds (via [installer] or [installer.windows]).
-func (c Config) MakeWindowsInstaller() bool {
-	if c.Installer.Windows.Enabled != nil {
-		return *c.Installer.Windows.Enabled
-	}
-	return c.Installer.Windows.Make || c.Installer.Make
-}
-
-// ResolvedMacOSPKG merges [installer], [installer.macos] and legacy
-// [macos.pkg], with [macos.pkg] taking highest precedence when set.
-func (c Config) ResolvedMacOSPKG() PKG {
-	out := PKG{
-		Make:            c.MakeMacOSInstaller(),
-		InstallLocation: "/Applications",
-		License:         c.Installer.License,
-	}
-	im := c.Installer.MacOS
-	if im.SigningIdentity != "" {
-		out.SigningIdentity = im.SigningIdentity
-	}
-	if im.InstallLocation != "" {
-		out.InstallLocation = im.InstallLocation
-	}
-	if im.Scripts != "" {
-		out.Scripts = im.Scripts
-	}
-	if im.License != "" {
-		out.License = im.License
-	}
-	p := c.MacOS.PKG
-	if p.SigningIdentity != "" {
-		out.SigningIdentity = p.SigningIdentity
-	}
-	if p.InstallLocationSet && p.InstallLocation != "" {
-		out.InstallLocation = p.InstallLocation
-	}
-	if p.Scripts != "" {
-		out.Scripts = p.Scripts
-	}
-	if p.License != "" {
-		out.License = p.License
-	}
-	return out
-}
-
-// ResolvedWindowsInstaller returns [installer.windows] with fallbacks applied
-// from [installer], [windows], and [linux].
-func (c Config) ResolvedWindowsInstaller() InstallerWindows {
-	out := c.Installer.Windows
-	out.Make = c.MakeWindowsInstaller()
-	if out.Scope == "" {
-		out.Scope = InstallerScopeUser
-	}
-	if out.License == "" {
-		out.License = c.Installer.License
-	}
-	if out.Publisher == "" {
-		out.Publisher = c.Windows.Company
-	}
-	if out.URL == "" {
-		out.URL = c.Linux.Homepage
-	}
-	return out
+	App     App     `toml:"app"`
+	Build   Build   `toml:"build"`
+	Dev     Dev     `toml:"dev"`
+	MacOS   MacOS   `toml:"macos"`
+	Windows Windows `toml:"windows"`
+	Linux   Linux   `toml:"linux"`
+	Web     Web     `toml:"web"`
+	I18n    I18n    `toml:"i18n"`
+	Release Release `toml:"release"`
 }
 
 // Release is what ggui release builds and where it publishes it.
@@ -267,6 +134,11 @@ type Build struct {
 	// (default pure-Go driver) or "zig" (Zig native driver: Metal on macOS,
 	// Direct3D 12 on Windows, Vulkan on Linux).
 	Renderer string `toml:"renderer"`
+	// Installer names the Go main package that defines the application's
+	// installer using github.com/ironpark/ggui/installer (for example
+	// "./cmd/installer"). Empty auto-discovers ./cmd/installer or
+	// ./installer when present as a main package.
+	Installer string `toml:"installer"`
 }
 
 // Values build.renderer accepts.
@@ -374,10 +246,6 @@ type Window struct {
 type PKG struct {
 	// Make is whether the file has a [macos.pkg] table.
 	Make bool `toml:"-"`
-	// InstallLocationSet records whether macos.pkg.install_location was
-	// explicitly set in the file, so [installer.macos].install_location is
-	// not masked by the default.
-	InstallLocationSet bool `toml:"-"`
 	// SigningIdentity names the installer identity; empty is the
 	// keychain's or the certificate's Developer ID Installer.
 	SigningIdentity string `toml:"signing_identity"`
@@ -522,13 +390,6 @@ func Defaults() Config {
 			Publish:    []string{"github"},
 			Chocolatey: Chocolatey{Source: "https://push.chocolatey.org/"},
 		},
-		Installer: Installer{
-			Windows: InstallerWindows{
-				Scope:             InstallerScopeUser,
-				StartMenuShortcut: true,
-				LaunchAfter:       true,
-			},
-		},
 	}
 }
 
@@ -624,11 +485,6 @@ func Parse(name string, data []byte) (Config, error) {
 	// A table asks for what it describes even when it sets nothing.
 	cfg.MacOS.DMG.Make = md.IsDefined("macos", "dmg")
 	cfg.MacOS.PKG.Make = md.IsDefined("macos", "pkg")
-	cfg.MacOS.PKG.InstallLocationSet = md.IsDefined("macos", "pkg", "install_location")
-	cfg.Installer.MacOS.Make = md.IsDefined("installer", "macos")
-	cfg.Installer.Windows.Make = md.IsDefined("installer", "windows")
-	cfg.Installer.Make = md.IsDefined("installer", "license") ||
-		(md.IsDefined("installer") && !cfg.Installer.MacOS.Make && !cfg.Installer.Windows.Make)
 
 	var errs Errors
 	for _, k := range undecoded(md) {

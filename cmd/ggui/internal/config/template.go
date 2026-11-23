@@ -49,6 +49,11 @@ version = {{.Version}}
 # Linux). Release bundles ship the shared library beside the app; dev,
 # native and record builds embed it. Same as --renderer.
 # renderer = "go"
+# Go main package defining the application's installer with
+# github.com/ironpark/ggui/installer (for example "./cmd/installer").
+# Empty auto-discovers ./cmd/installer or ./installer when present as a
+# main package. Same as --installer-pkg.
+# installer = ""
 
 [dev]
 # Build tags for ggui dev. ggui_inspector puts the widget inspector in the
@@ -290,43 +295,6 @@ version = {{.Version}}
 # description = ""
 # The feed pushed to.
 # source = "https://push.chocolatey.org/"
-
-# Platform installers built beside the app: Name.pkg on macOS and the
-# ggui-based Name-Setup.exe on Windows. Adding [installer] enables both;
-# adding only [installer.macos] or [installer.windows] enables that
-# target alone. --installer makes one without the table, --installer=false
-# skips it.
-# [installer]
-# A plain-text license file shown and accepted during installation.
-# license = ""
-
-# macOS .pkg installer options (keys in [macos.pkg] also work and take
-# precedence when set).
-# [installer.macos]
-# enabled = true
-# signing_identity = ""
-# install_location = "/Applications"
-# scripts = ""
-# license = ""
-
-# Windows Name-Setup.exe (ggui-based setup wizard and uninstaller) options.
-# [installer.windows]
-# enabled = true
-# "user" (%LOCALAPPDATA%\Programs\Name, no UAC prompt) or "machine"
-# (%ProgramFiles%\Name, asks for administrator elevation).
-# scope = "user"
-# Default install folder; may use %LOCALAPPDATA% or %ProgramFiles%.
-# install_location = ""
-# Plain-text license file, overriding installer.license.
-# license = ""
-# Publisher in Add/Remove Programs. Default: windows.company.
-# publisher = ""
-# Info URL in Add/Remove Programs. Default: linux.homepage.
-# url = ""
-# start_menu_shortcut = true
-# desktop_shortcut = false
-# Offer to launch the app on the final wizard step.
-# launch_after = true
 `))
 
 // Template returns the commented file ggui init writes.

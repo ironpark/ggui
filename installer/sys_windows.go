@@ -156,6 +156,349 @@ func (windowsBackend) DeleteUninstallEntry(meta Metadata) error {
 	return err
 }
 
+func envKeyRootAndPath(scope string) (registry.Key, string) {
+	if normalizeEnvScope(scope) == ScopeMachine {
+		return registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Control\Session Manager\Environment`
+	}
+	return registry.CURRENT_USER, `Environment`
+}
+
+func (windowsBackend) GetEnv(scope, name string) (string, bool, error) {
+	n, err := validateEnvName(name)
+	if err != nil {
+		return "", false, err
+	}
+	root, path := envKeyRootAndPath(scope)
+	k, err := registry.OpenKey(root, path, registry.QUERY_VALUE)
+	if errors.Is(err, registry.ErrNotExist) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("opening environment key: %w", err)
+	}
+	defer k.Close()
+	val, _, err := k.GetStringValue(n)
+	if errors.Is(err, registry.ErrNotExist) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("reading environment variable %s: %w", n, err)
+	}
+	return val, true, nil
+}
+
+func (windowsBackend) SetEnv(scope, name, value string) error {
+	n, err := validateEnvName(name)
+	if err != nil {
+		return err
+	}
+	root, path := envKeyRootAndPath(scope)
+	k, _, err := registry.CreateKey(root, path, registry.SET_VALUE)
+	if err != nil {
+		return fmt.Errorf("opening environment key: %w", err)
+	}
+	defer k.Close()
+	if strings.Contains(value, "%") {
+		err = k.SetExpandStringValue(n, value)
+	} else {
+		err = k.SetStringValue(n, value)
+	}
+	if err != nil {
+		return fmt.Errorf("writing environment variable %s: %w", n, err)
+	}
+	broadcastEnvironmentChange()
+	return nil
+}
+
+func (windowsBackend) DeleteEnv(scope, name string) error {
+	n, err := validateEnvName(name)
+	if err != nil {
+		return err
+	}
+	root, path := envKeyRootAndPath(scope)
+	k, err := registry.OpenKey(root, path, registry.SET_VALUE)
+	if errors.Is(err, registry.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("opening environment key: %w", err)
+	}
+	defer k.Close()
+	err = k.DeleteValue(n)
+	if errors.Is(err, registry.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("deleting environment variable %s: %w", n, err)
+	}
+	broadcastEnvironmentChange()
+	return nil
+}
+
+func (windowsBackend) AddToPath(scope, dir string) error {
+	return updateWindowsPath(scope, dir, true)
+}
+
+func (windowsBackend) RemoveFromPath(scope, dir string) error {
+	return updateWindowsPath(scope, dir, false)
+}
+
+func updateWindowsPath(scope, dir string, add bool) error {
+	root, path := envKeyRootAndPath(scope)
+	k, _, err := registry.CreateKey(root, path, registry.QUERY_VALUE|registry.SET_VALUE)
+	if err != nil {
+		return fmt.Errorf("opening %s: %w", path, err)
+	}
+	defer k.Close()
+
+	cur, _, err := k.GetStringValue("Path")
+	if err != nil && !errors.Is(err, registry.ErrNotExist) {
+		return fmt.Errorf("reading Path: %w", err)
+	}
+	next, changed := modifyPathList(cur, dir, add)
+	if !changed {
+		return nil
+	}
+	if err := k.SetExpandStringValue("Path", next); err != nil {
+		return fmt.Errorf("writing Path: %w", err)
+	}
+	broadcastEnvironmentChange()
+	return nil
+}
+
+func registryRootKey(root RegistryRoot) (registry.Key, error) {
+	nr, err := normalizeRegistryRoot(root)
+	if err != nil {
+		return 0, err
+	}
+	switch nr {
+	case RegistryHKCU:
+		return registry.CURRENT_USER, nil
+	case RegistryHKLM:
+		return registry.LOCAL_MACHINE, nil
+	case RegistryHKCR:
+		return registry.CLASSES_ROOT, nil
+	default:
+		return 0, fmt.Errorf("installer: unsupported registry root %q", root)
+	}
+}
+
+func (windowsBackend) RegistryKeyExists(root RegistryRoot, keyPath string) (bool, error) {
+	r, err := registryRootKey(root)
+	if err != nil {
+		return false, err
+	}
+	kp, err := normalizeRegistryKey(keyPath)
+	if err != nil {
+		return false, err
+	}
+	k, err := registry.OpenKey(r, kp, registry.QUERY_VALUE)
+	if errors.Is(err, registry.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	k.Close()
+	return true, nil
+}
+
+func (windowsBackend) GetRegistryValue(root RegistryRoot, keyPath, name string) (RegistryValue, bool, error) {
+	r, err := registryRootKey(root)
+	if err != nil {
+		return RegistryValue{}, false, err
+	}
+	kp, err := normalizeRegistryKey(keyPath)
+	if err != nil {
+		return RegistryValue{}, false, err
+	}
+	k, err := registry.OpenKey(r, kp, registry.QUERY_VALUE)
+	if errors.Is(err, registry.ErrNotExist) {
+		return RegistryValue{}, false, nil
+	}
+	if err != nil {
+		return RegistryValue{}, false, fmt.Errorf("opening registry key %s\\%s: %w", root, kp, err)
+	}
+	defer k.Close()
+
+	_, valType, err := k.GetValue(name, nil)
+	if errors.Is(err, registry.ErrNotExist) {
+		return RegistryValue{}, false, nil
+	}
+	if err != nil && !errors.Is(err, registry.ErrShortBuffer) {
+		return RegistryValue{}, false, fmt.Errorf("reading registry value %s\\%s\\%s: %w", root, kp, name, err)
+	}
+
+	switch valType {
+	case registry.SZ:
+		s, _, err := k.GetStringValue(name)
+		return RegistryValue{Type: RegSZ, String: s}, err == nil, err
+	case registry.EXPAND_SZ:
+		s, _, err := k.GetStringValue(name)
+		return RegistryValue{Type: RegExpandSZ, String: s}, err == nil, err
+	case registry.DWORD:
+		v, _, err := k.GetIntegerValue(name)
+		return RegistryValue{Type: RegDWORD, DWORD: uint32(v)}, err == nil, err
+	case registry.QWORD:
+		v, _, err := k.GetIntegerValue(name)
+		return RegistryValue{Type: RegQWORD, QWORD: v}, err == nil, err
+	case registry.BINARY:
+		b, _, err := k.GetBinaryValue(name)
+		return RegistryValue{Type: RegBinary, Binary: b}, err == nil, err
+	case registry.MULTI_SZ:
+		ss, _, err := k.GetStringsValue(name)
+		return RegistryValue{Type: RegMultiSZ, Multi: ss}, err == nil, err
+	default:
+		b, _, err := k.GetBinaryValue(name)
+		return RegistryValue{Type: RegBinary, Binary: b}, err == nil, err
+	}
+}
+
+func (windowsBackend) SetRegistryValue(root RegistryRoot, keyPath, name string, val RegistryValue) error {
+	r, err := registryRootKey(root)
+	if err != nil {
+		return err
+	}
+	kp, err := normalizeRegistryKey(keyPath)
+	if err != nil {
+		return err
+	}
+	v, err := normalizeRegistryValue(val)
+	if err != nil {
+		return err
+	}
+	k, _, err := registry.CreateKey(r, kp, registry.SET_VALUE)
+	if err != nil {
+		return fmt.Errorf("creating registry key %s\\%s: %w", root, kp, err)
+	}
+	defer k.Close()
+
+	switch v.Type {
+	case RegSZ:
+		err = k.SetStringValue(name, v.String)
+	case RegExpandSZ:
+		err = k.SetExpandStringValue(name, v.String)
+	case RegDWORD:
+		err = k.SetDWordValue(name, v.DWORD)
+	case RegQWORD:
+		err = k.SetQWordValue(name, v.QWORD)
+	case RegBinary:
+		err = k.SetBinaryValue(name, v.Binary)
+	case RegMultiSZ:
+		err = k.SetStringsValue(name, v.Multi)
+	}
+	if err != nil {
+		return fmt.Errorf("writing registry value %s\\%s\\%s: %w", root, kp, name, err)
+	}
+	return nil
+}
+
+func (windowsBackend) DeleteRegistryValue(root RegistryRoot, keyPath, name string) error {
+	r, err := registryRootKey(root)
+	if err != nil {
+		return err
+	}
+	kp, err := normalizeRegistryKey(keyPath)
+	if err != nil {
+		return err
+	}
+	k, err := registry.OpenKey(r, kp, registry.SET_VALUE)
+	if errors.Is(err, registry.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("opening registry key %s\\%s: %w", root, kp, err)
+	}
+	defer k.Close()
+	err = k.DeleteValue(name)
+	if errors.Is(err, registry.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
+func (windowsBackend) DeleteRegistryKey(root RegistryRoot, keyPath string, onlyIfEmpty bool) error {
+	r, err := registryRootKey(root)
+	if err != nil {
+		return err
+	}
+	kp, err := normalizeRegistryKey(keyPath)
+	if err != nil {
+		return err
+	}
+	if onlyIfEmpty {
+		k, err := registry.OpenKey(r, kp, registry.QUERY_VALUE)
+		if errors.Is(err, registry.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		ki, statErr := k.Stat()
+		k.Close()
+		if statErr != nil {
+			return statErr
+		}
+		if ki.ValueCount > 0 || ki.SubKeyCount > 0 {
+			return nil
+		}
+		err = registry.DeleteKey(r, kp)
+		if errors.Is(err, registry.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	return deleteRegistryTree(r, kp)
+}
+
+func deleteRegistryTree(r registry.Key, kp string) error {
+	k, err := registry.OpenKey(r, kp, registry.ENUMERATE_SUB_KEYS)
+	if errors.Is(err, registry.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	subs, readErr := k.ReadSubKeyNames(0)
+	k.Close()
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
+		return readErr
+	}
+	for _, sub := range subs {
+		if err := deleteRegistryTree(r, kp+`\`+sub); err != nil {
+			return err
+		}
+	}
+	err = registry.DeleteKey(r, kp)
+	if errors.Is(err, registry.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
+func broadcastEnvironmentChange() {
+	envPtr, err := windows.UTF16PtrFromString("Environment")
+	if err != nil {
+		return
+	}
+	const (
+		hwndBroadcast     = 0xFFFF
+		wmSettingChange   = 0x001A
+		smtoAbortIfHung   = 0x0002
+		broadcastTimeoutM = 1000
+	)
+	var result uintptr
+	procSendMessageTimeoutW.Call(
+		hwndBroadcast,
+		wmSettingChange,
+		0,
+		uintptr(unsafe.Pointer(envPtr)),
+		smtoAbortIfHung,
+		broadcastTimeoutM,
+		uintptr(unsafe.Pointer(&result)),
+	)
+}
+
 func (windowsBackend) Launch(exePath string) error {
 	cmd := exec.Command(exePath)
 	cmd.Dir = filepath.Dir(exePath)
@@ -247,12 +590,14 @@ func (windowsBackend) RemoveShortcut(lnkPath string) error {
 }
 
 var (
-	modOle32           = windows.NewLazySystemDLL("ole32.dll")
-	procCoInitializeEx = modOle32.NewProc("CoInitializeEx")
-	procCoUninitialize = modOle32.NewProc("CoUninitialize")
-	procCoCreateInst   = modOle32.NewProc("CoCreateInstance")
-	modShell32         = windows.NewLazySystemDLL("shell32.dll")
-	procSHChangeNotify = modShell32.NewProc("SHChangeNotify")
+	modOle32                = windows.NewLazySystemDLL("ole32.dll")
+	procCoInitializeEx      = modOle32.NewProc("CoInitializeEx")
+	procCoUninitialize      = modOle32.NewProc("CoUninitialize")
+	procCoCreateInst        = modOle32.NewProc("CoCreateInstance")
+	modShell32              = windows.NewLazySystemDLL("shell32.dll")
+	procSHChangeNotify      = modShell32.NewProc("SHChangeNotify")
+	modUser32               = windows.NewLazySystemDLL("user32.dll")
+	procSendMessageTimeoutW = modUser32.NewProc("SendMessageTimeoutW")
 )
 
 const (

@@ -72,6 +72,7 @@ from the repository root unless a guide says otherwise.
 | Translate the words controls show and say, such as "Close" and "No results" | [Localization](accessibility.md#localization) |
 | Translate an app's own text, with plurals, dates and numbers | [Translating an app](i18n.md) |
 | Create an app, run live rebuilds, bundle for macOS, Windows, Linux (`.tar.gz`, `.deb`, `.rpm`) or web, check translations, record GIFs, or inspect machine setup | [The ggui command](cli.md) |
+| Write a custom Windows/macOS installer in Go with custom steps, hooks, and live preview | [Writing an installer in Go](installer.md) |
 | Package and install apps on Linux (`.deb`, `.rpm`, tarball, runtime libraries) | [Linux](linux.md) |
 | Publish an app to GitHub, Homebrew and Chocolatey | [Releasing an app](releasing.md) |
 

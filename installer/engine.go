@@ -26,14 +26,35 @@ type InstallOptions struct {
 	DesktopShortcut   bool
 }
 
-// InstallManifest records the exact files and shortcuts placed by Install so
-// Uninstall removes only what belongs to this application.
+// InstallManifest records the exact files, shortcuts, environment variables,
+// PATH entries, and Windows Registry values placed by Install so Uninstall
+// removes only what belongs to this application.
 type InstallManifest struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	Version   string   `json:"version"`
-	Files     []string `json:"files"`
-	Shortcuts []string `json:"shortcuts,omitempty"`
+	ID        string                  `json:"id"`
+	Name      string                  `json:"name"`
+	Version   string                  `json:"version"`
+	Files     []string                `json:"files"`
+	Shortcuts []string                `json:"shortcuts,omitempty"`
+	Env       []ManifestEnvEntry      `json:"env,omitempty"`
+	Path      []ManifestPathEntry     `json:"path,omitempty"`
+	Registry  []ManifestRegistryEntry `json:"registry,omitempty"`
+}
+
+// installTx tracks active installation/uninstallation state so hook helpers
+// on Context (WriteFile, TrackFile, TrackShortcut, CreateShortcut, SetEnv,
+// AddToPath, SetRegistry*, ReportProgress) participate in atomic rollback and
+// manifest recording.
+type installTx struct {
+	absDir           string
+	backend          Backend
+	report           func(float64, string)
+	installedRel     *[]string
+	createdFiles     *[]string
+	createdShortcuts *[]string
+	envEntries       *[]ManifestEnvEntry
+	pathEntries      *[]ManifestPathEntry
+	regEntries       *[]ManifestRegistryEntry
+	rollbackFns      *[]func()
 }
 
 // Install extracts payload into opts.InstallDir, copies the running installer
@@ -41,6 +62,10 @@ type InstallManifest struct {
 // manifest, and registers the Windows Uninstall entry. If extraction fails
 // partway through, newly written files are rolled back cleanly.
 func Install(ctx context.Context, payload *Payload, opts InstallOptions, b Backend, onProgress func(Progress)) error {
+	return install(ctx, payload, opts, b, nil, onProgress)
+}
+
+func install(ctx context.Context, payload *Payload, opts InstallOptions, b Backend, ic *Context, onProgress func(Progress)) error {
 	if payload == nil {
 		return errors.New("installer: nil payload")
 	}
@@ -67,7 +92,15 @@ func Install(ctx context.Context, payload *Payload, opts InstallOptions, b Backe
 
 	var createdFiles []string
 	var createdShortcuts []string
+	var installedRel []string
+	var envEntries []ManifestEnvEntry
+	var pathEntries []ManifestPathEntry
+	var regEntries []ManifestRegistryEntry
+	var rollbackFns []func()
 	rollback := func() {
+		for i := len(rollbackFns) - 1; i >= 0; i-- {
+			rollbackFns[i]()
+		}
 		for _, s := range createdShortcuts {
 			_ = b.RemoveShortcut(s)
 		}
@@ -76,9 +109,47 @@ func Install(ctx context.Context, payload *Payload, opts InstallOptions, b Backe
 		}
 	}
 
-	report(0.05, "Preparing installation…")
+	if ic != nil {
+		ic.beginTx(&installTx{
+			absDir:           absDir,
+			backend:          b,
+			report:           report,
+			installedRel:     &installedRel,
+			createdFiles:     &createdFiles,
+			createdShortcuts: &createdShortcuts,
+			envEntries:       &envEntries,
+			pathEntries:      &pathEntries,
+			regEntries:       &regEntries,
+			rollbackFns:      &rollbackFns,
+		})
+		defer ic.endTx()
+	}
 
-	var installedRel []string
+	previewPause := func() error {
+		if ic == nil || !ic.isPreview || ic.post == nil {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(60 * time.Millisecond):
+			return nil
+		}
+	}
+
+	report(0.05, "Preparing installation…")
+	if err := previewPause(); err != nil {
+		rollback()
+		return err
+	}
+
+	if ic != nil && ic.app != nil && ic.app.BeforeInstall != nil {
+		if err := ic.app.BeforeInstall(ic); err != nil {
+			rollback()
+			return err
+		}
+	}
+
 	var writtenBytes int64
 	totalBytes := max(payload.TotalBytes, 1)
 
@@ -92,7 +163,7 @@ func Install(ctx context.Context, payload *Payload, opts InstallOptions, b Backe
 			rollback()
 			return fmt.Errorf("file %q escapes install directory", f.RelPath)
 		}
-		report(0.05+0.75*float64(writtenBytes)/float64(totalBytes), "Installing "+f.RelPath+"…")
+		report(0.05+0.70*float64(writtenBytes)/float64(totalBytes), "Installing "+f.RelPath+"…")
 		existed := fileExists(dst)
 		if err := writeFileAtomic(dst, f.Data, 0o755); err != nil {
 			rollback()
@@ -101,15 +172,19 @@ func Install(ctx context.Context, payload *Payload, opts InstallOptions, b Backe
 		if !existed {
 			createdFiles = append(createdFiles, dst)
 		}
-		installedRel = append(installedRel, f.RelPath)
+		installedRel = appendUnique(installedRel, f.RelPath)
 		writtenBytes += int64(len(f.Data))
+		if err := previewPause(); err != nil {
+			rollback()
+			return err
+		}
 	}
 
 	// Copy this installer binary as Uninstall.exe inside the install directory.
 	uninstallDst := filepath.Join(absDir, uninstallerExe)
 	var uninstallBytes int64
 	if selfExe, err := b.SelfExe(); err == nil && selfExe != "" && !samePath(selfExe, uninstallDst) {
-		report(0.84, "Writing uninstaller…")
+		report(0.80, "Writing uninstaller…")
 		existed := fileExists(uninstallDst)
 		n, err := copyFileAtomic(selfExe, uninstallDst, 0o755)
 		if err != nil {
@@ -120,7 +195,7 @@ func Install(ctx context.Context, payload *Payload, opts InstallOptions, b Backe
 			createdFiles = append(createdFiles, uninstallDst)
 		}
 		uninstallBytes = n
-		installedRel = append(installedRel, uninstallerExe)
+		installedRel = appendUnique(installedRel, uninstallerExe)
 	}
 
 	exePath := filepath.Join(absDir, filepath.FromSlash(payload.Meta.Executable))
@@ -129,7 +204,11 @@ func Install(ctx context.Context, payload *Payload, opts InstallOptions, b Backe
 		desc = payload.Meta.Name
 	}
 
-	report(0.90, "Creating shortcuts…")
+	report(0.85, "Creating shortcuts…")
+	if err := previewPause(); err != nil {
+		rollback()
+		return err
+	}
 	if opts.StartMenuShortcut {
 		if dir := b.StartMenuDir(payload.Meta.NormalizedScope()); dir != "" {
 			lnk := filepath.Join(dir, payload.Meta.Name+".lnk")
@@ -137,7 +216,7 @@ func Install(ctx context.Context, payload *Payload, opts InstallOptions, b Backe
 				rollback()
 				return fmt.Errorf("creating Start Menu shortcut: %w", err)
 			}
-			createdShortcuts = append(createdShortcuts, lnk)
+			createdShortcuts = appendUnique(createdShortcuts, lnk)
 		}
 	}
 	if opts.DesktopShortcut {
@@ -147,17 +226,38 @@ func Install(ctx context.Context, payload *Payload, opts InstallOptions, b Backe
 				rollback()
 				return fmt.Errorf("creating Desktop shortcut: %w", err)
 			}
-			createdShortcuts = append(createdShortcuts, lnk)
+			createdShortcuts = appendUnique(createdShortcuts, lnk)
 		}
 	}
 
-	// Persist manifest so Uninstall removes only files/shortcuts we placed.
+	// Apply declarative WindowsConfig PATH, environment variables, and registry entries.
+	if ic != nil && ic.app != nil {
+		if err := applyDeclarativeWindowsConfig(ic, payload.Meta, absDir, exePath); err != nil {
+			rollback()
+			return err
+		}
+	}
+
+	if ic != nil && ic.app != nil && ic.app.AfterInstall != nil {
+		report(0.90, "Running post-install tasks…")
+		if err := ic.app.AfterInstall(ic); err != nil {
+			rollback()
+			return err
+		}
+	}
+
+	// Persist manifest after declarative settings and AfterInstall so extra
+	// files, shortcuts, env vars, PATH entries, and registry entries are
+	// recorded for clean Uninstall.
 	mf := InstallManifest{
 		ID:        payload.Meta.ID,
 		Name:      payload.Meta.Name,
 		Version:   payload.Meta.Version,
 		Files:     installedRel,
 		Shortcuts: createdShortcuts,
+		Env:       envEntries,
+		Path:      pathEntries,
+		Registry:  regEntries,
 	}
 	mfBytes, err := json.MarshalIndent(mf, "", "  ")
 	if err != nil {
@@ -172,6 +272,10 @@ func Install(ctx context.Context, payload *Payload, opts InstallOptions, b Backe
 	createdFiles = append(createdFiles, mfPath)
 
 	report(0.95, "Registering application…")
+	if err := previewPause(); err != nil {
+		rollback()
+		return err
+	}
 	sizeKB := uint32((payload.TotalBytes + uninstallBytes + int64(len(mfBytes)) + 1023) / 1024)
 	if sizeKB == 0 {
 		sizeKB = 1
@@ -200,6 +304,10 @@ func Install(ctx context.Context, payload *Payload, opts InstallOptions, b Backe
 // directories, and deletes the Windows Uninstall registry entry. Unrelated
 // user files inside installDir are preserved.
 func Uninstall(ctx context.Context, meta Metadata, installDir string, b Backend, onProgress func(Progress)) error {
+	return uninstall(ctx, meta, installDir, b, nil, onProgress)
+}
+
+func uninstall(ctx context.Context, meta Metadata, installDir string, b Backend, ic *Context, onProgress func(Progress)) error {
 	if b == nil {
 		b = defaultBackend()
 	}
@@ -212,6 +320,15 @@ func Uninstall(ctx context.Context, meta Metadata, installDir string, b Backend,
 	absDir, err := filepath.Abs(strings.TrimSpace(installDir))
 	if err != nil {
 		return fmt.Errorf("invalid install directory %q: %w", installDir, err)
+	}
+
+	if ic != nil {
+		ic.beginTx(&installTx{
+			absDir:  absDir,
+			backend: b,
+			report:  report,
+		})
+		defer ic.endTx()
 	}
 
 	report(0.1, "Reading install manifest…")
@@ -230,6 +347,13 @@ func Uninstall(ctx context.Context, meta Metadata, installDir string, b Backend,
 		}
 		if d := b.DesktopDir(scope); d != "" {
 			mf.Shortcuts = append(mf.Shortcuts, filepath.Join(d, meta.Name+".lnk"))
+		}
+	}
+
+	if ic != nil && ic.app != nil && ic.app.BeforeUninstall != nil {
+		report(0.18, "Running pre-uninstall tasks…")
+		if err := ic.app.BeforeUninstall(ic); err != nil {
+			return err
 		}
 	}
 
@@ -276,14 +400,76 @@ func Uninstall(ctx context.Context, meta Metadata, installDir string, b Backend,
 	}
 	_ = os.Remove(absDir)
 
+	report(0.86, "Removing environment and registry entries…")
+	for i := len(mf.Path) - 1; i >= 0; i-- {
+		_ = b.RemoveFromPath(mf.Path[i].Scope, mf.Path[i].Dir)
+	}
+	for i := len(mf.Env) - 1; i >= 0; i-- {
+		_ = b.DeleteEnv(mf.Env[i].Scope, mf.Env[i].Name)
+	}
+	for i := len(mf.Registry) - 1; i >= 0; i-- {
+		re := mf.Registry[i]
+		_ = b.DeleteRegistryValue(re.Root, re.Key, re.Name)
+		if re.DeleteKey {
+			_ = b.DeleteRegistryKey(re.Root, re.Key, true)
+		}
+	}
+
 	report(0.90, "Removing registration…")
 	if err := b.DeleteUninstallEntry(meta); err != nil {
 		return err
 	}
 	b.NotifyShell()
 
+	if ic != nil && ic.app != nil && ic.app.AfterUninstall != nil {
+		report(0.95, "Finalizing uninstall…")
+		if err := ic.app.AfterUninstall(ic); err != nil {
+			return err
+		}
+	}
+
 	report(1.0, "Uninstall complete.")
 	return nil
+}
+
+func applyDeclarativeWindowsConfig(ic *Context, meta Metadata, absDir, exePath string) error {
+	wc := ic.app.Windows
+	if wc.AddToPath {
+		if err := ic.AddToPath(absDir); err != nil {
+			return err
+		}
+	}
+	if len(wc.Env) > 0 {
+		keys := make([]string, 0, len(wc.Env))
+		for k := range wc.Env {
+			keys = append(keys, k)
+		}
+		slices.Sort(keys)
+		for _, k := range keys {
+			val := expandInstallTokens(wc.Env[k], meta, absDir, exePath)
+			if err := ic.SetEnv(k, val); err != nil {
+				return err
+			}
+		}
+	}
+	for _, entry := range wc.Registry {
+		root := entry.Root
+		if root == "" {
+			root = defaultRegistryRoot(meta.NormalizedScope())
+		}
+		val := expandRegistryValue(entry.Value, meta, absDir, exePath)
+		if err := ic.SetRegistryValue(root, entry.Key, entry.Name, val); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func appendUnique(list []string, v string) []string {
+	if slices.Contains(list, v) {
+		return list
+	}
+	return append(list, v)
 }
 
 func isSubpath(root, target string) bool {

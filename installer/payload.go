@@ -1,11 +1,15 @@
-// Package installer implements a self-contained, ggui-based Windows installer
-// and uninstaller built by `ggui build --target windows --installer`.
+// Package installer implements a self-contained, ggui-based installer and
+// uninstaller written in Go and packaged by `ggui build --installer` and
+// `ggui release`.
 //
-// An installer binary embeds a ZIP payload (payload.zip) containing metadata
-// (meta.json), an optional PNG icon (icon.png), and the application files under
-// files/. Running the binary opens a ggui setup wizard (or installs headlessly
-// with --silent / /S), installs the application, registers shortcuts and a
-// Windows Add/Remove Programs entry, and copies itself as Uninstall.exe.
+// Create a main package (by convention ./cmd/installer or ./installer) and call
+// installer.Main(&installer.App{...}). During `ggui build` and `ggui release`,
+// ggui queries the package's build-time specification via GGUI_INSTALLER_DESCRIBE
+// (Windows UAC scope, macOS .pkg options, license, shortcuts) and, on Windows,
+// cross-compiles your package into Name-Setup.exe with the built application
+// embedded automatically via -overlay. Running the same package with
+// `ggui dev ./cmd/installer` opens an interactive preview in a safe sandbox so
+// you can design and test custom wizard steps with hot reload.
 package installer
 
 import (

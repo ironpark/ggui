@@ -1,6 +1,6 @@
-// Package installer defines the shared interface and specification for
-// platform installers built by ggui build (macOS .pkg and Windows
-// Name-Setup.exe).
+// Package installer defines the shared interface, discovery, Go-code
+// description protocol, and specification for platform installers built by
+// ggui build and ggui release (macOS .pkg and Windows Name-Setup.exe).
 package installer
 
 import "context"
@@ -26,12 +26,17 @@ type Spec struct {
 	ExtraFiles []string // additional files shipped beside Artifact (e.g. ggfx_driver.dll)
 	OutDir     string   // directory where the installer file is written
 
+	// Package is the user's Go main package defining the installer with
+	// github.com/ironpark/ggui/installer, or nil for the built-in default.
+	Package *Package
+
 	Description string // short description
 	Publisher   string // publisher / company name
 	Copyright   string // copyright notice
 	Homepage    string // project URL
 	Icon        string // resolved PNG icon path, or ""
 	License     string // resolved path to a plain-text license file, or ""
+	LicenseText string // inline plain-text license copy (takes precedence over License)
 
 	MacOS   MacOSOptions
 	Windows WindowsOptions

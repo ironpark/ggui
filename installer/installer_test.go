@@ -2,6 +2,8 @@ package installer
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"image"
 	"image/color"
 	"image/png"
@@ -14,9 +16,12 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/runtime"
+	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 type fakeBackend struct {
+	*PreviewBackend
 	defaultDir    string
 	existingDir   string
 	existingVer   string
@@ -37,12 +42,15 @@ func newFakeBackend(t *testing.T) *fakeBackend {
 	if err := os.WriteFile(self, []byte("fake-setup-exe"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	pb := NewPreviewBackend()
+	t.Cleanup(func() { _ = pb.Close() })
 	return &fakeBackend{
-		defaultDir:   filepath.Join(root, "Programs", "Hello"),
-		startMenuDir: filepath.Join(root, "StartMenu"),
-		desktopDir:   filepath.Join(root, "Desktop"),
-		selfExe:      self,
-		shortcuts:    map[string]string{},
+		PreviewBackend: pb,
+		defaultDir:     filepath.Join(root, "Programs", "Hello"),
+		startMenuDir:   filepath.Join(root, "StartMenu"),
+		desktopDir:     filepath.Join(root, "Desktop"),
+		selfExe:        self,
+		shortcuts:      map[string]string{},
 	}
 }
 
@@ -207,37 +215,176 @@ func TestInstallAndUninstallEngine(t *testing.T) {
 	}
 }
 
-func TestSilentRunInstallAndUninstall(t *testing.T) {
+func TestSilentRunInstallAndUninstallWithHooks(t *testing.T) {
 	fb := newFakeBackend(t)
 	raw := testPayloadBytes(t, "MIT")
 	dir := filepath.Join(t.TempDir(), "MyHello")
-	if err := runWithBackend(raw, []string{"--silent", "--dir", dir}, fb); err != nil {
+
+	var events []string
+	app := &App{
+		Payload: raw,
+		BeforeInstall: func(ctx *Context) error {
+			events = append(events, "before-install:"+ctx.Dir())
+			return nil
+		},
+		AfterInstall: func(ctx *Context) error {
+			events = append(events, "after-install")
+			if err := ctx.WriteFile("conf/defaults.json", []byte(`{"ok":true}`), 0o644); err != nil {
+				return err
+			}
+			return ctx.AddToUserPath(ctx.Dir())
+		},
+		BeforeUninstall: func(ctx *Context) error {
+			events = append(events, "before-uninstall")
+			return ctx.RemoveFromUserPath(ctx.Dir())
+		},
+		AfterUninstall: func(ctx *Context) error {
+			events = append(events, "after-uninstall")
+			return nil
+		},
+	}
+
+	if err := runWithBackend(app, []string{"--silent", "--dir", dir}, fb); err != nil {
 		t.Fatalf("silent install failed: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "Hello.exe")); err != nil {
-		t.Fatalf("silent install did not extract Hello.exe: %v", err)
+	for _, rel := range []string{"Hello.exe", "conf/defaults.json"} {
+		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("silent install missing %s: %v", rel, err)
+		}
 	}
-	if err := runWithBackend(raw, []string{"--uninstall", "--silent", "--dir", dir}, fb); err != nil {
+	if !slices.Contains(fb.PathDirs(ScopeUser), dir) {
+		t.Fatalf("AddToUserPath did not record %s: %v", dir, fb.PathDirs(ScopeUser))
+	}
+
+	if err := runWithBackend(app, []string{"--uninstall", "--silent", "--dir", dir}, fb); err != nil {
 		t.Fatalf("silent uninstall failed: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "Hello.exe")); !os.IsNotExist(err) {
-		t.Fatalf("silent uninstall left Hello.exe behind")
+	for _, rel := range []string{"Hello.exe", "conf/defaults.json"} {
+		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(rel))); !os.IsNotExist(err) {
+			t.Fatalf("silent uninstall left %s behind", rel)
+		}
+	}
+	if len(fb.PathDirs(ScopeUser)) != 0 {
+		t.Fatalf("RemoveFromUserPath left entries: %v", fb.PathDirs(ScopeUser))
+	}
+	wantEvents := []string{"before-install:" + dir, "after-install", "before-uninstall", "after-uninstall"}
+	if !slices.Equal(events, wantEvents) {
+		t.Errorf("hook events = %v, want %v", events, wantEvents)
+	}
+}
+
+func TestAfterInstallErrorRollsBack(t *testing.T) {
+	fb := newFakeBackend(t)
+	raw := testPayloadBytes(t, "")
+	dir := filepath.Join(t.TempDir(), "RollbackTest")
+	app := &App{
+		Payload: raw,
+		AfterInstall: func(ctx *Context) error {
+			if err := ctx.WriteFile("extra.txt", []byte("temp"), 0o644); err != nil {
+				return err
+			}
+			return errors.New("post-install boom")
+		},
+	}
+	err := runWithBackend(app, []string{"--silent", "--dir", dir}, fb)
+	if err == nil || !strings.Contains(err.Error(), "post-install boom") {
+		t.Fatalf("expected post-install error, got %v", err)
+	}
+	for _, name := range []string{"Hello.exe", "extra.txt", manifestName} {
+		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+			t.Errorf("rollback left %s behind", name)
+		}
+	}
+	if len(fb.shortcuts) != 0 || fb.regEntry != nil {
+		t.Errorf("rollback left shortcuts=%v reg=%v", fb.shortcuts, fb.regEntry)
+	}
+}
+
+func TestDescribeProtocol(t *testing.T) {
+	outPath := filepath.Join(t.TempDir(), "describe.json")
+	t.Setenv(DescribeEnv, outPath)
+
+	app := &App{
+		Name:        "Acme",
+		License:     "Apache 2.0",
+		Publisher:   "Acme Corp",
+		Homepage:    "https://acme.example",
+		Windows: WindowsConfig{
+			Scope:             ScopeMachine,
+			InstallDir:        `%ProgramFiles%\Acme`,
+			DesktopShortcut:   Bool(true),
+			LaunchAfter:       Bool(false),
+			StartMenuShortcut: Bool(true),
+		},
+		MacOS: MacOSConfig{
+			SigningIdentity: "Developer ID Installer: Acme",
+			InstallLocation: "/Applications/Acme",
+			Scripts:         "scripts/pkg",
+		},
+	}
+	if err := Run(app, nil); err != nil {
+		t.Fatalf("Run with DescribeEnv failed: %v", err)
+	}
+	raw, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var desc Description
+	if err := json.Unmarshal(raw, &desc); err != nil {
+		t.Fatal(err)
+	}
+	if desc.V != describeProtocol || desc.Name != "Acme" || desc.License != "Apache 2.0" {
+		t.Fatalf("unexpected top-level description: %+v", desc)
+	}
+	if !desc.Windows.Enabled || desc.Windows.Scope != ScopeMachine || desc.Windows.Publisher != "Acme Corp" ||
+		desc.Windows.URL != "https://acme.example" || !desc.Windows.StartMenuShortcut || !desc.Windows.DesktopShortcut || desc.Windows.LaunchAfter {
+		t.Fatalf("unexpected windows description: %+v", desc.Windows)
+	}
+	if !desc.MacOS.Enabled || desc.MacOS.SigningIdentity != "Developer ID Installer: Acme" ||
+		desc.MacOS.InstallLocation != "/Applications/Acme" || desc.MacOS.Scripts != "scripts/pkg" || desc.MacOS.License != "Apache 2.0" {
+		t.Fatalf("unexpected macos description: %+v", desc.MacOS)
 	}
 }
 
 func TestWizardUIInstallAndUninstallFlow(t *testing.T) {
 	fb := newFakeBackend(t)
 	raw := testPayloadBytes(t, "Copyright (c) 2026 Example Ltd. All rights reserved.")
-	p, err := ParsePayload(raw)
+
+	customNote := ggui.State("hello-note")
+	app := &App{
+		Payload: raw,
+		Steps: []Step{
+			LicenseStep(),
+			LocationStep(),
+			CustomStep("options", "Additional Options", func(ctx *Context) ggui.Widget {
+				return widget.Column(
+					ui.Checkbox(ctx.Bool("add_path", false), "Add CLI to user PATH"),
+				).Space(0.75)
+			}),
+			ProgressStep(),
+			FinishStep(),
+		},
+		AfterInstall: func(ctx *Context) error {
+			note := Value(ctx, customNote)
+			if err := ctx.WriteFile("note.txt", []byte(note), 0o644); err != nil {
+				return err
+			}
+			if ctx.GetBool("add_path") {
+				return ctx.AddToUserPath(ctx.Dir())
+			}
+			return nil
+		},
+	}
+
+	ctx, err := NewContext(app, nil, fb)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	closed := false
-	m := newSetupModel(p, CLIOptions{}, fb.defaultDir, fb)
 	var probe *ggui.Probe
 	probe = ggui.ProbeBuilder(func() ggui.Widget {
-		return m.build(probe.Post, probe.Dialogs(), func() { closed = true })
+		return ctx.BuildWidget(probe.Post, probe.Dialogs(), func() { closed = true })
 	}, ggui.Sz(540, 390))
 	defer probe.Close()
 
@@ -250,7 +397,7 @@ func TestWizardUIInstallAndUninstallFlow(t *testing.T) {
 		pr.Click(f.Center())
 	}
 
-	// Step 1: License agreement — Next is disabled (not clickable) until checkbox is ticked.
+	// Step 1: License agreement — Next is disabled until checkbox is ticked.
 	probe.Frame()
 	if _, ok := probe.FindRole(ggui.RoleButton, "Next"); ok {
 		t.Fatalf("expected disabled Next button to not be clickable before license acceptance")
@@ -259,11 +406,11 @@ func TestWizardUIInstallAndUninstallFlow(t *testing.T) {
 	probe.Frame()
 	clickRole(probe, ggui.RoleButton, "Next")
 	probe.Frame()
-	if got := ggui.Peek(m.Step); got != stepConfig {
-		t.Fatalf("step after accepting license = %v, want stepConfig", got)
+	if cur, _ := ctx.CurrentStep(); cur.ID != "location" {
+		t.Fatalf("step after accepting license = %q, want location", cur.ID)
 	}
 
-	// Step 2: Config — browse folder via StubFilePicker, then click Install.
+	// Step 2: Location — browse folder via StubFilePicker, then click Next (to custom options step).
 	pickedParent := t.TempDir()
 	stub := probe.Dialogs().(*runtime.StubFilePicker)
 	stub.Paths = []string{pickedParent}
@@ -271,16 +418,29 @@ func TestWizardUIInstallAndUninstallFlow(t *testing.T) {
 	wantDir := filepath.Join(pickedParent, "Hello")
 	waitUntil(t, 2*time.Second, func() bool {
 		probe.Frame()
-		return ggui.Peek(m.InstallDir) == wantDir
+		return ggui.Peek(ctx.InstallDir) == wantDir
 	})
+	clickRole(probe, ggui.RoleButton, "Next")
+	probe.Frame()
+	if cur, _ := ctx.CurrentStep(); cur.ID != "options" {
+		t.Fatalf("step after location = %q, want options", cur.ID)
+	}
 
+	// Step 3: Custom Options step — toggle PATH checkbox and click Install (smart footer label!).
+	clickRole(probe, ggui.RoleCheckbox, "Add CLI to user PATH")
+	probe.Frame()
 	clickRole(probe, ggui.RoleButton, "Install")
 	waitUntil(t, 3*time.Second, func() bool {
 		probe.Frame()
-		return ggui.Peek(m.Step) == stepDone
+		cur, _ := ctx.CurrentStep()
+		return cur.Kind == StepFinish
 	})
 
-	// Step 3: Done — Finish launches the app and closes the window.
+	if !slices.Contains(fb.PathDirs(ScopeUser), wantDir) {
+		t.Errorf("custom step + AfterInstall did not add %s to PATH: %v", wantDir, fb.PathDirs(ScopeUser))
+	}
+
+	// Step 4: Finish launches the app and closes the window.
 	clickRole(probe, ggui.RoleButton, "Finish")
 	probe.Frame()
 	if !closed {
@@ -295,17 +455,21 @@ func TestWizardUIInstallAndUninstallFlow(t *testing.T) {
 	fb.existingDir = wantDir
 	fb.existingVer = "1.2.0"
 	closed = false
-	um := newSetupModel(p, CLIOptions{Uninstall: true}, wantDir, fb)
+	uctx, err := NewContext(app, []string{"--uninstall"}, fb)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var uprobe *ggui.Probe
 	uprobe = ggui.ProbeBuilder(func() ggui.Widget {
-		return um.build(uprobe.Post, uprobe.Dialogs(), func() { closed = true })
+		return uctx.BuildWidget(uprobe.Post, uprobe.Dialogs(), func() { closed = true })
 	}, ggui.Sz(540, 390))
 	defer uprobe.Close()
 	uprobe.Frame()
 	clickRole(uprobe, ggui.RoleButton, "Uninstall")
 	waitUntil(t, 3*time.Second, func() bool {
 		uprobe.Frame()
-		return ggui.Peek(um.Step) == stepDone
+		cur, _ := uctx.CurrentStep()
+		return cur.Kind == StepFinish
 	})
 	clickRole(uprobe, ggui.RoleButton, "Finish")
 	uprobe.Frame()
@@ -314,6 +478,266 @@ func TestWizardUIInstallAndUninstallFlow(t *testing.T) {
 	}
 	if _, err := os.Stat(wantExe); !os.IsNotExist(err) {
 		t.Error("Hello.exe still exists after GUI uninstall")
+	}
+}
+
+func TestCustomBuildUIAndPreviewMode(t *testing.T) {
+	// Ensure no global embedded payload leaks from other tests.
+	SetEmbeddedPayload(nil)
+
+	app := &App{
+		Name:    "PreviewApp",
+		Version: "2.0.0",
+		BuildUI: func(ctx *Context) ggui.Widget {
+			return widget.Column(
+				ui.Title("One-Click "+ctx.Meta().Name),
+				ui.Button("Install Now", ctx.StartInstall),
+				ui.Button("Done", ctx.Finish),
+			).Space(1)
+		},
+	}
+	ctx, err := NewContext(app, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pb, ok := ctx.Backend().(*PreviewBackend); ok {
+		defer pb.Close()
+	}
+	if !ctx.IsPreview() {
+		t.Fatal("expected IsPreview() == true when no payload is embedded")
+	}
+
+	closed := false
+	var probe *ggui.Probe
+	probe = ggui.ProbeBuilder(func() ggui.Widget {
+		return ctx.BuildWidget(probe.Post, probe.Dialogs(), func() { closed = true })
+	}, ggui.Sz(540, 390))
+	defer probe.Close()
+
+	probe.Frame()
+	btn, ok := probe.FindRole(ggui.RoleButton, "Install Now")
+	if !ok {
+		t.Fatal("custom BuildUI Install Now button not found")
+	}
+	probe.Click(btn.Center())
+	waitUntil(t, 3*time.Second, func() bool {
+		probe.Frame()
+		return ggui.Peek(ctx.Progress) == 1.0
+	})
+
+	doneBtn, ok := probe.FindRole(ggui.RoleButton, "Done")
+	if !ok {
+		t.Fatal("custom BuildUI Done button not found")
+	}
+	probe.Click(doneBtn.Center())
+	probe.Frame()
+	if !closed {
+		t.Error("Done button did not close window")
+	}
+}
+
+func TestModifyPathList(t *testing.T) {
+	got, changed := modifyPathList(`C:\Windows;C:\Tools\`, `C:\Apps\MyApp`, true)
+	if !changed || got != `C:\Windows;C:\Tools\;C:\Apps\MyApp` {
+		t.Fatalf("add new: got=%q changed=%v", got, changed)
+	}
+	// Duplicate detection is case-insensitive and ignores trailing slashes.
+	if _, changed := modifyPathList(got, `c:\apps\myapp\`, true); changed {
+		t.Error("expected duplicate add to report changed=false")
+	}
+	got, changed = modifyPathList(got, `c:\apps\myapp`, false)
+	if !changed || got != `C:\Windows;C:\Tools\` {
+		t.Fatalf("remove: got=%q changed=%v", got, changed)
+	}
+	if _, changed := modifyPathList(got, `C:\Missing`, false); changed {
+		t.Error("expected removing missing path to report changed=false")
+	}
+}
+
+func TestDeclarativeEnvPathAndRegistryLifecycle(t *testing.T) {
+	fb := newFakeBackend(t)
+	raw := testPayloadBytes(t, "")
+	dir := filepath.Join(t.TempDir(), "Hello")
+
+	// Pre-populate a shared Run key owned by another application; Uninstall must preserve it.
+	if err := fb.SetRegistryValue(RegistryHKCU, `Software\Microsoft\Windows\CurrentVersion\Run`, "OtherApp", StringValue(`C:\Other.exe`)); err != nil {
+		t.Fatal(err)
+	}
+
+	app := &App{
+		Payload: raw,
+		Windows: WindowsConfig{
+			Scope:     ScopeUser,
+			AddToPath: true,
+			Env: map[string]string{
+				"HELLO_HOME":    "%INSTALL_DIR%",
+				"HELLO_VERSION": "%VERSION%",
+			},
+			Registry: []RegistryEntry{
+				{Key: `Software\Example\Hello`, Name: "InstallDir", Value: StringValue("%INSTALL_DIR%")},
+				{Key: `Software\Example\Hello`, Name: "ExeExpand", Value: ExpandStringValue("%EXE_PATH%")},
+				{Key: `Software\Example\Hello`, Name: "AutoUpdate", Value: DWORDValue(1)},
+				{Key: `Software\Example\Hello`, Name: "BuildSeq", Value: QWORDValue(42)},
+				{Key: `Software\Example\Hello`, Name: "Raw", Value: BinaryValue([]byte{1, 2, 3})},
+				{Key: `Software\Example\Hello`, Name: "Tags", Value: MultiStringValue([]string{"%APP_NAME%", "%APP_ID%"})},
+				{Root: RegistryHKCU, Key: `Software\Microsoft\Windows\CurrentVersion\Run`, Name: "Hello", Value: StringValue(`"%EXE_PATH%"`)},
+			},
+		},
+	}
+
+	if err := runWithBackend(app, []string{"--silent", "--dir", dir}, fb); err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
+
+	// Verify PATH, env vars, and all typed registry values with token expansion.
+	if !slices.Contains(fb.PathDirs(ScopeUser), dir) {
+		t.Fatalf("PATH missing %s: %v", dir, fb.PathDirs(ScopeUser))
+	}
+	if v, ok, err := fb.GetEnv(ScopeUser, "HELLO_HOME"); err != nil || !ok || v != dir {
+		t.Errorf("HELLO_HOME = (%q, %v, %v), want %q", v, ok, err, dir)
+	}
+	if v, ok, err := fb.GetEnv(ScopeUser, "HELLO_VERSION"); err != nil || !ok || v != "1.2.0" {
+		t.Errorf("HELLO_VERSION = (%q, %v, %v), want 1.2.0", v, ok, err)
+	}
+	if rv, ok, _ := fb.GetRegistryValue(RegistryHKCU, `Software\Example\Hello`, "InstallDir"); !ok || rv.Type != RegSZ || rv.String != dir {
+		t.Errorf("InstallDir reg = (%+v, %v)", rv, ok)
+	}
+	wantExe := filepath.Join(dir, "Hello.exe")
+	if rv, ok, _ := fb.GetRegistryValue(RegistryHKCU, `Software\Example\Hello`, "ExeExpand"); !ok || rv.Type != RegExpandSZ || rv.String != wantExe {
+		t.Errorf("ExeExpand reg = (%+v, %v)", rv, ok)
+	}
+	if rv, ok, _ := fb.GetRegistryValue(RegistryHKCU, `Software\Example\Hello`, "AutoUpdate"); !ok || rv.Type != RegDWORD || rv.DWORD != 1 {
+		t.Errorf("AutoUpdate reg = (%+v, %v)", rv, ok)
+	}
+	if rv, ok, _ := fb.GetRegistryValue(RegistryHKCU, `Software\Example\Hello`, "BuildSeq"); !ok || rv.Type != RegQWORD || rv.QWORD != 42 {
+		t.Errorf("BuildSeq reg = (%+v, %v)", rv, ok)
+	}
+	if rv, ok, _ := fb.GetRegistryValue(RegistryHKCU, `Software\Example\Hello`, "Raw"); !ok || rv.Type != RegBinary || !bytes.Equal(rv.Binary, []byte{1, 2, 3}) {
+		t.Errorf("Raw reg = (%+v, %v)", rv, ok)
+	}
+	if rv, ok, _ := fb.GetRegistryValue(RegistryHKCU, `Software\Example\Hello`, "Tags"); !ok || rv.Type != RegMultiSZ || !slices.Equal(rv.Multi, []string{"Hello", "com.example.hello"}) {
+		t.Errorf("Tags reg = (%+v, %v)", rv, ok)
+	}
+
+	// Uninstall with NO custom BeforeUninstall hook must clean up all tracked env/PATH/registry
+	// entries and delete the newly created key, while preserving OtherApp in the shared Run key.
+	if err := runWithBackend(&App{Payload: raw}, []string{"--uninstall", "--silent", "--dir", dir}, fb); err != nil {
+		t.Fatalf("uninstall failed: %v", err)
+	}
+	if len(fb.PathDirs(ScopeUser)) != 0 {
+		t.Errorf("PATH still has entries after uninstall: %v", fb.PathDirs(ScopeUser))
+	}
+	if _, ok, _ := fb.GetEnv(ScopeUser, "HELLO_HOME"); ok {
+		t.Error("HELLO_HOME still exists after uninstall")
+	}
+	if exists, _ := fb.RegistryKeyExists(RegistryHKCU, `Software\Example\Hello`); exists {
+		t.Error("newly created Software\\Example\\Hello key was not removed after uninstall")
+	}
+	if _, ok, _ := fb.GetRegistryValue(RegistryHKCU, `Software\Microsoft\Windows\CurrentVersion\Run`, "Hello"); ok {
+		t.Error("Hello Run entry still exists after uninstall")
+	}
+	if rv, ok, _ := fb.GetRegistryValue(RegistryHKCU, `Software\Microsoft\Windows\CurrentVersion\Run`, "OtherApp"); !ok || rv.String != `C:\Other.exe` {
+		t.Errorf("unrelated OtherApp entry in shared Run key was damaged: (%+v, %v)", rv, ok)
+	}
+}
+
+func TestImperativeEnvAndRegistryRollback(t *testing.T) {
+	fb := newFakeBackend(t)
+	raw := testPayloadBytes(t, "")
+	dir := filepath.Join(t.TempDir(), "RollbackEnvReg")
+
+	// Pre-existing env var and registry value to confirm rollback restores previous values.
+	if err := fb.SetEnv(ScopeUser, "EXISTING_VAR", "before"); err != nil {
+		t.Fatal(err)
+	}
+	if err := fb.SetRegistryValue(RegistryHKCU, `Software\Shared`, "ExistingVal", StringValue("keep-me")); err != nil {
+		t.Fatal(err)
+	}
+
+	app := &App{
+		Payload: raw,
+		AfterInstall: func(ctx *Context) error {
+			if err := ctx.SetEnv("EXISTING_VAR", "during"); err != nil {
+				return err
+			}
+			if err := ctx.SetEnv("BRAND_NEW_VAR", "temp"); err != nil {
+				return err
+			}
+			if err := ctx.AddToPath(ctx.Dir()); err != nil {
+				return err
+			}
+			if err := ctx.SetRegistryString(RegistryHKCU, `Software\Shared`, "ExistingVal", "overwritten"); err != nil {
+				return err
+			}
+			if err := ctx.SetRegistryDWORD(RegistryHKCU, `Software\TempApp`, "Flag", 7); err != nil {
+				return err
+			}
+			if err := ctx.SetRegistryString(RegistryHKCU, `Software\TempApp`, "Second", "two"); err != nil {
+				return err
+			}
+			return errors.New("abort install")
+		},
+	}
+
+	err := runWithBackend(app, []string{"--silent", "--dir", dir}, fb)
+	if err == nil || !strings.Contains(err.Error(), "abort install") {
+		t.Fatalf("expected abort error, got %v", err)
+	}
+	if v, ok, _ := fb.GetEnv(ScopeUser, "EXISTING_VAR"); !ok || v != "before" {
+		t.Errorf("EXISTING_VAR after rollback = (%q, %v), want before", v, ok)
+	}
+	if _, ok, _ := fb.GetEnv(ScopeUser, "BRAND_NEW_VAR"); ok {
+		t.Error("BRAND_NEW_VAR was not removed by rollback")
+	}
+	if len(fb.PathDirs(ScopeUser)) != 0 {
+		t.Errorf("PATH was not reverted by rollback: %v", fb.PathDirs(ScopeUser))
+	}
+	if rv, ok, _ := fb.GetRegistryValue(RegistryHKCU, `Software\Shared`, "ExistingVal"); !ok || rv.String != "keep-me" {
+		t.Errorf("ExistingVal after rollback = (%+v, %v), want keep-me", rv, ok)
+	}
+	if exists, _ := fb.RegistryKeyExists(RegistryHKCU, `Software\TempApp`); exists {
+		t.Error("newly created Software\\TempApp key was not removed by rollback")
+	}
+}
+
+func TestMachineScopeAndValidation(t *testing.T) {
+	fb := newFakeBackend(t)
+	raw := testPayloadBytes(t, "")
+	dir := filepath.Join(t.TempDir(), "MachineHello")
+
+	app := &App{
+		Payload: raw,
+		Windows: WindowsConfig{
+			Scope:     ScopeMachine,
+			AddToPath: true,
+			Env:       map[string]string{"SYS_HELLO": "%INSTALL_DIR%"},
+			Registry: []RegistryEntry{
+				{Key: `Software\Acme\Hello`, Name: "Mode", Value: StringValue("machine")},
+			},
+		},
+	}
+	if err := runWithBackend(app, []string{"--silent", "--dir", dir}, fb); err != nil {
+		t.Fatalf("machine install failed: %v", err)
+	}
+	if !slices.Contains(fb.PathDirs(ScopeMachine), dir) {
+		t.Errorf("machine PATH missing %s: %v", dir, fb.PathDirs(ScopeMachine))
+	}
+	if v, ok, _ := fb.GetEnv(ScopeMachine, "SYS_HELLO"); !ok || v != dir {
+		t.Errorf("machine SYS_HELLO = (%q, %v), want %q", v, ok, dir)
+	}
+	if rv, ok, _ := fb.GetRegistryValue(RegistryHKLM, `Software\Acme\Hello`, "Mode"); !ok || rv.String != "machine" {
+		t.Errorf("HKLM Mode = (%+v, %v), want machine", rv, ok)
+	}
+
+	// Invalid names/roots/keys return errors cleanly.
+	if err := fb.SetEnv(ScopeUser, "BAD=NAME", "1"); err == nil {
+		t.Error("expected error for env name containing '='")
+	}
+	if err := fb.SetRegistryValue("HKZZ", `Software\X`, "A", StringValue("1")); err == nil {
+		t.Error("expected error for invalid registry root")
+	}
+	if err := fb.SetRegistryValue(RegistryHKCU, "", "A", StringValue("1")); err == nil {
+		t.Error("expected error for empty registry key")
 	}
 }
 

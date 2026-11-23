@@ -130,4 +130,31 @@ func TestSetupBuilderValidateAndPayload(t *testing.T) {
 		meta.Scope != "machine" || meta.License != "MIT License\n" || !meta.DesktopShortcut || meta.LaunchAfter {
 		t.Errorf("unexpected payload metadata: %+v", meta)
 	}
+
+	// Inline LicenseText takes precedence over License file path.
+	inlineSpec := spec
+	inlineSpec.License = ""
+	inlineSpec.LicenseText = "Inline Go License"
+	if err := b.Validate(inlineSpec); err != nil {
+		t.Fatalf("Validate with LicenseText failed: %v", err)
+	}
+	rawInline, err := buildPayloadZip(inlineSpec, installer.ScopeUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr2, err := zip.NewReader(bytes.NewReader(rawInline), int64(len(rawInline)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range zr2.File {
+		if f.Name == "meta.json" {
+			rc, _ := f.Open()
+			var m payloadMetadata
+			json.NewDecoder(rc).Decode(&m)
+			rc.Close()
+			if m.License != "Inline Go License" {
+				t.Errorf("inline license = %q, want Inline Go License", m.License)
+			}
+		}
+	}
 }

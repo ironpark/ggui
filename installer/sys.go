@@ -17,8 +17,9 @@ type UninstallEntry struct {
 }
 
 // Backend abstracts OS-specific installer actions (Windows Registry, COM
-// shortcuts, shell notifications, and detached process launch) so the core
-// engine and ggui wizard can be unit-tested on any host.
+// shortcuts, shell notifications, environment variables, PATH updates, and
+// detached process launch) so the core engine and custom ggui wizards can be
+// unit-tested on any host.
 type Backend interface {
 	DefaultInstallDir(meta Metadata) string
 	ExistingInstall(meta Metadata) (dir, version string, ok bool)
@@ -29,11 +30,28 @@ type Backend interface {
 	NotifyShell()
 	WriteUninstallEntry(entry UninstallEntry) error
 	DeleteUninstallEntry(meta Metadata) error
+
+	GetEnv(scope, name string) (value string, ok bool, err error)
+	SetEnv(scope, name, value string) error
+	DeleteEnv(scope, name string) error
+	AddToPath(scope, dir string) error
+	RemoveFromPath(scope, dir string) error
+
+	RegistryKeyExists(root RegistryRoot, keyPath string) (bool, error)
+	GetRegistryValue(root RegistryRoot, keyPath, name string) (RegistryValue, bool, error)
+	SetRegistryValue(root RegistryRoot, keyPath, name string, val RegistryValue) error
+	DeleteRegistryValue(root RegistryRoot, keyPath, name string) error
+	DeleteRegistryKey(root RegistryRoot, keyPath string, onlyIfEmpty bool) error
+
 	Launch(exePath string) error
 	SelfExe() (string, error)
 	RelaunchForUninstall(installDir string, silent bool) (bool, error)
 	ScheduleTempDelete(selfExe string)
 }
+
+// DefaultBackend returns the host platform's default Backend implementation
+// (Windows Registry + COM shortcuts on Windows; portable fallback elsewhere).
+func DefaultBackend() Backend { return defaultBackend() }
 
 // expandWindowsEnv expands Windows-style %VAR% references using getenv.
 func expandWindowsEnv(s string, getenv func(string) string) string {
