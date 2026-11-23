@@ -517,9 +517,10 @@ func (b *Buffer) deleteGlyphsInplace(filter func(*GlyphInfo) bool) {
 	// Merge clusters and delete filtered glyphs.
 	// NOTE! We can't use out-buffer as we have positioning data.
 	var (
-		j    int
-		info = b.Info
-		pos  = b.Pos
+		j      int
+		info   = b.Info
+		pos    = b.Pos
+		hasPos = len(pos) == len(info)
 	)
 	for i := range info {
 		if filter(&info[i]) {
@@ -554,12 +555,18 @@ func (b *Buffer) deleteGlyphsInplace(filter func(*GlyphInfo) bool) {
 
 		if j != i {
 			info[j] = info[i]
-			pos[j] = pos[i]
+			if hasPos {
+				pos[j] = pos[i]
+			}
 		}
 		j++
 	}
 	b.Info = b.Info[:j]
-	b.Pos = b.Pos[:j]
+	if hasPos {
+		b.Pos = b.Pos[:j]
+	} else if len(b.Pos) > j {
+		b.Pos = b.Pos[:j]
+	}
 }
 
 // unsafeToBreak adds the flag `GlyphFlagUnsafeToBreak`
