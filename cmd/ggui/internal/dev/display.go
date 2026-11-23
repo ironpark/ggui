@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
@@ -68,8 +69,11 @@ type Bundler interface {
 type RemoteDisplay struct {
 	Dir      string // the project's directory, where the go command runs
 	CacheDir string // where the viewer's binaries are kept
-	Stderr   io.Writer
-	Log      io.Writer // ggui's own messages
+	// Tags are build tags passed when building ggviewer (for example
+	// "ggfxzig" when the Zig native renderer is enabled).
+	Tags   []string
+	Stderr io.Writer
+	Log    io.Writer // ggui's own messages
 	// Exe, when set, is the viewer to run instead of the project's: one
 	// being worked on, from GGUI_VIEWER.
 	Exe string
@@ -110,7 +114,7 @@ func (d *RemoteDisplay) Start(ctx context.Context) (Viewer, error) {
 	d.next = nil
 	if b == nil {
 		var err error
-		if b, err = viewer.Resolve(ctx, d.Dir, d.CacheDir); err != nil {
+		if b, err = viewer.Resolve(ctx, d.Dir, d.CacheDir, d.Tags...); err != nil {
 			return nil, err
 		}
 	}
@@ -175,8 +179,8 @@ func ensureViewer(ctx context.Context, say *ui.Output, b *viewer.Binary) error {
 // whether that makes another binary or requires refreshing the viewer bundle.
 func (d *RemoteDisplay) Stale(ctx context.Context, paths []string) bool {
 	bundleStale := d.Bundle != nil && d.Bundle.NeedsRefresh(paths)
-	if d.bin != nil && d.bin.Affects(paths) {
-		b, err := viewer.Resolve(ctx, d.Dir, d.CacheDir)
+	if d.bin != nil && (d.bin.Affects(paths) || !slices.Equal(d.bin.Tags, d.Tags)) {
+		b, err := viewer.Resolve(ctx, d.Dir, d.CacheDir, d.Tags...)
 		if err == nil && b.Key != d.bin.Key {
 			d.next = b
 			return true

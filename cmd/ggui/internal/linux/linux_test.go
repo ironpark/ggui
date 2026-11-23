@@ -522,3 +522,38 @@ func TestTar(t *testing.T) {
 		}
 	}
 }
+
+func TestAssembleLibraries(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "prog")
+	os.WriteFile(bin, []byte("\x7fELF"), 0o755)
+	lib := filepath.Join(dir, "libggfx_driver.so")
+	os.WriteFile(lib, []byte("\x7fELFlib"), 0o644)
+
+	app := testApp()
+	if got, want := LibRelPath(app, "libggfx_driver.so"), "../lib/hello-world/libggfx_driver.so"; got != want {
+		t.Errorf("LibRelPath = %q, want %q", got, want)
+	}
+	tree, _, err := Assemble(Tree{
+		App:       app,
+		Binary:    bin,
+		Libraries: []string{lib},
+		OutDir:    filepath.Join(dir, "out"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(tree, "usr", "lib", app.Package, "libggfx_driver.so")
+	got, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "\x7fELFlib" {
+		t.Errorf("lib content = %q", got)
+	}
+	if fi, err := os.Stat(dst); err != nil {
+		t.Fatal(err)
+	} else if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o755 {
+		t.Errorf("lib mode = %o, want 0755", fi.Mode().Perm())
+	}
+}

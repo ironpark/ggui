@@ -104,6 +104,11 @@ func (v *validator) validateBuild() {
 	if v.cfg.Build.Output == "" {
 		v.add(`build.output must name a directory, such as "build"`, "build", "output")
 	}
+	switch v.cfg.Build.Renderer {
+	case RendererGo, RendererZig:
+	default:
+		v.add(fmt.Sprintf(`build.renderer %q must be "go" or "zig"`, v.cfg.Build.Renderer), "build", "renderer")
+	}
 	for _, list := range []struct {
 		tags []string
 		key  string

@@ -21,6 +21,7 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 	"github.com/ironpark/ggui/cmd/ggui/internal/svgicon"
 	"github.com/ironpark/ggui/cmd/ggui/internal/windows"
+	"github.com/ironpark/ggui/cmd/ggui/internal/ziglib"
 )
 
 // Module paths the project is checked for.
@@ -252,6 +253,40 @@ func checkConfig(r *Report, o Options) *project.Project {
 	checkWindowsBuild(r, proj)
 	checkLinuxBuild(r, proj)
 	return proj
+}
+
+// projectUsesZig reports whether proj configures the Zig native renderer
+// either via build.renderer = "zig" or by naming ggfxzig in build/dev tags.
+func projectUsesZig(proj *project.Project) bool {
+	if proj == nil {
+		return false
+	}
+	return proj.Config.Build.Renderer == config.RendererZig ||
+		slices.Contains(proj.Config.Build.Tags, ziglib.Tag) ||
+		slices.Contains(proj.Config.Dev.Tags, ziglib.Tag)
+}
+
+// checkRenderer checks the Zig native renderer configuration and prebuilt
+// driver library availability when the project asks for it.
+func checkRenderer(ctx context.Context, r *Report, proj *project.Project, env map[string]string) {
+	if !projectUsesZig(proj) {
+		return
+	}
+	goos, goarch := env["GOOS"], env["GOARCH"]
+	if goos == "js" {
+		r.ok("renderer", "zig configured for desktop; js/wasm uses WebGL")
+		return
+	}
+	if !ziglib.Supported(goos, goarch) {
+		r.warn("renderer", fmt.Sprintf("zig is not available for %s/%s; builds fall back to the Go renderer", goos, goarch),
+			"Zig driver supports darwin, windows and linux on amd64 and arm64")
+		return
+	}
+	if _, err := ziglib.Prebuilt(ctx, proj.Root, goos, goarch); err != nil {
+		r.fail("renderer", "zig ("+goos+"/"+goarch+"): "+err.Error(), "update github.com/ironpark/ggfx to v0.1.0 or later")
+		return
+	}
+	r.ok("renderer", fmt.Sprintf("zig (%s/%s, prebuilt %s ready)", goos, goarch, ziglib.FileName(goos)))
 }
 
 // checkLinuxBuild says what ggui build --target linux makes, which the

@@ -23,6 +23,7 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/release/homebrew"
 	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
 	"github.com/ironpark/ggui/cmd/ggui/internal/windows"
+	"github.com/ironpark/ggui/cmd/ggui/internal/ziglib"
 )
 
 // reportOut is where report prints the path of what it built: standard
@@ -73,6 +74,7 @@ them. docs/releasing.md has the details.`,
 		fs.BoolVar(&o.allowDirty, "allow-dirty", false, "release from a work tree with changes not committed")
 		fs.BoolVar(&o.replaceAssets, "replace-assets", false, "upload to a GitHub release already published, replacing its files")
 		fs.StringVar(&o.out, "out", "", "the output `directory`, replacing build.output; the files go in its release/VERSION")
+		renderer := fs.String("renderer", "", "graphics driver implementation: `go` (default) or zig (native Metal/DX12/Vulkan), replacing build.renderer")
 		return func(ctx context.Context, pos, rest []string) error {
 			if len(pos) > 1 || len(rest) > 0 {
 				fmt.Fprintln(os.Stderr, "ggui release: takes one directory")
@@ -83,6 +85,7 @@ them. docs/releasing.md has the details.`,
 			}
 			o.targetsSet, o.archesSet, o.publishSet = isSet(fs, "targets"), isSet(fs, "arches"), isSet(fs, "publish")
 			o.targetsFlag, o.archesFlag, o.publishFlag = *targets, *arches, *publish
+			o.rendererSet, o.rendererFlag = isSet(fs, "renderer"), *renderer
 			return runRelease(ctx, o, os.Stdout, os.Getenv)
 		}
 	},
@@ -93,8 +96,8 @@ type releaseOptions struct {
 	draft, prerelease, dryRun            bool
 	allowDirty, replaceAssets            bool
 
-	targetsSet, archesSet, publishSet    bool
-	targetsFlag, archesFlag, publishFlag string
+	targetsSet, archesSet, publishSet, rendererSet     bool
+	targetsFlag, archesFlag, publishFlag, rendererFlag string
 }
 
 // list reads a comma-separated flag of names from allowed, each once.
@@ -125,6 +128,8 @@ type releasePlan struct {
 	targets   []string
 	arches    []string
 	publish   []string
+	tags      []string
+	zig       bool
 	repo      string // owner/repo, or "" when unknown in a dry run
 	api, web  string
 	head      string // the commit released, or "" outside git in a dry run
@@ -229,6 +234,10 @@ func newReleasePlan(proj *project.Project, o releaseOptions) (*releasePlan, erro
 	}
 	if len(p.targets) == 0 || len(p.arches) == 0 {
 		return nil, errors.New("nothing to build: name at least one target and one architecture")
+	}
+	p.zig, p.tags, err = ziglib.ResolveRenderer(cfg.Build.Renderer, o.rendererFlag, o.rendererSet, cfg.Build.Tags)
+	if err != nil {
+		return nil, err
 	}
 	p.notesFile = o.notes
 	if p.notesFile == "" && r.Notes != "" {
@@ -543,7 +552,7 @@ func (p *releasePlan) buildArch(ctx context.Context, work string, ra releaseArch
 	cfg := p.proj.Config
 	dir := filepath.Join(work, ra.target+"-"+ra.arch)
 	b := &builder{
-		proj: p.proj, out: dir, tags: cfg.Build.Tags, ldflags: cfg.Build.LDFlags,
+		proj: p.proj, out: dir, tags: p.tags, ldflags: cfg.Build.LDFlags, zig: p.zig,
 		console: cfg.Windows.Console, formats: cfg.Linux.Formats,
 		mac: macFlags{isSet: func(string) bool { return false }},
 	}
@@ -647,8 +656,12 @@ func (p *releasePlan) buildWindows(ctx context.Context, b *builder, arch, dir st
 	}
 	zip := filepath.Join(dir, release.WindowsName(p.slug, p.version, arch))
 	exe := b.main.Name + ".exe"
+	files := []string{filepath.Join(dir, exe)}
+	if dll := filepath.Join(dir, ziglib.FileName("windows")); exists(dll) {
+		files = append(files, dll)
+	}
 	err := step(ctx, "Zipping "+exe, "Zipped "+exe, func() error {
-		return release.ZipFiles(zip, filepath.Join(dir, exe))
+		return release.ZipFiles(zip, files...)
 	})
 	if err != nil {
 		return err

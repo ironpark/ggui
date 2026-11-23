@@ -220,3 +220,34 @@ func TestSignAdHoc(t *testing.T) {
 		t.Errorf("codesign --verify: %s", out)
 	}
 }
+
+func TestAssembleFrameworks(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "prog")
+	os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755)
+	fw := filepath.Join(dir, "libggfx_driver.dylib")
+	os.WriteFile(fw, []byte("dylib-bytes"), 0o644)
+
+	app, _, err := Assemble(Bundle{
+		Info:       info(),
+		Binary:     bin,
+		Frameworks: []string{fw},
+		OutDir:     filepath.Join(dir, "out"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(app, "Contents", "Frameworks", "libggfx_driver.dylib")
+	got, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "dylib-bytes" {
+		t.Errorf("framework content = %q, want dylib-bytes", got)
+	}
+	if fi, err := os.Stat(dst); err != nil {
+		t.Fatal(err)
+	} else if runtime.GOOS != "windows" && fi.Mode()&0o111 == 0 {
+		t.Errorf("framework mode = %v, want executable", fi.Mode())
+	}
+}

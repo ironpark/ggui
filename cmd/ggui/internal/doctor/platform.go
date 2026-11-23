@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+
+	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 )
 
 // The checks below are for the machine ggui runs on, which is where apps
@@ -36,14 +38,15 @@ func xcodeTools() bool {
 	return exec.Command("xcode-select", "-p").Run() == nil
 }
 
-func checkPlatform(ctx context.Context, r *Report, env map[string]string) {
+func checkPlatform(ctx context.Context, r *Report, env map[string]string, proj *project.Project) {
+	wantZig := projectUsesZig(proj)
 	switch runtime.GOOS {
 	case "darwin":
 		checkDarwin(ctx, r)
 	case "linux", "freebsd", "netbsd":
-		checkUnix(ctx, r)
+		checkUnix(ctx, r, wantZig)
 	case "windows":
-		checkWindows(r)
+		checkWindows(r, wantZig)
 	default:
 		r.warn("platform", runtime.GOOS+": ggui apps cannot run here; builds for other targets still work", "")
 	}
@@ -86,7 +89,7 @@ func checkDarwin(ctx context.Context, r *Report) {
 	}
 }
 
-func checkUnix(ctx context.Context, r *Report) {
+func checkUnix(ctx context.Context, r *Report, wantZig bool) {
 	display, wayland := os.Getenv("DISPLAY"), os.Getenv("WAYLAND_DISPLAY")
 	switch {
 	case display != "":
@@ -99,19 +102,26 @@ func checkUnix(ctx context.Context, r *Report) {
 	}
 
 	libs := newLibIndex(ctx)
-	checkRequiredLibraries(r, libs)
+	checkRequiredLibraries(r, libs, wantZig)
 	checkGLVersion(ctx, r, display)
 	checkXExtensions(r, libs)
 	checkFeaturePrograms(r)
 }
 
 // checkRequiredLibraries checks for the libraries no window opens
-// without: libX11, libGLESv2 or libGL, and GLX or EGL for the context.
-func checkRequiredLibraries(r *Report, libs *libIndex) {
+// without: libX11, libGLESv2 or libGL, and GLX or EGL for the context,
+// plus the Vulkan loader for the optional Zig Vulkan renderer.
+func checkRequiredLibraries(r *Report, libs *libIndex, wantZig bool) {
 	if p := libs.find("libX11.so.6", "libX11.so"); p != "" {
 		r.ok("libX11", p)
 	} else {
 		r.fail("libX11", "not found; windows cannot open without it", installHint("libx11-6", "libX11"))
+	}
+	if vk := libs.find("libvulkan.so.1", "libvulkan.so"); vk != "" {
+		r.ok("Vulkan", "Vulkan loader through "+vk+" (used by the Zig renderer)")
+	} else if wantZig && runtime.GOOS == "linux" {
+		r.warn("Vulkan", "libvulkan.so.1 not found; the Zig renderer falls back to OpenGL without Vulkan",
+			installHint("libvulkan1", "vulkan-loader"))
 	}
 	gles := libs.find("libGLESv2.so", "libGLESv2.so.2", "libGLESv2.so.1", "libGLESv2.so.0")
 	gl := libs.find("libGL.so", "libGL.so.2", "libGL.so.1", "libGL.so.0")
@@ -339,7 +349,7 @@ func (ix *libIndex) find(names ...string) string {
 // checkWindows looks in System32 for the libraries ggfx draws with. Go
 // 1.21 and later run on Windows 10 or later only, so the version needs no
 // check: an older Windows could not have started this command.
-func checkWindows(r *Report) {
+func checkWindows(r *Report, wantZig bool) {
 	root := os.Getenv("SystemRoot")
 	if root == "" {
 		root = `C:\Windows`
@@ -357,10 +367,18 @@ func checkWindows(r *Report) {
 		}
 	}
 	d3d := has("d3d11.dll") && has("dxgi.dll")
+	d3d12 := has("d3d12.dll") && has("dxgi.dll")
 	gl := has("opengl32.dll")
 	switch {
+	case d3d && d3d12 && compiler != "":
+		r.ok("graphics", "Direct3D 11 & 12 (d3d11.dll, d3d12.dll, dxgi.dll, "+compiler+")")
 	case d3d && compiler != "":
 		r.ok("graphics", "Direct3D 11 (d3d11.dll, dxgi.dll, "+compiler+")")
+		if wantZig {
+			r.warn("Direct3D 12", "d3d12.dll not found; the Zig renderer falls back to Direct3D 11", "install Windows updates and a DirectX 12 GPU driver")
+		}
+	case d3d12 && wantZig:
+		r.ok("graphics", "Direct3D 12 (d3d12.dll, dxgi.dll)")
 	case gl:
 		r.warn("graphics", "Direct3D 11 is not usable (no d3d11, dxgi or d3dcompiler); ggfx falls back to OpenGL 3.3, which needs the GPU vendor's driver",
 			"install the GPU driver, or the DirectX runtime for d3dcompiler_47.dll")

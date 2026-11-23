@@ -44,6 +44,11 @@ version = {{.Version}}
 # ldflags = ""
 # Where ggui build writes its output.
 # output = "build"
+# Graphics driver implementation: "go" (default pure-Go driver) or "zig"
+# (native Zig driver: Metal on macOS, Direct3D 12 on Windows, Vulkan on
+# Linux). Release bundles ship the shared library beside the app; dev,
+# native and record builds embed it. Same as --renderer.
+# renderer = "go"
 
 [dev]
 # Build tags for ggui dev. ggui_inspector puts the widget inspector in the

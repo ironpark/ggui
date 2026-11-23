@@ -42,9 +42,10 @@ func Supported() error {
 
 // Binary is the viewer a project's module graph builds.
 type Binary struct {
-	Dir  string // where the go command runs: the project
-	Key  string // what the binary is built from, hashed
-	Path string // the binary in the cache, which may not exist yet
+	Dir  string   // where the go command runs: the project
+	Tags []string // build tags passed to go build, normalized
+	Key  string   // what the binary is built from, hashed
+	Path string   // the binary in the cache, which may not exist yet
 
 	// files are the editable files the viewer is built from, and mods the
 	// files that decide the module graph.
@@ -55,24 +56,27 @@ type Binary struct {
 var buildEnv = []string{"GOVERSION", "GOOS", "GOARCH", "GOFLAGS", "CGO_ENABLED", "GOEXPERIMENT", "GOAMD64", "GOARM64", "GOWORK"}
 
 // Resolve finds the viewer in the module graph of the project in dir and
-// says where in cacheDir its binary is kept. When the graph has no viewer,
-// or a viewer without the ggwd it needs, the error is an *Unavailable.
+// says where in cacheDir its binary is kept. Optional build tags (such as
+// "ggfxzig") are included in the dependency listing, cache key and build.
+// When the graph has no viewer, or a viewer without the ggwd it needs, the
+// error is an *Unavailable.
 //
-// The key covers what decides the binary: the Go version, the target and
-// the build environment, and for every package the viewer is built from,
-// its module's version, or, for a module being edited (the main module,
-// a workspace module or a replacement by a directory), the contents of
-// the package's files. A changed dependency thus makes another binary,
-// and a binary built once is found again by every later session.
+// The key covers what decides the binary: the Go version, the target, the
+// build environment, any build tags, and for every package the viewer is
+// built from, its module's version, or, for a module being edited (the main
+// module, a workspace module or a replacement by a directory), the contents
+// of the package's files. A changed dependency or tag set thus makes another
+// binary, and a binary built once is found again by every later session.
 //
 // It does not ask whether the system is one remote display is offered on:
 // see Supported.
-func Resolve(ctx context.Context, dir, cacheDir string) (*Binary, error) {
+func Resolve(ctx context.Context, dir, cacheDir string, tags ...string) (*Binary, error) {
+	normTags := normalizeTags(tags)
 	env, err := gotool.Env(ctx, dir, nil, buildEnv...)
 	if err != nil {
 		return nil, err
 	}
-	pkgs, err := gotool.Deps(ctx, gotool.ListOptions{Dir: dir}, Package)
+	pkgs, err := gotool.Deps(ctx, gotool.ListOptions{Dir: dir, Tags: normTags}, Package)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +84,7 @@ func Resolve(ctx context.Context, dir, cacheDir string) (*Binary, error) {
 		return nil, err
 	}
 
-	b := &Binary{Dir: dir, files: map[string]bool{}}
+	b := &Binary{Dir: dir, Tags: normTags, files: map[string]bool{}}
 	key, err := b.key(env, pkgs)
 	if err != nil {
 		return nil, err
@@ -94,13 +98,33 @@ func Resolve(ctx context.Context, dir, cacheDir string) (*Binary, error) {
 	return b, nil
 }
 
+func normalizeTags(tags []string) []string {
+	if len(tags) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(tags))
+	for _, t := range tags {
+		if t != "" {
+			out = append(out, t)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
 // key hashes what decides the binary into its cache key: the build
-// environment and every package the viewer is built from, and records
-// the files of local packages in b.files for Affects.
+// environment, any build tags and every package the viewer is built from,
+// and records the files of local packages in b.files for Affects.
 func (b *Binary) key(env map[string]string, pkgs []gotool.Package) (string, error) {
 	h := sha256.New()
 	for _, k := range buildEnv {
 		fmt.Fprintf(h, "%s=%s\n", k, env[k])
+	}
+	if len(b.Tags) > 0 {
+		fmt.Fprintf(h, "TAGS=%s\n", strings.Join(b.Tags, ","))
 	}
 	slices.SortFunc(pkgs, func(a, b gotool.Package) int { return strings.Compare(a.ImportPath, b.ImportPath) })
 	for i := range pkgs {
@@ -239,7 +263,7 @@ func (b *Binary) Ensure(ctx context.Context) (built bool, err error) {
 	}
 	tmp.Close()
 	defer os.Remove(tmp.Name())
-	if err := gotool.Build(ctx, gotool.BuildOptions{Dir: b.Dir, Package: Package, Output: tmp.Name()}); err != nil {
+	if err := gotool.Build(ctx, gotool.BuildOptions{Dir: b.Dir, Package: Package, Output: tmp.Name(), Tags: b.Tags}); err != nil {
 		os.Remove(tmp.Name())
 		os.Remove(dir) // if no other session builds there
 		if be, ok := errors.AsType[*gotool.BuildError](err); ok {

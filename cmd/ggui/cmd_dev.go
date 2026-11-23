@@ -21,6 +21,7 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/svgicon"
 	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
 	"github.com/ironpark/ggui/cmd/ggui/internal/viewer"
+	"github.com/ironpark/ggui/cmd/ggui/internal/ziglib"
 )
 
 var devCmd = &command{
@@ -82,18 +83,19 @@ which keeps running the last build that succeeded.`,
 
 // devFlags are the flags of ggui dev.
 type devFlags struct {
-	cfgPath, tags, display, bundleDir, sign *string
-	wasmOpt, base, host                     *string
-	port                                    *int
-	stopTimeout                             *time.Duration
-	noWatch, webMode, verbose               *bool
-	isSet                                   func(string) bool
+	cfgPath, tags, renderer, display, bundleDir, sign *string
+	wasmOpt, base, host                               *string
+	port                                              *int
+	stopTimeout                                       *time.Duration
+	noWatch, webMode, verbose                         *bool
+	isSet                                             func(string) bool
 }
 
 func newDevFlags(fs *flag.FlagSet) *devFlags {
 	f := &devFlags{isSet: func(name string) bool { return isSet(fs, name) }}
 	f.cfgPath = fs.String("config", "", "read `file` instead of the ggui.toml found from the current directory")
 	f.tags = fs.String("tags", "", "build `tags`, comma-separated, replacing dev.tags")
+	f.renderer = fs.String("renderer", "", "graphics driver implementation: `go` (default) or zig (native Metal/DX12/Vulkan), replacing build.renderer")
 	f.noWatch = fs.Bool("no-watch", false, "build and run once; do not watch for changes")
 	f.stopTimeout = fs.Duration("stop-timeout", 3*time.Second, "how long the app has to exit when asked before it is killed")
 	f.display = fs.String("display", "", "where the app's window shows: `remote`, in a viewer that stays while the app restarts (the default on macOS, Linux and Windows), or window, its own; replaces dev.display")
@@ -144,6 +146,28 @@ func (f *devFlags) run(ctx context.Context, pos, rest []string) error {
 		f: f, proj: proj, arg: arg, rest: rest,
 		cfg: proj.Config, say: ui.Stderr.Prefixed("ggui"),
 	}
+	baseTags := proj.Config.Dev.Tags
+	if f.isSet("tags") {
+		baseTags = splitTags(*f.tags)
+	}
+	useZig, _, err := ziglib.ResolveRenderer(proj.Config.Build.Renderer, *f.renderer, f.isSet("renderer"), baseTags)
+	if err != nil {
+		return err
+	}
+	if useZig {
+		switch {
+		case *f.webMode:
+			if f.isSet("renderer") {
+				s.say.Warn("--web always uses WebGL; ignoring --renderer zig")
+			}
+		case !ziglib.Supported(runtime.GOOS, runtime.GOARCH):
+			s.say.Warn("the Zig renderer is not available for %s/%s; using the Go renderer", runtime.GOOS, runtime.GOARCH)
+		case !slices.Contains(baseTags, ziglib.NoEmbedTag):
+			if _, err := ziglib.Prebuilt(ctx, proj.Root, runtime.GOOS, runtime.GOARCH); err != nil {
+				return err
+			}
+		}
+	}
 	s.settings = func(p *project.Project) dev.Settings { return f.settings(p, rest) }
 	s.first = s.settings(proj)
 	s.tags, s.extra = s.first.Tags, s.first.Extra
@@ -184,6 +208,19 @@ func (f *devFlags) settings(p *project.Project, rest []string) dev.Settings {
 	}
 	if f.isSet("tags") {
 		s.Tags = splitTags(*f.tags)
+	}
+	useZig, cleanedTags, err := ziglib.ResolveRenderer(p.Config.Build.Renderer, *f.renderer, f.isSet("renderer"), s.Tags)
+	if err == nil {
+		switch {
+		case *f.webMode:
+			s.Tags = ziglib.WithoutTags(cleanedTags)
+		case useZig && ziglib.Supported(runtime.GOOS, runtime.GOARCH):
+			s.Tags = ziglib.WithTags(cleanedTags, true)
+		case useZig:
+			s.Tags = ziglib.WithoutTags(cleanedTags)
+		default:
+			s.Tags = cleanedTags
+		}
 	}
 	if p.File != "" {
 		s.Extra = append(s.Extra, p.File)
@@ -273,6 +310,14 @@ func (s *devSession) bundle(ctx context.Context) (*macos.DevBundle, string, erro
 // every change, with the dev bundle and the display asked for.
 func (s *devSession) runNative(ctx context.Context, force chan struct{}, devBundler *macos.DevBundle, bDir string) error {
 	f, cfg := s.f, s.cfg
+	mode := cfg.Dev.Display
+	if f.isSet("display") {
+		mode = *f.display
+	}
+	d, err := remoteDisplay(mode, s.proj.Root, viewerTags(s.tags))
+	if err != nil {
+		return err
+	}
 	n := &dev.Native{
 		Dir: s.proj.Root, Package: s.main.Package, Tags: s.tags,
 		Args: s.first.Args, Env: s.first.Env,
@@ -303,7 +348,11 @@ func (s *devSession) runNative(ctx context.Context, force chan struct{}, devBund
 				held(p.Config.App.ID != cfg.App.ID, "app.id")
 				devBundler.UpdateSpec(devBundleSpec(p, s.main, bDir, s.say), p.Path(p.Config.MacOS.Entitlements))
 			}
-			return s.settings(p), notes, nil
+			next := s.settings(p)
+			if d != nil {
+				d.Tags = viewerTags(next.Tags)
+			}
+			return next, notes, nil
 		},
 		// The app's stdout is the terminal itself; its stderr
 		// goes through a pipe for the tail a viewer shows, and on
@@ -314,14 +363,6 @@ func (s *devSession) runNative(ctx context.Context, force chan struct{}, devBund
 	if devBundler != nil {
 		n.Bundle = devBundler
 	}
-	mode := cfg.Dev.Display
-	if f.isSet("display") {
-		mode = *f.display
-	}
-	d, err := remoteDisplay(mode, s.proj.Root)
-	if err != nil {
-		return err
-	}
 	if d != nil {
 		if devBundler != nil {
 			d.Bundle = devBundler
@@ -329,6 +370,15 @@ func (s *devSession) runNative(ctx context.Context, force chan struct{}, devBund
 		n.Display = d
 	}
 	return n.Run(ctx)
+}
+
+// viewerTags returns the renderer build tags ggviewer needs to match the
+// app's resolved dev tags.
+func viewerTags(tags []string) []string {
+	if slices.Contains(tags, ziglib.Tag) && ziglib.Supported(runtime.GOOS, runtime.GOARCH) {
+		return []string{ziglib.Tag}
+	}
+	return nil
 }
 
 // secondSignal returns a channel closed when the interrupt is given a
@@ -357,7 +407,7 @@ func secondSignal() (force chan struct{}, stop func()) {
 // remoteDisplay returns the Display for mode, dev.display's value, or nil
 // for the app's own window. Remote display where it is not available is
 // the app's own window too, which is said when it was asked for by name.
-func remoteDisplay(mode, dir string) (*dev.RemoteDisplay, error) {
+func remoteDisplay(mode, dir string, tags []string) (*dev.RemoteDisplay, error) {
 	switch mode {
 	case "window":
 		return nil, nil
@@ -379,7 +429,7 @@ func remoteDisplay(mode, dir string) (*dev.RemoteDisplay, error) {
 	}
 	// The viewer's logs go through ui, so that they land above the
 	// build's spinner rather than in it.
-	return &dev.RemoteDisplay{Dir: dir, CacheDir: cache, Exe: os.Getenv("GGUI_VIEWER"), Stderr: ui.Stderr, Log: os.Stderr}, nil
+	return &dev.RemoteDisplay{Dir: dir, CacheDir: cache, Tags: tags, Exe: os.Getenv("GGUI_VIEWER"), Stderr: ui.Stderr, Log: os.Stderr}, nil
 }
 
 // resolveMain finds the main package, which takes the go command a moment,

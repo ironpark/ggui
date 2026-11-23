@@ -22,6 +22,7 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
 	"github.com/ironpark/ggui/cmd/ggui/internal/web"
 	"github.com/ironpark/ggui/cmd/ggui/internal/windows"
+	"github.com/ironpark/ggui/cmd/ggui/internal/ziglib"
 )
 
 var buildCmd = &command{
@@ -80,11 +81,11 @@ identity takes a Mac. docs/cli.md has the details.`,
 // buildFlags are the flags of ggui build: the ones that pick the target
 // and the ones macFlags gathers for signing a macOS build.
 type buildFlags struct {
-	cfgPath, tgt, out     *string
-	universal, console    *bool
-	format, tags, ldflags *string
-	mac                   macFlags
-	isSet                 func(string) bool
+	cfgPath, tgt, out               *string
+	universal, console              *bool
+	format, tags, ldflags, renderer *string
+	mac                             macFlags
+	isSet                           func(string) bool
 }
 
 func newBuildFlags(fs *flag.FlagSet) *buildFlags {
@@ -97,6 +98,7 @@ func newBuildFlags(fs *flag.FlagSet) *buildFlags {
 	f.format = fs.String("format", "", "with --target linux, what to make of the install tree: `formats` from tar, deb and rpm, comma-separated, replacing linux.formats")
 	f.tags = fs.String("tags", "", "build `tags`, comma-separated, replacing build.tags")
 	f.ldflags = fs.String("ldflags", "", "linker `flags` after -s -w, replacing build.ldflags")
+	f.renderer = fs.String("renderer", "", "graphics driver implementation: `go` (default) or zig (native Metal/DX12/Vulkan), replacing build.renderer")
 	f.mac = macFlags{
 		identity:     fs.String("identity", "", "sign the macOS bundle as `identity`, replacing macos.signing_identity; - signs ad hoc"),
 		p12File:      fs.String("p12-file", "", "sign with the PKCS#12 certificate in `file`, replacing macos.p12_file"),
@@ -136,6 +138,11 @@ func (f *buildFlags) run(ctx context.Context, pos, rest []string) error {
 	if f.isSet("ldflags") {
 		b.ldflags = *f.ldflags
 	}
+	b.zig, b.tags, err = ziglib.ResolveRenderer(cfg.Build.Renderer, *f.renderer, f.isSet("renderer"), b.tags)
+	if err != nil {
+		return err
+	}
+	b.rendererFlagSet = f.isSet("renderer")
 	b.universal = cfg.MacOS.Universal || *f.universal
 	b.console = cfg.Windows.Console
 	if f.isSet("console") {
@@ -254,16 +261,18 @@ func defaultTarget() string {
 }
 
 type builder struct {
-	proj      *project.Project
-	main      *project.Main
-	out       string
-	tags      []string
-	ldflags   string
-	universal bool
-	mac       macFlags
-	console   bool     // link a Windows program for the console
-	arch      string   // the GOARCH of a Windows or Linux build
-	formats   []string // what a Linux build makes of its tree
+	proj            *project.Project
+	main            *project.Main
+	out             string
+	tags            []string
+	ldflags         string
+	zig             bool // build with ggfx's Zig native graphics driver
+	rendererFlagSet bool // --renderer was passed on the command line
+	universal       bool
+	mac             macFlags
+	console         bool     // link a Windows program for the console
+	arch            string   // the GOARCH of a Windows or Linux build
+	formats         []string // what a Linux build makes of its tree
 }
 
 // macFlags are the flags that sign, notarize and package a macOS build.
@@ -407,15 +416,30 @@ func (b *builder) native(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	goos, goarch := env["GOOS"], env["GOARCH"]
 	name := b.main.Executable
-	if env["GOOS"] == "windows" {
+	if goos == "windows" {
 		name += ".exe"
 	}
 	out := filepath.Join(dir, name)
-	if err := b.build(ctx, b.release(out), env["GOOS"]+"/"+env["GOARCH"]); err != nil {
+	o := b.release(out)
+	if b.zig {
+		if ziglib.Supported(goos, goarch) {
+			if !slices.Contains(o.Tags, ziglib.NoEmbedTag) {
+				if _, err := ziglib.Prebuilt(ctx, b.proj.Root, goos, goarch); err != nil {
+					return err
+				}
+			}
+			o.Tags = ziglib.WithTags(o.Tags, true)
+		} else {
+			ui.Stderr.Warn("the Zig renderer is not available for %s/%s; building with the Go renderer", goos, goarch)
+			o.Tags = ziglib.WithoutTags(o.Tags)
+		}
+	}
+	if err := b.build(ctx, o, goos+"/"+goarch); err != nil {
 		return err
 	}
-	return report(out, env["GOOS"]+"/"+env["GOARCH"])
+	return report(out, goos+"/"+goarch)
 }
 
 func (b *builder) macos(ctx context.Context) error {
@@ -463,15 +487,31 @@ func (b *builder) macos(ctx context.Context) error {
 		return err
 	}
 	defer os.RemoveAll(tmp)
+	arch, err := b.macosArch(ctx)
+	if err != nil {
+		return err
+	}
+	var frameworks []string
+	var useZig bool
+	if b.zig {
+		dylib, ok, err := b.macosZigDriver(ctx, tmp, arch)
+		if err != nil {
+			return err
+		}
+		if ok {
+			useZig = true
+			frameworks = append(frameworks, dylib)
+		}
+	}
 	icon, err := b.icon(ctx, tmp)
 	if err != nil {
 		return err
 	}
-	bin, arch, err := b.macosBinary(ctx, tmp)
+	bin, archLabel, err := b.macosBinary(ctx, tmp, arch, useZig)
 	if err != nil {
 		return err
 	}
-	app, err := b.assembleBundle(dir, icon, bin)
+	app, err := b.assembleBundle(dir, icon, bin, frameworks)
 	if err != nil {
 		return err
 	}
@@ -479,18 +519,69 @@ func (b *builder) macos(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return b.reportMacOS(ctx, sg, app, artifacts, notarize, arch)
+	return b.reportMacOS(ctx, sg, app, artifacts, notarize, archLabel)
 }
 
-// macosBinary builds the program the bundle holds: for arm64 and amd64
-// joined by lipo when the build is universal, else for the go command's
-// GOARCH. It returns the program's path and the architecture built for.
-func (b *builder) macosBinary(ctx context.Context, tmp string) (bin, arch string, err error) {
-	bin = filepath.Join(tmp, b.main.Executable)
+func (b *builder) macosArch(ctx context.Context) (string, error) {
+	if b.universal {
+		return "universal", nil
+	}
+	env, err := gotool.Env(ctx, b.proj.Root, []string{"GOOS=darwin"}, "GOARCH")
+	if err != nil {
+		return "", err
+	}
+	return env["GOARCH"], nil
+}
+
+// macosZigDriver unpacks ggfx's prebuilt libggfx_driver.dylib for arch
+// (joining arm64 and amd64 into a universal dylib when universal) into tmp.
+func (b *builder) macosZigDriver(ctx context.Context, tmp, arch string) (string, bool, error) {
+	dst := filepath.Join(tmp, ziglib.FileName("darwin"))
 	if b.universal {
 		var halves []string
 		for _, a := range []string{"arm64", "amd64"} {
-			o := b.release(bin + "-" + a)
+			h := filepath.Join(tmp, "libggfx_driver-"+a+".dylib")
+			if err := ziglib.Extract(ctx, b.proj.Root, "darwin", a, h); err != nil {
+				return "", false, err
+			}
+			halves = append(halves, h)
+		}
+		err := step(ctx, "Joining arm64 and amd64 Zig driver libraries", "Joined arm64 and amd64 Zig driver libraries", func() error {
+			return macos.Lipo(dst, halves...)
+		})
+		if err != nil {
+			return "", false, err
+		}
+		return dst, true, nil
+	}
+	if !ziglib.Supported("darwin", arch) {
+		ui.Stderr.Warn("the Zig renderer is not available for darwin/%s; building with the Go renderer", arch)
+		return "", false, nil
+	}
+	if err := ziglib.Extract(ctx, b.proj.Root, "darwin", arch, dst); err != nil {
+		return "", false, err
+	}
+	return dst, true, nil
+}
+
+// macosBinary builds the program the bundle holds: for arm64 and amd64
+// joined by lipo when the build is universal, else for arch. It returns
+// the program's path and the architecture label built for.
+func (b *builder) macosBinary(ctx context.Context, tmp, arch string, useZig bool) (bin, archLabel string, err error) {
+	bin = filepath.Join(tmp, b.main.Executable)
+	releaseOpts := func(out string) gotool.BuildOptions {
+		o := b.release(out)
+		if useZig {
+			o.Tags = ziglib.WithTags(o.Tags, false)
+		} else if b.zig {
+			o.Tags = ziglib.WithoutTags(o.Tags)
+		}
+		return o
+	}
+	if b.universal {
+		var halves []string
+		for _, a := range []string{"arm64", "amd64"} {
+			o := releaseOpts(bin + "-" + a)
 			o.GOOS, o.GOARCH = "darwin", a
 			if err := b.build(ctx, o, "darwin/"+a); err != nil {
 				return "", "", err
@@ -505,12 +596,7 @@ func (b *builder) macosBinary(ctx context.Context, tmp string) (bin, arch string
 		}
 		return bin, "arm64 + amd64", nil
 	}
-	env, err := gotool.Env(ctx, b.proj.Root, []string{"GOOS=darwin"}, "GOARCH")
-	if err != nil {
-		return "", "", err
-	}
-	arch = env["GOARCH"]
-	o := b.release(bin)
+	o := releaseOpts(bin)
 	o.GOOS = "darwin"
 	if err := b.build(ctx, o, "darwin/"+arch); err != nil {
 		return "", "", err
@@ -518,10 +604,10 @@ func (b *builder) macosBinary(ctx context.Context, tmp string) (bin, arch string
 	return bin, arch, nil
 }
 
-// assembleBundle puts the program in Name.app in dir, with the icon and
-// the Info.plist keys [macos.plist] and the translation catalogs give,
-// and returns the bundle's path.
-func (b *builder) assembleBundle(dir, icon, bin string) (string, error) {
+// assembleBundle puts the program in Name.app in dir, with the icon,
+// any bundled framework libraries, and the Info.plist keys [macos.plist]
+// and the translation catalogs give, and returns the bundle's path.
+func (b *builder) assembleBundle(dir, icon, bin string, frameworks []string) (string, error) {
 	cfg := b.proj.Config
 	appName := b.main.Name + ".app"
 	extra, langs := plistExtra(b.proj.Root, cfg.MacOS.Plist)
@@ -536,6 +622,7 @@ func (b *builder) assembleBundle(dir, icon, bin string) (string, error) {
 		Category:             cfg.MacOS.Category,
 		Extra:                extra,
 		Binary:               bin,
+		Frameworks:           frameworks,
 		Icon:                 icon,
 		IconName:             b.proj.Path(cfg.App.Icon),
 		IconInset:            cfg.MacOS.IconInset,
@@ -821,6 +908,17 @@ func (b *builder) windows(ctx context.Context) error {
 	}
 	exe := b.main.Name + ".exe"
 	log := ui.Stderr
+	useZig := false
+	if b.zig {
+		if ziglib.Supported("windows", b.arch) {
+			if _, err := ziglib.Prebuilt(ctx, b.proj.Root, "windows", b.arch); err != nil {
+				return err
+			}
+			useZig = true
+		} else {
+			log.Warn("the Zig renderer is not available for windows/%s; building with the Go renderer", b.arch)
+		}
+	}
 	cleanup, err := b.windowsResources(ctx, exe)
 	if err != nil {
 		return err
@@ -829,6 +927,11 @@ func (b *builder) windows(ctx context.Context) error {
 
 	o := b.release(filepath.Join(dir, exe))
 	o.GOOS, o.GOARCH = "windows", b.arch
+	if useZig {
+		o.Tags = ziglib.WithTags(o.Tags, false)
+	} else if b.zig {
+		o.Tags = ziglib.WithoutTags(o.Tags)
+	}
 	if !b.console {
 		// The GUI subsystem: Windows opens no console for the program,
 		// and its standard streams go nowhere unless redirected.
@@ -836,6 +939,13 @@ func (b *builder) windows(ctx context.Context) error {
 	}
 	if err := b.build(ctx, o, "windows/"+b.arch); err != nil {
 		return err
+	}
+	if useZig {
+		dll := filepath.Join(dir, ziglib.FileName("windows"))
+		if err := ziglib.Extract(ctx, b.proj.Root, "windows", b.arch, dll); err != nil {
+			return err
+		}
+		log.Note("%s", log.Dim("bundled Zig driver library "+shortPath(dll)+" beside "+exe))
 	}
 	if runtime.GOOS != "windows" && b.arch == runtime.GOARCH && b.arch != "amd64" && os.Getenv("GOARCH") == "" {
 		log.Note("%s", log.Dim("for "+b.arch+", this machine's architecture; most PCs need GOARCH=amd64"))
@@ -933,6 +1043,12 @@ func (b *builder) web(ctx context.Context) error {
 		title = b.main.Name
 	}
 	o := b.release("")
+	if b.zig {
+		if b.rendererFlagSet {
+			ui.Stderr.Warn("web builds always use WebGL; ignoring --renderer zig")
+		}
+		o.Tags = ziglib.WithoutTags(o.Tags)
+	}
 	log := ui.Stderr
 	var r *web.Result
 	err := step(ctx, "Building for js/wasm", "Built for js/wasm", func() error {

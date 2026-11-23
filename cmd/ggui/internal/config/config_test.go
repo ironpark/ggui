@@ -32,6 +32,7 @@ package = "./cmd/hello"
 tags = ["prod"]
 ldflags = "-X main.version=1.2.3"
 output = "dist"
+renderer = "zig"
 
 [dev]
 tags = []
@@ -69,7 +70,7 @@ wasm_opt = "-Oz"
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.App.Name != "Hello World" || cfg.App.Package != "./cmd/hello" || cfg.Build.Output != "dist" {
+	if cfg.App.Name != "Hello World" || cfg.App.Package != "./cmd/hello" || cfg.Build.Output != "dist" || cfg.Build.Renderer != RendererZig {
 		t.Errorf("app/build = %+v %+v", cfg.App, cfg.Build)
 	}
 	// tags = [] replaces the default rather than leaving it.
@@ -115,6 +116,10 @@ func TestSVGIcon(t *testing.T) {
 	es = errorsOf(t, "[app]\nicon = \"icon.jpg\"\n")
 	if len(es) != 1 || !strings.Contains(es[0].Msg, "or an SVG") {
 		t.Errorf("errors = %v", es)
+	}
+	es = errorsOf(t, "[build]\nrenderer = \"metal\"\n")
+	if len(es) != 1 || es[0].Line != 2 || !strings.HasPrefix(es[0].Msg, `build.renderer "metal"`) {
+		t.Errorf("renderer errors = %v", es)
 	}
 	cfg, err = Parse("ggui.toml", []byte("[macos]\nicon_inset = true\n"))
 	if err != nil || !cfg.MacOS.IconInset || Defaults().MacOS.IconInset {

@@ -131,6 +131,28 @@ func Modules(ctx context.Context, dir string, paths ...string) ([]Module, error)
 	return decodeStream[Module](out)
 }
 
+// DownloadModule downloads a module into the local module cache and returns
+// its metadata, including the unpacked Dir.
+func DownloadModule(ctx context.Context, dir, path string) (Module, error) {
+	out, err := output(ctx, dir, nil, "mod", "download", "-json", path)
+	if err != nil {
+		return Module{}, err
+	}
+	var m struct {
+		Path    string
+		Version string
+		Dir     string
+		Error   string
+	}
+	if err := json.Unmarshal(out, &m); err != nil {
+		return Module{}, fmt.Errorf("go mod download: %w", err)
+	}
+	if m.Error != "" {
+		return Module{}, errors.New(m.Error)
+	}
+	return Module{Path: m.Path, Version: m.Version, Dir: m.Dir}, nil
+}
+
 // ModFile is what a go.mod file asks for.
 type ModFile struct {
 	Module struct {

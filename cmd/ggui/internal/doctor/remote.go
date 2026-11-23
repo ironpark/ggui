@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 
+	"github.com/ironpark/ggui/cmd/ggui/internal/config"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 	"github.com/ironpark/ggui/cmd/ggui/internal/viewer"
+	"github.com/ironpark/ggui/cmd/ggui/internal/ziglib"
 )
 
 // checkRemote says whether ggui dev can show the project's app in its
@@ -22,16 +26,23 @@ func checkRemote(ctx context.Context, r *Report, o Options, p projectInfo) {
 	if p.ggui == nil {
 		return // no project, or one without ggui: said above
 	}
-	if proj, err := project.Open(o.Dir, "", o.Config); err == nil && proj.Config.Dev.Display == "window" {
-		r.ok(name, `off: dev.display is "window"`)
-		return
+	var viewerTags []string
+	if proj, err := project.Open(o.Dir, "", o.Config); err == nil {
+		if proj.Config.Dev.Display == "window" {
+			r.ok(name, `off: dev.display is "window"`)
+			return
+		}
+		if (proj.Config.Build.Renderer == config.RendererZig || slices.Contains(proj.Config.Dev.Tags, ziglib.Tag)) &&
+			ziglib.Supported(runtime.GOOS, runtime.GOARCH) {
+			viewerTags = []string{ziglib.Tag}
+		}
 	}
 	cache, err := viewer.CacheDir()
 	if err != nil {
 		r.warn(name, "no cache directory for the viewer: "+err.Error(), "")
 		return
 	}
-	b, err := viewer.Resolve(ctx, o.Dir, cache)
+	b, err := viewer.Resolve(ctx, o.Dir, cache, viewerTags...)
 	var u *viewer.Unavailable
 	switch {
 	case errors.As(err, &u):

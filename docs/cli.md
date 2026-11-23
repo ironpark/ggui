@@ -401,6 +401,7 @@ and why, and builds started, cancelled and thrown away.
 | Flag | Use |
 | --- | --- |
 | `--tags a,b` | Build tags, replacing `dev.tags`. `--tags ""` builds with none. |
+| `--renderer go\|zig` | Graphics driver implementation: `go` (default pure-Go driver) or `zig` (native Metal/Direct3D 12/Vulkan driver via `ggfxzig`), replacing `build.renderer`. Also passed when building `ggviewer`. |
 | `--no-watch` | Build and run once; dev exits when the app does. |
 | `--stop-timeout 3s` | How long the app has to exit when asked before it is killed. |
 | `--verbose` | Print the watcher's and the rebuild loop's decisions, timed. `GGUI_VERBOSE=1` does the same. |
@@ -481,6 +482,7 @@ on standard output, for scripts.
 | `--notary-profile name`, `--api-key-file file`, `--apple-id id`, `--team-id id` | Notarize with these credentials, replacing those in `[macos.notary]`. |
 | `--dmg`, `--pkg` | Also make the disk image or the installer; `--dmg=false` and `--pkg=false` skip the one `[macos.dmg]` or `[macos.pkg]` asks for. |
 | `--tags a,b` | Build tags, replacing `build.tags`. |
+| `--renderer go\|zig` | Graphics driver implementation: `go` (default pure-Go driver) or `zig` (native Metal/Direct3D 12/Vulkan driver), replacing `build.renderer`. For `macos`, `windows` and `linux` targets, `ggui` builds with `ggfxzig,ggfxnoembed` and bundles the platform's prebuilt shared library from `github.com/ironpark/ggfx` (`Contents/Frameworks/libggfx_driver.dylib`, `ggfx_driver.dll` beside `Name.exe`, or `usr/lib/<pkg>/libggfx_driver.so`); for `native` it embeds the library with `ggfxzig`. |
 | `--ldflags flags` | Linker flags after `-s -w`, replacing `build.ldflags`. |
 | `--config file` | Read this file instead of the `ggui.toml` found. |
 
@@ -830,7 +832,7 @@ credentials each channel needs and a GitHub Actions workflow.
 | Target | Files, for each architecture |
 | --- | --- |
 | `macos` | `name-VERSION-macos-ARCH.dmg` when `[macos.dmg]` asks for a disk image, else `name-VERSION-macos-ARCH.zip` of `Name.app`, as `ditto -c -k --keepParent` lays it out, links and modes kept; `.pkg` too when `[macos.pkg]` asks (on macOS). Builds one `universal` binary on any host when both `amd64` and `arm64` are in `arches` (joined in pure Go), signed and notarized as `[macos]` specifies (Apple's tools on macOS, or `rcodesign` on Linux and Windows builds that link it). |
-| `windows` | `name-VERSION-windows-ARCH.zip`, holding `Name.exe`: `amd64`, `arm64` and `386`. |
+| `windows` | `name-VERSION-windows-ARCH.zip`, holding `Name.exe` (and `ggfx_driver.dll` when `build.renderer = "zig"`): `amd64`, `arm64` and `386`. |
 | `linux` | What `linux.formats` names: the tarball, `.deb` and `.rpm`: `amd64`, `arm64` and `riscv64`. |
 
 `name` is `app.name` lowercased, with hyphens between words. An
@@ -861,6 +863,7 @@ says what fails and carries on.
 | `--allow-dirty` | Release from a work tree with changes not committed. |
 | `--replace-assets` | Upload to a GitHub release already published, replacing its files of the same names. |
 | `--out dir` | The output directory, replacing `build.output`. |
+| `--renderer go\|zig` | Graphics driver implementation: `go` (default) or `zig`, replacing `build.renderer`. |
 | `--config file` | Read this file instead of the `ggui.toml` found. |
 
 | Variable | For |
@@ -908,8 +911,8 @@ runs on:
 | System | Required | Optional |
 | --- | --- | --- |
 | macOS | macOS 13 or later, which Go 1.27 programs need. The AppKit, Carbon, CoreFoundation, CoreGraphics, CoreVideo, Foundation, IOKit, Metal, OpenGL and QuartzCore frameworks: all load at start-up, OpenGL even when drawing with Metal. | |
-| Linux, FreeBSD, NetBSD | An X11 display: there is no Wayland backend, so a Wayland session needs XWayland and `DISPLAY`. `libX11`; `libGLESv2` or `libGL`; GLX or `libEGL` to make the context; a driver offering OpenGL 3.3 or OpenGL ES 3.0, checked with `glxinfo` when it is installed. | `libXi`, `libXrandr`, `libXcursor`, `libXinerama`, `libXrender`, `libXext`; `fc-match` for system fonts; `zenity` or `kdialog` for file and message dialogs; `xdg-open`. |
-| Windows | Direct3D 11 (`d3d11.dll`, `dxgi.dll` and a `d3dcompiler_4x.dll`), or OpenGL 3.3 through the GPU driver, which ggfx falls back to. | `uiautomationcore.dll`, for screen readers. |
+| Linux, FreeBSD, NetBSD | An X11 display: there is no Wayland backend, so a Wayland session needs XWayland and `DISPLAY`. `libX11`; `libGLESv2` or `libGL`; GLX or `libEGL` to make the context; a driver offering OpenGL 3.3 or OpenGL ES 3.0, checked with `glxinfo` when it is installed. | `libvulkan.so.1` (Vulkan loader, used by the optional Zig renderer); `libXi`, `libXrandr`, `libXcursor`, `libXinerama`, `libXrender`, `libXext`; `fc-match` for system fonts; `zenity` or `kdialog` for file and message dialogs; `xdg-open`. |
+| Windows | Direct3D 11 (`d3d11.dll`, `dxgi.dll` and a `d3dcompiler_4x.dll`), or Direct3D 12 (`d3d12.dll`, used by the optional Zig renderer), or OpenGL 3.3 through the GPU driver, which ggfx falls back to. | `uiautomationcore.dll`, for screen readers. |
 
 ## ggui i18n
 
@@ -1080,6 +1083,7 @@ The GIF is `name.gif`, or `tour.gif`, in the project's directory, unless
 | `--cursor=false` | Leave out the cursor the tour's pointer steps draw; the steps still drive the app. |
 | `--package pkg` | The main package, replacing `app.package`. |
 | `--tags tags` | Build tags, replacing `build.tags`. |
+| `--renderer go\|zig` | Graphics driver implementation: `go` (default) or `zig`, replacing `build.renderer`. |
 | `--config file` | Read `file` instead of the `ggui.toml` found. |
 
 An app that does not import package `record`, has no tour of the name, or
@@ -1149,6 +1153,7 @@ base = "/hello/"
 | `tags` | `[]` | Build tags for `ggui build`. |
 | `ldflags` | `""` | Linker flags added after `-s -w`. |
 | `output` | `"build"` | The directory `ggui build` writes to. |
+| `renderer` | `"go"` | Graphics driver implementation: `"go"` (default pure-Go driver) or `"zig"` (native Zig driver: Metal on macOS, Direct3D 12 on Windows, Vulkan on Linux; requires `ggfx v0.1.0` or later). Release builds bundle the shared library with `ggfxzig,ggfxnoembed` (macOS `Contents/Frameworks/libggfx_driver.dylib`, Windows `ggfx_driver.dll` beside `Name.exe`, Linux `usr/lib/<pkg>/libggfx_driver.so` plus `libvulkan1`/`vulkan-loader` in default package deps); `dev`, `record` and `native` builds embed it with `ggfxzig`, and `ggui dev` builds `ggviewer` with `ggfxzig` too. Same as `--renderer`. |
 
 ### [dev]
 

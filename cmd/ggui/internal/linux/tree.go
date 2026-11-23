@@ -29,6 +29,9 @@ const MinIconSize = icns.MinSize
 type Tree struct {
 	App
 	Binary string // the built program
+	// Libraries are shared libraries (such as libggfx_driver.so) installed
+	// under usr/lib/<Package>/ with mode 0755.
+	Libraries []string
 	// Icon is a square PNG to scale into the hicolor sizes, or "".
 	Icon string
 	// IconName is what messages call the icon, as for a PNG drawn from
@@ -44,7 +47,14 @@ type Tree struct {
 func TreeName(a App) string { return a.Package + "-linux-" + a.Arch }
 
 // Paths in the tree, relative to it.
-func binPath(a App) string     { return filepath.Join("usr", "bin", a.Package) }
+func binPath(a App) string              { return filepath.Join("usr", "bin", a.Package) }
+func libPath(a App, name string) string { return filepath.Join("usr", "lib", a.Package, name) }
+
+// LibRelPath returns the path to a bundled shared library named name
+// relative to the executable's directory (usr/bin), using forward slashes.
+func LibRelPath(a App, name string) string {
+	return "../lib/" + a.Package + "/" + name
+}
 func desktopPath(a App) string { return filepath.Join("usr", "share", "applications", a.ID+".desktop") }
 func metainfoPath(a App) string {
 	return filepath.Join("usr", "share", "metainfo", a.ID+".metainfo.xml")
@@ -84,6 +94,11 @@ func Assemble(t Tree) (dir string, warnings []string, err error) {
 
 	if err := copyBinary(t.Binary, filepath.Join(dir, binPath(t.App)), 0o755); err != nil {
 		return "", nil, err
+	}
+	for _, lib := range t.Libraries {
+		if err := copyBinary(lib, filepath.Join(dir, libPath(t.App, filepath.Base(lib))), 0o755); err != nil {
+			return "", nil, err
+		}
 	}
 
 	if t.Icon != "" {

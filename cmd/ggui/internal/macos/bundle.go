@@ -81,7 +81,10 @@ func (in Info) Plist() map[string]any {
 type Bundle struct {
 	Info
 	Binary string // the built program, copied into the bundle
-	Icon   string // a PNG, or ""
+	// Frameworks are shared libraries (such as libggfx_driver.dylib) copied
+	// into Contents/Frameworks with mode 0755 and signed as nested code.
+	Frameworks []string
+	Icon       string // a PNG, or ""
 	// IconName is what messages call the icon, as for a PNG drawn from
 	// an SVG; Icon when "".
 	IconName string
@@ -106,6 +109,17 @@ func Assemble(b Bundle) (app string, warnings []string, err error) {
 	}
 	if err := copyFile(filepath.Join(contents, "MacOS", b.Executable), b.Binary, 0o755); err != nil {
 		return "", nil, err
+	}
+	if len(b.Frameworks) > 0 {
+		fwDir := filepath.Join(contents, "Frameworks")
+		if err := os.MkdirAll(fwDir, 0o755); err != nil {
+			return "", nil, err
+		}
+		for _, fw := range b.Frameworks {
+			if err := copyFile(filepath.Join(fwDir, filepath.Base(fw)), fw, 0o755); err != nil {
+				return "", nil, err
+			}
+		}
 	}
 	if b.Icon != "" {
 		name := b.IconName

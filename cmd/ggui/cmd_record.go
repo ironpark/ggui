@@ -19,6 +19,7 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/proc"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
+	"github.com/ironpark/ggui/cmd/ggui/internal/ziglib"
 )
 
 var recordCmd = &command{
@@ -68,13 +69,13 @@ cursor the tour's pointer steps draw.`,
 
 // recordFlags are the flags of ggui record.
 type recordFlags struct {
-	cfgPath, pkg, tags, out, frames *string
-	fps, width, colors              *int
-	dither                          *float64
-	loop, lossy                     *int
-	frame, backdrop                 *string
-	list, cursor                    *bool
-	isSet                           func(string) bool
+	cfgPath, pkg, tags, renderer, out, frames *string
+	fps, width, colors                        *int
+	dither                                    *float64
+	loop, lossy                               *int
+	frame, backdrop                           *string
+	list, cursor                              *bool
+	isSet                                     func(string) bool
 }
 
 func newRecordFlags(fs *flag.FlagSet) *recordFlags {
@@ -82,6 +83,7 @@ func newRecordFlags(fs *flag.FlagSet) *recordFlags {
 	f.cfgPath = fs.String("config", "", "read `file` instead of the ggui.toml found from the current directory")
 	f.pkg = fs.String("package", "", "the main `package` to build, replacing app.package")
 	f.tags = fs.String("tags", "", "build `tags`, comma-separated, replacing build.tags")
+	f.renderer = fs.String("renderer", "", "graphics driver implementation: `go` (default) or zig (native Metal/DX12/Vulkan), replacing build.renderer")
 	f.out = fs.String("o", "", "write the GIF to `file` instead of name.gif in the project's directory")
 	f.frames = fs.String("frames", "", "write PNG frames, 0000.png and on, to `directory` instead of a GIF")
 	f.list = fs.Bool("list", false, "print the names of the tours the app registered")
@@ -112,7 +114,24 @@ func (f *recordFlags) run(ctx context.Context, pos, rest []string) error {
 	if f.isSet("tags") {
 		buildTags = splitTags(*f.tags)
 	}
+	useZig, buildTags, err := ziglib.ResolveRenderer(cfg.Build.Renderer, *f.renderer, f.isSet("renderer"), buildTags)
+	if err != nil {
+		return err
+	}
 	say := ui.Stderr.Prefixed("ggui")
+	if useZig {
+		if ziglib.Supported(runtime.GOOS, runtime.GOARCH) {
+			if !slices.Contains(buildTags, ziglib.NoEmbedTag) {
+				if _, err := ziglib.Prebuilt(ctx, proj.Root, runtime.GOOS, runtime.GOARCH); err != nil {
+					return err
+				}
+			}
+			buildTags = ziglib.WithTags(buildTags, true)
+		} else {
+			say.Warn("the Zig renderer is not available for %s/%s; building with the Go renderer", runtime.GOOS, runtime.GOARCH)
+			buildTags = ziglib.WithoutTags(buildTags)
+		}
+	}
 	main, err := resolveMain(ctx, say, proj, *f.pkg, gotool.ListOptions{Tags: buildTags})
 	if err != nil {
 		return err

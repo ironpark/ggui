@@ -64,7 +64,7 @@ tags = ["hello", "gui"]
 
    ```text
    hello-world-1.2.0-macos-universal.dmg     (or .zip of Hello World.app)
-   hello-world-1.2.0-windows-amd64.zip       (Hello World.exe)
+   hello-world-1.2.0-windows-amd64.zip       (Hello World.exe; plus ggfx_driver.dll with renderer = "zig")
    hello-world-1.2.0-windows-arm64.zip
    hello-world-1.2.0-linux-amd64.tar.gz
    hello-world_1.2.0_amd64.deb

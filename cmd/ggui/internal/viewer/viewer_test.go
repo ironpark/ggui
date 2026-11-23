@@ -189,6 +189,30 @@ func TestResolve(t *testing.T) {
 	}
 }
 
+func TestResolveWithTags(t *testing.T) {
+	offline(t)
+	dir := writeModule(t, "github.com/ironpark/ggui", map[string]string{
+		"cmd/ggviewer/main.go":     "package main\n\nfunc main() { println(tagMode) }\n",
+		"cmd/ggviewer/mode_go.go":  "//go:build !ggfxzig\n\npackage main\n\nconst tagMode = \"go\"\n",
+		"cmd/ggviewer/mode_zig.go": "//go:build ggfxzig\n\npackage main\n\nconst tagMode = \"zig\"\n",
+	})
+	cache := t.TempDir()
+	bGo, err := Resolve(t.Context(), dir, cache)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bZig, err := Resolve(t.Context(), dir, cache, "ggfxzig")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bGo.Key == bZig.Key {
+		t.Fatalf("Resolve with ggfxzig tag produced same key %s as default", bGo.Key)
+	}
+	if built, err := bZig.Ensure(t.Context()); err != nil || !built {
+		t.Fatalf("Ensure(ggfxzig) = %v, %v", built, err)
+	}
+}
+
 func TestPrune(t *testing.T) {
 	dir := t.TempDir()
 	for i := range 6 {

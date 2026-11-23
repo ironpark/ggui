@@ -130,7 +130,17 @@ type Build struct {
 	Tags    []string `toml:"tags"`
 	LDFlags string   `toml:"ldflags"`
 	Output  string   `toml:"output"`
+	// Renderer selects the ggfx graphics driver implementation: "go"
+	// (default pure-Go driver) or "zig" (Zig native driver: Metal on macOS,
+	// Direct3D 12 on Windows, Vulkan on Linux).
+	Renderer string `toml:"renderer"`
 }
+
+// Values build.renderer accepts.
+const (
+	RendererGo  = "go"
+	RendererZig = "zig"
+)
 
 // Dev holds what ggui dev builds and runs the app with.
 type Dev struct {
@@ -300,7 +310,9 @@ type Linux struct {
 // Default Linux package dependencies: the libraries ggwd and ggfx open at
 // run time, which a package manager cannot see, as each family names
 // their packages. libgl1 and libglvnd-glx hold libGL and GLX, libegl1 and
-// libglvnd-egl EGL, and each requires Mesa's drivers.
+// libglvnd-egl EGL, and each requires Mesa's drivers. When building with
+// the Zig Vulkan renderer, VulkanDependsDeb and VulkanDependsRPM add the
+// Vulkan loader beside the OpenGL fallback.
 var (
 	DefaultDependsDeb = []string{
 		"libx11-6", "libxrandr2", "libxi6", "libxcursor1", "libxinerama1", "libxext6", "libxrender1",
@@ -310,6 +322,8 @@ var (
 		"libX11", "libXrandr", "libXi", "libXcursor", "libXinerama", "libXext", "libXrender",
 		"libglvnd-glx", "libglvnd-egl",
 	}
+	VulkanDependsDeb = "libvulkan1"
+	VulkanDependsRPM = "vulkan-loader"
 )
 
 // Web holds what only the js/wasm bundle and its page use.
@@ -330,7 +344,7 @@ var defaultDevTags = []string{"ggui_inspector", "ggui_debug"}
 func Defaults() Config {
 	return Config{
 		App:   App{Version: "0.1.0", Package: "."},
-		Build: Build{Output: "build"},
+		Build: Build{Output: "build", Renderer: RendererGo},
 		Dev:   Dev{Tags: slices.Clone(defaultDevTags)},
 		MacOS: MacOS{
 			// What the Go 1.27 linker records as the binary's minimum,

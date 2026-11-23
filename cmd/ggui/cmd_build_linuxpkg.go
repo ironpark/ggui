@@ -14,6 +14,7 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 	"github.com/ironpark/ggui/cmd/ggui/internal/svgicon"
 	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
+	"github.com/ironpark/ggui/cmd/ggui/internal/ziglib"
 )
 
 // linuxPackage is the package name, and the program's name in /usr/bin:
@@ -66,11 +67,19 @@ func (b *builder) linuxApp() linux.App {
 }
 
 // depends returns what a package in format, deb or rpm, depends on.
-func (b *builder) depends(format string) []string {
+func (b *builder) depends(format string, useZig bool) []string {
 	if format == "deb" {
-		return b.proj.Config.Linux.DependsDeb
+		deps := b.proj.Config.Linux.DependsDeb
+		if useZig && slices.Equal(deps, config.DefaultDependsDeb) {
+			return append(slices.Clone(deps), config.VulkanDependsDeb)
+		}
+		return deps
 	}
-	return b.proj.Config.Linux.DependsRPM
+	deps := b.proj.Config.Linux.DependsRPM
+	if useZig && slices.Equal(deps, config.DefaultDependsRPM) {
+		return append(slices.Clone(deps), config.VulkanDependsRPM)
+	}
+	return deps
 }
 
 // linux builds the install tree Package-linux-Arch: the program for
@@ -93,6 +102,22 @@ func (b *builder) linux(ctx context.Context) error {
 		return err
 	}
 	defer os.RemoveAll(tmp)
+
+	var libs []string
+	useZig := false
+	if b.zig {
+		if ziglib.Supported("linux", b.arch) {
+			so := filepath.Join(tmp, ziglib.FileName("linux"))
+			if err := ziglib.Extract(ctx, b.proj.Root, "linux", b.arch, so); err != nil {
+				return err
+			}
+			libs = append(libs, so)
+			useZig = true
+		} else {
+			ui.Stderr.Warn("the Zig renderer is not available for linux/%s; building with the Go renderer", b.arch)
+		}
+	}
+
 	icon, err := b.icon(ctx, tmp)
 	if err != nil {
 		return err
@@ -106,15 +131,21 @@ func (b *builder) linux(ctx context.Context) error {
 	o := b.release(bin)
 	o.GOOS, o.GOARCH = "linux", b.arch
 	o.Env = append(o.Env, "CGO_ENABLED=0")
+	if useZig {
+		o.Tags = ziglib.WithTags(o.Tags, false)
+		o.LDFlags += " " + ziglib.LibraryPathLDFlag(linux.LibRelPath(app, ziglib.FileName("linux")))
+	} else if b.zig {
+		o.Tags = ziglib.WithoutTags(o.Tags)
+	}
 	if err := b.build(ctx, o, "linux/"+b.arch); err != nil {
 		return err
 	}
 
-	tree, err := b.linuxTree(ctx, dir, app, bin, icon, svg)
+	tree, err := b.linuxTree(ctx, dir, app, bin, libs, icon, svg)
 	if err != nil {
 		return err
 	}
-	archives, err := b.linuxArchives(ctx, app, tree, dir)
+	archives, err := b.linuxArchives(ctx, app, tree, dir, useZig)
 	if err != nil {
 		return err
 	}
@@ -138,7 +169,7 @@ func (b *builder) reportLinux(tree string, archives []string) error {
 
 // linuxTree assembles the install tree in dir and says what the files
 // leave out, returning the tree's path.
-func (b *builder) linuxTree(ctx context.Context, dir string, app linux.App, bin, icon, svg string) (string, error) {
+func (b *builder) linuxTree(ctx context.Context, dir string, app linux.App, bin string, libs []string, icon, svg string) (string, error) {
 	cfg := b.proj.Config
 	log := ui.Stderr
 	name := linux.TreeName(app)
@@ -149,12 +180,13 @@ func (b *builder) linuxTree(ctx context.Context, dir string, app linux.App, bin,
 	err := step(ctx, "Assembling "+name, "Assembled "+name, func() error {
 		var err error
 		tree, warnings, err = linux.Assemble(linux.Tree{
-			App:      app,
-			Binary:   bin,
-			Icon:     icon,
-			IconName: b.proj.Path(cfg.App.Icon),
-			SVG:      svg,
-			OutDir:   dir,
+			App:       app,
+			Binary:    bin,
+			Libraries: libs,
+			Icon:      icon,
+			IconName:  b.proj.Path(cfg.App.Icon),
+			SVG:       svg,
+			OutDir:    dir,
 		})
 		return err
 	})
@@ -178,7 +210,7 @@ func (b *builder) linuxTree(ctx context.Context, dir string, app linux.App, bin,
 
 // linuxArchives makes each format of b.formats from the tree, returning
 // the files made.
-func (b *builder) linuxArchives(ctx context.Context, app linux.App, tree, dir string) ([]string, error) {
+func (b *builder) linuxArchives(ctx context.Context, app linux.App, tree, dir string, useZig bool) ([]string, error) {
 	var artifacts []string
 	for _, f := range b.formats {
 		var (
@@ -190,7 +222,7 @@ func (b *builder) linuxArchives(ctx context.Context, app linux.App, tree, dir st
 			out = filepath.Join(dir, linux.TarName(app))
 			write = func() error { return linux.Tar(tree, out) }
 		default:
-			p := linux.Package{App: app, Tree: tree, Depends: b.depends(f), OutDir: dir}
+			p := linux.Package{App: app, Tree: tree, Depends: b.depends(f, useZig), OutDir: dir}
 			name, err := p.FileName(f)
 			if err != nil {
 				return nil, err

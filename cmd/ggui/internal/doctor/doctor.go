@@ -82,10 +82,11 @@ func Run(ctx context.Context, o Options) *Report {
 	r.Checks = append(r.Checks, pr.Checks...)
 	checkRemote(ctx, r, o, proj)
 	cfg := checkConfig(r, o)
+	checkRenderer(ctx, r, cfg, env)
 	if cfg != nil {
 		checkTranslations(r, cfg.Root, cfg.Config.I18n)
 	}
-	checkPlatform(ctx, r, env)
+	checkPlatform(ctx, r, env, cfg)
 	checkTools(ctx, r)
 	checkSigning(ctx, r, cfg)
 	return r
