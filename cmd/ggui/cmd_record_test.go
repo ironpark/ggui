@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"image/gif"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/config"
+	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 	"github.com/ironpark/ggui/cmd/ggui/internal/scaffold"
 	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
 )
@@ -37,6 +39,33 @@ func TestRecordProtocolGolden(t *testing.T) {
 	}
 	if got, _ := json.Marshal(rep); string(got) != goldenRecordReport {
 		t.Errorf("report\n%s\nwant\n%s", got, goldenRecordReport)
+	}
+}
+
+// Every flag that sets how the recording is made reaches the request the
+// app is asked for; a flag left at its default is left out of it.
+func TestRecordRequestCarriesTheFlags(t *testing.T) {
+	parse := func(args ...string) recordRequest {
+		t.Helper()
+		fs := flag.NewFlagSet("record", flag.ContinueOnError)
+		f := newRecordFlags(fs)
+		if err := fs.Parse(args); err != nil {
+			t.Fatal(err)
+		}
+		req, err := f.request("intro", &project.Project{Root: t.TempDir()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return req
+	}
+	req := parse("--fps", "10", "--width", "640", "--colors", "128", "--dither", "0.25", "--loop", "2", "--lossy", "30", "--frame", "round", "--backdrop", "#20242a", "--cursor=false")
+	want := recordRequest{FPS: 10, Width: 640, Colors: 128, Dither: 0.25, Loop: 2, Lossy: 30, Frame: "round", Backdrop: "#20242a", NoCursor: true}
+	req.V, req.Tour, req.Format, req.Out = 0, "", "", ""
+	if req != want {
+		t.Errorf("request = %+v, want %+v", req, want)
+	}
+	if def := parse(); def.Colors != 0 {
+		t.Errorf("default colors = %d, want 0 (left out)", def.Colors)
 	}
 }
 

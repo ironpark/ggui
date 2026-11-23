@@ -404,7 +404,8 @@ func StringsOf(env ggui.Env) *Strings {
 func stringsOf(env ggui.Env) *Strings { return StringsOf(env) }
 
 // OrDefault returns s, or the English Strings when s is nil: the words of a
-// control not yet laid out.
+// control not yet laid out. The English Strings are shared; treat them as
+// read-only, as StringsOf's result.
 func (s *Strings) OrDefault() *Strings {
 	if s == nil {
 		return &english

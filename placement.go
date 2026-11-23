@@ -307,7 +307,7 @@ func (s *placementStore) save(name string, p placement) {
 	all[name] = p
 	data, err := json.MarshalIndent(all, "", "\t")
 	if err == nil {
-		err = replaceFile(s.path, data)
+		err = replaceFile(s.path, data, 0o600)
 	}
 	if err != nil {
 		placementTrouble(err)
@@ -315,13 +315,14 @@ func (s *placementStore) save(name string, p placement) {
 }
 
 // replaceFile writes data to path through a file beside it, renamed over
-// path once it is complete.
-func replaceFile(path string, data []byte) error {
+// path once complete, so that a reader never sees half of it, and gives it
+// mode. It makes the directory if it is missing.
+func replaceFile(path string, data []byte, mode fs.FileMode) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(dir, ".windows-*.json")
+	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+"-*")
 	if err != nil {
 		return err
 	}
@@ -330,10 +331,15 @@ func replaceFile(path string, data []byte) error {
 		err = cerr
 	}
 	if err == nil {
+		err = os.Chmod(f.Name(), mode)
+	}
+	if err == nil {
 		err = robustio.Rename(f.Name(), path)
 	}
 	if err != nil {
-		os.Remove(f.Name())
+		if rerr := os.Remove(f.Name()); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
+			err = errors.Join(err, rerr)
+		}
 	}
 	return err
 }
