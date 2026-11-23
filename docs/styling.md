@@ -748,7 +748,7 @@ control supports `.Name("Appearance")`, `.OnChange(fn)`, `.Disabled(v)`, and
 | `Provide`, `WithEnv` | [environment.go](../environment.go) |
 | `ui.Title`, `ui.Heading`, `ui.Caption`, `ui.Mono` | [ui/text.go](../ui/text.go) |
 | Shadows | [effects.go](../effects.go) |
-| Motion and transitions | [anim.go](../anim.go), [widget/transition.go](../widget/transition.go) |
+| Motion and transitions | [anim.go](../anim.go), [timeline.go](../timeline.go), [widget/transition.go](../widget/transition.go) |
 | The controls that consume the tokens | [ui/](../ui/) |
 
 See [Documentation](README.md) for the rest of the framework, and
