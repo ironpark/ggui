@@ -9,7 +9,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/pkg/virtual"
+	"github.com/ironpark/ggui/internal/virtual"
 )
 
 // layoutFor lays a EachKeyed out with room for everything, which is when its

@@ -5,7 +5,7 @@ import (
 	"slices"
 	"unsafe"
 
-	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/gem"
 )
 
 // Routing through the region tree. Every region knows the region it was

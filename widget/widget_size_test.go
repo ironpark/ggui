@@ -8,7 +8,7 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/gem"
 )
 
 // steadyTextFrame lays w out and paints it, as a frame that finds nothing

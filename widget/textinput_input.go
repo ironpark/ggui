@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/internal/editlayout"
 	"github.com/ironpark/ggui/internal/textedit"
 	"github.com/ironpark/ggui/internal/textlayout"
-	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/runtime"
 )
 

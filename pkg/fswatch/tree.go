@@ -112,7 +112,7 @@ func (t *Tree) Run(ctx context.Context, out chan<- []string) error {
 	defer t.run.Unlock()
 	src, err := t.newSource(true, func(dir string) bool { return t.ignored(dir, true) })
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrUnwatched, err)
+		return fmt.Errorf("%w: %w", ErrUnwatched, err)
 	}
 	defer src.close()
 
@@ -127,11 +127,14 @@ func (t *Tree) Run(ctx context.Context, out chan<- []string) error {
 		return src.watch(roots)
 	}
 	if err := rewatch(); err != nil {
-		return fmt.Errorf("%w: %v", ErrUnwatched, err)
+		return fmt.Errorf("%w: %w", ErrUnwatched, err)
 	}
 
 	pending := map[string]bool{}
 	var settle <-chan time.Time
+	settleTimer := time.NewTimer(t.o.Settle)
+	settleTimer.Stop()
+	defer settleTimer.Stop()
 	for {
 		var send chan<- []string
 		var batch []string
@@ -145,18 +148,19 @@ func (t *Tree) Run(ctx context.Context, out chan<- []string) error {
 			clear(pending)
 		case <-t.changed:
 			if err := rewatch(); err != nil {
-				return fmt.Errorf("%w: %v", ErrUnwatched, err)
+				return fmt.Errorf("%w: %w", ErrUnwatched, err)
 			}
 		case <-src.wake():
 			if settle == nil {
-				settle = time.After(t.o.Settle)
+				settleTimer.Reset(t.o.Settle)
+				settle = settleTimer.C
 			}
 		case <-settle:
 			settle = nil
 			paths, all, err := src.take()
 			switch {
 			case err != nil:
-				return fmt.Errorf("%w: %v", ErrUnwatched, err)
+				return fmt.Errorf("%w: %w", ErrUnwatched, err)
 			case all:
 				for _, r := range roots {
 					pending[r] = true

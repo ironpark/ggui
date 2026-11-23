@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/pkg/gem"
-	"github.com/ironpark/ggui/pkg/kinetics"
+	"github.com/ironpark/ggui/kinetics"
 	"github.com/ironpark/ggui/property"
 )
 

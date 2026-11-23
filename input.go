@@ -3,8 +3,8 @@ package ggui
 import (
 	"slices"
 
-	"github.com/ironpark/ggui/pkg/gem"
-	"github.com/ironpark/ggui/pkg/kinetics"
+	"github.com/ironpark/ggui/gem"
+	"github.com/ironpark/ggui/kinetics"
 	"github.com/ironpark/ggwd"
 )
 

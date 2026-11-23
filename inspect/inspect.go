@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"github.com/ironpark/ggui/a11y"
-	"github.com/ironpark/ggui/pkg/layout"
+	"github.com/ironpark/ggui/layout"
 )
 
 type (

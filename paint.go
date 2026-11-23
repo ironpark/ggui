@@ -11,14 +11,14 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggfx/vector"
+	"github.com/ironpark/ggui/gem"
+	"github.com/ironpark/ggui/geom"
 	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/framestats"
 	"github.com/ironpark/ggui/internal/render"
 	"github.com/ironpark/ggui/internal/textedit"
 	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/internal/third_party/text"
-	"github.com/ironpark/ggui/pkg/gem"
-	"github.com/ironpark/ggui/pkg/geom"
 )
 
 // Drawing on a Canvas. The rectangles, circles and lines a widget draws

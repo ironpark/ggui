@@ -4,7 +4,7 @@ import (
 	"slices"
 
 	"github.com/ironpark/ggui/a11y"
-	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/gem"
 )
 
 // The description types live in the a11y package, which cannot import

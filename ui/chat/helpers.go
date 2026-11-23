@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"

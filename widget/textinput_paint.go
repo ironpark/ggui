@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/internal/editlayout"
 	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/internal/third_party/text"
-	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // caretBlink is how long the caret shows and hides for.

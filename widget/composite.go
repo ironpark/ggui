@@ -2,7 +2,7 @@ package widget
 
 import (
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/property"
 )
 

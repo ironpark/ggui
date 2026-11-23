@@ -5,8 +5,8 @@ import (
 	"sort"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/pkg/gem"
-	"github.com/ironpark/ggui/pkg/virtual"
+	"github.com/ironpark/ggui/gem"
+	"github.com/ironpark/ggui/internal/virtual"
 )
 
 // The parts of EachWidget that work with an enclosing Scroll: section

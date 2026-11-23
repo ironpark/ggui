@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/ironpark/ggui/pkg/hangul"
+	"github.com/ironpark/ggui/ui/internal/hangul"
 )
 
 // The weights of commandScore, those of the command-score cmdk ranks its
