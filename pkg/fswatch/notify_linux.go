@@ -156,7 +156,7 @@ func (s *inotify) watchTrees(roots []string, maxDirs int) error {
 		err := filepath.WalkDir(r, func(p string, d fs.DirEntry, err error) error {
 			switch {
 			case err != nil:
-				return nil // gone, or not to be read: not watched
+				return nil //nolint:nilerr // an unreadable entry is skipped; the walk goes on
 			case !d.IsDir():
 				return nil
 			case p != r && s.skip != nil && s.skip(p):
