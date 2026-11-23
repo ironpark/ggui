@@ -163,7 +163,7 @@ func (w *Watcher) check(full bool, relist map[string]bool) Batch {
 		onFull()
 	}
 
-	// Stat outside the lock, so Set is never held up by a slow
+	// Stat outside the lock, so Add and Set are never held up by a slow
 	// disk, keeping only the paths that changed.
 	changed := w.changes(seen)
 	defer func() {
