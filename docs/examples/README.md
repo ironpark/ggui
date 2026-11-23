@@ -33,6 +33,7 @@ in a browser with live reloads, use `task serve EXAMPLE=<name>` (for example
 | [SQLite](sqlite) | Standalone-module SQLite browser with filtering, sorting, paging, typed edits, SQL runner, and CSV export | `go run ./docs/examples/sqlite` |
 | [Gallery](gallery) | Searchable preview catalog across all `ui`, `ui/chart`, and `ui/chat` controls with live theme customizer | `go run ./docs/examples/gallery` (`task run-gallery`) |
 | [Create](create) | Live theme editor with interactive card collage, palettes, typography, radius, JSON presets, and Go code export | `go run ./docs/examples/create` (`task run-create`) |
+| [Installer](installer) | Go-authored setup wizard preview with welcome, license, location, custom options, env/PATH, and Windows Registry hooks | `go run ./docs/examples/installer` |
 
 ## Headless tests
 
