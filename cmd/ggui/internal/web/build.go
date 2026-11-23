@@ -166,7 +166,7 @@ func Optimize(ctx context.Context, path, flags string, logf func(string, ...any)
 // is the one worth having: on a 36 MB binary it saves 45% in a quarter
 // second, where the best level spends seven times as long for another
 // percent.
-func Gzip(path string) (int64, error) {
+func Gzip(path string) (size int64, err error) {
 	src, err := os.Open(path)
 	if err != nil {
 		return 0, err
@@ -178,7 +178,11 @@ func Gzip(path string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer dst.Close()
+	defer func() {
+		if cerr := dst.Close(); err == nil {
+			err = cerr
+		}
+	}()
 
 	zw := gzip.NewWriter(dst)
 	if _, err := io.Copy(zw, src); err != nil {

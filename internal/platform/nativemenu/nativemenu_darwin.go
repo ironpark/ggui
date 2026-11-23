@@ -17,7 +17,7 @@ import (
 // application menu, with About, Hide and Quit, stays first, and the Window
 // menu stays last. A tray is an NSStatusItem. Every action, in either, is
 // one method of one target object, which reads the sender's tag and hands
-// it to the callback Handle was given. All of it runs on the main thread,
+// it to the callback OnSelect was given. All of it runs on the main thread,
 // which is AppKit's.
 
 var (
@@ -134,10 +134,10 @@ func Supported() bool { return true }
 // channel.
 func TraySupported() bool { return true }
 
-// Handle sets the function called with an action's id when it is chosen,
+// OnSelect sets the function called with an action's id when it is chosen,
 // in a menu or by a tray's click. It runs on the main thread locally, or on
 // the remote event reader in a remote app, and must hand the work on.
-func Handle(selected func(id int)) {
+func OnSelect(selected func(id int)) {
 	mu.Lock()
 	onSelect = selected
 	mu.Unlock()
@@ -397,7 +397,7 @@ func ContextSupported() bool { return !remotedisplay.On() }
 
 // Popup tracks a menu synchronously and returns its selected action, or zero
 // on dismissal. Selection is returned to the caller rather than dispatched
-// through Handle, so it runs in the originating window before IDs are released.
+// through OnSelect, so it runs in the originating window before IDs are released.
 func Popup(owner uintptr, x, y float64, entries []Item) (selected int) {
 	ggwd.RunOnMainThread(func() {
 		if owner == 0 || len(entries) == 0 {

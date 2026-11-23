@@ -76,7 +76,7 @@ func expand(path string, ig *watch.Ignore) []string {
 	var all []string
 	filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr // an unreadable entry is skipped; the walk goes on
 		}
 		if p != path {
 			if len(d.Name()) > 0 && d.Name()[0] == '.' {

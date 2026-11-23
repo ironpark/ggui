@@ -1,6 +1,7 @@
 package web
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -170,9 +171,7 @@ func (s *Server) startLocked() *build {
 	dir := filepath.Join(s.tmp, strconv.Itoa(s.seq))
 	prev := filepath.Join(s.tmp, strconv.Itoa(s.seq-2))
 	s.broadcastLocked(b.event())
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	s.wg.Go(func() {
 		defer cancel()
 		o := s.build
 		o.Out = filepath.Join(dir, WasmName)
@@ -202,7 +201,7 @@ func (s *Server) startLocked() *build {
 			os.RemoveAll(prev)
 		}
 		s.broadcastLocked(b.event())
-	}()
+	})
 	return b
 }
 
@@ -274,13 +273,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	switch rest {
 	case "", "index.html":
-		s.serveIndex(w, r)
+		s.serveIndex(w)
 	case WasmName:
 		s.serveWasm(w, r)
 	case "wasm_exec.js":
 		s.serveWasmExec(w, r)
 	case "_status":
-		s.serveStatus(w, r)
+		s.serveStatus(w)
 	case "_events":
 		s.serveEvents(w, r)
 	case "_rebuild":
@@ -296,34 +295,49 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.Rebuild()
 		w.WriteHeader(http.StatusNoContent)
 	default:
-		// Anything else comes from the package's own directory, so it can
-		// ship an asset it fetches at run time. A page request naming no
-		// file is a route the app shows itself.
-		clean := pathClean(rest)
-		if blockedStaticPath(clean) {
-			http.NotFound(w, r)
-			return
-		}
-		file := filepath.Join(s.pkgDir, filepath.FromSlash(clean))
-		if _, err := os.Stat(file); errors.Is(err, fs.ErrNotExist) {
-			// A dangling symlink is not a route.
-			if _, lerr := os.Lstat(file); lerr == nil {
-				http.NotFound(w, r)
-				return
-			}
-			if wantsPage(r) {
-				s.serveIndex(w, r)
-				return
-			}
-			http.NotFound(w, r)
-			return
-		}
-		if !s.containedInPkgDir(file) {
-			http.NotFound(w, r)
-			return
-		}
-		http.ServeFile(w, r, file)
+		s.serveAsset(w, r, rest)
 	}
+}
+
+// serveAsset serves what comes from the package's own directory, so it
+// can ship an asset it fetches at run time. A page request naming no file
+// is a route the app shows itself. The directory is opened as a root, so
+// a path cannot leave it through a symlink.
+func (s *Server) serveAsset(w http.ResponseWriter, r *http.Request, rest string) {
+	clean := pathClean(rest)
+	if blockedStaticPath(clean) {
+		http.NotFound(w, r)
+		return
+	}
+	root, err := os.OpenRoot(s.pkgDir)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer root.Close()
+	name := cmp.Or(clean, ".")
+	if _, err := root.Stat(name); err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
+		// A dangling symlink is not a route.
+		if _, lerr := root.Lstat(name); lerr == nil {
+			http.NotFound(w, r)
+			return
+		}
+		if wantsPage(r) {
+			s.serveIndex(w)
+			return
+		}
+		http.NotFound(w, r)
+		return
+	}
+	if !s.containedInPkgDir(filepath.Join(s.pkgDir, filepath.FromSlash(name))) {
+		http.NotFound(w, r)
+		return
+	}
+	http.ServeFileFS(w, r, root.FS(), name) //nolint:gosec // G703: root-scoped by os.Root, and the name is cleaned and checked
 }
 
 // sameOrigin rejects cross-origin browser requests while permitting same-origin
@@ -408,7 +422,7 @@ func wantsPage(r *http.Request) bool {
 		strings.Contains(r.Header.Get("Accept"), "text/html")
 }
 
-func (s *Server) serveIndex(w http.ResponseWriter, r *http.Request) {
+func (s *Server) serveIndex(w http.ResponseWriter) {
 	s.retryIfFailed() // a reload is how you ask for another go at it
 	s.current()       // start compiling while the page loads
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -472,7 +486,7 @@ func acceptsGzip(r *http.Request) bool {
 }
 
 // serveStatus answers what the build is doing, for the loading screen.
-func (s *Server) serveStatus(w http.ResponseWriter, r *http.Request) {
+func (s *Server) serveStatus(w http.ResponseWriter) {
 	b := s.current()
 	// Size is the binary as the page will see it, decoded, which is what its
 	// progress bar counts; Compressed is only for reporting.

@@ -279,7 +279,7 @@ func extract(w io.Writer, src *i18n.Sources, lang, out string) error {
 		} else if abs, err := filepath.Abs(out); err == nil {
 			out = abs
 		}
-		if _, err := os.Stat(out); err == nil {
+		if _, err := os.Stat(out); err == nil { //nolint:gosec // G703: the path is the CLI user's own argument or build output
 			return fmt.Errorf("%s exists; ggui i18n extract without --lang adds the messages it lacks", out)
 		}
 		c := &i18n.Catalog{Lang: lang, Path: out}

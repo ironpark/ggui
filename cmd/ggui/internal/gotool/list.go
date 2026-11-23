@@ -133,13 +133,15 @@ func Modules(ctx context.Context, dir string, paths ...string) ([]Module, error)
 
 // ModFile is what a go.mod file asks for.
 type ModFile struct {
-	Module  struct{ Path string }
-	Go      string
+	Module struct {
+		Path string `json:"Path"`
+	} `json:"Module"`
+	Go      string `json:"Go"`
 	Require []struct {
-		Path     string
-		Version  string
-		Indirect bool
-	}
+		Path     string `json:"Path"`
+		Version  string `json:"Version"`
+		Indirect bool   `json:"Indirect"`
+	} `json:"Require"`
 }
 
 // ReadModFile reads the go.mod at path through go mod edit, which parses

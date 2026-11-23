@@ -86,7 +86,7 @@ func Run(ctx context.Context, o Options) *Report {
 		checkTranslations(r, cfg.Root, cfg.Config.I18n)
 	}
 	checkPlatform(ctx, r, env)
-	checkTools(ctx, r, env)
+	checkTools(ctx, r)
 	checkSigning(ctx, r, cfg)
 	return r
 }

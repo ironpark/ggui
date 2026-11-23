@@ -227,7 +227,7 @@ func (a *App) handleEvent(ev ggwd.Event) error {
 		// The menu bar and the status bar exist once the engine has a
 		// window. Rebuild a pre-Run menu set so signal changes made before
 		// StartEvent (or during Setup) are reflected in the installed menu.
-		nativemenu.Handle(a.menuSelected)
+		nativemenu.OnSelect(a.menuSelected)
 		if a.menu != nil {
 			a.SetMenu(a.menu.items...)
 		}

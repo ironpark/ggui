@@ -41,22 +41,22 @@ func TestPackageName(t *testing.T) {
 }
 
 func TestPackageVersion(t *testing.T) {
-	for in, want := range map[string]string{
-		"1":                "1",
-		"1.2":              "1.2",
-		"1.2.3":            "1.2.3",
-		"v1.2.3":           "1.2.3",
-		"1.2.0-rc.1":       "1.2.0~rc.1",
-		"1.2.0-rc.1+git.5": "1.2.0~rc.1+git.5",
-		"dev":              "0~dev",
-		"":                 "0",
-		" 2.0 ":            "2.0",
-		"1.0_beta":         "1.0.beta",
-		"version":          "0~version",
-		"1.0+a/b":          "1.0+a.b",
+	for _, tc := range []struct{ in, want string }{
+		{"1", "1"},
+		{"1.2", "1.2"},
+		{"1.2.3", "1.2.3"},
+		{"v1.2.3", "1.2.3"},
+		{"1.2.0-rc.1", "1.2.0~rc.1"},
+		{"1.2.0-rc.1+git.5", "1.2.0~rc.1+git.5"},
+		{"dev", "0~dev"},
+		{"", "0"},
+		{" 2.0 ", "2.0"},
+		{"1.0_beta", "1.0.beta"},
+		{"version", "0~version"},
+		{"1.0+a/b", "1.0+a.b"},
 	} {
-		if got := PackageVersion(in); got != want {
-			t.Errorf("PackageVersion(%q) = %q, want %q", in, got, want)
+		if got := PackageVersion(tc.in); got != tc.want {
+			t.Errorf("PackageVersion(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
 }

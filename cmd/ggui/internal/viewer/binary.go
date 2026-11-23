@@ -204,7 +204,7 @@ func (b *Binary) Ensure(ctx context.Context) (built bool, err error) {
 	dir := filepath.Dir(b.Path)
 	if _, err := os.Stat(b.Path); err == nil {
 		now := time.Now()
-		os.Chtimes(dir, now, now) // used: the last to be pruned
+		_ = os.Chtimes(dir, now, now) // used: the last to be pruned
 		return false, nil
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -222,7 +222,7 @@ func (b *Binary) Ensure(ctx context.Context) (built bool, err error) {
 		os.Remove(tmp.Name())
 		os.Remove(dir) // if no other session builds there
 		if be, ok := errors.AsType[*gotool.BuildError](err); ok {
-			return false, fmt.Errorf("building the viewer failed:\n%s", be.Error())
+			return false, fmt.Errorf("building the viewer failed:\n%w", be)
 		}
 		return false, err
 	}

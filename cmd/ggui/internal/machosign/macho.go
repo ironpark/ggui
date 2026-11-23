@@ -107,7 +107,7 @@ func Sign(data []byte, o Options) ([]byte, error) {
 
 // SignFile signs the program at path in place.
 func SignFile(path string, o Options) error {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G703: the path is the CLI user's own argument or build output
 	if err != nil {
 		return err
 	}
@@ -124,7 +124,7 @@ func SignFile(path string, o Options) error {
 // replaceFile writes data over path through a file beside it, keeping
 // its mode, so that a failed write leaves path as it was.
 func replaceFile(path string, data []byte) error {
-	fi, err := os.Stat(path)
+	fi, err := os.Stat(path) //nolint:gosec // G703: the path is the CLI user's own argument or build output
 	if err != nil {
 		return err
 	}
@@ -138,13 +138,13 @@ func replaceFile(path string, data []byte) error {
 		err = cerr
 	}
 	if err == nil {
-		err = os.Chmod(tmp, fi.Mode().Perm())
+		err = os.Chmod(tmp, fi.Mode().Perm()) //nolint:gosec // G703: the path is the CLI user's own argument or build output
 	}
 	if err == nil {
 		err = shared.Rename(tmp, path)
 	}
 	if err != nil {
-		os.Remove(tmp)
+		os.Remove(tmp) //nolint:gosec // G703: the path is the CLI user's own argument or build output
 	}
 	return err
 }

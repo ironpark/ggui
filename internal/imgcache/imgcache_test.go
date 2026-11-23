@@ -492,6 +492,8 @@ func TestWaitersDuringUploadAreNotifiedAfterReady(t *testing.T) {
 	h1.Acquire(c, k, load, Waiter{Post: u1.post, Notify: func() { n1.Add(1) }})
 	h2.Acquire(c, k, load, Waiter{Post: u2.post, Notify: func() { n2.Add(1) }})
 	close(loadDone)
+	tick := time.NewTicker(time.Millisecond)
+	defer tick.Stop()
 
 	// Wait until run() posts to both u1 and u2.
 	deadline := time.After(time.Second)
@@ -508,7 +510,7 @@ func TestWaitersDuringUploadAreNotifiedAfterReady(t *testing.T) {
 		select {
 		case <-deadline:
 			t.Fatal("timed out waiting for load to finish")
-		case <-time.After(time.Millisecond):
+		case <-tick.C:
 		}
 	}
 
@@ -564,6 +566,8 @@ func TestUploadPanicMarksDeadAndRemovesEntry(t *testing.T) {
 	var calls atomic.Int32
 	k := Key{Src: "panic-img"}
 	h.Acquire(c, k, sized(4, 4, &calls), Waiter{Post: u.post, Notify: func() {}})
+	tick := time.NewTicker(time.Millisecond)
+	defer tick.Stop()
 	deadline := time.After(time.Second)
 	for {
 		u.mu.Lock()
@@ -575,7 +579,7 @@ func TestUploadPanicMarksDeadAndRemovesEntry(t *testing.T) {
 		select {
 		case <-deadline:
 			t.Fatal("timed out waiting for load")
-		case <-time.After(time.Millisecond):
+		case <-tick.C:
 		}
 	}
 	var recovered any

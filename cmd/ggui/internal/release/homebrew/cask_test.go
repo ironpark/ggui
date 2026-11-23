@@ -74,10 +74,12 @@ func TestCaskGolden(t *testing.T) {
 }
 
 func TestRubyEscaping(t *testing.T) {
-	c := casks()["universal"]
+	cs := casks()
+	c := cs["universal"]
 	c.Name = "Say \"Hi\" #{system(\"x\")} #@ivar #$gvar\r\n"
 	c.Universal.URL = "https://github.com/alice/#{evil}/releases/download/v1.2.0/app-#{pwn}-1.2.0.dmg"
-	got, err := c.Ruby()
+	cs["universal"] = c
+	got, err := cs["universal"].Ruby()
 	if err != nil {
 		t.Fatal(err)
 	}
