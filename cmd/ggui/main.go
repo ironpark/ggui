@@ -4,6 +4,7 @@
 //	ggui dev [package]     run it, rebuilding and restarting it on every change
 //	ggui build [package]   build a macOS .app, a Windows .exe, a web bundle or a program
 //	ggui release [dir]     build the release files and publish them
+//	ggui update keygen|sign|verify|appcast  manage Ed25519 keys and Sparkle 2 appcast.xml feeds
 //	ggui doctor            check the machine and the project
 //	ggui i18n check|extract  check the translation catalogs, or fill them in
 //	ggui record [name]     draw a tour of it into an animated GIF
@@ -42,7 +43,7 @@ type command struct {
 	flags func(fs *flag.FlagSet) func(ctx context.Context, pos, rest []string) error
 }
 
-var commands = []*command{initCmd, devCmd, buildCmd, releaseCmd, doctorCmd, i18nCmd, recordCmd}
+var commands = []*command{initCmd, devCmd, buildCmd, releaseCmd, updateCmd, doctorCmd, i18nCmd, recordCmd}
 
 // stopSignals are the signals that stop a command: Ctrl-C, a polite kill,
 // and the terminal closing.

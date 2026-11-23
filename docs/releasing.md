@@ -1,17 +1,19 @@
 # Releasing an app
 
-[Documentation](README.md) · [The ggui command](cli.md)
+[Documentation](README.md) · [The ggui command](cli.md) · [Auto-updating an app](updater.md)
 
 `ggui release` takes a ggui app from a commit to the people who install
-it: it builds the macOS, Windows and Linux files, checksums them, and
-publishes them as a GitHub release, a Homebrew cask and a Chocolatey
-package. This page goes through it in order; [the command's
+it: it builds the macOS, Windows and Linux files, checksums them,
+optionally generates and signs a Sparkle 2 `appcast.xml` auto-update
+feed, and publishes them as a GitHub release, a Homebrew cask and a
+Chocolatey package. This page goes through it in order; [the command's
 reference](cli.md#ggui-release) lists every flag and key.
 
 - [From a tag to users](#from-a-tag-to-users)
 - [Credentials](#credentials)
 - [Homebrew and Gatekeeper](#homebrew-and-gatekeeper)
 - [Chocolatey](#chocolatey)
+- [Sparkle 2 appcast feeds](#sparkle-2-appcast-feeds)
 - [Releasing from GitHub Actions](#releasing-from-github-actions)
 - [Trying it first: the dry run](#trying-it-first-the-dry-run)
 - [Troubleshooting](#troubleshooting)
@@ -46,6 +48,9 @@ authors = "Alice"
 license_url = "https://github.com/alice/hello/blob/main/LICENSE"
 icon_url = "https://raw.githubusercontent.com/alice/hello/main/icon.png"
 tags = ["hello", "gui"]
+
+[release.appcast]
+merge_from = "https://github.com/alice/hello/releases/latest/download/appcast.xml"
 ```
 
 1. **The version.** Set `app.version` and commit it; `--version` releases
@@ -53,9 +58,12 @@ tags = ["hello", "gui"]
    `v1.2.0`, or `release.tag_prefix` and the version.
 2. **Checks.** The work tree must have nothing left to commit (or
    `--allow-dirty`), and the tag, if it exists already, here or on
-   `origin`, must be at the commit checked out. Publishing to GitHub
-   also needs the commit pushed, a token that works, and no published
-   release at the tag. All of this is checked before anything is built.
+   `origin`, must be at the commit checked out. When `[release.appcast]`
+   is configured, the Ed25519 signing key in `$GGUI_UPDATE_PRIVATE_KEY`
+   (or `release.appcast.private_key_env`) is validated up front.
+   Publishing to GitHub also needs the commit pushed, a token that works,
+   and no published release at the tag. All of this is checked before
+   anything is built.
 3. **Builds.** Each of `release.targets` for each of `release.arches`
    it has: macOS as one `universal` build on any host whenever both `amd64`
    and `arm64` are enabled (joined in pure Go), signed and notarized as
@@ -72,6 +80,7 @@ tags = ["hello", "gui"]
    hello-world_1.2.0_amd64.deb
    hello-world-1.2.0-1.x86_64.rpm
    ...
+   appcast.xml                               (with [release.appcast])
    SHA256SUMS
    homebrew/Casks/hello-world.rb
    chocolatey/hello-world.nuspec, tools/, hello-world.1.2.0.nupkg
@@ -100,6 +109,7 @@ tags = ["hello", "gui"]
 | GitHub | A token that can write the repository's contents (releases): a classic token with `repo`, a fine-grained one with *Contents: read and write*, or Actions' own `GITHUB_TOKEN` with `contents: write`. | `$GITHUB_TOKEN`, else `$GH_TOKEN`, else `gh auth token` when [gh](https://cli.github.com) is signed in. |
 | Homebrew | A token that can write the *tap's* contents. Actions' `GITHUB_TOKEN` cannot write another repository, so give a fine-grained token for the tap. | `$HOMEBREW_TAP_TOKEN`, else the GitHub token. |
 | Chocolatey | The API key of your [chocolatey.org account](https://community.chocolatey.org/account). | `$CHOCOLATEY_API_KEY` only; never `ggui.toml`. |
+| Appcast signing | A base64 Ed25519 private key from `ggui update keygen`. | `$GGUI_UPDATE_PRIVATE_KEY` (or `release.appcast.private_key_env`); never `ggui.toml`. |
 | macOS signing | A Developer ID certificate and notary credentials. | See [Shipping to other Macs](cli.md#shipping-to-other-macs). |
 
 No token or key is printed, in a log or an error: errors say where a
@@ -182,6 +192,48 @@ Things to know before the first push:
   sends it, a `PUT` of `multipart/form-data` to `api/v2/package/` below the
   source, with the key in `X-NuGet-ApiKey`.
 
+## Sparkle 2 appcast feeds
+
+Add a `[release.appcast]` table to `ggui.toml` to ship a signed
+Sparkle 2-compatible `appcast.xml` feed with every release:
+
+```toml
+[release.appcast]
+merge_from = "https://github.com/alice/hello/releases/latest/download/appcast.xml"
+max_items = 20
+```
+
+1. **Generate keys once** with `ggui update keygen`. Put the printed
+   `PublicKey` (`SUPublicEDKey`) in your application's `updater.Config`
+   and store the private key in `$GGUI_UPDATE_PRIVATE_KEY` (locally or
+   as a repository secret in CI — never in `ggui.toml` or git).
+2. **Build and sign.** During `ggui release`, every updatable artifact
+   (macOS `.dmg`/`.zip`, Windows `-setup.exe` with
+   `sparkle:installerArguments="--silent"` and `.zip`, Linux `.tar.gz`)
+   is signed with Ed25519 (`sparkle:edSignature`) and hashed with
+   SHA-256 (`sparkle:sha256`). Installers/packages handled by external
+   package managers (`.pkg`, `.deb`, `.rpm`) are left out of the feed.
+   macOS items receive `<sparkle:minimumSystemVersion>` from
+   `macos.minimum_system_version` (or `macos.plist.LSMinimumSystemVersion`),
+   and release notes from `--notes` / `release.notes` populate
+   `<description>`.
+3. **Merge and upload.** If `merge_from` is set, `ggui release` fetches
+   the previous feed (a missing file or HTTP 404 on the first release
+   warns and starts fresh), merges new entries newest-first, prunes
+   beyond `max_items` distinct versions, writes `appcast.xml` into
+   `build/release/VERSION/`, includes it in `SHA256SUMS`, and uploads it
+   to the GitHub release.
+
+Apps using `github.com/ironpark/ggui/updater` can then point `FeedURL`
+directly at GitHub's stable redirect URL:
+
+```text
+https://github.com/alice/hello/releases/latest/download/appcast.xml
+```
+
+See [Auto-updating an app](updater.md) for embedding the updater UI,
+beta channels, phased rollouts, and standalone `ggui update` commands.
+
 ## Releasing from GitHub Actions
 
 A workflow that releases each tag pushed. It runs on macOS, which signs
@@ -212,6 +264,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+          GGUI_UPDATE_PRIVATE_KEY: ${{ secrets.GGUI_UPDATE_PRIVATE_KEY }}
           GGUI_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
           GGUI_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
           GGUI_NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
@@ -265,11 +318,20 @@ PUT    https://push.chocolatey.org/api/v2/package/
 ```
 
 A dry run needs no token and no key, and says what a real run would stop
-at, a dirty tree or a tag elsewhere, without stopping. Read the cask and
-the scripts it wrote before the first real release; `brew style --cask`
-on the cask in a tap checks it as Homebrew's maintainers would.
+at, a dirty tree or a tag elsewhere, without stopping. When
+`[release.appcast]` is configured without `$GGUI_UPDATE_PRIVATE_KEY`, a
+dry run warns and writes an unsigned preview `appcast.xml`. Read the
+appcast, the cask and the scripts it wrote before the first real release;
+`brew style --cask` on the cask in a tap checks it as Homebrew's
+maintainers would.
 
 ## Troubleshooting
+
+- **"generating appcast.xml needs $GGUI_UPDATE_PRIVATE_KEY"**: run
+  `ggui update keygen` once and export the private key in
+  `$GGUI_UPDATE_PRIVATE_KEY` (or the variable named by
+  `release.appcast.private_key_env`), or add it as a GitHub Actions
+  secret. Never put the private key in `ggui.toml`.
 
 - **"the work tree has changes not committed"**: commit them, or add
   `build/` to `.gitignore` if it is the build's own output; `--allow-dirty`

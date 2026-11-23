@@ -34,6 +34,7 @@ in a browser with live reloads, use `task serve EXAMPLE=<name>` (for example
 | [Gallery](gallery) | Searchable preview catalog across all `ui`, `ui/chart`, and `ui/chat` controls with live theme customizer | `go run ./docs/examples/gallery` (`task run-gallery`) |
 | [Create](create) | Live theme editor with interactive card collage, palettes, typography, radius, JSON presets, and Go code export | `go run ./docs/examples/create` (`task run-create`) |
 | [Installer](installer) | Go-authored setup wizard preview with welcome, license, location, custom options, env/PATH, and Windows Registry hooks | `go run ./docs/examples/installer` |
+| [Updater](updater) | Sparkle 2-compatible auto-updater demo with local appcast server, Ed25519 signing/verification, `stable`/`beta` channel switching, manual & silent checks, skipping/clearing versions, simulated live `Applier`, and `updater.Dialog(ctrl)` | `go run ./docs/examples/updater` |
 
 ## Headless tests
 

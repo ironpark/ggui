@@ -3,16 +3,21 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/config"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 	"github.com/ironpark/ggui/cmd/ggui/internal/release"
+	"github.com/ironpark/ggui/cmd/ggui/internal/release/appcast"
+	"github.com/ironpark/ggui/cmd/ggui/internal/release/github"
 	"github.com/ironpark/ggui/cmd/ggui/internal/ui"
 )
 
@@ -370,5 +375,231 @@ func TestReleaseDryRun(t *testing.T) {
 	}
 	if !strings.Contains(said.String(), "not in a git repository") {
 		t.Errorf("no word of the missing repository:\n%s", said)
+	}
+}
+
+func TestReleaseWithAppcast(t *testing.T) {
+	if got := github.ContentType("appcast.xml"); got != "application/xml; charset=utf-8" {
+		t.Errorf("github.ContentType(appcast.xml) = %q, want application/xml; charset=utf-8", got)
+	}
+
+	pub, priv, err := appcast.GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Serve a prior 1.1.0 appcast over HTTP to test merge_from.
+	prevXML, err := appcast.Marshal(&appcast.Feed{
+		Title:    "Hello World",
+		Language: "en",
+		Items: []appcast.Item{{
+			Title:        "Version 1.1.0",
+			Version:      "1.1.0",
+			ShortVersion: "1.1.0",
+			PubDate:      time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+			Enclosure: appcast.Enclosure{
+				URL:         "https://github.com/alice/hello/releases/download/v1.1.0/hello-world-1.1.0-macos-universal.zip",
+				Length:      100,
+				Type:        appcast.DefaultEnclosureType,
+				EdSignature: "prev-sig",
+				OS:          "macos",
+				Arch:        "universal",
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/appcast.xml":
+			w.Header().Set("Content-Type", "application/xml")
+			w.Write(prevXML)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	// Pre-build key checks: missing key stops real run, warns on dry-run, invalid key never leaks secret.
+	{
+		said := quiet(t)
+		cfg := config.Defaults()
+		cfg.Release.Appcast.Make = true
+		p := &releasePlan{proj: &project.Project{Config: cfg}}
+		emptyEnv := func(string) string { return "" }
+		if err := p.checkAppcastKey(releaseOptions{dryRun: false}, emptyEnv); err == nil || !strings.Contains(err.Error(), "GGUI_UPDATE_PRIVATE_KEY") {
+			t.Errorf("missing key real run = %v", err)
+		}
+		if err := p.checkAppcastKey(releaseOptions{dryRun: true}, emptyEnv); err != nil {
+			t.Errorf("missing key dry-run failed: %v", err)
+		}
+		if !strings.Contains(said.String(), "unsigned preview") {
+			t.Errorf("dry-run missing key warning absent:\n%s", said.String())
+		}
+		badSecret := "TOP_SECRET_INVALID_KEY_VALUE"
+		if err := p.checkAppcastKey(releaseOptions{dryRun: false}, func(string) string { return badSecret }); err == nil {
+			t.Error("invalid key accepted")
+		} else if strings.Contains(err.Error(), badSecret) {
+			t.Errorf("invalid key error leaked secret: %v", err)
+		}
+		if err := p.checkAppcastKey(releaseOptions{dryRun: false}, func(string) string { return priv }); err != nil {
+			t.Fatalf("valid key rejected: %v", err)
+		}
+		if strings.Contains(p.appcastKey.String(), priv) || strings.Contains(p.appcastKey.GoString(), priv) {
+			t.Error("releasePlan.appcastKey printed secret")
+		}
+	}
+
+	// End-to-end collect with signed appcast.xml, SHA256SUMS inclusion, and HTTP merge.
+	quiet(t)
+	cfg := config.Defaults()
+	cfg.Release.Publish = []string{"github"}
+	cfg.Release.Appcast.Make = true
+	cfg.Release.Appcast.MergeFrom = srv.URL + "/appcast.xml"
+	cfg.Release.Appcast.PhasedRollout = "24h"
+	cfg.Release.Appcast.Critical = true
+	cfg.Release.Appcast.ReleaseNotesLink = "https://github.com/alice/hello/releases/tag/v1.2.0"
+
+	p := fakePlan(t, cfg, map[string][2]string{
+		release.MacName("hello-world", "1.2.0", "universal", "zip"): {"macos", "universal"},
+		release.MacName("hello-world", "1.2.0", "universal", "pkg"): {"macos", "universal"},
+		release.WindowsName("hello-world", "1.2.0", "amd64"):        {"windows", "amd64"},
+		release.WindowsSetupName("hello-world", "1.2.0", "amd64"):   {"windows", "amd64"},
+		"hello-world-1.2.0-linux-amd64.tar.gz":                      {"linux", "amd64"},
+		"hello-world_1.2.0_amd64.deb":                               {"linux", "amd64"},
+	})
+	if err := p.checkAppcastKey(releaseOptions{}, func(k string) string {
+		if k == "GGUI_UPDATE_PRIVATE_KEY" {
+			return priv
+		}
+		return ""
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	all, _, err := p.collect(t.Context(), &stdout)
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+
+	// appcast.xml must be generated, included in returned assets, and listed in SHA256SUMS.
+	appcastPath := filepath.Join(p.dir, "appcast.xml")
+	xmlBytes, err := os.ReadFile(appcastPath)
+	if err != nil {
+		t.Fatalf("appcast.xml not written: %v", err)
+	}
+	var sawAppcastAsset bool
+	for _, a := range all {
+		if a.Name == "appcast.xml" && a.SHA256 != "" && a.Size == int64(len(xmlBytes)) {
+			sawAppcastAsset = true
+		}
+	}
+	if !sawAppcastAsset {
+		t.Errorf("appcast.xml missing or unhashed in collect assets: %+v", all)
+	}
+	sumsData, err := os.ReadFile(filepath.Join(p.dir, release.SumsName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(sumsData), "  appcast.xml\n") {
+		t.Errorf("SHA256SUMS does not include appcast.xml:\n%s", sumsData)
+	}
+
+	feed, err := appcast.Parse(xmlBytes)
+	if err != nil {
+		t.Fatalf("Parse appcast.xml: %v\n%s", err, xmlBytes)
+	}
+	// 4 eligible from 1.2.0 (mac zip, win zip, win setup.exe, linux tar.gz) + 1 merged from 1.1.0 = 5.
+	if len(feed.Items) != 5 {
+		t.Fatalf("got %d items, want 5:\n%s", len(feed.Items), xmlBytes)
+	}
+	var count120 int
+	for _, it := range feed.Items {
+		if it.Version != "1.2.0" {
+			continue
+		}
+		count120++
+		base := filepath.Base(it.Enclosure.URL)
+		if err := appcast.VerifyFile(pub, filepath.Join(p.dir, base), it.Enclosure.EdSignature); err != nil {
+			t.Errorf("VerifyFile(%s) failed: %v", base, err)
+		}
+		if it.PhasedRolloutInterval != 86400 || !it.CriticalUpdate || it.ReleaseNotesLink != cfg.Release.Appcast.ReleaseNotesLink {
+			t.Errorf("1.2.0 item metadata mismatch: %+v", it)
+		}
+		if it.Enclosure.OS == "macos" && it.MinimumSystemVersion != "13.0" {
+			t.Errorf("macOS min system version = %q, want 13.0", it.MinimumSystemVersion)
+		}
+		if it.Enclosure.OS != "macos" && it.MinimumSystemVersion != "" {
+			t.Errorf("%s min system version = %q, want empty", it.Enclosure.OS, it.MinimumSystemVersion)
+		}
+		if strings.HasSuffix(base, "-setup.exe") && it.Enclosure.InstallerArguments != "--silent" {
+			t.Errorf("setup.exe installerArguments = %q, want --silent", it.Enclosure.InstallerArguments)
+		}
+	}
+	if count120 != 4 {
+		t.Errorf("got %d items for 1.2.0, want 4", count120)
+	}
+
+	// Dry-run without key + 404 merge_from warns and generates an unsigned preview appcast.xml.
+	said := quiet(t)
+	cfg2 := config.Defaults()
+	cfg2.Release.Publish = []string{"github"}
+	cfg2.Release.Appcast.Make = true
+	cfg2.Release.Appcast.MergeFrom = srv.URL + "/missing.xml"
+	p2 := fakePlan(t, cfg2, map[string][2]string{
+		release.MacName("hello-world", "1.2.0", "universal", "zip"): {"macos", "universal"},
+	})
+	p2.dryRun = true
+	if err := p2.checkAppcastKey(releaseOptions{dryRun: true}, func(string) string { return "" }); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	if _, _, err := p2.collect(t.Context(), &stdout); err != nil {
+		t.Fatalf("dry-run unsigned collect: %v", err)
+	}
+	if !strings.Contains(said.String(), "was not found") {
+		t.Errorf("expected 404 merge warning:\n%s", said.String())
+	}
+	unsignedData, err := os.ReadFile(filepath.Join(p2.dir, "appcast.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	unsignedFeed, err := appcast.Parse(unsignedData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unsignedFeed.Items) != 1 || unsignedFeed.Items[0].Enclosure.EdSignature != "" {
+		t.Errorf("unsigned dry-run feed = %+v", unsignedFeed.Items)
+	}
+
+	// writeAppcast returns a clear error when there are 0 eligible updatable artifacts.
+	cfgNoItems := config.Defaults()
+	cfgNoItems.Release.Appcast.Make = true
+	pNoItems := fakePlan(t, cfgNoItems, map[string][2]string{
+		release.MacName("hello-world", "1.2.0", "universal", "pkg"): {"macos", "universal"},
+		"hello-world_1.2.0_amd64.deb":                               {"linux", "amd64"},
+	})
+	pNoItems.dryRun = true
+	if err := pNoItems.writeAppcast(t.Context()); err == nil || !strings.Contains(err.Error(), "no updatable release artifacts") {
+		t.Errorf("writeAppcast with 0 eligible items = %v, want clear error", err)
+	}
+
+	// writeAppcast rejects sub-second phased_rollout durations.
+	cfgSubSec := config.Defaults()
+	cfgSubSec.Release.Appcast.Make = true
+	cfgSubSec.Release.Appcast.PhasedRollout = "500ms"
+	pSubSec := fakePlan(t, cfgSubSec, map[string][2]string{
+		release.MacName("hello-world", "1.2.0", "universal", "zip"): {"macos", "universal"},
+	})
+	pSubSec.dryRun = true
+	if err := pSubSec.writeAppcast(t.Context()); err == nil || !strings.Contains(err.Error(), "at least 1s") {
+		t.Errorf("writeAppcast with 500ms rollout = %v, want duration error", err)
+	}
+
+	// releaseCmd.help documents [release.appcast] and appcast.xml.
+	if !strings.Contains(releaseCmd.help, "[release.appcast]") || !strings.Contains(releaseCmd.help, "appcast.xml") {
+		t.Errorf("releaseCmd.help does not document [release.appcast] / appcast.xml")
 	}
 }

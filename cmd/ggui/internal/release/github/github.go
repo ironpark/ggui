@@ -395,6 +395,8 @@ func ContentType(name string) string {
 		return "application/x-rpm"
 	case strings.HasSuffix(n, ".exe"):
 		return "application/vnd.microsoft.portable-executable"
+	case strings.HasSuffix(n, ".xml"):
+		return "application/xml; charset=utf-8"
 	case filepath.Base(n) == strings.ToLower(release.SumsName), strings.HasSuffix(n, ".txt"):
 		return "text/plain; charset=utf-8"
 	}

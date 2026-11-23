@@ -402,7 +402,7 @@ func TestTemplate(t *testing.T) {
 	if !reflect.DeepEqual(cfg, want) {
 		t.Errorf("template parses to %+v, want %+v", cfg, want)
 	}
-	for _, table := range []string{"app", "build", "dev", "macos", "macos.notary", "macos.dmg", "macos.pkg", "windows", "linux", "web", "i18n", "release", "release.homebrew", "release.chocolatey"} {
+	for _, table := range []string{"app", "build", "dev", "macos", "macos.notary", "macos.dmg", "macos.pkg", "windows", "linux", "web", "i18n", "release", "release.homebrew", "release.chocolatey", "release.appcast"} {
 		for _, key := range knownKeys(strings.Split(table, ".")) {
 			if !strings.Contains(string(data), "\n"+key+" =") && !strings.Contains(string(data), "\n# "+key+" =") &&
 				!strings.Contains(string(data), "["+table+"."+key+"]") {
@@ -485,5 +485,109 @@ func TestBuildInstallerKey(t *testing.T) {
 	}
 	if Defaults().Build.Installer != "" {
 		t.Errorf("default build.installer = %q, want empty", Defaults().Build.Installer)
+	}
+}
+
+func TestReleaseAppcast(t *testing.T) {
+	if d := Defaults().Release.Appcast; d.Make || d.File != "appcast.xml" || d.PrivateKeyEnv != "GGUI_UPDATE_PRIVATE_KEY" || d.MaxItems != 20 {
+		t.Errorf("default release.appcast = %+v", d)
+	}
+
+	// An empty [release.appcast] table enables generation with defaults.
+	cfg, err := Parse("ggui.toml", []byte("[release.appcast]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Release.Appcast.Make || cfg.Release.Appcast.File != "appcast.xml" || cfg.Release.Appcast.PrivateKeyEnv != "GGUI_UPDATE_PRIVATE_KEY" || cfg.Release.Appcast.MaxItems != 20 {
+		t.Errorf("empty [release.appcast] = %+v", cfg.Release.Appcast)
+	}
+
+	// Full configuration.
+	cfg, err = Parse("ggui.toml", []byte(`[release.appcast]
+file = "beta-appcast.xml"
+channel = "beta"
+private_key_env = "CI_SPARKLE_KEY"
+merge_from = "https://example.com/appcast.xml"
+max_items = 10
+phased_rollout = "24h"
+critical = true
+release_notes_link = "https://example.com/releases/1.2.0"
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Appcast{
+		Make:             true,
+		File:             "beta-appcast.xml",
+		Channel:          "beta",
+		PrivateKeyEnv:    "CI_SPARKLE_KEY",
+		MergeFrom:        "https://example.com/appcast.xml",
+		MaxItems:         10,
+		PhasedRollout:    "24h",
+		Critical:         true,
+		ReleaseNotesLink: "https://example.com/releases/1.2.0",
+	}
+	if cfg.Release.Appcast != want {
+		t.Errorf("got %+v, want %+v", cfg.Release.Appcast, want)
+	}
+}
+
+func TestReleaseAppcastValidation(t *testing.T) {
+	src := `[release.appcast]
+file = "../appcast.xml"
+private_key_env = "not a var"
+max_items = 0
+phased_rollout = "soon"
+release_notes_link = "ftp://example.com/notes"
+channel = "beta 1"
+`
+	es := errorsOf(t, src)
+	want := map[int]string{
+		2: "release.appcast.file",
+		3: "release.appcast.private_key_env",
+		4: "release.appcast.max_items",
+		5: "release.appcast.phased_rollout",
+		6: "release.appcast.release_notes_link",
+		7: "release.appcast.channel",
+	}
+	if len(es) != len(want) {
+		t.Fatalf("got %d errors, want %d:\n%v", len(es), len(want), es)
+	}
+	for _, e := range es {
+		if !strings.HasPrefix(e.Msg, want[e.Line]) {
+			t.Errorf("line %d: %q, want prefix %q", e.Line, e.Msg, want[e.Line])
+		}
+	}
+
+	for _, bad := range []string{
+		"[release.appcast]\nfile = \"\"\n",
+		"[release.appcast]\nfile = \"sub/appcast.xml\"\n",
+		"[release.appcast]\nfile = \"..\"\n",
+		"[release.appcast]\nprivate_key_env = \"\"\n",
+		"[release.appcast]\nmax_items = -1\n",
+		"[release.appcast]\nphased_rollout = \"-1h\"\n",
+		"[release.appcast]\nphased_rollout = \"0s\"\n",
+		"[release.appcast]\nphased_rollout = \"500ms\"\n",
+		"[release.appcast]\nchannel = \"beta\\n2\"\n",
+		"[release.appcast]\nrelease_notes_link = \"https://\"\n",
+		"[release.appcast]\nrelease_notes_link = \"http:///notes\"\n",
+		"[release.appcast]\nrelease_notes_link = \"https://example.com\\nnotes\"\n",
+		"[release.appcast]\nrelease_notes_link = \"https://example.com\\u0000\"\n",
+		"[release.appcast]\nmerge_from = \"https://\"\n",
+		"[release.appcast]\nmerge_from = \"http:///appcast.xml\"\n",
+		"[release.appcast]\nmerge_from = \"ftp://example.com/appcast.xml\"\n",
+		"[release.appcast]\nmerge_from = \"https://example.com/a\\nb\"\n",
+		"[release.appcast]\nmerge_from = \"appcast\\u0000.xml\"\n",
+		"[linux]\nhomepage = \"https://\"\n",
+		"[release]\ngithub_api = \"http:///api\"\n",
+	} {
+		if es := errorsOf(t, bad); len(es) != 1 {
+			t.Errorf("%q: got %v, want 1 error", bad, es)
+		}
+	}
+
+	// 1s rollout and local merge_from path remain valid.
+	if _, err := Parse("ggui.toml", []byte("[release.appcast]\nphased_rollout = \"1s\"\nmerge_from = \"dist/appcast.xml\"\n")); err != nil {
+		t.Errorf("valid 1s rollout / local merge_from rejected: %v", err)
 	}
 }

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"math"
+	"net/url"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -349,7 +350,7 @@ func (v *validator) validateLinuxMaintainer() {
 }
 
 func (v *validator) validateLinuxHomepage() {
-	if v.cfg.Linux.Homepage != "" && !strings.HasPrefix(v.cfg.Linux.Homepage, "https://") && !strings.HasPrefix(v.cfg.Linux.Homepage, "http://") {
+	if v.cfg.Linux.Homepage != "" && !httpURL(v.cfg.Linux.Homepage) {
 		v.add(fmt.Sprintf("linux.homepage %q must be an http or https URL", v.cfg.Linux.Homepage), "linux", "homepage")
 	}
 }
@@ -397,6 +398,7 @@ func (r *Release) validate() []problem {
 	v.validateReleaseNotes()
 	v.validateReleaseHomebrew()
 	v.validateReleaseChocolatey()
+	v.validateReleaseAppcast()
 	return v.ps
 }
 
@@ -490,9 +492,47 @@ func (v *validator) validateReleaseChocolatey() {
 	}
 }
 
+func (v *validator) validateReleaseAppcast() {
+	a := v.cfg.Release.Appcast
+	if a.File == "" || a.File == "." || a.File == ".." || strings.ContainsAny(a.File, `/\`) || strings.Contains(a.File, "..") || strings.ContainsAny(a.File, "\n\r\x00") {
+		v.add(fmt.Sprintf(`release.appcast.file %q must be a simple file name without path separators or "..", such as "appcast.xml"`, a.File), "release", "appcast", "file")
+	}
+	if !envName.MatchString(a.PrivateKeyEnv) {
+		v.add(fmt.Sprintf(`release.appcast.private_key_env %q must name an environment variable, such as GGUI_UPDATE_PRIVATE_KEY; the private key itself never goes in this file`, a.PrivateKeyEnv), "release", "appcast", "private_key_env")
+	}
+	if a.MaxItems <= 0 {
+		v.add(fmt.Sprintf("release.appcast.max_items %d must be greater than zero", a.MaxItems), "release", "appcast", "max_items")
+	}
+	if a.PhasedRollout != "" {
+		if d, err := time.ParseDuration(a.PhasedRollout); err != nil || d < time.Second {
+			v.add(fmt.Sprintf(`release.appcast.phased_rollout %q must be a duration of at least 1s, such as "24h" or "168h"`, a.PhasedRollout), "release", "appcast", "phased_rollout")
+		}
+	}
+	if a.ReleaseNotesLink != "" && !httpURL(a.ReleaseNotesLink) {
+		v.add(fmt.Sprintf("release.appcast.release_notes_link %q must be an http or https URL", a.ReleaseNotesLink), "release", "appcast", "release_notes_link")
+	}
+	if a.Channel != "" && strings.ContainsAny(a.Channel, " \t\n\r") {
+		v.add(fmt.Sprintf("release.appcast.channel %q must not contain spaces or newlines", a.Channel), "release", "appcast", "channel")
+	}
+	if a.MergeFrom != "" {
+		if strings.ContainsAny(a.MergeFrom, "\r\n\x00") {
+			v.add("release.appcast.merge_from must be one path or URL without control characters", "release", "appcast", "merge_from")
+		} else if strings.Contains(a.MergeFrom, "://") && !httpURL(a.MergeFrom) {
+			v.add(fmt.Sprintf("release.appcast.merge_from %q must be a local path or an http or https URL", a.MergeFrom), "release", "appcast", "merge_from")
+		}
+	}
+}
+
 func httpURL(s string) bool {
-	return strings.HasPrefix(s, "https://") && len(s) > len("https://") ||
-		strings.HasPrefix(s, "http://") && len(s) > len("http://")
+	if s == "" || strings.ContainsAny(s, "\r\n\x00") {
+		return false
+	}
+	u, err := url.Parse(s)
+	if err != nil {
+		return false
+	}
+	scheme := strings.ToLower(u.Scheme)
+	return (scheme == "http" || scheme == "https") && u.Host != ""
 }
 
 // quoteList writes a, b and c as "a", "b" or "c".

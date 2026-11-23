@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/config"
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
@@ -19,6 +20,7 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/linux"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
 	"github.com/ironpark/ggui/cmd/ggui/internal/release"
+	"github.com/ironpark/ggui/cmd/ggui/internal/release/appcast"
 	"github.com/ironpark/ggui/cmd/ggui/internal/release/choco"
 	"github.com/ironpark/ggui/cmd/ggui/internal/release/github"
 	"github.com/ironpark/ggui/cmd/ggui/internal/release/homebrew"
@@ -50,6 +52,11 @@ them.
   linux    the tarball and packages linux.formats names, for each
            architecture.
 
+When [release.appcast] is present in ggui.toml, release also builds and
+Ed25519-signs a Sparkle 2 appcast.xml feed (with $GGUI_UPDATE_PRIVATE_KEY or
+release.appcast.private_key_env), merges prior versions from merge_from when
+set, and includes it alongside the release files.
+
 SHA256SUMS lists every file's checksum. Then, by --publish or
 release.publish:
 
@@ -61,7 +68,7 @@ release.publish:
   choco     the Chocolatey package, pushed with $CHOCOLATEY_API_KEY.
 
 The work tree must be clean, and the tag, if it exists, at this commit.
---dry-run builds and writes everything, the cask and the Chocolatey
+--dry-run builds and writes everything, the appcast, cask and Chocolatey
 package too, and prints the requests it would send instead of sending
 them. docs/releasing.md has the details.`,
 	flags: func(fs *flag.FlagSet) func(context.Context, []string, []string) error {
@@ -125,31 +132,34 @@ var versionRE = regexp.MustCompile(`^[0-9]+(\.[0-9]+){0,2}$`)
 // releasePlan is a release worked out from the configuration and flags,
 // before anything is built.
 type releasePlan struct {
-	proj      *project.Project
-	arg       string
-	version   string
-	tag       string
-	targets   []string
-	arches    []string
-	publish   []string
-	tags      []string
-	zig       bool
-	repo      string // owner/repo, or "" when unknown in a dry run
-	api, web  string
-	head      string // the commit released, or "" outside git in a dry run
-	dir       string // build/release/VERSION
-	slug      string // the app's name in file names
+	proj         *project.Project
+	arg          string
+	version      string
+	tag          string
+	targets      []string
+	arches       []string
+	publish      []string
+	tags         []string
+	zig          bool
+	repo         string // owner/repo, or "" when unknown in a dry run
+	api, web     string
+	head         string // the commit released, or "" outside git in a dry run
+	dir          string // build/release/VERSION
+	slug         string // the app's name in file names
 	main         *project.Main
 	instResolved bool
 	instPkg      *installer.Package
 	instDesc     *installer.Description
 	assets       []release.Asset
-	sums      release.Asset
-	cask      string // the cask's path, when one was written
-	caskToken string
-	nupkg     string // the .nupkg's path, when one was made
-	chocoID   string
-	notesFile string // the release's description, from --notes or release.notes
+	sums         release.Asset
+	cask         string // the cask's path, when one was written
+	caskToken    string
+	nupkg        string // the .nupkg's path, when one was made
+	chocoID      string
+	appcastKey   release.Token // Ed25519 private key from [release.appcast], never printed
+	appcast      string        // the appcast's path, when one was written
+	dryRun       bool
+	notesFile    string // the release's description, from --notes or release.notes
 }
 
 func (p *releasePlan) publishes(ch string) bool { return slices.Contains(p.publish, ch) }
@@ -188,7 +198,7 @@ func runRelease(ctx context.Context, o releaseOptions, stdout io.Writer, getenv 
 	if err := p.build(ctx, work); err != nil {
 		return err
 	}
-	all, body, err := p.collect(stdout)
+	all, body, err := p.collect(ctx, stdout)
 	if err != nil {
 		return err
 	}
@@ -260,9 +270,13 @@ func newReleasePlan(proj *project.Project, o releaseOptions) (*releasePlan, erro
 // build takes minutes and a notarized one longer: the repository, the
 // commit and the tag, the GitHub token, the Chocolatey key.
 func (p *releasePlan) checkRelease(ctx context.Context, o releaseOptions, getenv func(string) string) (*github.Client, error) {
+	p.dryRun = o.dryRun
 	p.api = strings.TrimRight(p.proj.Config.Release.GitHubAPI, "/")
 	p.web = github.WebURL(p.api)
 	if err := p.checkGit(ctx, o); err != nil {
+		return nil, err
+	}
+	if err := p.checkAppcastKey(o, getenv); err != nil {
 		return nil, err
 	}
 	var gh *github.Client
@@ -278,10 +292,32 @@ func (p *releasePlan) checkRelease(ctx context.Context, o releaseOptions, getenv
 	return gh, nil
 }
 
+// checkAppcastKey validates the Ed25519 signing key before any build starts.
+// In a dry run without a key, it warns and lets collect write an unsigned preview.
+func (p *releasePlan) checkAppcastKey(o releaseOptions, getenv func(string) string) error {
+	a := p.proj.Config.Release.Appcast
+	if !a.Make {
+		return nil
+	}
+	raw := strings.TrimSpace(getenv(a.PrivateKeyEnv))
+	if raw == "" {
+		if !o.dryRun {
+			return fmt.Errorf("generating %s needs $%s, a base64 Ed25519 private key (run 'ggui update keygen' to create one)", a.File, a.PrivateKeyEnv)
+		}
+		ui.Stderr.Warn("$%s is not set; generating an unsigned preview %s (a real run stops here)", a.PrivateKeyEnv, a.File)
+		return nil
+	}
+	if _, err := appcast.ParsePrivateKey(raw); err != nil {
+		return fmt.Errorf("$%s is not a valid Ed25519 private key: %w", a.PrivateKeyEnv, err)
+	}
+	p.appcastKey = release.NewToken(raw, "$"+a.PrivateKeyEnv)
+	return nil
+}
+
 // collect checks the builds made something, hashes and lists the files,
-// writes the cask and the Chocolatey package when asked, and returns the
+// writes the appcast, cask and Chocolatey package when asked, and returns the
 // assets and the release's description.
-func (p *releasePlan) collect(stdout io.Writer) ([]release.Asset, string, error) {
+func (p *releasePlan) collect(ctx context.Context, stdout io.Writer) ([]release.Asset, string, error) {
 	log := ui.Stderr
 	if len(p.assets) == 0 {
 		return nil, "", errors.New("the builds made nothing to release")
@@ -290,6 +326,9 @@ func (p *releasePlan) collect(stdout io.Writer) ([]release.Asset, string, error)
 		if err := p.assets[i].Hash(); err != nil {
 			return nil, "", err
 		}
+	}
+	if err := p.writeAppcast(ctx); err != nil {
+		return nil, "", err
 	}
 	var err error
 	if p.sums, err = release.WriteSums(p.dir, p.assets); err != nil {
@@ -352,15 +391,16 @@ func (p *releasePlan) checkGit(ctx context.Context, o releaseOptions) error {
 	}
 	g := release.Git{Dir: p.proj.Root}
 	needGitHub := p.publishes("github") || p.publishes("homebrew") || p.publishes("choco")
+	needRepo := needGitHub || p.proj.Config.Release.Appcast.Make
 
 	p.repo = p.proj.Config.Release.GitHub
-	if err := p.gitHead(ctx, g, needGitHub, soft); err != nil {
+	if err := p.gitHead(ctx, g, needRepo, soft); err != nil {
 		return err
 	}
 	if p.head == "" {
 		return nil
 	}
-	if err := p.gitRepo(ctx, g, needGitHub, soft); err != nil {
+	if err := p.gitRepo(ctx, g, needRepo, soft); err != nil {
 		return err
 	}
 	if err := p.gitDirty(ctx, g, o, soft); err != nil {
@@ -849,6 +889,103 @@ func (p *releasePlan) writeChoco() error {
 	}
 	p.chocoID = pkg.ID
 	ui.Stderr.Success("Made the Chocolatey package %s", ui.Stderr.Cyan(shortPath(p.nupkg)))
+	return nil
+}
+
+// writeAppcast generates, signs, merges, and hashes the Sparkle 2 appcast.xml
+// feed when [release.appcast] is configured, appending it to p.assets so it is
+// listed in SHA256SUMS and uploaded to GitHub Releases.
+func (p *releasePlan) writeAppcast(ctx context.Context) error {
+	cfg := p.proj.Config
+	a := cfg.Release.Appcast
+	if !a.Make {
+		return nil
+	}
+	minMacOS := cfg.MacOS.MinimumSystemVersion
+	if v, ok := cfg.MacOS.Plist["LSMinimumSystemVersion"].(string); ok {
+		minMacOS = v
+	}
+	var rolloutSec int64
+	if a.PhasedRollout != "" {
+		d, err := time.ParseDuration(a.PhasedRollout)
+		if err != nil || d < time.Second {
+			return fmt.Errorf("release.appcast.phased_rollout %q must be a duration of at least 1s", a.PhasedRollout)
+		}
+		rolloutSec = int64(d / time.Second)
+	}
+	var notesText string
+	if p.notesFile != "" {
+		data, err := os.ReadFile(p.notesFile)
+		if err != nil {
+			return fmt.Errorf("--notes: %w", err)
+		}
+		notesText = string(data)
+	}
+	items, err := appcast.BuildFromAssets(p.assets, appcast.BuildOptions{
+		Version:               p.version,
+		ShortVersion:          p.version,
+		Title:                 "Version " + p.version,
+		PubDate:               time.Now().UTC(),
+		MinMacOSVersion:       minMacOS,
+		Channel:               a.Channel,
+		PhasedRolloutInterval: rolloutSec,
+		CriticalUpdate:        a.Critical,
+		ReleaseNotes:          notesText,
+		ReleaseNotesLink:      a.ReleaseNotesLink,
+		PrivateKey:            p.appcastKey.Value(),
+		AllowUnsigned:         p.dryRun && p.appcastKey.Value() == "",
+		DownloadURL:           p.download,
+		AppcastFile:           a.File,
+	})
+	if err != nil {
+		return err
+	}
+	if len(items) == 0 {
+		return fmt.Errorf("no updatable release artifacts found for %s (expected macOS .zip/.dmg, Windows -setup.exe/.zip, or Linux .tar.gz)", a.File)
+	}
+	var existing *appcast.Feed
+	if a.MergeFrom != "" {
+		src := a.MergeFrom
+		if !isHTTPURL(src) {
+			src = p.proj.Path(src)
+		}
+		var found bool
+		existing, found, err = appcast.LoadSource(ctx, src)
+		if err != nil {
+			return fmt.Errorf("release.appcast.merge_from: %w", err)
+		}
+		if !found {
+			ui.Stderr.Warn("appcast merge source %s was not found; starting a new feed", a.MergeFrom)
+		}
+	}
+	feed := appcast.Merge(existing, items, a.MaxItems)
+	if feed.Title == "" {
+		feed.Title = p.main.Name
+	}
+	if feed.Link == "" && p.repo != "" {
+		feed.Link = p.homepage("")
+	}
+	if feed.Description == "" {
+		feed.Description = "Updates for " + p.main.Name
+	}
+	if feed.Language == "" {
+		feed.Language = "en"
+	}
+	xmlData, err := appcast.Marshal(feed)
+	if err != nil {
+		return err
+	}
+	dst := filepath.Join(p.dir, a.File)
+	if err := os.WriteFile(dst, xmlData, 0o644); err != nil {
+		return err
+	}
+	asset := release.Asset{Name: a.File, Path: dst}
+	if err := asset.Hash(); err != nil {
+		return err
+	}
+	p.assets = append(p.assets, asset)
+	p.appcast = dst
+	ui.Stderr.Success("Wrote %s (%d items)", ui.Stderr.Cyan(shortPath(dst)), len(feed.Items))
 	return nil
 }
 

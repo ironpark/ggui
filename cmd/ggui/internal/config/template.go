@@ -295,6 +295,27 @@ version = {{.Version}}
 # description = ""
 # The feed pushed to.
 # source = "https://push.chocolatey.org/"
+
+# The Sparkle 2-compatible update feed generated and signed during ggui release.
+# Adding this table enables appcast generation; the Ed25519 private key is read
+# from the environment variable private_key_env names, never written here.
+# [release.appcast]
+# The feed file name in the release directory.
+# file = "appcast.xml"
+# Optional release channel such as "beta" or "nightly"; empty is stable.
+# channel = ""
+# Environment variable holding the base64 Ed25519 private key.
+# private_key_env = "GGUI_UPDATE_PRIVATE_KEY"
+# Optional local path or http(s) URL of a previous appcast.xml to merge with.
+# merge_from = ""
+# Maximum number of distinct versions to retain when merging.
+# max_items = 20
+# Optional phased rollout duration, such as "24h" or "168h".
+# phased_rollout = ""
+# Mark this release as a critical update (<sparkle:criticalUpdate/>).
+# critical = false
+# Optional http(s) URL to release notes (<sparkle:releaseNotesLink>).
+# release_notes_link = ""
 `))
 
 // Template returns the commented file ggui init writes.

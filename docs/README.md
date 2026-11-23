@@ -73,6 +73,7 @@ from the repository root unless a guide says otherwise.
 | Translate an app's own text, with plurals, dates and numbers | [Translating an app](i18n.md) |
 | Create an app, run live rebuilds, bundle for macOS, Windows, Linux (`.tar.gz`, `.deb`, `.rpm`) or web, check translations, record GIFs, or inspect machine setup | [The ggui command](cli.md) |
 | Write a custom Windows/macOS installer in Go with custom steps, hooks, and live preview | [Writing an installer in Go](installer.md) |
+| Add Sparkle 2-compatible automatic updates with Ed25519 signing and built-in update UI | [Auto-updating an app](updater.md) |
 | Package and install apps on Linux (`.deb`, `.rpm`, tarball, runtime libraries) | [Linux](linux.md) |
 | Publish an app to GitHub, Homebrew and Chocolatey | [Releasing an app](releasing.md) |
 

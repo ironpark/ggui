@@ -32,6 +32,7 @@ applications it runs. `ggui version` prints the version installed.
 | [`ggui dev [package]`](#ggui-dev) | Run it, rebuilding and restarting it whenever its code changes; `--web` serves it to a browser instead. |
 | [`ggui build [package]`](#ggui-build) | Build a release: a macOS `.app`, a Windows `.exe`, a Linux install tree with its tarball and `.deb` and `.rpm` packages, a web bundle or a plain program. |
 | [`ggui release [dir]`](#ggui-release) | Build the release files for macOS, Windows and Linux, and publish them: a GitHub release, a Homebrew cask, a Chocolatey package. |
+| [`ggui update keygen\|sign\|verify\|appcast`](#ggui-update) | Generate Ed25519 update keys, sign or verify release files, and build Sparkle 2 `appcast.xml` feeds. |
 | [`ggui doctor`](#ggui-doctor) | Check the machine and the project for what ggui needs. |
 | [`ggui i18n check\|extract [dir]`](#ggui-i18n) | Check the translation catalogs against the messages the app passes, or add what they lack. |
 | [`ggui record [name]`](#ggui-record) | Draw a tour the app registered into an animated GIF, or PNG frames. |
@@ -56,6 +57,7 @@ and spinners. `NO_COLOR` wins over the other two.
 - [ggui dev](#ggui-dev)
 - [ggui build](#ggui-build)
 - [ggui release](#ggui-release)
+- [ggui update](#ggui-update)
 - [ggui doctor](#ggui-doctor)
 - [ggui i18n](#ggui-i18n)
 - [ggui record](#ggui-record)
@@ -883,19 +885,27 @@ credentials each channel needs and a GitHub Actions workflow.
 | `linux` | What `linux.formats` names: the tarball, `.deb` and `.rpm`: `amd64`, `arm64` and `riscv64`. |
 
 `name` is `app.name` lowercased, with hyphens between words. An
-architecture a target has no build for is passed over.
+architecture a target has no build for is passed over. When
+[`[release.appcast]`](#releaseappcast) is present in `ggui.toml`, `ggui release`
+also generates and Ed25519-signs a Sparkle 2 `appcast.xml` feed over the
+eligible release files (macOS `.dmg`/`.zip`, Windows `-setup.exe` and `.zip`,
+Linux `.tar.gz`), merges prior versions from `merge_from` when set, adds it to
+`SHA256SUMS`, and uploads it to the GitHub release. See
+[Auto-updating an app](updater.md).
 
 | Channel | Publishes |
 | --- | --- |
-| `github` | A release at the tag `v` + version, with every file. It is created as a draft with the tag and `target_commitish` set to the commit checked out, so GitHub makes the tag when it is published and nothing is pushed from here; the files are uploaded, a file of the same name replaced, a failed upload retried; and only then is the draft published, so a failed run leaves a draft no one sees. A run after a failure takes up that draft. |
+| `github` | A release at the tag `v` + version, with every file (including `appcast.xml` when `[release.appcast]` is configured). It is created as a draft with the tag and `target_commitish` set to the commit checked out, so GitHub makes the tag when it is published and nothing is pushed from here; the files are uploaded, a file of the same name replaced, a failed upload retried; and only then is the draft published, so a failed run leaves a draft no one sees. A run after a failure takes up that draft. |
 | `homebrew` | The cask `Casks/TOKEN.rb`, committed to `release.homebrew.tap` through GitHub's contents API. |
 | `choco` | The package `ID.VERSION.nupkg`, pushed to `release.chocolatey.source`. Its install script downloads the Windows zip from the GitHub release and checks its SHA-256. |
 
 Before building, a run checks what it can: that the work tree has no
 changes not committed, that the tag, if it exists here or on `origin`, is
-at this commit, and, when publishing to GitHub, that the token works, the
-commit is pushed and the release is not published already. A dry run
-says what fails and carries on.
+at this commit, that the Ed25519 private key is set and valid when
+`[release.appcast]` is configured, and, when publishing to GitHub, that
+the token works, the commit is pushed and the release is not published
+already. A dry run says what fails and carries on (writing an unsigned
+preview `appcast.xml` when no signing key is set).
 
 | Flag | Does |
 | --- | --- |
@@ -906,7 +916,7 @@ says what fails and carries on.
 | `--draft` | Leave the GitHub release a draft. Not with `homebrew` or `choco`, which download from it. |
 | `--prerelease` | Mark the GitHub release a prerelease. |
 | `--notes file` | The release's description, Markdown, replacing `release.notes`. Without either it is a table of the files. |
-| `--dry-run` | Build and write everything, the cask and the Chocolatey package too, publish nothing, and print the requests a real run would send. |
+| `--dry-run` | Build and write everything, the appcast, cask and Chocolatey package too, publish nothing, and print the requests a real run would send. |
 | `--allow-dirty` | Release from a work tree with changes not committed. |
 | `--replace-assets` | Upload to a GitHub release already published, replacing its files of the same names. |
 | `--out dir` | The output directory, replacing `build.output`. |
@@ -918,9 +928,65 @@ says what fails and carries on.
 | `GITHUB_TOKEN`, then `GH_TOKEN`, then `gh auth token` | The GitHub release, and the tap. |
 | `HOMEBREW_TAP_TOKEN` | The tap, when the token above cannot write it. |
 | `CHOCOLATEY_API_KEY` | The Chocolatey push. |
+| `GGUI_UPDATE_PRIVATE_KEY` (or `release.appcast.private_key_env`) | Ed25519 signing of the Sparkle 2 `appcast.xml` feed when `[release.appcast]` is configured. |
 
 No token or key is ever printed: an error names where the token came
 from, not what it is.
+
+## ggui update
+
+```sh
+ggui update keygen --out-private ~/.config/myapp/update.key
+ggui update sign build/release/1.2.0/myapp-1.2.0-macos-universal.dmg
+ggui update verify --signature "<sig>" --public-key "<pub>" build/release/1.2.0/myapp-1.2.0-macos-universal.dmg
+ggui update appcast \
+  --dir build/release/1.2.0 \
+  --base-url https://github.com/alice/myapp/releases/download/v1.2.0 \
+  --version 1.2.0 \
+  --merge https://github.com/alice/myapp/releases/latest/download/appcast.xml \
+  --out build/release/1.2.0/appcast.xml
+```
+
+`ggui update` manages Sparkle 2-compatible Ed25519 signing keys, archive
+signatures, and `appcast.xml` feeds independently of `ggui release`. See
+[Auto-updating an app](updater.md) for the full runtime and publishing guide.
+
+| Subcommand | Does |
+| --- | --- |
+| `keygen` | Generate an Ed25519 key pair: a base64 32-byte public key (`SUPublicEDKey`) and 32-byte private seed (compatible with Sparkle 2's `generate_keys`). With `--out-private FILE`, writes the private key atomically with mode `0600` (refusing to overwrite an existing file) and prints only the public key. |
+| `sign FILE` | Sign `FILE`'s raw bytes with the Ed25519 private key from `--key-file` or `$GGUI_UPDATE_PRIVATE_KEY` (or `--key-env`) and print `sparkle:edSignature`, `length` and `sparkle:sha256`. |
+| `verify FILE` | Verify `FILE`'s raw bytes against `--signature` and `--public-key`. |
+| `appcast` | Scan `--dir` for updatable release artifacts, sign each with Ed25519 (unless `--allow-unsigned`), merge with `--merge` when given, and write a Sparkle 2 `appcast.xml` feed. |
+
+`ggui update appcast` infers OS and architecture from each filename and
+includes macOS `.zip`/`.dmg` (skipping `.pkg`), Windows `-setup.exe` (adding
+`sparkle:installerArguments="--silent"`) and `.zip`, and Linux `.tar.gz`/`.tgz`
+(skipping `.deb` and `.rpm`). `SHA256SUMS`, the output feed file, and `.xml`
+files are skipped automatically. When `--dir` contains both macOS and
+Windows/Linux artifacts, `--min-os` is applied only to macOS items so a macOS
+version such as `13.0` does not block Windows or Linux clients.
+
+| Flag | Subcommands | Default | Does |
+| --- | --- | --- | --- |
+| `--out-private file` | `keygen` | none | Write the private key to `file` with mode `0600` instead of printing it. Fails if `file` already exists. |
+| `--key-file file` | `sign`, `appcast` | none | Read the base64 Ed25519 private key (32-byte seed or 64-byte full key) from `file`. |
+| `--key-env var` | `sign`, `appcast` | `GGUI_UPDATE_PRIVATE_KEY` | Environment variable holding the base64 Ed25519 private key when `--key-file` is not set. |
+| `--signature sig` | `verify` | none | Base64 Ed25519 signature (`sparkle:edSignature`) to verify. |
+| `--public-key key` | `verify` | none | Base64 32-byte Ed25519 public key (`SUPublicEDKey`). |
+| `--dir directory` | `appcast` | none | Directory containing the release artifacts (required). |
+| `--base-url URL` | `appcast` | none | Base `http(s)` URL where the release artifacts are hosted (required). |
+| `--version version` | `appcast` | none | Release version such as `1.2.0` (required; a leading `v` or `V` before a digit is stripped). |
+| `--out file` | `appcast` | `appcast.xml` | Output appcast XML file path. |
+| `--merge path-or-url` | `appcast` | none | Existing appcast local path or `http(s)` URL to merge with; a missing file or HTTP 404 warns and starts a fresh feed. |
+| `--title title` | `appcast` | `Updates` | RSS channel `<title>`. |
+| `--channel channel` | `appcast` | none (stable) | Release channel such as `beta` or `nightly`; empty, `stable`, or `default` is the default channel. |
+| `--min-os version` | `appcast` | none | Minimum OS version (`sparkle:minimumSystemVersion`). |
+| `--notes file` | `appcast` | none | Markdown or plain-text release notes file written to `<description>`. |
+| `--notes-url URL` | `appcast` | none | `http(s)` URL to release notes (`sparkle:releaseNotesLink`). |
+| `--rollout duration` | `appcast` | none | Phased rollout duration of at least `1s`, such as `24h` or `168h` (`sparkle:phasedRolloutInterval`, in seconds). |
+| `--critical` | `appcast` | `false` | Mark the release as a critical update (`<sparkle:criticalUpdate/>`). |
+| `--allow-unsigned` | `appcast` | `false` | Allow generating an unsigned feed when no private key is set. |
+| `--max-items N` | `appcast` | `20` | Maximum number of distinct versions per channel to retain when merging. |
 
 ## ggui doctor
 
@@ -1359,3 +1425,22 @@ What [`ggui release`](#ggui-release) builds and where it publishes it; see
 | `summary` | `linux.description` | `summary`. |
 | `description` | `summary` | `description`, Markdown. |
 | `source` | `"https://push.chocolatey.org/"` | The feed pushed to; the package goes to `api/v2/package` below it. |
+
+### [release.appcast]
+
+Adding this table enables Sparkle 2-compatible `appcast.xml` generation and
+Ed25519 signing during [`ggui release`](#ggui-release) (even if every key is
+left at its default); see [Auto-updating an app](updater.md). The private key
+never goes in `ggui.toml` — it is always read from the environment variable
+named by `private_key_env`.
+
+| Key | Default | Use |
+| --- | --- | --- |
+| `file` | `"appcast.xml"` | Simple filename of the generated feed in `build/release/VERSION/` (no path separators). Added to `SHA256SUMS` and uploaded as a GitHub release asset. |
+| `channel` | `""` | Optional Sparkle 2 release channel such as `"beta"` or `"nightly"`; empty, `"stable"`, or `"default"` is the default channel. |
+| `private_key_env` | `"GGUI_UPDATE_PRIVATE_KEY"` | Environment variable holding the base64 Ed25519 private key (32-byte seed or 64-byte full key). |
+| `merge_from` | none | Optional local file path (relative to `ggui.toml`) or `http(s)` URL of a previous `appcast.xml` to merge with. Missing files and HTTP 404 start a fresh feed. |
+| `max_items` | `20` | Maximum number of distinct versions per channel to retain when merging. |
+| `phased_rollout` | none | Optional Go duration of at least `"1s"`, such as `"24h"` or `"168h"`, written in seconds to `<sparkle:phasedRolloutInterval>`. |
+| `critical` | `false` | Mark the release as a critical update (`<sparkle:criticalUpdate/>`). |
+| `release_notes_link` | none | Optional `http(s)` URL written to `<sparkle:releaseNotesLink>`. |

@@ -62,6 +62,23 @@ type Release struct {
 	Notes      string     `toml:"notes"`
 	Homebrew   Homebrew   `toml:"homebrew"`
 	Chocolatey Chocolatey `toml:"chocolatey"`
+	Appcast    Appcast    `toml:"appcast"`
+}
+
+// Appcast is the Sparkle 2-compatible update feed ggui release generates and
+// signs beside the release files. The Ed25519 private key comes from the
+// environment variable PrivateKeyEnv names only.
+type Appcast struct {
+	// Make is whether the file has a [release.appcast] table.
+	Make             bool   `toml:"-"`
+	File             string `toml:"file"`            // default "appcast.xml"
+	Channel          string `toml:"channel"`         // "" = stable
+	PrivateKeyEnv    string `toml:"private_key_env"` // default "GGUI_UPDATE_PRIVATE_KEY"
+	MergeFrom        string `toml:"merge_from"`      // optional path or http(s) URL
+	MaxItems         int    `toml:"max_items"`       // default 20
+	PhasedRollout    string `toml:"phased_rollout"`  // optional duration e.g. "24h"
+	Critical         bool   `toml:"critical"`
+	ReleaseNotesLink string `toml:"release_notes_link"` // optional http(s) URL
 }
 
 // Homebrew is the cask ggui release writes into a tap.
@@ -389,6 +406,11 @@ func Defaults() Config {
 			TagPrefix:  "v",
 			Publish:    []string{"github"},
 			Chocolatey: Chocolatey{Source: "https://push.chocolatey.org/"},
+			Appcast: Appcast{
+				File:          "appcast.xml",
+				PrivateKeyEnv: "GGUI_UPDATE_PRIVATE_KEY",
+				MaxItems:      20,
+			},
 		},
 	}
 }
@@ -485,6 +507,7 @@ func Parse(name string, data []byte) (Config, error) {
 	// A table asks for what it describes even when it sets nothing.
 	cfg.MacOS.DMG.Make = md.IsDefined("macos", "dmg")
 	cfg.MacOS.PKG.Make = md.IsDefined("macos", "pkg")
+	cfg.Release.Appcast.Make = md.IsDefined("release", "appcast")
 
 	var errs Errors
 	for _, k := range undecoded(md) {
