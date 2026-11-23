@@ -119,7 +119,7 @@ func Equal[T any](a, b T) bool {
 		// is the same as another.
 		return any(a) == any(b)
 	}
-	if ok, eq := sameColors(a, b); ok {
+	if eq, ok := sameColors(a, b); ok {
 		return eq
 	}
 	if eq, ok := sameFloats(t, a, b); ok {
@@ -166,7 +166,7 @@ func sameBoxedFloats(a, b any) (eq, ok bool) {
 
 // sameColors compares a and b by the channels they draw, when both are
 // colors; it reports whether they are.
-func sameColors[T any](a, b T) (bool, bool) {
+func sameColors[T any](a, b T) (eq, ok bool) {
 	ca, ok := any(a).(color.Color)
 	if !ok {
 		return false, false
@@ -177,11 +177,11 @@ func sameColors[T any](a, b T) (bool, bool) {
 	}
 	aNil, bNil := isNilColor(ca), isNilColor(cb)
 	if aNil || bNil {
-		return true, aNil && bNil
+		return aNil && bNil, true
 	}
 	ar, ag, ab, aa := ca.RGBA()
 	br, bg, bb, ba := cb.RGBA()
-	return true, ar == br && ag == bg && ab == bb && aa == ba
+	return ar == br && ag == bg && ab == bb && aa == ba, true
 }
 
 // sameNumber compares two floats, NaN equal to NaN.

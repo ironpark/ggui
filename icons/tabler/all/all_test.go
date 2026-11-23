@@ -66,6 +66,11 @@ func TestAProgramHoldsOnlyTheIconsItNames(t *testing.T) {
 	if !bytes.Contains(data, body(tabler.Download)) {
 		t.Fatal("the icon the program names is not in it")
 	}
+	// Set maps the roles to icons the program does not name; importing
+	// the package must not link them.
+	if bytes.Contains(data, body(tabler.LayoutSidebar)) {
+		t.Fatal("a role icon the program does not name is linked by importing the package")
+	}
 	// A sample of the rest: searching the program for every icon takes a
 	// minute, and a library that was linked whole would hold them all. One
 	// of them may be drawn as the named icon is.
