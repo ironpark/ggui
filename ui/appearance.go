@@ -240,7 +240,8 @@ var disclosureHoverSlot = ggui.NewSlot[*ggui.Motion]("disclosure hover")
 // Ring describes a keyboard focus indicator: Color strokes the border of
 // Rect, rounded by Radius, and a soft three-pixel halo surrounds it. The
 // ring eases in and out over Motion (typically env.Motion(Theme.MotionFast),
-// which lands at once under reduced motion); zero switches at once.
+// which lands at once under reduced motion); zero switches at once. Theme
+// is required: the ring takes its border width and halo from it.
 type Ring struct {
 	Theme  *uitheme.Theme
 	Rect   ggui.Rect
