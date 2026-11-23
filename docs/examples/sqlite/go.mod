@@ -14,7 +14,7 @@ require (
 	github.com/ebitengine/purego v0.11.1 // indirect
 	github.com/gogpu/naga v0.21.10 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/ironpark/ggwd v0.0.0-20261120121552-0b5175d66b9d // indirect
+	github.com/ironpark/ggwd v0.0.0-20261123092851-969c1988e18d // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
