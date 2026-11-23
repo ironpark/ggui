@@ -120,19 +120,9 @@ func Refresh(e *Computation) (ran bool) {
 		return false
 	}
 	if e.state == stateCheck {
-		for _, src := range e.sources {
-			if p := src.producer(); p != nil {
-				if p.running && e.cell != nil {
-					panic("ggui: cyclic Derived")
-				}
-				Refresh(p)
-				if e.disposed || e.state == stateClean {
-					return false
-				}
-				if e.state == stateDirty {
-					break
-				}
-			}
+		e.settleSources()
+		if e.disposed || e.state == stateClean {
+			return false
 		}
 	}
 	if e.disposed {
@@ -143,6 +133,24 @@ func Refresh(e *Computation) (ran bool) {
 	}
 	e.state = stateClean
 	return false
+}
+
+// settleSources refreshes the producers e read, stopping once e is dirty,
+// settled or disposed.
+func (e *Computation) settleSources() {
+	for _, src := range e.sources {
+		p := src.producer()
+		if p == nil {
+			continue
+		}
+		if p.running && e.cell != nil {
+			panic("ggui: cyclic Derived")
+		}
+		Refresh(p)
+		if e.disposed || e.state == stateClean || e.state == stateDirty {
+			return
+		}
+	}
 }
 
 func runEffect(e *Computation) bool {
@@ -421,24 +429,7 @@ func (rt *Runtime) Flush() (settled bool) {
 		return true
 	}
 	for range MaxFlushPasses {
-		ran := false
-		for _, x := range rt.Related() {
-			if x == nil {
-				continue
-			}
-			s := &x.effects
-			clear(s.lastPass)
-			s.lastPass = s.lastPass[:0]
-			if s.settled() {
-				// Every mark bumps dirtyGen, so a set with none since the
-				// last flush has nothing to run.
-				continue
-			}
-			if s.runPass() {
-				ran = true
-			}
-		}
-		if !ran {
+		if !rt.flushPass() {
 			// Read after the quiet pass: cleanup and nested flushes may
 			// have written signals while earlier passes were running.
 			for _, x := range rt.Related() {
@@ -450,6 +441,29 @@ func (rt *Runtime) Flush() (settled bool) {
 		}
 	}
 	return false
+}
+
+// flushPass runs one pass over the runtimes rt covers, reporting whether
+// any Computation ran.
+func (rt *Runtime) flushPass() bool {
+	ran := false
+	for _, x := range rt.Related() {
+		if x == nil {
+			continue
+		}
+		s := &x.effects
+		clear(s.lastPass)
+		s.lastPass = s.lastPass[:0]
+		if s.settled() {
+			// Every mark bumps dirtyGen, so a set with none since the
+			// last flush has nothing to run.
+			continue
+		}
+		if s.runPass() {
+			ran = true
+		}
+	}
+	return ran
 }
 
 // Settled reports whether every write reaching rt or a runtime it covers

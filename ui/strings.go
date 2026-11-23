@@ -2,7 +2,6 @@ package ui
 
 import (
 	"reflect"
-	"sync"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
@@ -185,147 +184,145 @@ type Strings struct {
 
 // DefaultStrings returns the English the controls use where no Strings
 // were provided.
-func DefaultStrings() Strings { return *english() }
+func DefaultStrings() Strings { return english }
 
-// english is DefaultStrings made once, shared by every Env that has no
-// Strings of its own.
-var english = sync.OnceValue(func() *Strings {
-	return &Strings{
-		Close:    "Close",
-		Previous: "Previous",
-		Next:     "Next",
-		Loading:  "Loading",
+// english is DefaultStrings, shared by every Env that has no Strings of
+// its own.
+var english = Strings{
+	Close:    "Close",
+	Previous: "Previous",
+	Next:     "Next",
+	Loading:  "Loading",
 
-		DismissFormat:    "Dismiss %s",
-		CloseTabFormat:   "Close %s",
-		AlertContinue:    "Continue",
-		AlertCancel:      "Cancel",
-		DrawerSize:       "Drawer size",
-		DrawerSizeFormat: "%s size",
+	DismissFormat:    "Dismiss %s",
+	CloseTabFormat:   "Close %s",
+	AlertContinue:    "Continue",
+	AlertCancel:      "Cancel",
+	DrawerSize:       "Drawer size",
+	DrawerSizeFormat: "%s size",
 
-		SearchCommands:      "Search commands",
-		SearchCommandsHint:  "Search commands…",
-		Commands:            "Commands",
-		NoResults:           "No results",
-		HintNavigate:        "Navigate",
-		HintSelect:          "Select",
-		ComboboxPlaceholder: "Select…",
-		ChooseOption:        "Choose option",
-		ChooseOptions:       "Choose options",
-		ShowOptions:         "Show options",
-		ClearValue:          "Clear",
-		SearchOptions:       "Search options",
-		NoItemsFound:        "No items found.",
-		RemoveFormat:        "Remove %s",
+	SearchCommands:      "Search commands",
+	SearchCommandsHint:  "Search commands…",
+	Commands:            "Commands",
+	NoResults:           "No results",
+	HintNavigate:        "Navigate",
+	HintSelect:          "Select",
+	ComboboxPlaceholder: "Select…",
+	ChooseOption:        "Choose option",
+	ChooseOptions:       "Choose options",
+	ShowOptions:         "Show options",
+	ClearValue:          "Clear",
+	SearchOptions:       "Search options",
+	NoItemsFound:        "No items found.",
+	RemoveFormat:        "Remove %s",
 
-		ThemeModeName:    "Theme",
-		ToggleGroupName:  "Options",
-		ButtonGroupName:  "Actions",
-		ContextMenuName:  "Context menu",
-		MenubarName:      "Menubar",
-		NavigationName:   "Navigation",
-		BreadcrumbName:   "Breadcrumb",
-		SidebarName:      "Sidebar",
-		AccordionName:    "Accordion",
-		ResizablePanels:  "Resize panels",
-		TraceName:        "Execution trace",
-		AttachmentsName:  "Attachments",
-		ConversationName: "Conversation",
-		CarouselName:     "Carousel",
-		ChartName:        "Chart",
-		OneTimePassword:  "One-time password",
-		DarkMode:         "Dark mode",
-		SliderValue:      "Value",
+	ThemeModeName:    "Theme",
+	ToggleGroupName:  "Options",
+	ButtonGroupName:  "Actions",
+	ContextMenuName:  "Context menu",
+	MenubarName:      "Menubar",
+	NavigationName:   "Navigation",
+	BreadcrumbName:   "Breadcrumb",
+	SidebarName:      "Sidebar",
+	AccordionName:    "Accordion",
+	ResizablePanels:  "Resize panels",
+	TraceName:        "Execution trace",
+	AttachmentsName:  "Attachments",
+	ConversationName: "Conversation",
+	CarouselName:     "Carousel",
+	ChartName:        "Chart",
+	OneTimePassword:  "One-time password",
+	DarkMode:         "Dark mode",
+	SliderValue:      "Value",
 
-		ThemeLight:            "Light",
-		ThemeDark:             "Dark",
-		ThemeSystem:           "System",
-		BreadcrumbMore:        "More",
-		ToggleSidebar:         "Toggle Sidebar",
-		SliderThumbFormat:     "%s %d",
-		CodeLengthFormat:      "%d-character code",
-		InvalidCode:           "; invalid code",
-		AvatarMoreFormat:      "%d more",
-		ScrollToStart:         "Scroll to start",
-		ScrollToEnd:           "Scroll to end",
-		NumberDecrement:       "Decrement",
-		NumberIncrement:       "Increment",
-		PreviousSlide:         "Previous slide",
-		NextSlide:             "Next slide",
-		SlideFormat:           "Slide %d of %d",
-		ChartHelp:             "Chart. Use arrow keys to explore values; Enter selects a category.",
-		ChartTotal:            "Total",
-		ChartNoData:           "No data",
-		CodeContent:           "Code content",
-		CodeScrollHelp:        "Use arrow keys or Page Up and Page Down to scroll",
-		CodeBlockName:         "Code block",
-		CodeName:              "Code",
-		CopyCode:              "Copy code",
-		CodeCopied:            "Code copied",
-		BlockQuote:            "Block quote",
-		HighlightedLineFormat: "Highlighted line %d",
-		AddedLineFormat:       "Added line %d",
-		RemovedLineFormat:     "Removed line %d",
+	ThemeLight:            "Light",
+	ThemeDark:             "Dark",
+	ThemeSystem:           "System",
+	BreadcrumbMore:        "More",
+	ToggleSidebar:         "Toggle Sidebar",
+	SliderThumbFormat:     "%s %d",
+	CodeLengthFormat:      "%d-character code",
+	InvalidCode:           "; invalid code",
+	AvatarMoreFormat:      "%d more",
+	ScrollToStart:         "Scroll to start",
+	ScrollToEnd:           "Scroll to end",
+	NumberDecrement:       "Decrement",
+	NumberIncrement:       "Increment",
+	PreviousSlide:         "Previous slide",
+	NextSlide:             "Next slide",
+	SlideFormat:           "Slide %d of %d",
+	ChartHelp:             "Chart. Use arrow keys to explore values; Enter selects a category.",
+	ChartTotal:            "Total",
+	ChartNoData:           "No data",
+	CodeContent:           "Code content",
+	CodeScrollHelp:        "Use arrow keys or Page Up and Page Down to scroll",
+	CodeBlockName:         "Code block",
+	CodeName:              "Code",
+	CopyCode:              "Copy code",
+	CodeCopied:            "Code copied",
+	BlockQuote:            "Block quote",
+	HighlightedLineFormat: "Highlighted line %d",
+	AddedLineFormat:       "Added line %d",
+	RemovedLineFormat:     "Removed line %d",
 
-		TraceStatusPending:         "pending",
-		TraceStatusRunning:         "running",
-		TraceStatusCompleted:       "completed",
-		TraceStatusFailed:          "failed",
-		TraceStatusError:           "error",
-		TraceStatusSkipped:         "skipped",
-		AttachmentStatusIdle:       "idle",
-		AttachmentStatusUploading:  "uploading",
-		AttachmentStatusProcessing: "processing",
-		AttachmentStatusError:      "error",
-		AttachmentStatusDone:       "done",
+	TraceStatusPending:         "pending",
+	TraceStatusRunning:         "running",
+	TraceStatusCompleted:       "completed",
+	TraceStatusFailed:          "failed",
+	TraceStatusError:           "error",
+	TraceStatusSkipped:         "skipped",
+	AttachmentStatusIdle:       "idle",
+	AttachmentStatusUploading:  "uploading",
+	AttachmentStatusProcessing: "processing",
+	AttachmentStatusError:      "error",
+	AttachmentStatusDone:       "done",
 
-		PaginationName:     "Pagination",
-		PageFormat:         "Page %d",
-		MorePages:          "More pages",
-		FilterRows:         "Filter rows",
-		FilterRowsHint:     "Filter rows...",
-		Columns:            "Columns",
-		ShowColumnFormat:   "Show %s",
-		SortFormat:         "Sort %s",
-		SortAscending:      "ascending",
-		SortDescending:     "descending",
-		SelectRowFormat:    "Select row %v",
-		SelectPage:         "Select page",
-		NoTableResults:     "No results.",
-		RowsSelectedFormat: "%d of %d row(s) selected.",
-		PageOfFormat:       "Page %d of %d",
-		RowsPerPage:        "Rows per page",
+	PaginationName:     "Pagination",
+	PageFormat:         "Page %d",
+	MorePages:          "More pages",
+	FilterRows:         "Filter rows",
+	FilterRowsHint:     "Filter rows...",
+	Columns:            "Columns",
+	ShowColumnFormat:   "Show %s",
+	SortFormat:         "Sort %s",
+	SortAscending:      "ascending",
+	SortDescending:     "descending",
+	SelectRowFormat:    "Select row %v",
+	SelectPage:         "Select page",
+	NoTableResults:     "No results.",
+	RowsSelectedFormat: "%d of %d row(s) selected.",
+	PageOfFormat:       "Page %d of %d",
+	RowsPerPage:        "Rows per page",
 
-		CalendarName:  "Calendar",
-		PreviousMonth: "Previous month",
-		NextMonth:     "Next month",
-		MonthSelect:   "Month",
-		YearSelect:    "Year",
-		Weekdays:      [7]string{"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"},
-		Months: [12]string{"January", "February", "March", "April", "May", "June",
-			"July", "August", "September", "October", "November", "December"},
-		MonthsShort:      [12]string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"},
-		MonthTitleFormat: "%s %d",
-		ChooseDate:       "Choose date",
-		ChooseDates:      "Choose dates",
-		DateLayout:       "2006-01-02",
+	CalendarName:  "Calendar",
+	PreviousMonth: "Previous month",
+	NextMonth:     "Next month",
+	MonthSelect:   "Month",
+	YearSelect:    "Year",
+	Weekdays:      [7]string{"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"},
+	Months: [12]string{"January", "February", "March", "April", "May", "June",
+		"July", "August", "September", "October", "November", "December"},
+	MonthsShort:      [12]string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"},
+	MonthTitleFormat: "%s %d",
+	ChooseDate:       "Choose date",
+	ChooseDates:      "Choose dates",
+	DateLayout:       "2006-01-02",
 
-		QuestionnaireName:     "Questionnaire",
-		QuestionFormat:        "Question %d of %d",
-		QuestionnaireProgress: "Questionnaire progress",
-		Submit:                "Submit",
-		Skip:                  "Skip",
-		AnswerRequired:        "Choose an answer to continue.",
-		AnswerOrSkip:          "Choose an answer or skip this question.",
-		NoQuestions:           "No questions",
-		NoQuestionsDetail:     "There are no enabled questions.",
-	}
-})
+	QuestionnaireName:     "Questionnaire",
+	QuestionFormat:        "Question %d of %d",
+	QuestionnaireProgress: "Questionnaire progress",
+	Submit:                "Submit",
+	Skip:                  "Skip",
+	AnswerRequired:        "Choose an answer to continue.",
+	AnswerOrSkip:          "Choose an answer or skip this question.",
+	NoQuestions:           "No questions",
+	NoQuestionsDetail:     "There are no enabled questions.",
+}
 
 // withDefaults returns s with every empty string, a field's or an array
 // element's, taken from DefaultStrings.
 func (s Strings) withDefaults() Strings {
-	out, def := reflect.ValueOf(&s).Elem(), reflect.ValueOf(english()).Elem()
+	out, def := reflect.ValueOf(&s).Elem(), reflect.ValueOf(&english).Elem()
 	for i := range out.NumField() {
 		f := out.Field(i)
 		switch f.Kind() {
@@ -400,17 +397,18 @@ func StringsOf(env ggui.Env) *Strings {
 	if s, ok := env.Get(stringsKey); ok {
 		return s
 	}
-	return english()
+	return &english
 }
 
 // stringsOf is StringsOf, kept for package-internal callers.
 func stringsOf(env ggui.Env) *Strings { return StringsOf(env) }
 
 // OrDefault returns s, or the English Strings when s is nil: the words of a
-// control not yet laid out.
+// control not yet laid out. The English Strings are shared; treat them as
+// read-only, as StringsOf's result.
 func (s *Strings) OrDefault() *Strings {
 	if s == nil {
-		return english()
+		return &english
 	}
 	return s
 }

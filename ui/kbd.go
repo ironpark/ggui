@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -32,7 +33,7 @@ func (k *KbdWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := uitheme.Of(env)
 	fill, ink := t.Muted, t.MutedFg
 	if inverse, _ := env.Get(KbdInverseKey); inverse {
-		fill, ink = fade(t.Bg, pick(isDark(t.Bg), .1, .2)), t.Bg
+		fill, ink = fade(t.Bg, pick(controlkit.IsDark(t.Bg), .1, .2)), t.Bg
 	}
 	k.text.Style(t.Caption.Merge(t.Label)).Color(ink)
 	// shadcn's h-5 min-w-5 px-1 rounded-sm: two and a half Spaces square at

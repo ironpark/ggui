@@ -4,7 +4,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/kinetics"
 	"github.com/ironpark/ggwd"
 )
@@ -63,33 +62,15 @@ func (in *inputState) panTouch(f *frameInput) {
 		in.touchMotion = touchMotion{Last: now, Pos: f.pos}
 		return
 	}
-	// Assert before re-resolving: the scan only pays off for the rare control
-	// that captures drags, and it runs on every frame of a held finger.
-	if in.pressed != nil {
-		if _, ok := in.pressed.pointer.(TouchDragCapturer); ok {
-			if cur := in.findPointer(in.pressed); cur != nil {
-				if capturer, ok := cur.pointer.(TouchDragCapturer); ok && capturer.CaptureTouchDrag() {
-					return
-				}
-			}
-		}
+	if in.touchCaptured() {
+		return
 	}
 	in.touchMotion.Sample(now, f.pos, maxFrameStep)
 	delta, ok := in.touchPan.Move(f.pos)
 	if !ok {
 		return
 	}
-	ev := PointerEvent{Kind: PointerScroll, Pos: in.touchPan.Start, Scroll: delta, ScrollPixels: true}
-	if in.touchPan.Panning {
-		if cur := in.findPointer(in.touchScroll); cur != nil && delta != (Point{}) {
-			in.deliver(cur, ev)
-		}
-	} else if delta != (Point{}) {
-		if target := in.send(ev); target != nil {
-			in.touchScroll, in.touchPan.Panning = keep(target), true
-			in.releasePress(f.pos, f.mods)
-		}
-	}
+	in.scrollPan(f, delta)
 	if in.touchPan.Panning {
 		// The original target has already been released. Never generate a tap.
 		ended := len(f.up) != 0
@@ -100,6 +81,42 @@ func (in *inputState) panTouch(f *frameInput) {
 			in.touchMotion.origin = in.touchPan.Start
 			in.touchMotion.Last = now
 			in.touchPan.Panning, in.touchScroll = false, nil
+		}
+	}
+}
+
+// touchCaptured reports whether the region holding the press captures the
+// touch's drag, as a TouchDragCapturer that asks to.
+func (in *inputState) touchCaptured() bool {
+	// Assert before re-resolving: the scan only pays off for the rare control
+	// that captures drags, and it runs on every frame of a held finger.
+	if in.pressed == nil {
+		return false
+	}
+	if _, ok := in.pressed.pointer.(TouchDragCapturer); !ok {
+		return false
+	}
+	cur := in.findPointer(in.pressed)
+	if cur == nil {
+		return false
+	}
+	capturer, ok := cur.pointer.(TouchDragCapturer)
+	return ok && capturer.CaptureTouchDrag()
+}
+
+// scrollPan sends the finger's movement, delta, to the region the pan
+// scrolls; before the pan has one, to whatever takes it, which the pan
+// then scrolls, the press it took the touch from released.
+func (in *inputState) scrollPan(f *frameInput, delta Point) {
+	ev := PointerEvent{Kind: PointerScroll, Pos: in.touchPan.Start, Scroll: delta, ScrollPixels: true}
+	if in.touchPan.Panning {
+		if cur := in.findPointer(in.touchScroll); cur != nil && delta != (Point{}) {
+			in.deliver(cur, ev)
+		}
+	} else if delta != (Point{}) {
+		if target := in.send(ev); target != nil {
+			in.touchScroll, in.touchPan.Panning = keep(target), true
+			in.releasePress(f.pos, f.mods)
 		}
 	}
 }
@@ -137,7 +154,7 @@ func (in *inputState) stepTouchMomentum(now time.Time) {
 		m.stop()
 		return
 	}
-	if scope := in.activeScope(); scope != nil && (cur.scope == nil || !gem.Same(scope.owner, cur.scope.owner)) {
+	if !cur.inScope(in.activeScope()) {
 		m.stop()
 		return
 	}

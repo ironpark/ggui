@@ -3,6 +3,7 @@ package machosign
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"math/big"
 	"slices"
 
@@ -60,20 +61,7 @@ func DEREntitlements(data []byte) ([]byte, error) {
 func derValue(v any) ([]byte, error) {
 	switch v := v.(type) {
 	case map[string]any:
-		keys := make([]string, 0, len(v))
-		for k := range v {
-			keys = append(keys, k)
-		}
-		slices.Sort(keys)
-		var body []byte
-		for _, k := range keys {
-			e, err := derValue(v[k])
-			if err != nil {
-				return nil, fmt.Errorf("%s: %w", k, err)
-			}
-			body = append(body, derTLV(derSequence, append(derTLV(derUTF8, []byte(k)), e...))...)
-		}
-		return derTLV(derDict, body), nil
+		return derDictionary(v)
 	case []any:
 		var body []byte
 		for i, e := range v {
@@ -97,6 +85,20 @@ func derValue(v any) ([]byte, error) {
 		return derTLV(derInteger, derInt(new(big.Int).SetUint64(v))), nil
 	}
 	return nil, fmt.Errorf("entitlements cannot hold a %T", v)
+}
+
+// derDictionary encodes d as entries of a UTF-8 key and its value,
+// sorted by key.
+func derDictionary(d map[string]any) ([]byte, error) {
+	var body []byte
+	for _, k := range slices.Sorted(maps.Keys(d)) {
+		e, err := derValue(d[k])
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", k, err)
+		}
+		body = append(body, derTLV(derSequence, append(derTLV(derUTF8, []byte(k)), e...))...)
+	}
+	return derTLV(derDict, body), nil
 }
 
 // derInt is n in the fewest bytes of two's complement.

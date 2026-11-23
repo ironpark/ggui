@@ -206,6 +206,25 @@ func (g *InputGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		}
 		g.row = widget.Row(parts...)
 	}
+	g.styleAddons(t, env)
+	// A side with an addon is padded by the theme's Space, or by half of
+	// it when the addon is a button, which brings its own padding; a side
+	// without one keeps a field's. The editor sits three quarters of a
+	// Space from an addon. These are shadcn's pl-2, its button offset and
+	// pl-1.5.
+	pad := g.padding(t, env)
+	g.row.Gap(t.Space * .75)
+	size := g.layoutRows(c, env, pad)
+
+	if editor, ok := g.input.(interface{ IsDisabled() bool }); ok {
+		g.effectiveDisabled = g.effectiveDisabled || editor.IsDisabled()
+	}
+	return size
+}
+
+// styleAddons rounds the addon buttons the group styles and sets the text
+// the addons are laid out under.
+func (g *InputGroupWidget) styleAddons(t *uitheme.Theme, env ggui.Env) {
 	// shadcn's rounded-[calc(var(--radius)-3px)], so that a button's corner
 	// runs alongside the group's.
 	for _, b := range g.styled {
@@ -220,88 +239,97 @@ func (g *InputGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		muted = t.Disabled(muted)
 	}
 	g.addonEnv = env.WithText(ggui.TextStyle{Color: muted, Weight: t.Label.Weight})
+}
 
-	// A side with an addon is padded by the theme's Space, or by half of
-	// it when the addon is a button, which brings its own padding; a side
-	// without one keeps a field's. The editor sits three quarters of a
-	// Space from an addon. These are shadcn's pl-2, its button offset and
-	// pl-1.5.
-	side := func(w ggui.Widget) float64 {
-		switch w.(type) {
-		case nil:
-			return t.FieldPad.Left
-		case *ButtonWidget:
-			return t.Space / 2
-		}
-		return t.Space
+// groupPadding is the room an InputGroup keeps around its editor's row and
+// its rows of addons.
+type groupPadding struct {
+	left, right, top, bottom float64
+	gapTop, gapBottom        float64
+	band, block              float64
+}
+
+// addonPad is the padding on a side of an InputGroup that holds addon w,
+// or none when w is nil.
+func addonPad(t *uitheme.Theme, w ggui.Widget) float64 {
+	switch w.(type) {
+	case nil:
+		return t.FieldPad.Left
+	case *ButtonWidget:
+		return t.Space / 2
 	}
-	left, right := side(g.leading), side(g.trailing)
+	return t.Space
+}
+
+// padding is the room around the editor's row and the rows of addons, and
+// the band the editor's row is at least as tall as.
+func (g *InputGroupWidget) padding(t *uitheme.Theme, env ggui.Env) groupPadding {
+	p := groupPadding{left: addonPad(t, g.leading), right: addonPad(t, g.trailing), block: t.FieldPad.Left}
 	if env.Direction() == ggui.DirRTL {
-		left, right = right, left
+		p.left, p.right = p.right, p.left
 	}
-	g.row.Gap(t.Space * .75)
 	// A single line is as tall as a text field, its row centered; a text
 	// area and a group with rows of addons take a Space above and below.
 	tall := g.multiline || g.top != nil || g.bottom != nil
 	padY := pick(tall, t.Space, t.Space/2)
-	band := pick(tall, 0, 20+t.FieldPad.Top+t.FieldPad.Bottom-2*padY)
-	if tall && !g.multiline {
-		band = 20 // the line a field's height is made around
-	}
+	p.band = pick(tall, 0, 20+t.FieldPad.Top+t.FieldPad.Bottom-2*padY)
 	// A row of addons keeps three quarters of a Space on the editor's
 	// side, shadcn's py-1.5, and a text area its own Space of padding
 	// towards the row besides: the textarea's py-2.
-	blockPad, addonGap := t.FieldPad.Left, t.Space*.75
-	padTop, padBottom, gapTop, gapBottom := padY, padY, addonGap+t.Space, addonGap+t.Space
-	if tall && !g.multiline {
-		// A single line stays a field's height, and its text moves away
-		// from a row of addons within it: shadcn's pt-3 on the input over
-		// a block-end addon and pb-3 under a block-start one, for the
-		// half Space it has otherwise.
-		slack := t.FieldPad.Top + t.FieldPad.Bottom
-		pt, pb := pick(g.bottom != nil, t.Space*1.5, t.Space/2), pick(g.top != nil, t.Space*1.5, t.Space/2)
-		above := (slack + pt - pb) / 2
-		below := slack - above
-		padTop, padBottom, gapTop, gapBottom = above, below, addonGap+above, addonGap+below
-		if g.top != nil {
-			padTop = t.Space
-		}
-		if g.bottom != nil {
-			padBottom = t.Space
-		}
+	addonGap := t.Space * .75
+	p.top, p.bottom, p.gapTop, p.gapBottom = padY, padY, addonGap+t.Space, addonGap+t.Space
+	if !tall || g.multiline {
+		return p
 	}
+	p.band = 20 // the line a field's height is made around
+	// A single line stays a field's height, and its text moves away
+	// from a row of addons within it: shadcn's pt-3 on the input over
+	// a block-end addon and pb-3 under a block-start one, for the
+	// half Space it has otherwise.
+	slack := t.FieldPad.Top + t.FieldPad.Bottom
+	pt, pb := pick(g.bottom != nil, t.Space*1.5, t.Space/2), pick(g.top != nil, t.Space*1.5, t.Space/2)
+	above := (slack + pt - pb) / 2
+	below := slack - above
+	p.top, p.bottom, p.gapTop, p.gapBottom = above, below, addonGap+above, addonGap+below
+	if g.top != nil {
+		p.top = t.Space
+	}
+	if g.bottom != nil {
+		p.bottom = t.Space
+	}
+	return p
+}
 
-	width := max(c.MaxW-left-right, 0)
-	row := g.row.Layout(ggui.Constraints{MinW: clamp(c.MinW-left-right, 0, width), MaxW: width, MaxH: max(c.MaxH-padTop-padBottom, 0)}, env)
-	block := ggui.Loose(ggui.Sz(max(c.MaxW-2*blockPad, 0), c.MaxH))
+// layoutRows lays out the editor's row and the rows of addons inside pad,
+// keeps where each goes, and returns the group's size.
+func (g *InputGroupWidget) layoutRows(c ggui.Constraints, env ggui.Env, pad groupPadding) ggui.Size {
+	width := max(c.MaxW-pad.left-pad.right, 0)
+	row := g.row.Layout(ggui.Constraints{MinW: clamp(c.MinW-pad.left-pad.right, 0, width), MaxW: width, MaxH: max(c.MaxH-pad.top-pad.bottom, 0)}, env)
+	block := ggui.Loose(ggui.Sz(max(c.MaxW-2*pad.block, 0), c.MaxH))
 	var top, bottom ggui.Size
-	want := ggui.Sz(left+row.W+right, padTop+padBottom+max(row.H, band))
+	want := ggui.Sz(pad.left+row.W+pad.right, pad.top+pad.bottom+max(row.H, pad.band))
 	if g.top != nil {
 		top = g.top.Layout(block, g.addonEnv)
-		want.W, want.H = max(want.W, top.W+2*blockPad), want.H+top.H+gapTop
+		want.W, want.H = max(want.W, top.W+2*pad.block), want.H+top.H+pad.gapTop
 	}
 	if g.bottom != nil {
 		bottom = g.bottom.Layout(block, g.addonEnv)
-		want.W, want.H = max(want.W, bottom.W+2*blockPad), want.H+bottom.H+gapBottom
+		want.W, want.H = max(want.W, bottom.W+2*pad.block), want.H+bottom.H+pad.gapBottom
 	}
 	size := c.Constrain(want)
 	// The rows of addons keep their heights at the two ends, and the
 	// editor's row is centered in what is left between them.
-	y, rest := padTop, size.H-padTop-padBottom
+	y, rest := pad.top, size.H-pad.top-pad.bottom
 	rtl := env.Direction() == ggui.DirRTL
 	if g.top != nil {
-		g.topRect = ggui.Rct(ggui.Pt(pick(rtl, size.W-blockPad-top.W, blockPad), y), top)
-		y, rest = y+top.H+gapTop, rest-top.H-gapTop
+		g.topRect = ggui.Rct(ggui.Pt(pick(rtl, size.W-pad.block-top.W, pad.block), y), top)
+		y, rest = y+top.H+pad.gapTop, rest-top.H-pad.gapTop
 	}
 	if g.bottom != nil {
-		g.botRect = ggui.Rct(ggui.Pt(pick(rtl, size.W-blockPad-bottom.W, blockPad), size.H-padBottom-bottom.H), bottom)
-		rest -= bottom.H + gapBottom
+		g.botRect = ggui.Rct(ggui.Pt(pick(rtl, size.W-pad.block-bottom.W, pad.block), size.H-pad.bottom-bottom.H), bottom)
+		rest -= bottom.H + pad.gapBottom
 	}
-	g.rowRect = ggui.Rct(ggui.Pt(left, y+max(rest-row.H, 0)/2), row)
-
-	if editor, ok := g.input.(interface{ IsDisabled() bool }); ok {
-		g.effectiveDisabled = g.effectiveDisabled || editor.IsDisabled()
-	}
+	g.rowRect = ggui.Rct(ggui.Pt(pad.left, y+max(rest-row.H, 0)/2), row)
 	return size
 }
 
@@ -319,7 +347,7 @@ func (g *InputGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	} else {
 		dst.Describe(r, g)
 	}
-	fieldSurface(dst, g.Anchor(r), t, r, t.Radius, fieldState{g.hasFocus(), g.invalid, g.effectiveDisabled}, g.motion, g.sides.within(dst))
+	fieldSurface(dst, g.Anchor(r), r, fieldLook{theme: t, focused: g.hasFocus(), invalid: g.invalid, inert: g.effectiveDisabled, motion: g.motion, sides: g.sides.within(dst)})
 	place := func(at ggui.Rect) ggui.Rect { at.Origin = at.Origin.Add(r.Origin); return at }
 	if g.top != nil {
 		dst.Paint(g.top, place(g.topRect))

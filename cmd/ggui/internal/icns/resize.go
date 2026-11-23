@@ -38,13 +38,19 @@ func NewResizer(src image.Image) *Resizer {
 
 // Resize scales r's source image to size×size by area averaging in linear light.
 func (r *Resizer) Resize(size int) *image.NRGBA {
-	w, h, lin := r.w, r.h, r.lin
-
 	// Separable: rows first, then columns.
-	xw := weights(w, size)
-	yw := weights(h, size)
-	tmp := make([]float64, size*h*4)
-	for y := range h {
+	xw := weights(r.w, size)
+	yw := weights(r.h, size)
+	tmp := make([]float64, size*r.h*4)
+	r.foldRows(size, xw, tmp)
+	return foldColumns(size, yw, tmp)
+}
+
+// foldRows averages source rows into tmp: each destination pixel of a
+// row accumulates the linear-light pixels its horizontal footprint covers.
+func (r *Resizer) foldRows(size int, xw [][]contrib, tmp []float64) {
+	w, lin := r.w, r.lin
+	for y := range r.h {
 		for x := range size {
 			var acc [4]float64
 			for _, c := range xw[x] {
@@ -56,6 +62,12 @@ func (r *Resizer) Resize(size int) *image.NRGBA {
 			copy(tmp[(y*size+x)*4:], acc[:])
 		}
 	}
+}
+
+// foldColumns averages tmp rows into the output image and un-premultiplies:
+// each destination pixel accumulates the vertical footprint tmp rows cover,
+// then color is divided by alpha for output.
+func foldColumns(size int, yw [][]contrib, tmp []float64) *image.NRGBA {
 	dst := image.NewNRGBA(image.Rect(0, 0, size, size))
 	for y := range size {
 		for x := range size {

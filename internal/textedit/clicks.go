@@ -55,9 +55,3 @@ func near(a, b layout.Point) bool {
 	dx, dy := a.X-b.X, a.Y-b.Y
 	return dx*dx+dy*dy < 16
 }
-
-// WordWise reports whether the modifiers held ask for the word-wise form of
-// a motion or a delete: Alt (Option) anywhere, or Ctrl without Meta. Ctrl
-// stands in for Cmd off macOS, but no Cmd shortcut uses an arrow or a
-// delete, which is why Ctrl+Left jumps a word on Windows and Linux.
-func WordWise(alt, ctrl, meta bool) bool { return alt || (ctrl && !meta) }

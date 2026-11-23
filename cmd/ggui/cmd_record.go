@@ -61,143 +61,219 @@ mac-expanded (the title row over a 38pt toolbar row) and mac-hidden (no
 bar, the buttons over the content). --cursor=false leaves out the
 cursor the tour's pointer steps draw.`,
 	flags: func(fs *flag.FlagSet) func(context.Context, []string, []string) error {
-		cfgPath := fs.String("config", "", "read `file` instead of the ggui.toml found from the current directory")
-		pkg := fs.String("package", "", "the main `package` to build, replacing app.package")
-		tags := fs.String("tags", "", "build `tags`, comma-separated, replacing build.tags")
-		out := fs.String("o", "", "write the GIF to `file` instead of name.gif in the project's directory")
-		frames := fs.String("frames", "", "write PNG frames, 0000.png and on, to `directory` instead of a GIF")
-		list := fs.Bool("list", false, "print the names of the tours the app registered")
-		fps := fs.Int("fps", 0, "keep `n` frames a second; 0 keeps every frame the tour draws")
-		width := fs.Int("width", 0, "scale the frames down to `px` pixels wide; 0 keeps the size drawn")
-		colors := fs.Int("colors", 256, "the GIF palette's `n` colors, 2 to 256")
-		dither := fs.Float64("dither", 0, "ordered dithering's `strength`, 0 (none) to 1; 0.3 smooths gradients that band")
-		loop := fs.Int("loop", 0, "play the GIF `n` times; 0 loops for ever")
-		lossy := fs.Int("lossy", 0, "let the GIF's compression write colors up to `n`/1000 off in Oklab, 0 (exact) to 200; 20 to 40 is hard to see")
-		frame := fs.String("frame", "", "draw the frames in a `style` of window frame, in place of the tour's: "+strings.Join(recordFrames, ", "))
-		backdrop := fs.String("backdrop", "", "the `color` a framed window is drawn on, #RRGGBB or transparent")
-		cursor := fs.Bool("cursor", true, "draw the cursor the tour's pointer steps move")
-		return func(ctx context.Context, pos, rest []string) error {
-			if len(pos) > 1 || len(rest) > 0 {
-				fmt.Fprintln(os.Stderr, "ggui record: takes one tour name")
-				return errUsage
-			}
-			name := ""
-			if len(pos) == 1 {
-				name = pos[0]
-			}
-			switch {
-			case len(pos) == 1 && !validTourName(name):
-				return fmt.Errorf("tour name %q must not be empty, a dot name, or contain path separators or \"..\"", name)
-			case *out != "" && *frames != "":
-				return errors.New("-o writes a GIF and --frames PNG frames: give one")
-			case *colors < 2 || *colors > 256:
-				return fmt.Errorf("--colors %d: a GIF has 2 to 256 colors", *colors)
-			case *dither < 0 || *dither > 1:
-				return fmt.Errorf("--dither %g: the strength is 0 to 1", *dither)
-			case *fps < 0 || *width < 0 || *loop < 0:
-				return errors.New("--fps, --width and --loop are not negative")
-			case *lossy < 0 || *lossy > 200:
-				return fmt.Errorf("--lossy %d: it is 0 to 200", *lossy)
-			case *frame != "" && !slices.Contains(recordFrames, *frame):
-				return fmt.Errorf("--frame %s: the frames are %s", *frame, strings.Join(recordFrames, ", "))
-			case *backdrop != "" && !validBackdrop(*backdrop):
-				return fmt.Errorf("--backdrop %s: give #RRGGBB or transparent", *backdrop)
-			}
-			proj, err := project.Open(".", *pkg, *cfgPath)
-			if err != nil {
-				return err
-			}
-			cfg := proj.Config
-			buildTags := cfg.Build.Tags
-			if isSet(fs, "tags") {
-				buildTags = splitTags(*tags)
-			}
-			say := ui.Stderr.Prefixed("ggui")
-			main, err := resolveMain(ctx, say, proj, *pkg, gotool.ListOptions{Tags: buildTags})
-			if err != nil {
-				return err
-			}
-
-			tmp, err := os.MkdirTemp("", "ggui-record-")
-			if err != nil {
-				return err
-			}
-			defer os.RemoveAll(tmp)
-			exe := filepath.Join(tmp, main.Executable)
-			if runtime.GOOS == "windows" {
-				exe += ".exe"
-			}
-			bo := gotool.BuildOptions{Dir: proj.Root, Package: main.Package, Output: exe, Tags: buildTags, TmpDir: tmp}
-			ui.Stderr.Println(ui.Stderr.Dim(bo.String()))
-			if err := step(ctx, "Building "+main.Name, "Built "+main.Name, func() error { return gotool.Build(ctx, bo) }); err != nil {
-				return err
-			}
-
-			req := recordRequest{V: recordProtocol, Tour: name, Report: filepath.Join(tmp, "report.json")}
-			switch {
-			case *list:
-				req.Format = "list"
-			case *frames != "":
-				req.Format, req.Out = "png", *frames
-			default:
-				req.Format, req.Out = "gif", *out
-				if req.Out == "" {
-					base := name
-					if base == "" {
-						base = "tour"
-					}
-					req.Out = filepath.Join(proj.Root, base+".gif")
-				}
-			}
-			if req.Out != "" {
-				if req.Out, err = filepath.Abs(req.Out); err != nil {
-					return err
-				}
-			}
-			if req.Format != "list" {
-				req.FPS, req.Width, req.Loop, req.Dither = *fps, *width, *loop, *dither
-				req.Lossy = *lossy
-				if *colors != 256 {
-					req.Colors = *colors
-				}
-				req.Frame, req.Backdrop, req.NoCursor = *frame, *backdrop, !*cursor
-			}
-			data, err := json.Marshal(req)
-			if err != nil {
-				return err
-			}
-			env := append(os.Environ(), proc.Environ(cfg.Dev.Env)...)
-			env = append(env, recordEnv+"="+string(data))
-
-			title, done := "Recording "+tourName(name), "Recorded "+tourName(name)
-			if *list {
-				title, done = "Listing the tours", "Listed the tours"
-			}
-			var rep recordReport
-			err = step(ctx, title, done, func() error {
-				if err := runRecorder(ctx, exe, proj.Root, env); err != nil {
-					return err
-				}
-				return readRecordReport(req.Report, &rep)
-			})
-			if err != nil {
-				return err
-			}
-			if *list {
-				if len(rep.Tours) == 0 {
-					say.Warn("%s registered no tours: see docs/recording.md", main.Name)
-				}
-				for _, t := range rep.Tours {
-					if t == "" {
-						t = "(default)"
-					}
-					fmt.Println(t)
-				}
-				return nil
-			}
-			return reportRecording(req.Out, req.Format, rep)
-		}
+		f := newRecordFlags(fs)
+		return f.run
 	},
+}
+
+// recordFlags are the flags of ggui record.
+type recordFlags struct {
+	cfgPath, pkg, tags, out, frames *string
+	fps, width, colors              *int
+	dither                          *float64
+	loop, lossy                     *int
+	frame, backdrop                 *string
+	list, cursor                    *bool
+	isSet                           func(string) bool
+}
+
+func newRecordFlags(fs *flag.FlagSet) *recordFlags {
+	f := &recordFlags{isSet: func(name string) bool { return isSet(fs, name) }}
+	f.cfgPath = fs.String("config", "", "read `file` instead of the ggui.toml found from the current directory")
+	f.pkg = fs.String("package", "", "the main `package` to build, replacing app.package")
+	f.tags = fs.String("tags", "", "build `tags`, comma-separated, replacing build.tags")
+	f.out = fs.String("o", "", "write the GIF to `file` instead of name.gif in the project's directory")
+	f.frames = fs.String("frames", "", "write PNG frames, 0000.png and on, to `directory` instead of a GIF")
+	f.list = fs.Bool("list", false, "print the names of the tours the app registered")
+	f.fps = fs.Int("fps", 0, "keep `n` frames a second; 0 keeps every frame the tour draws")
+	f.width = fs.Int("width", 0, "scale the frames down to `px` pixels wide; 0 keeps the size drawn")
+	f.colors = fs.Int("colors", 256, "the GIF palette's `n` colors, 2 to 256")
+	f.dither = fs.Float64("dither", 0, "ordered dithering's `strength`, 0 (none) to 1; 0.3 smooths gradients that band")
+	f.loop = fs.Int("loop", 0, "play the GIF `n` times; 0 loops for ever")
+	f.lossy = fs.Int("lossy", 0, "let the GIF's compression write colors up to `n`/1000 off in Oklab, 0 (exact) to 200; 20 to 40 is hard to see")
+	f.frame = fs.String("frame", "", "draw the frames in a `style` of window frame, in place of the tour's: "+strings.Join(recordFrames, ", "))
+	f.backdrop = fs.String("backdrop", "", "the `color` a framed window is drawn on, #RRGGBB or transparent")
+	f.cursor = fs.Bool("cursor", true, "draw the cursor the tour's pointer steps move")
+	return f
+}
+
+// run is the record command once its flags are parsed.
+func (f *recordFlags) run(ctx context.Context, pos, rest []string) error {
+	name, err := f.check(pos, rest)
+	if err != nil {
+		return err
+	}
+	proj, err := project.Open(".", *f.pkg, *f.cfgPath)
+	if err != nil {
+		return err
+	}
+	cfg := proj.Config
+	buildTags := cfg.Build.Tags
+	if f.isSet("tags") {
+		buildTags = splitTags(*f.tags)
+	}
+	say := ui.Stderr.Prefixed("ggui")
+	main, err := resolveMain(ctx, say, proj, *f.pkg, gotool.ListOptions{Tags: buildTags})
+	if err != nil {
+		return err
+	}
+
+	tmp, err := os.MkdirTemp("", "ggui-record-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmp)
+	exe, err := f.build(ctx, proj, main, buildTags, tmp)
+	if err != nil {
+		return err
+	}
+	req, err := f.request(name, proj)
+	if err != nil {
+		return err
+	}
+	rep, err := f.record(ctx, proj, exe, req, tmp)
+	if err != nil {
+		return err
+	}
+	if *f.list {
+		if len(rep.Tours) == 0 {
+			say.Warn("%s registered no tours: see docs/recording.md", main.Name)
+		}
+		for _, t := range rep.Tours {
+			if t == "" {
+				t = "(default)"
+			}
+			fmt.Println(t)
+		}
+		return nil
+	}
+	return reportRecording(req.Out, req.Format, rep)
+}
+
+// check reads the arguments and flags, returning the tour's name.
+func (f *recordFlags) check(pos, rest []string) (string, error) {
+	if len(pos) > 1 || len(rest) > 0 {
+		fmt.Fprintln(os.Stderr, "ggui record: takes one tour name")
+		return "", errUsage
+	}
+	name := ""
+	if len(pos) == 1 {
+		name = pos[0]
+	}
+	if len(pos) == 1 && !validTourName(name) {
+		return "", fmt.Errorf("tour name %q must not be empty, a dot name, or contain path separators or \"..\"", name)
+	}
+	if err := f.checkValues(); err != nil {
+		return "", err
+	}
+	return name, f.checkChoices()
+}
+
+// checkValues checks the flags' values are in range.
+func (f *recordFlags) checkValues() error {
+	switch {
+	case *f.out != "" && *f.frames != "":
+		return errors.New("-o writes a GIF and --frames PNG frames: give one")
+	case *f.colors < 2 || *f.colors > 256:
+		return fmt.Errorf("--colors %d: a GIF has 2 to 256 colors", *f.colors)
+	case *f.dither < 0 || *f.dither > 1:
+		return fmt.Errorf("--dither %g: the strength is 0 to 1", *f.dither)
+	case *f.fps < 0 || *f.width < 0 || *f.loop < 0:
+		return errors.New("--fps, --width and --loop are not negative")
+	case *f.lossy < 0 || *f.lossy > 200:
+		return fmt.Errorf("--lossy %d: it is 0 to 200", *f.lossy)
+	}
+	return nil
+}
+
+// checkChoices checks the frame style and backdrop name something known.
+func (f *recordFlags) checkChoices() error {
+	switch {
+	case *f.frame != "" && !slices.Contains(recordFrames, *f.frame):
+		return fmt.Errorf("--frame %s: the frames are %s", *f.frame, strings.Join(recordFrames, ", "))
+	case *f.backdrop != "" && !validBackdrop(*f.backdrop):
+		return fmt.Errorf("--backdrop %s: give #RRGGBB or transparent", *f.backdrop)
+	}
+	return nil
+}
+
+// build compiles the app to record into tmp, returning the executable.
+func (f *recordFlags) build(ctx context.Context, proj *project.Project, main *project.Main, tags []string, tmp string) (string, error) {
+	exe := filepath.Join(tmp, main.Executable)
+	if runtime.GOOS == "windows" {
+		exe += ".exe"
+	}
+	bo := gotool.BuildOptions{Dir: proj.Root, Package: main.Package, Output: exe, Tags: tags, TmpDir: tmp}
+	ui.Stderr.Println(ui.Stderr.Dim(bo.String()))
+	if err := step(ctx, "Building "+main.Name, "Built "+main.Name, func() error { return gotool.Build(ctx, bo) }); err != nil {
+		return "", err
+	}
+	return exe, nil
+}
+
+// request is what the app is asked to record, from the flags.
+func (f *recordFlags) request(name string, proj *project.Project) (recordRequest, error) {
+	req := recordRequest{V: recordProtocol, Tour: name}
+	switch {
+	case *f.list:
+		req.Format = "list"
+	case *f.frames != "":
+		req.Format, req.Out = "png", *f.frames
+	default:
+		req.Format, req.Out = "gif", *f.out
+		if req.Out == "" {
+			base := name
+			if base == "" {
+				base = "tour"
+			}
+			req.Out = filepath.Join(proj.Root, base+".gif")
+		}
+	}
+	if req.Out != "" {
+		abs, err := filepath.Abs(req.Out)
+		if err != nil {
+			return req, err
+		}
+		req.Out = abs
+	}
+	if req.Format != "list" {
+		req.FPS, req.Width, req.Loop, req.Dither = *f.fps, *f.width, *f.loop, *f.dither
+		req.Lossy = *f.lossy
+		if *f.colors != 256 {
+			req.Colors = *f.colors
+		}
+		req.Frame, req.Backdrop, req.NoCursor = *f.frame, *f.backdrop, !*f.cursor
+	}
+	return req, nil
+}
+
+// record runs the app built to record with the request in its
+// environment, and reads what it reports it did.
+func (f *recordFlags) record(ctx context.Context, proj *project.Project, exe string, req recordRequest, tmp string) (recordReport, error) {
+	reportPath := filepath.Join(tmp, "report.json")
+	req.Report = reportPath
+	data, err := json.Marshal(req)
+	if err != nil {
+		return recordReport{}, err
+	}
+	env := append(os.Environ(), proc.Environ(proj.Config.Dev.Env)...)
+	env = append(env, recordEnv+"="+string(data))
+
+	title, done := "Recording "+tourName(req.Tour), "Recorded "+tourName(req.Tour)
+	if *f.list {
+		title, done = "Listing the tours", "Listed the tours"
+	}
+	var rep recordReport
+	err = step(ctx, title, done, func() error {
+		if err := runRecorder(ctx, exe, proj.Root, env); err != nil {
+			return err
+		}
+		return readRecordReport(reportPath, &rep)
+	})
+	if err != nil {
+		return rep, err
+	}
+	return rep, nil
 }
 
 // recordEnv is the variable the app reads its request from, which

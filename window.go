@@ -21,130 +21,6 @@ import (
 	"github.com/ironpark/ggwd/native"
 )
 
-// Config describes a window: the one New opens, or one App.OpenWindow
-// adds. Only Title, Width and Height are commonly set; the zero value of
-// every other field is an ordinary decorated window centered on the screen.
-type Config struct {
-	Title  string
-	Width  int
-	Height int
-
-	// The size limits in logical pixels. Zero means no limit.
-	MinWidth  int
-	MinHeight int
-	MaxWidth  int
-	MaxHeight int
-
-	// Position is where the window opens on its screen, in logical pixels
-	// from the screen's top-left corner; nil centers it.
-	Position *Point
-	// Screen is the ID of the display the window opens on (see Screen.ID),
-	// which Position is on. Empty, or a display not connected, is the one
-	// windows open on by default.
-	Screen string
-
-	// Remember names the window's placement, such as "main", so that it
-	// reopens where it was last closed: on the same display, at the same
-	// position and size, and maximized if it was, kept for the user under
-	// os.UserConfigDir. A saved placement overrides Screen, Position,
-	// Width, Height and Maximized, within the size limits and the display's
-	// work area; one whose display is gone, or that would leave the window
-	// out of reach, keeps the size and leaves the place to Screen and
-	// Position. Each window of an app needs a name of its own. Empty, the
-	// default, keeps nothing. A browser, and the viewer of ggui dev, keep
-	// nothing either.
-	Remember string
-
-	Resizable bool
-	// Frameless opens the window without its title bar and border.
-	Frameless bool
-	// TitlebarHidden runs the window's content under its title bar on
-	// macOS, keeping the frame and the traffic lights: the bar is clear and
-	// has no title, the app draws its own header there, and moves the
-	// window by it with Window.StartDrag. TrafficLights, when set, is where
-	// the close button's top-left corner goes, from the window's, in
-	// logical pixels. Elsewhere the window has its title bar as usual.
-	TitlebarHidden bool
-	TrafficLights  *Point
-	// AlwaysOnTop keeps the window above ordinary windows.
-	AlwaysOnTop bool
-	// Transparent lets what is behind the window show through wherever
-	// nothing is painted. The window's background is clear unless
-	// Background says otherwise. DirectX cannot present such a window, so
-	// on a Windows machine that chose it the window fails to open.
-	Transparent bool
-	// Hidden opens the window without showing it; Show shows it.
-	Hidden bool
-	// Maximized opens the window maximized.
-	Maximized bool
-	// Unfocused opens the window without taking the keyboard focus.
-	Unfocused bool
-	// Icon is the window's icon in several sizes, where the platform shows
-	// one; the platform picks the size closest to what it needs.
-	Icon []image.Image
-
-	Background color.Color // nil follows the root environment background
-	Inspector  string      // a chord that toggles the widget inspector, such as "f1"; empty for none. Import ggui/inspect/panel for the panel.
-
-	// Accessibility says when the window talks to the platform's
-	// accessibility API. The zero value waits for an assistive technology
-	// to attach and costs nothing while none has; see AccessibilityMode.
-	Accessibility AccessibilityMode
-}
-
-func (c Config) withDefaults() Config {
-	if c.Title == "" {
-		c.Title = "ggui"
-	}
-	if c.Width == 0 {
-		c.Width = 800
-	}
-	if c.Height == 0 {
-		c.Height = 600
-	}
-	return c
-}
-
-// options is the ggfx form of c.
-func (c Config) options() *ggwd.WindowOptions {
-	o := &ggwd.WindowOptions{
-		Title:       c.Title,
-		Width:       float64(c.Width),
-		Height:      float64(c.Height),
-		Resizable:   c.Resizable,
-		Undecorated: c.Frameless,
-		Floating:    c.AlwaysOnTop,
-		Transparent: c.Transparent,
-		Hidden:      c.Hidden,
-		Maximized:   c.Maximized,
-		Unfocused:   c.Unfocused,
-		MinWidth:    float64(c.MinWidth),
-		MinHeight:   float64(c.MinHeight),
-		MaxWidth:    float64(c.MaxWidth),
-		MaxHeight:   float64(c.MaxHeight),
-	}
-	if c.Position != nil {
-		o.Position = &ggwd.Point{X: c.Position.X, Y: c.Position.Y}
-	}
-	o.TitlebarHidden = c.TitlebarHidden
-	if c.TrafficLights != nil {
-		o.TrafficLights = &ggwd.Point{X: c.TrafficLights.X, Y: c.TrafficLights.Y}
-	}
-	return o
-}
-
-// WindowState is whether a window is shown normally, minimized, maximized
-// or fullscreen.
-type WindowState uint8
-
-// The states a window can be in.
-const (
-	WindowNormal WindowState = iota
-	WindowMinimized
-	WindowMaximized
-	WindowFullscreen
-)
-
 // Window is one native window and the widget tree it shows. Each frame it
 // routes input to the regions painted last frame, settles reactive
 // bindings and layout, runs user effects, then paints and collects the
@@ -357,28 +233,7 @@ func (w *Window) handle(ev ggwd.Event) error {
 	case ggwd.FrameEvent:
 		return w.runFrameEvent(ev)
 	case ggwd.KeyEvent:
-		w.keyboard.SyncMods(ev.Modifiers)
-		w.keyboard.Set(ev.Key, ev.Pressed)
-		if ev.Pressed {
-			// The modifiers of this press, from the held keys and from the
-			// event itself, which sees a modifier the OS never reported as a
-			// key. Presses within one frame share the union, so a chord is
-			// not lost when its modifier was released before the frame ran.
-			m := w.keyboard.Mods().Or(ev.Modifiers)
-			w.pending.mods = w.pending.mods.Or(m)
-			if w.cfg.Inspector != "" && (KeyEvent{Kind: KeyPress, Key: ev.Key, Mods: m}).Is(w.inspectChord) {
-				// The inspector's chord is the inspector's: the focused
-				// widget sees neither the press nor its repeats.
-				if !ev.Repeat {
-					w.Inspector(!w.inspect)
-				}
-			} else {
-				w.pending.keys = append(w.pending.keys, ev.Key)
-			}
-		} else {
-			w.pending.released = append(w.pending.released, ev.Key)
-		}
-		w.markDirty(dirtyEvent)
+		w.onKeyEvent(ev)
 	case ggwd.CompositionEvent:
 		textinput.HandleEvent(ev)
 		w.markDirty(dirtyEvent)
@@ -388,64 +243,128 @@ func (w *Window) handle(ev ggwd.Event) error {
 		}
 		w.markDirty(dirtyEvent)
 	case ggwd.MouseMoveEvent:
-		w.pos = Pt(ev.X, ev.Y)
-		if f := w.canvas.fs(); f.pointerRead && f.pointerLost {
-			w.markDirty(dirtyEvent)
-		} else {
-			// What the move reaches is painted again, as hovering it
-			// enters or leaves a region (see deliver), and so are the
-			// widgets that read where the pointer is (see frameOn).
-			w.wakeFrame()
-		}
+		w.onMouseMoveEvent(ev)
 	case ggwd.MouseButtonEvent:
-		w.pos = Pt(ev.X, ev.Y)
-		// A modifier pressed while another window had the focus reached
-		// no KeyEvent here; the click still sees it.
-		w.keyboard.SyncMods(ev.Modifiers)
-		w.pending.mods = w.pending.mods.Or(ev.Modifiers)
-		if ev.Pressed {
-			w.pending.down = append(w.pending.down, ev.Button)
-		} else {
-			w.pending.up = append(w.pending.up, ev.Button)
-		}
-		w.markDirty(dirtyEvent)
+		w.onMouseButtonEvent(ev)
 	case ggwd.ScrollEvent:
-		w.keyboard.SyncMods(ev.Modifiers)
-		w.pending.mods = w.pending.mods.Or(ev.Modifiers)
-		if ev.Precise {
-			// A trackpad's points, as the logical pixels they move.
-			w.pending.wheelPx = w.pending.wheelPx.Add(Pt(ev.X*ggwd.PreciseLine, ev.Y*ggwd.PreciseLine))
-		} else {
-			// A wheel's notches, and how far the platform scrolls for them.
-			w.pending.wheel = w.pending.wheel.Add(Pt(ev.X, ev.Y))
-			w.pending.wheelBy = w.pending.wheelBy.Add(Pt(ev.X*ev.Line, ev.Y*ev.Line))
-		}
-		w.pending.phase = laterPhase(w.pending.phase, ev.Phase)
-		// The wheel is a pointer event: what it reaches is painted again
-		// (see deliver), and what it scrolls through a signal or a layout
-		// marks the frame whole by itself.
-		w.wakeFrame()
+		w.onScrollEvent(ev)
 	case ggwd.TouchEvent:
-		if w.touches == nil {
-			w.touches = map[ggwd.TouchID]Point{}
-		}
-		if ev.Phase == ggwd.TouchPhaseEnded {
-			delete(w.touches, ev.ID)
-		} else {
-			w.touches[ev.ID] = Pt(ev.X, ev.Y)
-		}
-		w.markDirty(dirtyEvent)
+		w.onTouchEvent(ev)
 	case ggwd.DragEvent:
-		switch ev.Phase {
-		case ggwd.DragEntered, ggwd.DragMoved:
-			w.dragOver, w.dragAt = true, Pt(ev.X, ev.Y)
-		case ggwd.DragExited, ggwd.DragEnded:
-			w.dragOver = false
-		}
-		w.markDirty(dirtyEvent)
+		w.onDragEvent(ev)
 	case ggwd.DropEvent:
 		w.pending.drop = append(w.pending.drop, droppedFiles(ev.Files)...)
 		w.markDirty(dirtyEvent)
+	case ggwd.CloseEvent, ggwd.FocusEvent, ggwd.WindowStateEvent, ggwd.MoveEvent, ggwd.ResizeEvent:
+		w.onWindowEvent(ev)
+	}
+	return nil
+}
+
+// onKeyEvent notes a key going down or up for the next frame, and turns
+// the inspector on or off at its chord.
+func (w *Window) onKeyEvent(ev ggwd.KeyEvent) {
+	w.keyboard.SyncMods(ev.Modifiers)
+	w.keyboard.Set(ev.Key, ev.Pressed)
+	if ev.Pressed {
+		// The modifiers of this press, from the held keys and from the
+		// event itself, which sees a modifier the OS never reported as a
+		// key. Presses within one frame share the union, so a chord is
+		// not lost when its modifier was released before the frame ran.
+		m := w.keyboard.Mods().Or(ev.Modifiers)
+		w.pending.mods = w.pending.mods.Or(m)
+		if w.cfg.Inspector != "" && (KeyEvent{Kind: KeyPress, Key: ev.Key, Mods: m}).Is(w.inspectChord) {
+			// The inspector's chord is the inspector's: the focused
+			// widget sees neither the press nor its repeats.
+			if !ev.Repeat {
+				w.Inspector(!w.inspect)
+			}
+		} else {
+			w.pending.keys = append(w.pending.keys, ev.Key)
+		}
+	} else {
+		w.pending.released = append(w.pending.released, ev.Key)
+	}
+	w.markDirty(dirtyEvent)
+}
+
+// onMouseMoveEvent notes where the pointer is and asks for the frame that
+// shows what it reaches.
+func (w *Window) onMouseMoveEvent(ev ggwd.MouseMoveEvent) {
+	w.pos = Pt(ev.X, ev.Y)
+	if f := w.canvas.fs(); f.pointerRead && f.pointerLost {
+		w.markDirty(dirtyEvent)
+	} else {
+		// What the move reaches is painted again, as hovering it
+		// enters or leaves a region (see deliver), and so are the
+		// widgets that read where the pointer is (see frameOn).
+		w.wakeFrame()
+	}
+}
+
+// onMouseButtonEvent notes a button going down or up for the next frame.
+func (w *Window) onMouseButtonEvent(ev ggwd.MouseButtonEvent) {
+	w.pos = Pt(ev.X, ev.Y)
+	// A modifier pressed while another window had the focus reached
+	// no KeyEvent here; the click still sees it.
+	w.keyboard.SyncMods(ev.Modifiers)
+	w.pending.mods = w.pending.mods.Or(ev.Modifiers)
+	if ev.Pressed {
+		w.pending.down = append(w.pending.down, ev.Button)
+	} else {
+		w.pending.up = append(w.pending.up, ev.Button)
+	}
+	w.markDirty(dirtyEvent)
+}
+
+// onScrollEvent adds a wheel's or a trackpad's scroll to what the next
+// frame scrolls by.
+func (w *Window) onScrollEvent(ev ggwd.ScrollEvent) {
+	w.keyboard.SyncMods(ev.Modifiers)
+	w.pending.mods = w.pending.mods.Or(ev.Modifiers)
+	if ev.Precise {
+		// A trackpad's points, as the logical pixels they move.
+		w.pending.wheelPx = w.pending.wheelPx.Add(Pt(ev.X*ggwd.PreciseLine, ev.Y*ggwd.PreciseLine))
+	} else {
+		// A wheel's notches, and how far the platform scrolls for them.
+		w.pending.wheel = w.pending.wheel.Add(Pt(ev.X, ev.Y))
+		w.pending.wheelBy = w.pending.wheelBy.Add(Pt(ev.X*ev.Line, ev.Y*ev.Line))
+	}
+	w.pending.phase = laterPhase(w.pending.phase, ev.Phase)
+	// The wheel is a pointer event: what it reaches is painted again
+	// (see deliver), and what it scrolls through a signal or a layout
+	// marks the frame whole by itself.
+	w.wakeFrame()
+}
+
+// onTouchEvent keeps where each finger down is, and forgets one lifted.
+func (w *Window) onTouchEvent(ev ggwd.TouchEvent) {
+	if w.touches == nil {
+		w.touches = map[ggwd.TouchID]Point{}
+	}
+	if ev.Phase == ggwd.TouchPhaseEnded {
+		delete(w.touches, ev.ID)
+	} else {
+		w.touches[ev.ID] = Pt(ev.X, ev.Y)
+	}
+	w.markDirty(dirtyEvent)
+}
+
+// onDragEvent follows files dragged from the desktop over the window.
+func (w *Window) onDragEvent(ev ggwd.DragEvent) {
+	switch ev.Phase {
+	case ggwd.DragEntered, ggwd.DragMoved:
+		w.dragOver, w.dragAt = true, Pt(ev.X, ev.Y)
+	case ggwd.DragExited, ggwd.DragEnded:
+		w.dragOver = false
+	}
+	w.markDirty(dirtyEvent)
+}
+
+// onWindowEvent follows what happens to the native window itself: a
+// request to close it, its focus, its state and its placement.
+func (w *Window) onWindowEvent(ev ggwd.Event) {
+	switch ev := ev.(type) {
 	case ggwd.CloseEvent:
 		if len(w.closeRequests) > 0 {
 			// The handlers decide in a frame, where they may put up a
@@ -482,7 +401,6 @@ func (w *Window) handle(ev ggwd.Event) error {
 		// only the window can say for the same moment.
 		w.notePlacement()
 	}
-	return nil
 }
 
 // markDirty notes that something asked for the window to be painted whole,
@@ -636,55 +554,6 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 	return nil
 }
 
-// frameOn runs one frame into screen: all of runFrameEvent that needs no
-// native window, which a WindowProbe runs as well, so that a test sees the
-// frames a window paints and asks for, not ones like them. It reports
-// whether the next frame must run without waiting for input and, when it
-// need not, the instant a widget asked to be painted again at, or zero.
-// The cursor the frame leaves is w.cursor.
-func (w *Window) frameOn(screen *ggfx.Image, scale float64, kept bool, setDamage func([]image.Rectangle)) (next bool, wake time.Time, err error) {
-	// Handlers dispatched below reach this window through UseHost.
-	w.beginFrame()
-	f := w.takeInput()
-	cf := w.canvas.fs()
-	moved := !cf.hasPointer || cf.pointer != f.pos
-	cf.pointer, cf.hasPointer = f.pos, true
-	before := w.world().delivered
-	w.dispatchInput(f)
-	touched, placed := w.input.takeTouched()
-	switch {
-	case w.world().delivered != before:
-		w.dirty.Or(uint32(dirtyInput))
-	case !placed:
-		w.dirty.Or(uint32(dirtyEvent))
-	default:
-		// What a pointer event reached is painted again, and what lies
-		// beside it left as it was, unless a signal was written too.
-		w.addRepaints(touched)
-	}
-	if moved && cf.pointerRead {
-		w.pointerMoved(cf)
-	}
-	if w.closed {
-		return false, time.Time{}, nil
-	}
-	if err := w.tick(false); err != nil {
-		return false, time.Time{}, err
-	}
-	w.draw(screen, scale, kept, setDamage)
-	if w.frameErr != nil {
-		return false, time.Time{}, w.frameErr
-	}
-	w.cursor = w.cursorAt(f.pos)
-	if w.closed {
-		return false, time.Time{}, nil
-	}
-	if w.endFrame(f) {
-		return true, time.Time{}, nil
-	}
-	return false, w.world().frame.takeWake(), nil
-}
-
 // paintTarget returns the image this frame paints into, and whether it
 // holds the last frame: screen, as its driver keeps it, or the backbuffer
 // while a BackdropBlur has wanted one recently, unless it was made for
@@ -786,42 +655,57 @@ func (w *Window) wantsFrame(f frameInput) bool {
 	// until the next input. The frame is painted whole unless every such
 	// request was held within a scroll's viewport, which is then noted as
 	// contained; see Invalidate.
-	relayout := w.root != nil && layoutGen() != w.laidGen
-	anim := wd.anims.active()
-	cb := len(w.frame) > 0
-	input := f.drag || w.touch.active || w.touch.waiting || w.input.touchMotion.target != nil
-	if relayout && (freeGen() != w.laidFree || len(w.frameLoop.contained) == 0) {
-		w.dirty.Or(uint32(dirtyLayout))
+	wants := frameWants{
+		relayout: w.root != nil && layoutGen() != w.laidGen,
+		anim:     wd.anims.active(),
+		callback: len(w.frame) > 0,
+		input:    f.drag || w.touch.active || w.touch.waiting || w.input.touchMotion.target != nil,
 	}
-	if anim {
-		w.dirty.Or(uint32(dirtyAnim))
-		wd.anims.noteDirtiers()
-	}
-	if cb {
-		w.dirty.Or(uint32(dirtyCallback))
-	}
-	if input {
-		w.dirty.Or(uint32(dirtyInput))
-	}
+	w.markWanted(wants, &wd.anims)
 	switch {
-	case relayout:
+	case wants.relayout:
 		framestats.For(framestats.Layout)
-	case anim:
+	case wants.anim:
 		framestats.For(framestats.Animation)
 	case wd.frame.timeRead():
 		// Only what read the time changes: the frame may be painted in
 		// part. What else changes by then marks it dirty itself.
 		framestats.For(framestats.Time)
-	case cb:
+	case wants.callback:
 		framestats.For(framestats.Callback)
 	case w.hasPosted():
 		framestats.For(framestats.Posted)
-	case input:
+	case wants.input:
 		framestats.For(framestats.Input)
 	default:
 		return false
 	}
 	return true
+}
+
+// frameWants is what, besides time read and posted work, wants the next
+// frame to run without waiting for input: a layout, an animation, work
+// run every frame, a touch or a drag in progress.
+type frameWants struct {
+	relayout, anim, callback, input bool
+}
+
+// markWanted marks the window dirty for each of wants, a layout only when
+// a request for it was not held within a scroll's viewport.
+func (w *Window) markWanted(wants frameWants, anims *animator) {
+	if wants.relayout && (freeGen() != w.laidFree || len(w.frameLoop.contained) == 0) {
+		w.dirty.Or(uint32(dirtyLayout))
+	}
+	if wants.anim {
+		w.dirty.Or(uint32(dirtyAnim))
+		anims.noteDirtiers()
+	}
+	if wants.callback {
+		w.dirty.Or(uint32(dirtyCallback))
+	}
+	if wants.input {
+		w.dirty.Or(uint32(dirtyInput))
+	}
 }
 
 // dispatchInput lets an existing app drag finish before the overlay can
@@ -862,89 +746,6 @@ func (w *Window) background() color.Color {
 		return color.Transparent
 	}
 	return rootEnv().Background()
-}
-
-// draw paints the tree to screen, which is in physical pixels at scale
-// pixels per logical pixel, so that a HiDPI monitor gets a sharp image while
-// widgets keep working in logical pixels.
-func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage func([]image.Rectangle)) {
-	dirtyBits := dirtyReason(w.dirty.Swap(0))
-	if scale > 0 {
-		if scale != w.canvas.scale {
-			dirtyBits |= dirtyScale
-			w.canvas.scale = scale
-		}
-	}
-	if w.canvas.fs().semOff && (w.performs.Load() > 0 || w.semWanted.Load() || w.ax.Listening()) {
-		dirtyBits |= dirtyOther
-	}
-	asked := w.takeRepaints()
-	pointer := w.pointerAsked
-	w.pointerAsked = false
-	if kept && dirtyBits == 0 && len(asked) == 0 && len(w.motion) == 0 && !w.motionLost && len(w.frameLoop.contained) == 0 &&
-		!w.stateChanged() {
-		// Nothing changed: work was posted that wrote nothing, say. The
-		// screen keeps the last frame, and untouched, nothing is presented.
-		framestats.CountSkipped()
-		w.drew = FrameSkipped
-		return
-	}
-	target, kept := w.paintTarget(screen, kept)
-	contained := w.takeContained()
-	defer w.frameLoop.endFrameFree(len(contained) > 0, false)
-	// within is where a frame whose changes a scroll contains paints, in
-	// pixels; empty, the frame paints all of it.
-	var within image.Rectangle
-	if wanted := len(w.motion) > 0 || len(asked) > 0; dirtyBits != 0 {
-		if wanted || len(contained) > 0 {
-			refusePartialDirty(dirtyBits)
-		}
-	} else if len(contained) > 0 {
-		within = w.containedDamage(target, kept, contained, asked)
-	} else if wanted && w.drawPartial(screen, target, kept, asked, pointer, setDamage) {
-		return
-	}
-	d := &w.drawing
-	*d = windowDraw{w: w, screen: screen, target: target, dst: target, setDamage: setDamage}
-	w.drew = FrameWhole
-	defer d.release()
-	if !within.Empty() {
-		d.dst = target.SubImage(within).(*ggfx.Image)
-	}
-	if within.Empty() {
-		// All of it changes: the screen need not start from a copy of the last frame.
-		d.damage(screen.Bounds())
-	} else {
-		d.damage(within)
-	}
-	if w.root == nil {
-		d.dst.Fill(w.background())
-		return
-	}
-	defer w.canvas.trimLayers()
-	w.aim(d.dst)
-	defer w.presentBackdrop(screen, target)
-	logical := w.logicalSize(screen)
-	if Untrack(w.viewport.Get) != logical {
-		w.viewport.Set(logical)
-	}
-	d.tracing = w.inspect || len(w.sinks) > 0
-	_, err := w.paint(paintPass{
-		size:    logical,
-		tracing: d.tracing,
-		semOff:  !w.semWanted.Load() && w.performs.Load() == 0 && !d.tracing && !w.ax.Listening(),
-		hooks:   d,
-	})
-	if !d.filled {
-		// The loop closed or lost its root as it settled: what is
-		// presented is the background, not what the screen kept.
-		d.dst.Fill(w.background())
-	}
-	if err != nil {
-		w.frameErr = err
-		return
-	}
-	w.noteMotion(target)
 }
 
 // aim points the window's Canvas at dst, which is the screen or the
@@ -1136,77 +937,6 @@ func windowState(s ggwd.WindowState) WindowState {
 	return WindowNormal
 }
 
-// Screen describes a display.
-type Screen struct {
-	// Name is the display's name, for people. Two displays of one model
-	// may share it, and on Windows most are "Generic PnP Monitor".
-	Name string
-	// ID tells the display from every other connected, and the display
-	// keeps it across restarts: what to save to open a window on it again,
-	// with Config.Screen. It is empty in a browser.
-	ID string
-	// Position is the display's top-left corner in the desktop, which
-	// every display is placed in, in logical pixels: on macOS from the main
-	// display's corner, elsewhere the desktop's pixels divided by this
-	// display's Scale. A window's Position is on its display, from here.
-	Position Point
-	// Size is the display's size in logical pixels.
-	Size Size
-	// WorkArea is the part of the display the menu bar, the dock and the
-	// taskbar leave to windows, from the display's top-left corner.
-	WorkArea Rect
-	// Scale is the display's physical pixels per logical pixel.
-	Scale float64
-}
-
-func screenOf(m *ggwd.Monitor) Screen {
-	width, height := m.Size()
-	x, y := m.Position()
-	ax, ay, aw, ah := m.WorkArea()
-	return Screen{
-		Name: m.Name(), ID: m.ID(), Position: Pt(x, y),
-		Size: Sz(width, height), WorkArea: Rct(Pt(ax, ay), Sz(aw, ah)),
-		Scale: m.DeviceScaleFactor(),
-	}
-}
-
-// monitorByID is the connected display whose ID is id, or nil.
-func monitorByID(id string) *ggwd.Monitor {
-	if id == "" || !appRunning.Load() {
-		return nil
-	}
-	for _, m := range ggwd.AppendMonitors(nil) {
-		if m.ID() == id {
-			return m
-		}
-	}
-	return nil
-}
-
-// Screen returns the display the window is on, or the zero Screen before
-// it opens.
-func (w *Window) Screen() Screen {
-	if nw := w.window.Load(); nw != nil {
-		if m := nw.Monitor(); m != nil {
-			return screenOf(m)
-		}
-	}
-	return Screen{}
-}
-
-// Screens returns the displays attached to the machine, the primary one
-// first. It needs a running App: before Run it returns none.
-func Screens() []Screen {
-	if !appRunning.Load() {
-		return nil
-	}
-	var out []Screen
-	for _, m := range ggwd.AppendMonitors(nil) {
-		out = append(out, screenOf(m))
-	}
-	return out
-}
-
 func (w *Window) nativeDialogs() runtime.Dialogs {
 	return runtime.NativeDialogsForWindow(func() uintptr {
 		if nw := w.window.Load(); nw != nil {
@@ -1214,65 +944,4 @@ func (w *Window) nativeDialogs() runtime.Dialogs {
 		}
 		return 0
 	})
-}
-
-// windowDraw is what a Window's whole frame keeps while it paints, the
-// paint's hooks among it: kept on the Window, a frame allocates none of it.
-type windowDraw struct {
-	w                   *Window
-	screen, target, dst *ggfx.Image // dst is where the frame paints: target, or the part a scroll contains
-	setDamage           func([]image.Rectangle)
-	tracing             bool
-	// filled is whether the background was filled: once the settle has
-	// run, which may change the theme it comes from, or turn a frame a
-	// scroll contains into a whole one.
-	filled bool
-}
-
-// damage tells the host, when it asked, that r is what the frame changes.
-func (d *windowDraw) damage(r image.Rectangle) {
-	if d.setDamage != nil {
-		d.w.damagePx = append(d.w.damagePx[:0], r)
-		d.setDamage(d.w.damagePx)
-	}
-}
-
-// release lets go of what the frame held. The damage last given stays in
-// the Window's damagePx, which the host may read until the next frame.
-func (d *windowDraw) release() { *d = windowDraw{} }
-
-// settled implements paintHooks.
-func (d *windowDraw) settled() {
-	w := d.w
-	unheld := w.frameLoop.unheld
-	w.frameLoop.unheld = false
-	if d.dst != d.target && (w.freeChanged() || unheld) {
-		// The layout changed more than the boundaries held: paint all of
-		// it.
-		if unheld {
-			framestats.Refuse("sized by content")
-		} else {
-			framestats.Refuse("state changed")
-			w.frameLoop.endFrameFree(true, true)
-		}
-		d.dst = d.target
-		w.aim(d.dst)
-		d.damage(d.screen.Bounds())
-	}
-	d.dst.Fill(w.background())
-	d.filled = true
-}
-
-// painted implements paintHooks.
-func (d *windowDraw) painted() {
-	w := d.w
-	// Counted once the settle had its chance to paint it whole.
-	if d.dst != d.target {
-		framestats.CountContained()
-		w.drew = FrameContained
-	}
-	w.ax.Publish(w.semantics(), w.takeAnnouncements())
-	if d.tracing {
-		w.publishInspect(&w.canvas, w.semantics())
-	}
 }

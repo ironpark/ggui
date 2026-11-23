@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -159,27 +160,22 @@ func (a *AttachmentWidget) uploadState() AttachmentState {
 	return AttachmentDone
 }
 
+// attachmentMeasure carries one Layout's measurements from phase to phase:
+// the card's size, the text column's width, the title's and description's
+// sizes and the text's height, and the extent of the row of actions.
+type attachmentMeasure struct {
+	w, h             float64
+	textW, textH     float64
+	title, desc      ggui.Size
+	actionW, actionH float64
+}
+
 func (a *AttachmentWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer a.props.Layout().EndLayout()
 	a.theme, a.reduced, a.current = uitheme.Of(env), env.ReducedMotion(), a.uploadState()
 	a.words = ui.StringsOf(env)
 	a.motion = env.Motion(a.theme.MotionFast)
-	a.padX, a.padY, a.gap, a.mediaSide = 10, 8, 8, 40
-	a.radius = a.theme.Chat.AttachmentRadius
-	fontSize := 14.0
-	switch a.size {
-	case AttachmentSmall:
-		a.padX, a.padY, a.gap, a.mediaSide, fontSize = 8, 6, 10, 32, 12
-	case AttachmentExtraSmall:
-		a.padX, a.padY, a.gap, a.radius, a.mediaSide, fontSize = 6, 4, 6, a.theme.Chat.AttachmentXSRadius, 28, 12
-	}
-	hasMedia := a.media != nil || a.image != nil
-	if hasMedia {
-		a.padX = a.padY
-	}
-	// Reserve the border separately from content padding, like CSS border-box.
-	a.padX += 1
-	a.padY += 1
+	fontSize := a.layoutMetrics()
 	// The title is the body font in medium weight; an error's description
 	// is the destructive color at 80%.
 	a.titleText.set(a.title, fontSize, a.theme.Fg)
@@ -189,10 +185,61 @@ func (a *AttachmentWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		descColor = fade(a.theme.Destructive, .8)
 	}
 	a.descriptionText.set(a.description, 12, descColor)
+	var m attachmentMeasure
 	free := ggui.Loose(ggui.Sz(ggui.Unbounded, ggui.Unbounded))
-	title := a.titleText.Layout(free, env)
-	desc := a.descriptionText.Layout(free, env)
-	textW := max(title.W, desc.W)
+	m.title = a.titleText.Layout(free, env)
+	m.desc = a.descriptionText.Layout(free, env)
+	m.actionW, m.actionH = a.layoutActions(c, env)
+	m.w = a.cardWidth(c, max(m.title.W, m.desc.W), m.actionW)
+	m.textW = a.fitMedia(m.w, m.actionW)
+	m.title = a.titleText.Layout(ggui.Loose(ggui.Sz(m.textW, ggui.Unbounded)), env)
+	m.desc = a.descriptionText.Layout(ggui.Loose(ggui.Sz(m.textW, ggui.Unbounded)), env)
+	m.textH = m.title.H
+	if a.description != "" {
+		m.textH += 2 + m.desc.H
+	}
+	var at ggui.Point
+	if a.vertical {
+		at = a.placeVertical(&m)
+	} else {
+		at = a.placeHorizontal(&m)
+	}
+	a.textRect = ggui.Rct(at, ggui.Sz(m.textW, m.title.H))
+	a.descriptionRect = ggui.Rct(ggui.Pt(at.X, at.Y+m.title.H+2), ggui.Sz(m.textW, m.desc.H))
+	a.layoutMedia(env)
+	if a.trigger != nil {
+		a.trigger.Layout(ggui.Loose(ggui.Sz(m.w, m.h)), env)
+	}
+	return c.Constrain(ggui.Sz(m.w, m.h))
+}
+
+func (a *AttachmentWidget) hasMedia() bool   { return a.media != nil || a.image != nil }
+func (a *AttachmentWidget) hasContent() bool { return a.title != "" || a.description != "" }
+
+// layoutMetrics sets the paddings, gap, radius and media side of the card's
+// size and returns the title's font size.
+func (a *AttachmentWidget) layoutMetrics() float64 {
+	a.padX, a.padY, a.gap, a.mediaSide = 10, 8, 8, 40
+	a.radius = a.theme.Chat.AttachmentRadius
+	fontSize := 14.0
+	switch a.size {
+	case AttachmentSmall:
+		a.padX, a.padY, a.gap, a.mediaSide, fontSize = 8, 6, 10, 32, 12
+	case AttachmentExtraSmall:
+		a.padX, a.padY, a.gap, a.radius, a.mediaSide, fontSize = 6, 4, 6, a.theme.Chat.AttachmentXSRadius, 28, 12
+	}
+	if a.hasMedia() {
+		a.padX = a.padY
+	}
+	// Reserve the border separately from content padding, like CSS border-box.
+	a.padX += 1
+	a.padY += 1
+	return fontSize
+}
+
+// layoutActions lays the actions out in a row from the origin, 4px apart on
+// a vertical card, and returns the row's width and height.
+func (a *AttachmentWidget) layoutActions(c ggui.Constraints, env ggui.Env) (float64, float64) {
 	a.actionRects = a.actionRects[:0]
 	actionW, actionH := 0.0, 0.0
 	for _, action := range a.actions {
@@ -204,96 +251,108 @@ func (a *AttachmentWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		actionW += s.W
 		actionH = max(actionH, s.H)
 	}
+	return actionW, actionH
+}
+
+// cardWidth is the card's width within c: a vertical card's fixed width,
+// else the text's natural width textW with the media and the actions beside
+// it, unless Width set one.
+func (a *AttachmentWidget) cardWidth(c ggui.Constraints, textW, actionW float64) float64 {
 	w := a.padX*2 + textW
 	// A card with no text is media alone: shadcn's w-24, which
 	// has-data-[slot=attachment-content] widens to w-30.
-	hasContent := a.title != "" || a.description != ""
 	if a.vertical {
-		w = pick(hasContent, attachmentVerticalWidth, attachmentMediaWidth)
+		w = pick(a.hasContent(), attachmentVerticalWidth, attachmentMediaWidth)
 	} else {
-		if hasMedia {
+		if a.hasMedia() {
 			w += a.mediaSide + a.gap
 		}
 		if len(a.actions) > 0 {
 			w += actionW + a.gap
 		}
-	}
-	if !a.vertical {
 		w = max(160, w)
 	}
 	if a.width > 0 {
 		w = a.width
 	}
-	w = min(c.MaxW, max(c.MinW, w))
+	return min(c.MaxW, max(c.MinW, w))
+}
+
+// fitMedia sizes the media within the card of width w, as wide as the card
+// on a vertical one, and returns the width left for the text.
+func (a *AttachmentWidget) fitMedia(w, actionW float64) float64 {
 	inner := max(0, w-2*a.padX)
 	a.mediaRect = ggui.Rect{}
 	if a.vertical {
-		if hasMedia {
+		if a.hasMedia() {
 			a.mediaSide = inner
 			a.mediaRect = ggui.Rct(ggui.Pt(a.padX, a.padY), ggui.Sz(inner, inner))
 		}
-		textW = max(0, inner-8)
-	} else {
-		textW = inner
-		if hasMedia {
-			a.mediaSide = min(a.mediaSide, inner)
-			textW -= a.mediaSide + a.gap
-		}
-		if len(a.actions) > 0 {
-			textW -= actionW + a.gap
-		}
-		textW = max(0, textW)
+		return max(0, inner-8)
 	}
-	title = a.titleText.Layout(ggui.Loose(ggui.Sz(textW, ggui.Unbounded)), env)
-	desc = a.descriptionText.Layout(ggui.Loose(ggui.Sz(textW, ggui.Unbounded)), env)
-	textH := title.H
-	if a.description != "" {
-		textH += 2 + desc.H
+	textW := inner
+	if a.hasMedia() {
+		a.mediaSide = min(a.mediaSide, inner)
+		textW -= a.mediaSide + a.gap
 	}
-	h := max(textH, actionH)
+	if len(a.actions) > 0 {
+		textW -= actionW + a.gap
+	}
+	return max(0, textW)
+}
+
+// placeVertical sets m's height for the text under the media, puts the
+// actions over the media's top right corner, and returns the text's origin.
+func (a *AttachmentWidget) placeVertical(m *attachmentMeasure) ggui.Point {
 	x, y := a.padX, a.padY
-	if a.vertical {
-		if hasMedia {
-			y += a.mediaSide + a.gap
-		}
-		x += 4
-		h = y + textH + a.padY
-		if !hasContent {
-			// Nothing under the media, and no gap kept for it.
-			h = a.padY + pick(hasMedia, a.mediaSide, 0) + a.padY
-		}
-		for i := range a.actionRects {
-			a.actionRects[i].Origin = ggui.Pt(max(a.padX, w-12-actionW)+a.actionRects[i].Origin.X, 12)
-		}
-	} else {
-		if hasMedia {
-			h = max(h, a.mediaSide)
-			a.mediaRect = ggui.Rct(ggui.Pt(x, a.padY+(h-a.mediaSide)/2), ggui.Sz(a.mediaSide, a.mediaSide))
-			x += a.mediaSide + a.gap
-		}
-		y += (h - textH) / 2
-		for i := range a.actionRects {
-			a.actionRects[i].Origin = ggui.Pt(max(a.padX, w-a.padX-actionW)+a.actionRects[i].Origin.X, a.padY+(h-a.actionRects[i].Size.H)/2)
-		}
-		h += 2 * a.padY
+	if a.hasMedia() {
+		y += a.mediaSide + a.gap
 	}
-	a.textRect = ggui.Rct(ggui.Pt(x, y), ggui.Sz(textW, title.H))
-	a.descriptionRect = ggui.Rct(ggui.Pt(x, y+title.H+2), ggui.Sz(textW, desc.H))
-	if a.media != nil {
-		if a.mediaView == nil {
-			a.mediaView = widget.Styled(widget.Center(a.media))
-		}
-		fg := a.theme.Fg
-		if a.current == AttachmentError {
-			fg = a.theme.Destructive
-		}
-		a.mediaView.Color(fg)
-		a.mediaView.Layout(ggui.Tight(a.mediaRect.Size), env)
+	x += 4
+	m.h = y + m.textH + a.padY
+	if !a.hasContent() {
+		// Nothing under the media, and no gap kept for it.
+		m.h = a.padY + pick(a.hasMedia(), a.mediaSide, 0) + a.padY
 	}
-	if a.trigger != nil {
-		a.trigger.Layout(ggui.Loose(ggui.Sz(w, h)), env)
+	for i := range a.actionRects {
+		a.actionRects[i].Origin = ggui.Pt(max(a.padX, m.w-12-m.actionW)+a.actionRects[i].Origin.X, 12)
 	}
-	return c.Constrain(ggui.Sz(w, h))
+	return ggui.Pt(x, y)
+}
+
+// placeHorizontal sets m's height for the media, the text and the actions
+// side by side, each centered on the row, and returns the text's origin.
+func (a *AttachmentWidget) placeHorizontal(m *attachmentMeasure) ggui.Point {
+	x, y := a.padX, a.padY
+	m.h = max(m.textH, m.actionH)
+	if a.hasMedia() {
+		m.h = max(m.h, a.mediaSide)
+		a.mediaRect = ggui.Rct(ggui.Pt(x, a.padY+(m.h-a.mediaSide)/2), ggui.Sz(a.mediaSide, a.mediaSide))
+		x += a.mediaSide + a.gap
+	}
+	y += (m.h - m.textH) / 2
+	for i := range a.actionRects {
+		a.actionRects[i].Origin = ggui.Pt(max(a.padX, m.w-a.padX-m.actionW)+a.actionRects[i].Origin.X, a.padY+(m.h-a.actionRects[i].Size.H)/2)
+	}
+	m.h += 2 * a.padY
+	return ggui.Pt(x, y)
+}
+
+// layoutMedia lays a media widget out in the media rect, in the
+// destructive color on an error.
+func (a *AttachmentWidget) layoutMedia(env ggui.Env) {
+	if a.media == nil {
+		return
+	}
+	if a.mediaView == nil {
+		a.mediaView = widget.Styled(widget.Center(a.media))
+	}
+	fg := a.theme.Fg
+	if a.current == AttachmentError {
+		fg = a.theme.Destructive
+	}
+	a.mediaView.Color(fg)
+	a.mediaView.Layout(ggui.Tight(a.mediaRect.Size), env)
 }
 
 func translated(r ggui.Rect, at ggui.Point) ggui.Rect { r.Origin = r.Origin.Add(at); return r }
@@ -310,7 +369,7 @@ func (a *AttachmentWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	fill, border := t.Card, t.Border
 	if a.trigger != nil {
 		// transition-colors: the hover surface eases in and out.
-		hover := ease(dst, a.theme, a.trigger.Anchor(r), attachmentHoverSlot, pick(a.trigger.Hovered, 1.0, 0.0), a.motion)
+		hover := controlkit.Ease(dst, a.theme, a.trigger.Anchor(r), attachmentHoverSlot, pick(a.trigger.Hovered, 1.0, 0.0), a.motion)
 		fill = mix(fill, fade(t.Muted, .5), hover)
 	}
 	if state == AttachmentError {

@@ -2,6 +2,7 @@ package record
 
 import (
 	"bufio"
+	"bytes"
 	"image"
 	"os"
 	"time"
@@ -51,7 +52,7 @@ func changed(a, b *image.RGBA) image.Rectangle {
 	w, h := a.Rect.Dx(), a.Rect.Dy()
 	row := func(y int) []byte { return a.Pix[y*a.Stride : y*a.Stride+w*4] }
 	rowB := func(y int) []byte { return b.Pix[y*b.Stride : y*b.Stride+w*4] }
-	same := func(y int) bool { return string(row(y)) == string(rowB(y)) }
+	same := func(y int) bool { return bytes.Equal(row(y), rowB(y)) }
 	y0 := 0
 	for y0 < h && same(y0) {
 		y0++
@@ -65,21 +66,39 @@ func changed(a, b *image.RGBA) image.Rectangle {
 	}
 	x0, x1 := w, 0
 	for y := y0; y < y1; y++ {
-		ra, rb := row(y), rowB(y)
-		for x := 0; x < x0; x++ {
-			if ra[x*4] != rb[x*4] || ra[x*4+1] != rb[x*4+1] || ra[x*4+2] != rb[x*4+2] || ra[x*4+3] != rb[x*4+3] {
-				x0 = x
-				break
-			}
-		}
-		for x := w - 1; x >= x1; x-- {
-			if ra[x*4] != rb[x*4] || ra[x*4+1] != rb[x*4+1] || ra[x*4+2] != rb[x*4+2] || ra[x*4+3] != rb[x*4+3] {
-				x1 = x + 1
-				break
-			}
-		}
+		x0, x1 = rowDiff(a, b, w, y, x0, x1)
 	}
 	return image.Rect(x0, y0, x1, y1)
+}
+
+// pixelRow returns the row's RGBA pixels, the image's stride cut off.
+func pixelRow(img *image.RGBA, w, y int) []byte {
+	return img.Pix[y*img.Stride : y*img.Stride+w*4]
+}
+
+// pixelDiffers compares one RGBA pixel of the rows ra and rb.
+func pixelDiffers(ra, rb []byte, x int) bool {
+	i := x * 4
+	return ra[i] != rb[i] || ra[i+1] != rb[i+1] || ra[i+2] != rb[i+2] || ra[i+3] != rb[i+3]
+}
+
+// rowDiff widens the bounds x0, x1 with the differing pixels of the
+// row.
+func rowDiff(a, b *image.RGBA, w, y, x0, x1 int) (int, int) {
+	ra, rb := pixelRow(a, w, y), pixelRow(b, w, y)
+	for x := range x0 {
+		if pixelDiffers(ra, rb, x) {
+			x0 = x
+			break
+		}
+	}
+	for x := w - 1; x >= x1; x-- {
+		if pixelDiffers(ra, rb, x) {
+			x1 = x + 1
+			break
+		}
+	}
+	return x0, x1
 }
 
 // gifSink is the first pass of a GIF: it keeps the frames the pacer

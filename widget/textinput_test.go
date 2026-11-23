@@ -1556,7 +1556,7 @@ func TestTextInputPlacesTheCaretInRightToLeftText(t *testing.T) {
 		}
 		// The first word selected is the right of the line.
 		var xs []float64
-		w.spanX(w.ed.Text, textlayout.Span{End: len(w.ed.Text)}, bl, 0, len("שלום"), 0, func(a, b float64) { xs = append(xs, a, b) })
+		w.spanX(shownLine{text: w.ed.Text, span: textlayout.Span{End: len(w.ed.Text)}, bidi: bl}, 0, len("שלום"), 0, func(a, b float64) { xs = append(xs, a, b) })
 		if len(xs) != 2 || xs[0] < total/3 || xs[1] < total-2 {
 			t.Errorf("multiline %v: the first word selected covers %v of %v, want its right end", multiline, xs, total)
 		}

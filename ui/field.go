@@ -180,49 +180,7 @@ func (f *FieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	// The body is rebuilt only when a part comes or goes, so its layout
 	// cache and the caption's survive a relayout.
 	if shape := (fieldShape{f.help != "", len(errors) > 0, f.horizontal, f.controlFirst, len(errors) > 1, f.carded}); f.column == nil || shape != f.shape || (shape.carded && f.help != f.cardHelp) {
-		f.shape = shape
-		f.cardHelp = pick(shape.carded, f.help, "")
-		parts := make([]ggui.Widget, 0, 4)
-		if shape.carded {
-			parts = append(parts, FieldTitle(f.label))
-		} else {
-			parts = append(parts, f.caption)
-		}
-		if !shape.horizontal && !shape.carded {
-			parts = append(parts, f.input)
-		}
-		if shape.noted && shape.carded {
-			parts = append(parts, FieldDescription(f.help))
-		} else if shape.noted {
-			parts = append(parts, f.note)
-		}
-		if shape.listed {
-			parts = append(parts, &f.alerts)
-		} else if shape.alerted {
-			parts = append(parts, f.alert)
-		}
-		f.column, f.row, f.card = widget.Column(parts...).Align(widget.AlignStretch), nil, nil
-		if shape.carded {
-			// A title alone is centered on the control; with text under
-			// it the two are a FieldContent and start at the top.
-			content := parts[0]
-			if len(parts) > 1 {
-				content = FieldContent(parts...)
-			}
-			f.card = FieldCard(f.input, content)
-			if shape.controlFirst {
-				f.card.ControlFirst()
-			}
-		} else if shape.horizontal {
-			// Beside one line of label the control is centered; beside a
-			// label with text under it, it starts at the top.
-			align := pick(shape.noted || shape.alerted, widget.AlignStart, widget.AlignCenter)
-			if shape.controlFirst {
-				f.row = widget.Row(f.input, widget.Expanded(f.column)).Align(align)
-			} else {
-				f.row = widget.Row(widget.Expanded(f.column), f.input).Align(align)
-			}
-		}
+		f.buildBody(shape)
 	}
 	if len(errors) > 0 {
 		env = env.With(fieldInvalid, true)
@@ -236,6 +194,62 @@ func (f *FieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		return f.row.Gap(t.Space).Layout(c, env)
 	}
 	return f.column.Gap(t.Space).Layout(c, env)
+}
+
+// buildBody builds the body shape asks for: the column of its parts, and
+// around it the card or the row of a Card or a Horizontal field.
+func (f *FieldWidget) buildBody(shape fieldShape) {
+	f.shape = shape
+	f.cardHelp = pick(shape.carded, f.help, "")
+	parts := f.bodyParts(shape)
+	f.column, f.row, f.card = widget.Column(parts...).Align(widget.AlignStretch), nil, nil
+	if shape.carded {
+		// A title alone is centered on the control; with text under
+		// it the two are a FieldContent and start at the top.
+		content := parts[0]
+		if len(parts) > 1 {
+			content = FieldContent(parts...)
+		}
+		f.card = FieldCard(f.input, content)
+		if shape.controlFirst {
+			f.card.ControlFirst()
+		}
+	} else if shape.horizontal {
+		// Beside one line of label the control is centered; beside a
+		// label with text under it, it starts at the top.
+		align := pick(shape.noted || shape.alerted, widget.AlignStart, widget.AlignCenter)
+		if shape.controlFirst {
+			f.row = widget.Row(f.input, widget.Expanded(f.column)).Align(align)
+		} else {
+			f.row = widget.Row(widget.Expanded(f.column), f.input).Align(align)
+		}
+	}
+}
+
+// bodyParts are the widgets of the body's column for shape, top to
+// bottom: the label, the control unless it sits beside them, the
+// description and the error or the errors.
+func (f *FieldWidget) bodyParts(shape fieldShape) []ggui.Widget {
+	parts := make([]ggui.Widget, 0, 4)
+	if shape.carded {
+		parts = append(parts, FieldTitle(f.label))
+	} else {
+		parts = append(parts, f.caption)
+	}
+	if !shape.horizontal && !shape.carded {
+		parts = append(parts, f.input)
+	}
+	if shape.noted && shape.carded {
+		parts = append(parts, FieldDescription(f.help))
+	} else if shape.noted {
+		parts = append(parts, f.note)
+	}
+	if shape.listed {
+		parts = append(parts, &f.alerts)
+	} else if shape.alerted {
+		parts = append(parts, f.alert)
+	}
+	return parts
 }
 
 // Paint implements Widget.

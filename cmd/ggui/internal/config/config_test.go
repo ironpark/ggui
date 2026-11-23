@@ -462,3 +462,10 @@ func TestAppNameValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestPlistTakesAnArrayOfTables(t *testing.T) {
+	src := "[[macos.plist.CFBundleURLTypes]]\nCFBundleURLName = \"com.example.app\"\nCFBundleURLSchemes = [\"example\"]\n"
+	if _, err := Parse("ggui.toml", []byte(src)); err != nil {
+		t.Fatalf("an array of tables in Info.plist was rejected: %v", err)
+	}
+}

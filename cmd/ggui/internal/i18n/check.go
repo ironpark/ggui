@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 )
 
 // Kind is what a Problem is.
@@ -45,81 +44,103 @@ func Check(c *Catalog, s *Sources, o Options) []Problem {
 	if c.Err != nil {
 		return []Problem{{Kind: Invalid, Error: true, Detail: c.Err.Error()}}
 	}
-	var ps []Problem
-	add := func(kind Kind, key string, isErr bool, format string, args ...any) {
-		ps = append(ps, Problem{Kind: kind, Key: key, Error: isErr, Detail: fmt.Sprintf(format, args...)})
-	}
+	cs := checkSet{c: c, s: s, o: o}
 	keys, pkeys := s.Keys()
 	for _, k := range keys {
-		m := s.Messages[k]
-		tr, ok := c.Messages[k]
-		switch {
-		case !ok:
-			add(Missing, k, !o.AllowMissing, "missing %s, used at %s", strconv.Quote(k), m.Uses[0])
-		case c.dynamic[k]:
-		case tr == "":
-			add(Missing, k, !o.AllowMissing, "%s is not translated (empty)", strconv.Quote(k))
-		default:
-			checkText(add, k, "", m.Source, tr, false)
-		}
+		cs.checkMessage(k)
 	}
 	for _, k := range pkeys {
-		m := s.Plurals[k]
-		forms, ok := c.Plurals[k]
-		switch {
-		case !ok:
-			add(Missing, k, !o.AllowMissing, "missing plural %s, used at %s", strconv.Quote(k), m.Uses[0])
-			continue
-		case c.dynamicPlural[k]:
-			continue
-		}
-		translated := false
-		for _, f := range forms {
-			if f != "" {
-				translated = true
-			}
-		}
-		if !translated {
-			add(Missing, k, !o.AllowMissing, "plural %s is not translated (empty)", strconv.Quote(k))
-			continue
-		}
-		for _, name := range sortedKeys(forms) {
-			if !slices.Contains(FormNames, name) {
-				add(BadForm, k, true, "plural %s has a form %q; the forms are %s", strconv.Quote(k), name, strings.Join(FormNames, ", "))
-			}
-		}
-		if forms["other"] == "" {
-			add(NoOther, k, true, "plural %s has no other form, which every language uses", strconv.Quote(k))
-		}
-		for _, name := range FormNames {
-			tr := forms[name]
-			if tr == "" {
-				continue
-			}
-			// Other is the plural source's equal; the rest may leave
-			// out what it says, as "one file" does the count, but not
-			// say more.
-			checkText(add, k, name, m.Other, tr, name != "other")
+		cs.checkPlural(k)
+	}
+	cs.checkUnused()
+	// Each kind together, the worst first.
+	slices.SortStableFunc(cs.ps, func(a, b Problem) int { return kindRank(a.Kind) - kindRank(b.Kind) })
+	return cs.ps
+}
+
+// checkSet is what Check compares: the catalog, the sources and the
+// options, with the problems found so far.
+type checkSet struct {
+	c  *Catalog
+	s  *Sources
+	o  Options
+	ps []Problem
+}
+
+func (cs *checkSet) add(kind Kind, key string, isErr bool, format string, args ...any) {
+	cs.ps = append(cs.ps, Problem{Kind: kind, Key: key, Error: isErr, Detail: fmt.Sprintf(format, args...)})
+}
+
+func (cs *checkSet) checkMessage(k string) {
+	m := cs.s.Messages[k]
+	tr, ok := cs.c.Messages[k]
+	switch {
+	case !ok:
+		cs.add(Missing, k, !cs.o.AllowMissing, "missing %s, used at %s", strconv.Quote(k), m.Uses[0])
+	case cs.c.dynamic[k]:
+	case tr == "":
+		cs.add(Missing, k, !cs.o.AllowMissing, "%s is not translated (empty)", strconv.Quote(k))
+	default:
+		checkText(cs.add, k, "", m.Source, tr, false)
+	}
+}
+
+func (cs *checkSet) checkPlural(k string) {
+	m := cs.s.Plurals[k]
+	forms, ok := cs.c.Plurals[k]
+	switch {
+	case !ok:
+		cs.add(Missing, k, !cs.o.AllowMissing, "missing plural %s, used at %s", strconv.Quote(k), m.Uses[0])
+		return
+	case cs.c.dynamicPlural[k]:
+		return
+	}
+	translated := false
+	for _, f := range forms {
+		if f != "" {
+			translated = true
 		}
 	}
+	if !translated {
+		cs.add(Missing, k, !cs.o.AllowMissing, "plural %s is not translated (empty)", strconv.Quote(k))
+		return
+	}
+	for _, name := range sortedKeys(forms) {
+		if !slices.Contains(FormNames, name) {
+			cs.add(BadForm, k, true, "plural %s has a form %q; the forms are %s", strconv.Quote(k), name, strings.Join(FormNames, ", "))
+		}
+	}
+	if forms["other"] == "" {
+		cs.add(NoOther, k, true, "plural %s has no other form, which every language uses", strconv.Quote(k))
+	}
+	for _, name := range FormNames {
+		tr := forms[name]
+		if tr == "" {
+			continue
+		}
+		// Other is the plural source's equal; the rest may leave
+		// out what it says, as "one file" does the count, but not
+		// say more.
+		checkText(cs.add, k, name, m.Other, tr, name != "other")
+	}
+}
 
+func (cs *checkSet) checkUnused() {
 	// Keys nobody passes: in a Go catalog with keys that are not
 	// literals, they may be what it was thought to lack.
-	if !c.Partial {
-		for _, k := range sortedKeys(c.Messages) {
-			if _, ok := s.Messages[k]; !ok {
-				add(Unused, k, false, "%s is not used%s", strconv.Quote(k), elsewhere(s.Plurals, k, "a plural message"))
-			}
-		}
-		for _, k := range sortedKeys(c.Plurals) {
-			if _, ok := s.Plurals[k]; !ok {
-				add(Unused, k, false, "plural %s is not used%s", strconv.Quote(k), elsewhere(s.Messages, k, "a message without plural forms"))
-			}
+	if cs.c.Partial {
+		return
+	}
+	for _, k := range sortedKeys(cs.c.Messages) {
+		if _, ok := cs.s.Messages[k]; !ok {
+			cs.add(Unused, k, false, "%s is not used%s", strconv.Quote(k), elsewhere(cs.s.Plurals, k, "a plural message"))
 		}
 	}
-	// Each kind together, the worst first.
-	slices.SortStableFunc(ps, func(a, b Problem) int { return kindRank(a.Kind) - kindRank(b.Kind) })
-	return ps
+	for _, k := range sortedKeys(cs.c.Plurals) {
+		if _, ok := cs.s.Plurals[k]; !ok {
+			cs.add(Unused, k, false, "plural %s is not used%s", strconv.Quote(k), elsewhere(cs.s.Messages, k, "a message without plural forms"))
+		}
+	}
 }
 
 // kindOrder is the order problems are reported in.
@@ -149,156 +170,6 @@ func checkText(add func(Kind, string, bool, string, ...any), key, form, source, 
 	if lead(source) != lead(tr) || trail(source) != trail(tr) {
 		add(Whitespace, key, false, "%s: the translation %s", what, spaceDiff(source, tr))
 	}
-}
-
-// Verb is a format verb: the argument it formats, counting from 1, and
-// its letter, or * for a width or precision taken from an argument.
-type Verb struct {
-	Arg  int
-	Verb rune
-	Text string // as written, such as %[2]d
-}
-
-// ParseVerbs returns the verbs of a format, as fmt reads them: %% is no
-// verb, an explicit index such as %[2]d sets the argument and those after
-// it, and a * width or precision takes an argument of its own. What
-// follows a verb's letter is text, so a Korean particle choice such as
-// {을/를} just after %s is not part of it.
-func ParseVerbs(format string) []Verb {
-	var vs []Verb
-	arg := 1
-	for i := 0; i < len(format); {
-		if format[i] != '%' {
-			i++
-			continue
-		}
-		start := i
-		i++
-		if i < len(format) && format[i] == '%' {
-			i++
-			continue
-		}
-		// index reads [n], setting arg, and records malformed indices.
-		badIndex := false
-		index := func() {
-			if i < len(format) && format[i] == '[' {
-				end := strings.IndexByte(format[i:], ']')
-				if end < 0 {
-					badIndex = true
-					i = len(format)
-					return
-				}
-				idx := format[i+1 : i+end]
-				digits := len(idx) > 0
-				for j := 0; j < len(idx); j++ {
-					if idx[j] < '0' || idx[j] > '9' {
-						digits = false
-						break
-					}
-				}
-				if digits {
-					if n, err := strconv.Atoi(idx); err == nil && n > 0 {
-						arg = n
-					} else {
-						badIndex = true
-					}
-				} else {
-					badIndex = true
-				}
-				i += end + 1
-			}
-		}
-		for i < len(format) && strings.IndexByte("+-# 0", format[i]) >= 0 {
-			i++
-		}
-		// width
-		index()
-		if i < len(format) && format[i] == '*' {
-			v := '*'
-			if badIndex {
-				v = '!'
-				badIndex = false
-			}
-			vs = append(vs, Verb{Arg: arg, Verb: v, Text: format[start : i+1]})
-			arg++
-			i++
-		} else {
-			for i < len(format) && format[i] >= '0' && format[i] <= '9' {
-				i++
-			}
-		}
-		// precision
-		if i < len(format) && format[i] == '.' {
-			i++
-			index()
-			if i < len(format) && format[i] == '*' {
-				v := '*'
-				if badIndex {
-					v = '!'
-					badIndex = false
-				}
-				vs = append(vs, Verb{Arg: arg, Verb: v, Text: format[start : i+1]})
-				arg++
-				i++
-			} else {
-				for i < len(format) && format[i] >= '0' && format[i] <= '9' {
-					i++
-				}
-			}
-		}
-		index()
-		if i >= len(format) {
-			vs = append(vs, Verb{Arg: arg, Verb: '!', Text: format[start:]})
-			break
-		}
-		r, size := utf8.DecodeRuneInString(format[i:])
-		i += size
-		if badIndex || !unicode.IsLetter(r) || r > unicode.MaxASCII {
-			// fmt prints %!{(BADVERB)} or %!(BADINDEX): a mistake, kept as
-			// one so that it differs from the source.
-			r = '!'
-		}
-		vs = append(vs, Verb{Arg: arg, Verb: r, Text: format[start:i]})
-		arg++
-	}
-	return vs
-}
-
-// sameVerbs reports whether two formats format the same arguments the
-// same way: the same verbs for the same arguments, in any order. With
-// subset, b may lack some of a's.
-func sameVerbs(a, b []Verb, subset bool) bool {
-	count := map[[2]int]int{}
-	for _, v := range a {
-		count[[2]int{v.Arg, int(v.Verb)}]++
-	}
-	for _, v := range b {
-		k := [2]int{v.Arg, int(v.Verb)}
-		if count[k] == 0 {
-			return false
-		}
-		count[k]--
-	}
-	if subset {
-		return true
-	}
-	for _, n := range count {
-		if n != 0 {
-			return false
-		}
-	}
-	return true
-}
-
-func verbList(vs []Verb) string {
-	if len(vs) == 0 {
-		return "no verbs"
-	}
-	s := make([]string, len(vs))
-	for i, v := range vs {
-		s[i] = v.Text
-	}
-	return strings.Join(s, ", ")
 }
 
 func lead(s string) string  { return s[:len(s)-len(strings.TrimLeftFunc(s, unicode.IsSpace))] }

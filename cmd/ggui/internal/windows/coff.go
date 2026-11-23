@@ -43,40 +43,84 @@ func rsrc(res []resource) (sect []byte, relocs []uint32) {
 	slices.SortFunc(res, func(a, b resource) int {
 		return cmp.Or(cmp.Compare(a.typ, b.typ), cmp.Compare(a.id, b.id), cmp.Compare(a.lang, b.lang))
 	})
-
-	// The tree: types, IDs within a type, languages within an ID, each
-	// language a leaf naming its resource.
-	type node struct {
-		key  uint16
-		kids []*node
-		leaf int // the resource's index, for a leaf; -1 for a directory
-	}
-	child := func(n *node, key uint16) *node {
-		if k := len(n.kids); k > 0 && n.kids[k-1].key == key {
-			return n.kids[k-1] // sorted, so a key's resources are together
-		}
-		c := &node{key: key, leaf: -1}
-		n.kids = append(n.kids, c)
-		return c
-	}
-	root := &node{leaf: -1}
+	root := &rsrcNode{leaf: -1}
 	for i, r := range res {
-		n := child(child(root, r.typ), r.id)
-		n.kids = append(n.kids, &node{key: r.lang, leaf: i})
+		n := root.child(r.typ).child(r.id)
+		n.kids = append(n.kids, &rsrcNode{key: r.lang, leaf: i})
 	}
+	l := layOutRsrc(root, res)
+	sect = make([]byte, l.size)
 
-	// Offsets: the directories breadth first, as rc.exe writes them, then
-	// the data entries, then the data, each 8-byte aligned.
-	const dirSize, entrySize, dataEntrySize = 16, 8, 16
-	var dirs []*node
-	dirOff := map[*node]uint32{}
+	le := binary.LittleEndian
+	for _, n := range l.dirs {
+		at := l.dirOff[n]
+		// Characteristics, TimeDateStamp and the version stay 0, and so
+		// does NumberOfNamedEntries.
+		le.PutUint16(sect[at+14:], uint16(len(n.kids)))
+		for i, k := range n.kids {
+			e := at + rsrcDirSize + rsrcEntrySize*uint32(i)
+			le.PutUint32(sect[e:], uint32(k.key))
+			if k.leaf >= 0 {
+				le.PutUint32(sect[e+4:], l.dataEntryOff[k.leaf])
+			} else {
+				le.PutUint32(sect[e+4:], 0x80000000|l.dirOff[k]) // a subdirectory
+			}
+		}
+	}
+	for i, r := range res {
+		e := l.dataEntryOff[i]
+		le.PutUint32(sect[e:], l.dataOff[i]) // OffsetToData, relocated
+		le.PutUint32(sect[e+4:], uint32(len(r.data)))
+		// CodePage and Reserved stay 0.
+		copy(sect[l.dataOff[i]:], r.data)
+		relocs = append(relocs, e)
+	}
+	return sect, relocs
+}
+
+// rsrcNode is a node of the resource tree: types, IDs within a type,
+// languages within an ID, each language a leaf naming its resource.
+type rsrcNode struct {
+	key  uint16
+	kids []*rsrcNode
+	leaf int // the resource's index, for a leaf; -1 for a directory
+}
+
+// child returns n's child with key, adding it when n has none.
+func (n *rsrcNode) child(key uint16) *rsrcNode {
+	if k := len(n.kids); k > 0 && n.kids[k-1].key == key {
+		return n.kids[k-1] // sorted, so a key's resources are together
+	}
+	c := &rsrcNode{key: key, leaf: -1}
+	n.kids = append(n.kids, c)
+	return c
+}
+
+// Sizes of a resource directory's header, of one of its entries, and of
+// a data entry.
+const rsrcDirSize, rsrcEntrySize, rsrcDataEntrySize = 16, 8, 16
+
+// rsrcLayout is where each part of a .rsrc section goes.
+type rsrcLayout struct {
+	dirs         []*rsrcNode
+	dirOff       map[*rsrcNode]uint32
+	dataEntryOff []uint32
+	dataOff      []uint32
+	size         uint32
+}
+
+// layOutRsrc places the tree under root and res, its resources: the
+// directories breadth first, as rc.exe writes them, then the data
+// entries, then the data, each 8-byte aligned.
+func layOutRsrc(root *rsrcNode, res []resource) rsrcLayout {
+	l := rsrcLayout{dirOff: map[*rsrcNode]uint32{}}
 	off := uint32(0)
-	for level := []*node{root}; len(level) > 0; {
-		var next []*node
+	for level := []*rsrcNode{root}; len(level) > 0; {
+		var next []*rsrcNode
 		for _, n := range level {
-			dirs = append(dirs, n)
-			dirOff[n] = off
-			off += dirSize + entrySize*uint32(len(n.kids))
+			l.dirs = append(l.dirs, n)
+			l.dirOff[n] = off
+			off += rsrcDirSize + rsrcEntrySize*uint32(len(n.kids))
 			for _, k := range n.kids {
 				if k.leaf < 0 {
 					next = append(next, k)
@@ -85,44 +129,19 @@ func rsrc(res []resource) (sect []byte, relocs []uint32) {
 		}
 		level = next
 	}
-	dataEntryOff := make([]uint32, len(res))
+	l.dataEntryOff = make([]uint32, len(res))
 	for i := range res {
-		dataEntryOff[i] = off
-		off += dataEntrySize
+		l.dataEntryOff[i] = off
+		off += rsrcDataEntrySize
 	}
-	dataOff := make([]uint32, len(res))
+	l.dataOff = make([]uint32, len(res))
 	for i, r := range res {
 		off = align(off, 8)
-		dataOff[i] = off
+		l.dataOff[i] = off
 		off += uint32(len(r.data))
 	}
-	sect = make([]byte, align(off, 8))
-
-	le := binary.LittleEndian
-	for _, n := range dirs {
-		at := dirOff[n]
-		// Characteristics, TimeDateStamp and the version stay 0, and so
-		// does NumberOfNamedEntries.
-		le.PutUint16(sect[at+14:], uint16(len(n.kids)))
-		for i, k := range n.kids {
-			e := at + dirSize + entrySize*uint32(i)
-			le.PutUint32(sect[e:], uint32(k.key))
-			if k.leaf >= 0 {
-				le.PutUint32(sect[e+4:], dataEntryOff[k.leaf])
-			} else {
-				le.PutUint32(sect[e+4:], 0x80000000|dirOff[k]) // a subdirectory
-			}
-		}
-	}
-	for i, r := range res {
-		e := dataEntryOff[i]
-		le.PutUint32(sect[e:], dataOff[i]) // OffsetToData, relocated
-		le.PutUint32(sect[e+4:], uint32(len(r.data)))
-		// CodePage and Reserved stay 0.
-		copy(sect[dataOff[i]:], r.data)
-		relocs = append(relocs, e)
-	}
-	return sect, relocs
+	l.size = align(off, 8)
+	return l
 }
 
 func align(n, to uint32) uint32 { return (n + to - 1) / to * to }

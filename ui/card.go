@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -230,7 +231,7 @@ func (c *CardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	} else if !c.pad {
 		c.box.Padding(spacing)
 	}
-	fill := colorOr(c.fill, t.Card)
+	fill := controlkit.ColorOr(c.fill, t.Card)
 	c.theme, c.shownRadius = t, radius
 	if c.onTap != nil {
 		// Paint tints the fill, which it can only do to a color: an
@@ -241,7 +242,7 @@ func (c *CardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		c.motion = env.Motion(t.MotionFast * 2 / 3)
 	}
 	c.box.Fill(fill).
-		Border(border, colorOr(c.border, fade(t.Fg, .1))).
+		Border(border, controlkit.ColorOr(c.border, fade(t.Fg, .1))).
 		Radius(radius)
 	return c.box.Layout(cs, env)
 }
@@ -255,7 +256,7 @@ func (c *CardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		return
 	}
 	t := c.theme
-	c.hover = ease(dst, t, c.Anchor(r), cardHoverSlot, pick(c.Hovered && !c.IsInert(), 1.0, 0.0), c.motion)
+	c.hover = controlkit.Ease(dst, t, c.Anchor(r), cardHoverSlot, pick(c.Hovered && !c.IsInert(), 1.0, 0.0), c.motion)
 	c.box.Fill(pick(c.hover > 0, mix(c.rest, t.Muted, c.hover), c.rest))
 	dst.DescribeNode(r, c, func(dst *ggui.Canvas) {
 		// Registered before the content, which is painted over it and so
@@ -505,12 +506,12 @@ var (
 		return BadgeStyle{Label: t.Fg, Border: t.Border, LinkFill: t.Muted, LinkLabel: t.MutedFg}
 	})
 	BadgeDestructive = NewVariant("destructive", func(t *uitheme.Theme) BadgeStyle {
-		return BadgeStyle{Fill: fade(t.Destructive, pick(isDark(t.Bg), .2, .1)), Label: t.Destructive, LinkFill: fade(t.Destructive, .2)}
+		return BadgeStyle{Fill: fade(t.Destructive, pick(controlkit.IsDark(t.Bg), .2, .1)), Label: t.Destructive, LinkFill: fade(t.Destructive, .2)}
 	})
 	// BadgeGhost is a bare label in the page's text color, on the Muted
 	// surface under the pointer.
 	BadgeGhost = NewVariant("ghost", func(t *uitheme.Theme) BadgeStyle {
-		return BadgeStyle{Label: t.Fg, HoverFill: fade(t.Muted, pick(isDark(t.Bg), .5, 1)), HoverLabel: t.MutedFg}
+		return BadgeStyle{Label: t.Fg, HoverFill: fade(t.Muted, pick(controlkit.IsDark(t.Bg), .5, 1)), HoverLabel: t.MutedFg}
 	})
 	// BadgeLink is a bare label in the Primary color, underlined under
 	// the pointer.
@@ -658,23 +659,16 @@ func (b *BadgeWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	st := b.style
 	radius := pick(b.radius >= 0, b.radius, r.Size.H/2)
+	hovered := b.takeHover(dst, r)
 	overFill, overLabel := st.HoverFill, st.HoverLabel
-	hovered := false
 	if b.action != nil {
-		b.Hit(dst, r, b, ggui.CursorShapePointer)
-		overFill, overLabel = colorOr(st.LinkFill, overFill), colorOr(st.LinkLabel, overLabel)
-		hovered = b.Hovered && !b.IsInert()
-	} else if overFill != nil || overLabel != nil || st.Underline {
-		// Read rather than claimed: the pointer stays with whatever the
-		// badge is inside.
-		p, ok := dst.Pointer()
-		hovered = ok && r.Contains(p) && dst.TakesInput()
+		overFill, overLabel = controlkit.ColorOr(st.LinkFill, overFill), controlkit.ColorOr(st.LinkLabel, overLabel)
 	}
 	fill, label := st.Fill, st.Label
-	b.hover = ease(dst, b.theme, b.Anchor(r), badgeHoverSlot, pick(hovered, 1.0, 0.0), b.motion)
+	b.hover = controlkit.Ease(dst, b.theme, b.Anchor(r), badgeHoverSlot, pick(hovered, 1.0, 0.0), b.motion)
 	if k := b.hover; k > 0 {
 		if overFill != nil {
-			fill = pick(fill == nil, fade(overFill, k), mix(colorOr(fill, overFill), overFill, k))
+			fill = pick(fill == nil, fade(overFill, k), mix(controlkit.ColorOr(fill, overFill), overFill, k))
 		}
 		if overLabel != nil {
 			label = mix(label, overLabel, k)
@@ -687,6 +681,32 @@ func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if st.Border != nil {
 		dst.StrokeRoundRect(r, radius, b.theme.BorderWidth, st.Border)
 	}
+	b.paintLabel(dst, r, label)
+	if b.action != nil {
+		FocusRing(dst, &b.Interactive, Ring{Theme: b.theme, Rect: r, Radius: radius, Color: b.theme.Ring, Motion: b.motion})
+	}
+}
+
+// takeHover reports whether the pointer is over the badge in r. A badge
+// with an action takes the pointer, registering r for it; one with only a
+// look under the pointer reads it rather than claims it, so the pointer
+// stays with whatever the badge is inside.
+func (b *BadgeWidget) takeHover(dst *ggui.Canvas, r ggui.Rect) bool {
+	st := b.style
+	if b.action != nil {
+		b.Hit(dst, r, b, ggui.CursorShapePointer)
+		return b.Hovered && !b.IsInert()
+	}
+	if st.HoverFill == nil && st.HoverLabel == nil && !st.Underline {
+		return false
+	}
+	p, ok := dst.Pointer()
+	return ok && r.Contains(p) && dst.TakesInput()
+}
+
+// paintLabel paints the icons and the text in label's color, the text
+// underlined under the pointer where the badge's look has an underline.
+func (b *BadgeWidget) paintLabel(dst *ggui.Canvas, r ggui.Rect, label color.Color) {
 	rtl := b.env.Direction() == ggui.DirRTL
 	iconY := r.Origin.Y + (r.Size.H-b.iconSide)/2
 	if b.leads {
@@ -695,7 +715,7 @@ func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	textRect := mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+b.textAt, r.Origin.Y+(r.Size.H-b.size.H)/2), b.size), r, rtl)
 	dst.Paint(b.text, textRect)
-	if st.Underline && b.hover > 0 {
+	if b.style.Underline && b.hover > 0 {
 		if base, ok := b.text.Baseline(); ok {
 			// shadcn's underline-offset-4, as a link button's.
 			dst.FillRect(ggui.Rct(ggui.Pt(textRect.Origin.X, textRect.Origin.Y+base+b.theme.Space/2), ggui.Sz(textRect.Size.W, 1)), fade(label, b.hover))
@@ -704,9 +724,6 @@ func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if b.trails {
 		trailRect := mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+b.trailAt, iconY), ggui.Sz(b.iconSide, b.iconSide)), r, rtl)
 		paintIcon(dst, b.env, b.trail, trailRect, label, 0)
-	}
-	if b.action != nil {
-		FocusRing(dst, &b.Interactive, Ring{Theme: b.theme, Rect: r, Radius: radius, Color: b.theme.Ring, Motion: b.motion})
 	}
 }
 
@@ -860,7 +877,7 @@ func (p *ProgressWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if p.head <= 0 {
 		bar = r
 	}
-	v := ease(dst, p.theme, ggui.Anchor{Rect: bar}, progressSlot, target, p.motion)
+	v := controlkit.Ease(dst, p.theme, ggui.Anchor{Rect: bar}, progressSlot, target, p.motion)
 	// Assistive technology reports the data, independently of visual easing.
 	node := ggui.Node{Role: ggui.RoleProgress, Name: p.name, Min: 0, Max: 1, Now: target}
 	rtl := p.env.Direction() == ggui.DirRTL
@@ -951,7 +968,7 @@ func (p *ProgressRingWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size 
 // Paint implements Widget.
 func (p *ProgressRingWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	target := clamp(p.value.Get(), 0, 1)
-	v := ease(dst, p.theme, ggui.Anchor{Rect: r}, progressSlot, target, p.motion)
+	v := controlkit.Ease(dst, p.theme, ggui.Anchor{Rect: r}, progressSlot, target, p.motion)
 	// Assistive technology reports the data, independently of visual easing.
 	dst.Leaf(r, ggui.Node{Role: ggui.RoleProgress, Min: 0, Max: 1, Now: target})
 	d := min(r.Size.W, r.Size.H) - p.stroke

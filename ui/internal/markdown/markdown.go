@@ -182,10 +182,7 @@ func shift(blocks []Block, n int) {
 // Equal reports whether a and b are the same block: the same content,
 // wherever in their sources they are.
 func Equal(a, b Block) bool {
-	if a.Kind != b.Kind || a.Level != b.Level || a.Info != b.Info || a.Code != b.Code || a.Open != b.Open ||
-		a.Ordered != b.Ordered || a.Number != b.Number || a.Tight != b.Tight || a.Task != b.Task ||
-		len(a.Children) != len(b.Children) || len(a.Rows) != len(b.Rows) ||
-		!equalInlines(a.Inlines, b.Inlines) || !equalAlign(a.Align, b.Align) || !equalRow(a.Header, b.Header) {
+	if !a.sameShape(b) {
 		return false
 	}
 	// A block Reparse kept shares its parts with the one it was: a widget
@@ -204,6 +201,15 @@ func Equal(a, b Block) bool {
 		}
 	}
 	return true
+}
+
+// sameShape reports whether a and b agree on everything but their
+// children and rows.
+func (a Block) sameShape(b Block) bool {
+	return a.Kind == b.Kind && a.Level == b.Level && a.Info == b.Info && a.Code == b.Code && a.Open == b.Open &&
+		a.Ordered == b.Ordered && a.Number == b.Number && a.Tight == b.Tight && a.Task == b.Task &&
+		len(a.Children) == len(b.Children) && len(a.Rows) == len(b.Rows) &&
+		equalInlines(a.Inlines, b.Inlines) && equalAlign(a.Align, b.Align) && equalRow(a.Header, b.Header)
 }
 
 func equalInlines(a, b []Inline) bool {

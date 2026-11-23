@@ -158,43 +158,71 @@ func remake[K comparable, V any](m map[K]V) map[K]V {
 // changed.
 func (w *Watcher) check(full bool, relist map[string]bool) Batch {
 	at := time.Now()
-	w.mu.Lock()
-	// The paths and their stamps go in a slice kept from scan to scan: a
-	// watch of a large tree stats every path each scan, and a map or a
-	// slice made afresh for each was garbage of hundreds of megabytes
-	// every few seconds.
-	seen := w.scanned[:0]
-	if cap(seen) > 2*len(w.files)+64 {
-		seen = nil // the set shrank: let the larger go
-	}
-	for p, st := range w.files {
-		seen = append(seen, seenStamp{p, st})
-	}
-	onFull := w.onFull
-	w.mu.Unlock()
+	seen, onFull := w.snapshot()
 	if full && onFull != nil {
 		onFull()
 	}
 
 	// Stat outside the lock, so Add and Set are never held up by a slow
 	// disk, keeping only the paths that changed.
-	changed := seen[:0]
-	for _, e := range seen {
-		if s := stat(e.path); s != e.st {
-			changed = append(changed, seenStamp{e.path, s})
-		}
-	}
+	changed := w.changes(seen)
 	defer func() {
 		clear(seen) // hold no paths the set may drop
 		w.scanned = seen[:0]
 	}()
 
 	w.mu.Lock()
+	ds := w.absorb(changed, full, relist)
+	w.mu.Unlock()
+
+	b := Batch{Changes: w.judge(ds), At: at}
+	if len(b.Changes) > 0 {
+		w.tracef("scan: %d changed (%s)", len(b.Changes), short(b.Paths()))
+	}
+	return b
+}
+
+// snapshot takes the paths and stamps of the last scan into a slice
+// kept from scan to scan: a watch of a large tree stats every path each
+// scan, and a map or a slice made afresh for each was garbage of
+// hundreds of megabytes every few seconds. It also takes onFull, and
+// returns with w.mu unlocked.
+func (w *Watcher) snapshot() (seen []seenStamp, onFull func()) {
+	w.mu.Lock()
+	seen = w.scanned[:0]
+	if cap(seen) > 2*len(w.files)+64 {
+		seen = nil // the set shrank: let the larger go
+	}
+	for p, st := range w.files {
+		seen = append(seen, seenStamp{p, st})
+	}
+	onFull = w.onFull
+	w.mu.Unlock()
+	return seen, onFull
+}
+
+// changes stats the paths of the last scan and keeps those whose stamp
+// is no longer what the scan saw.
+func (w *Watcher) changes(seen []seenStamp) []seenStamp {
+	changed := seen[:0]
+	for _, e := range seen {
+		if s := stat(e.path); s != e.st {
+			changed = append(changed, seenStamp{e.path, s})
+		}
+	}
+	return changed
+}
+
+// absorb folds what the stat found into the set, while w.mu is held:
+// each changed path's delta of old to new, its new stamp, and the
+// directories to list again. When the shape of the set changed, the
+// named directories are listed again and what reconcile adds or drops
+// is appended too. w.mu is held.
+func (w *Watcher) absorb(changed []seenStamp, full bool, relist map[string]bool) (ds []delta) {
 	if relist == nil {
 		relist = map[string]bool{}
 	}
 	reshape := full
-	var ds []delta
 	for _, e := range changed {
 		p, s := e.path, e.st
 		old, ok := w.files[p]
@@ -218,44 +246,53 @@ func (w *Watcher) check(full bool, relist map[string]bool) Batch {
 		}
 	}
 	if reshape || len(relist) > 0 {
-		for d := range relist {
-			if _, listed := w.entries[d]; listed {
-				w.entries[d] = w.readDir(d)
-			}
-		}
-		added, dropped := w.reconcile()
-		for _, p := range added {
-			if st := w.files[p]; st.exist {
-				ds = append(ds, delta{p, stamp{}, st})
-			}
-		}
-		if len(dropped) > 0 {
-			var byPath map[string]int
-			if len(ds) > 0 {
-				byPath = make(map[string]int, len(ds))
-				for i, d := range ds {
-					byPath[d.path] = i
-				}
-			}
-			for p, st := range dropped {
-				if !st.exist {
-					continue
-				}
-				if i, ok := byPath[p]; ok {
-					ds[i].new = stamp{}
-				} else {
-					ds = append(ds, delta{p, st, stamp{}})
-				}
-			}
-		}
+		ds = w.relistDirs(relist, ds)
 	}
-	w.mu.Unlock()
+	return ds
+}
 
-	b := Batch{Changes: w.judge(ds), At: at}
-	if len(b.Changes) > 0 {
-		w.tracef("scan: %d changed (%s)", len(b.Changes), short(b.Paths()))
+// relistDirs lists the named directories again, reconciles the set with
+// what is on disk now, and appends what appeared or went. w.mu is held.
+func (w *Watcher) relistDirs(relist map[string]bool, ds []delta) []delta {
+	for d := range relist {
+		if _, listed := w.entries[d]; listed {
+			w.entries[d] = w.readDir(d)
+		}
 	}
-	return b
+	added, dropped := w.reconcile()
+	for _, p := range added {
+		if st := w.files[p]; st.exist {
+			ds = append(ds, delta{p, stamp{}, st})
+		}
+	}
+	return w.dropDeltas(ds, dropped)
+}
+
+// dropDeltas appends a delta for each dropped path that existed, and
+// empties the new stamp of a delta that already said the path changed,
+// so that the two amount to a removal. w.mu is held.
+func (w *Watcher) dropDeltas(ds []delta, dropped map[string]stamp) []delta {
+	if len(dropped) == 0 {
+		return ds
+	}
+	var byPath map[string]int
+	if len(ds) > 0 {
+		byPath = make(map[string]int, len(ds))
+		for i, d := range ds {
+			byPath[d.path] = i
+		}
+	}
+	for p, st := range dropped {
+		if !st.exist {
+			continue
+		}
+		if i, ok := byPath[p]; ok {
+			ds[i].new = stamp{}
+		} else {
+			ds = append(ds, delta{p, st, stamp{}})
+		}
+	}
+	return ds
 }
 
 // look is a file being judged: one created or written, which is looked
@@ -278,21 +315,25 @@ const steadyStep = 5 * time.Millisecond
 // is looked at until it holds still, for up to Options.Steady across all
 // of them, and its content judged when Options.Content picks it.
 func (w *Watcher) judge(ds []delta) []Event {
-	var evs []Event
-	var looks []*look
+	evs, looks := w.eventsOf(ds)
+	w.steady(looks)
+	for _, l := range looks {
+		if ev, ok := w.settled(l); ok {
+			evs = append(evs, ev)
+		}
+	}
+	sortEvents(evs)
+	return w.filtered(dedupEvents(evs))
+}
+
+// eventsOf says what each delta became: an event for a path made,
+// written, or removed, a removal also dropping the sum held of it, and,
+// for a file written, a look, to be watched until it holds still.
+func (w *Watcher) eventsOf(ds []delta) (evs []Event, looks []*look) {
 	for _, d := range ds {
-		ev := Event{Path: d.path}
-		switch {
-		case !d.old.exist && !d.new.exist:
+		ev, ok := d.event()
+		if !ok {
 			continue
-		case !d.old.exist && d.new.exist:
-			ev.Op, ev.Dir = Create, d.new.dir
-		case d.old.exist && !d.new.exist:
-			ev.Op, ev.Dir = Remove, d.old.dir
-		case d.old.dir && d.new.dir:
-			continue // a directory's entries changed, which they say
-		default:
-			ev.Op, ev.Dir = Write, d.new.dir
 		}
 		if ev.Op == Remove || ev.Dir {
 			if ev.Op == Remove {
@@ -305,41 +346,41 @@ func (w *Watcher) judge(ds []delta) []Event {
 		}
 		looks = append(looks, &look{ev: ev, d: d, content: w.o.Content.matches(d.path), prev: d.new})
 	}
-	w.steady(looks)
-	for _, l := range looks {
-		if ev, ok := w.settled(l); ok {
-			evs = append(evs, ev)
+	return evs, looks
+}
+
+// event says what became of the path from old to new, or that there is
+// nothing to tell: a path made and removed again undoes itself, and a
+// directory whose entries changed is told of by them.
+func (d delta) event() (Event, bool) {
+	ev := Event{Path: d.path}
+	switch {
+	case !d.old.exist && !d.new.exist:
+		return Event{}, false
+	case !d.old.exist && d.new.exist:
+		ev.Op, ev.Dir = Create, d.new.dir
+	case d.old.exist && !d.new.exist:
+		ev.Op, ev.Dir = Remove, d.old.dir
+	case d.old.dir && d.new.dir:
+		return Event{}, false // a directory's entries changed, which they say
+	default:
+		ev.Op, ev.Dir = Write, d.new.dir
+	}
+	return ev, true
+}
+
+// filtered keeps the events the caller's Filter accepts.
+func (w *Watcher) filtered(evs []Event) []Event {
+	if w.o.Filter == nil {
+		return evs
+	}
+	kept := evs[:0]
+	for _, e := range evs {
+		if w.o.Filter(e) {
+			kept = append(kept, e)
 		}
 	}
-	sortEvents(evs)
-	if len(evs) > 1 {
-		dedup := evs[:0]
-		for _, e := range evs {
-			if n := len(dedup); n > 0 && dedup[n-1].Path == e.Path {
-				if dedup[n-1].Op == Remove && e.Op == Remove {
-					continue
-				}
-				if m, keep := then(dedup[n-1], e); keep {
-					dedup[n-1] = m
-				} else {
-					dedup = dedup[:n-1]
-				}
-				continue
-			}
-			dedup = append(dedup, e)
-		}
-		evs = dedup
-	}
-	if w.o.Filter != nil {
-		kept := evs[:0]
-		for _, e := range evs {
-			if w.o.Filter(e) {
-				kept = append(kept, e)
-			}
-		}
-		evs = kept
-	}
-	return evs
+	return kept
 }
 
 // steady looks at each file until it holds still: not empty, and the
@@ -363,29 +404,7 @@ func (w *Watcher) steady(looks []*look) {
 			if l.done {
 				continue
 			}
-			if l.content {
-				before := stat(l.d.path)
-				data, err := readFile(l.d.path)
-				after := stat(l.d.path)
-				l.prev = after
-				switch {
-				case !after.exist:
-					l.done = true
-				case err == nil && before == after && len(data) > 0:
-					l.data, l.done, l.steady = data, true, true
-				case err != nil && !transient(err) && !os.IsNotExist(err):
-					l.done = true // unreadable: reported as found
-				}
-			} else {
-				cur := stat(l.d.path)
-				switch {
-				case !cur.exist:
-					l.done = true
-				case cur == l.prev && cur.size > 0:
-					l.done, l.steady = true, true
-				}
-				l.prev = cur
-			}
+			w.lookOnce(l)
 			left = left || !l.done
 		}
 		if !left || w.o.Steady < 0 || time.Now().After(deadline) {
@@ -393,6 +412,35 @@ func (w *Watcher) steady(looks []*look) {
 		}
 		time.Sleep(steadyStep)
 	}
+}
+
+// lookOnce looks at a file once more: one whose content is judged is
+// read whole between two stats, one that is not is only statted, and
+// either is done when it has gone or held still.
+func (w *Watcher) lookOnce(l *look) {
+	if l.content {
+		before := stat(l.d.path)
+		data, err := readFile(l.d.path)
+		after := stat(l.d.path)
+		l.prev = after
+		switch {
+		case !after.exist:
+			l.done = true
+		case err == nil && before == after && len(data) > 0:
+			l.data, l.done, l.steady = data, true, true
+		case err != nil && !transient(err) && !os.IsNotExist(err):
+			l.done = true // unreadable: reported as found
+		}
+		return
+	}
+	cur := stat(l.d.path)
+	switch {
+	case !cur.exist:
+		l.done = true
+	case cur == l.prev && cur.size > 0:
+		l.done, l.steady = true, true
+	}
+	l.prev = cur
 }
 
 // settled makes the event of a file that was looked at, and keeps its

@@ -199,13 +199,13 @@ func (l *sidebarList) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	x, w := r.Origin.X+m.pad, max(r.Size.W-2*m.pad, 0)
 	// One clip down the column cuts what every row holds while the rows
 	// are narrower than they were laid out for.
-	face := dst
+	column := sidebarColumn{dst: dst, face: dst, x: x, w: w}
 	if w < s.fullW-2*m.pad-.5 {
-		face = dst.Clip(ggui.Rct(ggui.Pt(x, r.Origin.Y), ggui.Sz(w, r.Size.H)))
+		column.face = dst.Clip(ggui.Rct(ggui.Pt(x, r.Origin.Y), ggui.Sz(w, r.Size.H)))
 	}
 	y := r.Origin.Y
 	for _, n := range l.top {
-		y += s.paintNode(dst, face, n, x, y, w, m)
+		y += s.paintNode(column, n, y, m)
 	}
 }
 
@@ -378,110 +378,119 @@ func (s *SidebarWidget) fold(dst, face *ggui.Canvas, n *sidebarNode, block ggui.
 	return clip(dst), clip(face)
 }
 
-// paintNode paints n at (x, y) in a column w wide and returns the height
-// it took. Rows go on dst; what they hold goes on face, which is clipped
-// to the column while the sidebar is narrower than its rows were laid out.
-func (s *SidebarWidget) paintNode(dst, face *ggui.Canvas, n *sidebarNode, x, y, w float64, m sidebarMetrics) float64 {
+// sidebarColumn is a column of rows, x across and w wide. Rows go on dst;
+// what they hold goes on face, which is clipped to the column while the
+// sidebar is narrower than its rows were laid out.
+type sidebarColumn struct {
+	dst, face *ggui.Canvas
+	x, w      float64
+}
+
+// paintNode paints n at y in column and returns the height it took.
+func (s *SidebarWidget) paintNode(column sidebarColumn, n *sidebarNode, y float64, m sidebarMetrics) float64 {
 	t := s.theme
-	row := ggui.Rct(ggui.Pt(x, y), ggui.Sz(w, n.rowH))
+	row := ggui.Rct(ggui.Pt(column.x, y), ggui.Sz(column.w, n.rowH))
 	switch n.e.kind {
 	case sidebarRowSeparator:
-		dst.FillRect(row, t.Border)
+		column.dst.FillRect(row, t.Border)
 		return n.rowH
 	case sidebarRowSection:
-		return s.paintGroup(dst, face, n, x, y, w, m)
+		return s.paintGroup(column, n, y, m)
 	case sidebarRowSkeleton:
 		at := m.pad
 		if n.e.icon != "" {
-			face.Paint(n.bones[0], s.place(row, at, (n.rowH-m.icon)/2, ggui.Sz(m.icon, m.icon)))
+			column.face.Paint(n.bones[0], s.place(row, at, (n.rowH-m.icon)/2, ggui.Sz(m.icon, m.icon)))
 			at += m.icon + m.gap
 		}
-		face.Paint(n.bones[1], s.place(row, at, (n.rowH-n.widgetSize.H)/2, n.widgetSize))
+		column.face.Paint(n.bones[1], s.place(row, at, (n.rowH-n.widgetSize.H)/2, n.widgetSize))
 		return n.rowH
 	case sidebarRowCustom:
 		if n.rowH <= 0 {
 			return 0
 		}
-		c := face
+		c := column.face
 		if n.rowH < n.widgetSize.H {
-			c = face.Clip(row).Inert()
+			c = column.face.Clip(row).Inert()
 		}
 		c.Paint(n.e.widget, s.place(row, 0, 0, n.widgetSize))
 		return n.rowH
 	}
-	s.paintItem(dst, face, n, row, m)
+	s.paintItem(column.dst, column.face, n, row, m)
 	if n.progress <= 0 || len(n.kids) == 0 {
 		return n.rowH
 	}
 	// The sub-items, beside a line down from the row.
 	h := n.kidsH * n.progress
-	block := ggui.Rct(ggui.Pt(x-m.pad, y+n.rowH), ggui.Sz(w+2*m.pad, h))
-	bd, bf := s.fold(dst, face, n, block)
-	under := ggui.Rct(ggui.Pt(x, y+n.rowH), ggui.Sz(w, n.kidsH))
+	block := ggui.Rct(ggui.Pt(column.x-m.pad, y+n.rowH), ggui.Sz(column.w+2*m.pad, h))
+	bd, bf := s.fold(column.dst, column.face, n, block)
+	under := ggui.Rct(ggui.Pt(column.x, y+n.rowH), ggui.Sz(column.w, n.kidsH))
 	bd.FillRect(s.place(under, m.subIndent, 0, ggui.Sz(m.line, n.kidsH)), t.Border)
-	sub := s.place(under, m.subIndent+m.line+m.subPad, m.subY, ggui.Sz(max(w-2*m.subIndent-m.line-2*m.subPad, 0), 0))
+	sub := s.place(under, m.subIndent+m.line+m.subPad, m.subY, ggui.Sz(max(column.w-2*m.subIndent-m.line-2*m.subPad, 0), 0))
+	kids := sidebarColumn{dst: bd, face: bf, x: sub.Origin.X, w: sub.Size.W}
 	sy := sub.Origin.Y
 	for i, k := range n.kids {
 		if i > 0 {
 			sy += m.subGap
 		}
-		sy += s.paintNode(bd, bf, k, sub.Origin.X, sy, sub.Size.W, m)
+		sy += s.paintNode(kids, k, sy, m)
 	}
 	return n.rowH + h
 }
 
 // paintGroup paints a group: its heading with the group's action, and its
 // rows under that.
-func (s *SidebarWidget) paintGroup(dst, face *ggui.Canvas, n *sidebarNode, x, y, w float64, m sidebarMetrics) float64 {
-	t := s.theme
+func (s *SidebarWidget) paintGroup(column sidebarColumn, n *sidebarNode, y float64, m sidebarMetrics) float64 {
 	y += m.pad
 	if n.rowH > 0 {
-		row := ggui.Rct(ggui.Pt(x, y), ggui.Sz(w, n.rowH))
-		col := fade(t.Fg, .7*s.labelProgress)
-		c := face
-		if n.rowH < n.fullH {
-			c = face.Clip(row)
-		}
-		trails := !s.railed()
-		if n.e.collapsible && trails {
-			item := sidebarItem{s, n.index}
-			dst.Describe(row, item)
-			if !s.IsInert() && !n.e.disabled {
-				dst.HitPointer(row, item)
-				dst.HitCursor(row, ggui.CursorShapePointer)
-				if n.index == s.hover {
-					dst.FillRoundRect(row, t.RadiusSm, t.Accent)
-					col = t.AccentFg
-				}
-			}
-			s.paintChevron(c, n, s.place(row, n.chevronX, (n.fullH-m.icon)/2, ggui.Sz(m.icon, m.icon)), col)
-			if n.index == s.active {
-				s.focusRing(dst, row)
-				if s.reveal {
-					dst.RequestReveal(row)
-				}
-			}
-		}
-		n.label.Color(col)
-		c.Paint(n.label, s.place(row, m.pad, (n.fullH-n.labelSize.H)/2, n.labelSize))
-		if n.e.action != nil && trails {
-			dst.Paint(n.e.action, s.place(row, n.actionX, (n.fullH-n.actionSize.H)/2, n.actionSize))
-		}
-		n.rect = row
+		s.paintHeading(column, n, ggui.Rct(ggui.Pt(column.x, y), ggui.Sz(column.w, n.rowH)), m)
 		y += n.rowH
 	}
 	if n.progress > 0 {
 		h := n.kidsH * n.progress
-		bd, bf := s.fold(dst, face, n, ggui.Rct(ggui.Pt(x-m.pad, y), ggui.Sz(w+2*m.pad, h)))
+		kids := column
+		kids.dst, kids.face = s.fold(column.dst, column.face, n, ggui.Rct(ggui.Pt(column.x-m.pad, y), ggui.Sz(column.w+2*m.pad, h)))
 		ky := y
 		for i, k := range n.kids {
 			if i > 0 {
 				ky += m.rowGap
 			}
-			ky += s.paintNode(bd, bf, k, x, ky, w, m)
+			ky += s.paintNode(kids, k, ky, m)
 		}
 	}
 	return 2*m.pad + n.rowH + n.kidsH*n.progress
+}
+
+// paintHeading paints a group's heading into row: its label and action,
+// and for a group that folds, its chevron and the hover and keyboard marks
+// of a row.
+func (s *SidebarWidget) paintHeading(column sidebarColumn, n *sidebarNode, row ggui.Rect, m sidebarMetrics) {
+	t := s.theme
+	col := fade(t.Fg, .7*s.labelProgress)
+	c := column.face
+	if n.rowH < n.fullH {
+		c = column.face.Clip(row)
+	}
+	trails := !s.railed()
+	if n.e.collapsible && trails {
+		item := sidebarItem{s, n.index}
+		column.dst.Describe(row, item)
+		if !s.IsInert() && !n.e.disabled {
+			column.dst.HitPointer(row, item)
+			column.dst.HitCursor(row, ggui.CursorShapePointer)
+			if n.index == s.hover {
+				column.dst.FillRoundRect(row, t.RadiusSm, t.Accent)
+				col = t.AccentFg
+			}
+		}
+		s.paintChevron(c, n, s.place(row, n.chevronX, (n.fullH-m.icon)/2, ggui.Sz(m.icon, m.icon)), col)
+		s.ringActive(column.dst, n, row)
+	}
+	n.label.Color(col)
+	c.Paint(n.label, s.place(row, m.pad, (n.fullH-n.labelSize.H)/2, n.labelSize))
+	if n.e.action != nil && trails {
+		column.dst.Paint(n.e.action, s.place(row, n.actionX, (n.fullH-n.actionSize.H)/2, n.actionSize))
+	}
+	n.rect = row
 }
 
 // paintChevron draws a collapsible row's chevron, which points the way
@@ -497,44 +506,7 @@ func (s *SidebarWidget) paintChevron(dst *ggui.Canvas, n *sidebarNode, r ggui.Re
 // paintItem paints one destination into row.
 func (s *SidebarWidget) paintItem(dst, face *ggui.Canvas, n *sidebarNode, row ggui.Rect, m sidebarMetrics) {
 	t := s.theme
-	inert := s.IsInert()
-	disabled := n.e.disabled || inert
-	item := sidebarItem{s, n.index}
-	dst.Describe(row, item)
-	if !disabled {
-		dst.HitPointer(row, item)
-		dst.HitCursor(row, ggui.CursorShapePointer)
-	}
-	lit := n.index == s.cur || (!inert && n.index == s.hover)
-	// The highlight comes in and goes out over the theme's MotionFast, as
-	// a Tailwind transition-colors does, so the pointer crossing the rows
-	// does not flash each one. A row first painted lit starts lit.
-	d := s.env.Motion(t.MotionFast)
-	if !n.litSeen {
-		n.litSeen, d = true, 0
-	}
-	k := n.lit.Easing(t.Ease.Easing()).Toggle(lit, ggui.FrameTime(), d)
-	fg := mix(t.Fg, t.AccentFg, k)
-	var fill color.Color
-	switch {
-	case n.e.outline:
-		fill = mix(t.Bg, t.Accent, k)
-	case k > 0:
-		fill = fade(t.Accent, k)
-	}
-	if disabled {
-		fg = t.Disabled(fg)
-		if fill != nil {
-			fill = t.Disabled(fill)
-		}
-	}
-	if n.e.outline {
-		ring := mix(t.Border, t.Accent, k)
-		dst.StrokeRoundRect(row.Grow(t.BorderWidth), t.RadiusSm+t.BorderWidth, t.BorderWidth, pick(disabled, t.Disabled(ring), ring))
-	}
-	if fill != nil {
-		dst.FillRoundRect(row, t.RadiusSm, fill)
-	}
+	fg, disabled := s.paintRowSurface(dst, n, row)
 	// A large row gives its padding up on a rail, where what leads it, a
 	// logo or an avatar, is all of it.
 	pad := m.pad
@@ -572,13 +544,67 @@ func (s *SidebarWidget) paintItem(dst, face *ggui.Canvas, n *sidebarNode, row gg
 			}
 		}
 	}
-	if n.index == s.active {
-		s.focusRing(dst, row)
-		if s.reveal {
-			dst.RequestReveal(row)
+	s.ringActive(dst, n, row)
+	n.rect = row
+}
+
+// paintRowSurface describes row as n's destination, takes the pointer on
+// it unless n is disabled, and paints the highlight of a row that is the
+// current destination or under the pointer. It returns the color of what
+// the row shows and whether n is disabled.
+func (s *SidebarWidget) paintRowSurface(dst *ggui.Canvas, n *sidebarNode, row ggui.Rect) (fg color.Color, disabled bool) {
+	t := s.theme
+	inert := s.IsInert()
+	disabled = n.e.disabled || inert
+	item := sidebarItem{s, n.index}
+	dst.Describe(row, item)
+	if !disabled {
+		dst.HitPointer(row, item)
+		dst.HitCursor(row, ggui.CursorShapePointer)
+	}
+	lit := n.index == s.cur || (!inert && n.index == s.hover)
+	// The highlight comes in and goes out over the theme's MotionFast, as
+	// a Tailwind transition-colors does, so the pointer crossing the rows
+	// does not flash each one. A row first painted lit starts lit.
+	d := s.env.Motion(t.MotionFast)
+	if !n.litSeen {
+		n.litSeen, d = true, 0
+	}
+	k := n.lit.Easing(t.Ease.Easing()).Toggle(lit, ggui.FrameTime(), d)
+	fg = mix(t.Fg, t.AccentFg, k)
+	var fill color.Color
+	switch {
+	case n.e.outline:
+		fill = mix(t.Bg, t.Accent, k)
+	case k > 0:
+		fill = fade(t.Accent, k)
+	}
+	if disabled {
+		fg = t.Disabled(fg)
+		if fill != nil {
+			fill = t.Disabled(fill)
 		}
 	}
-	n.rect = row
+	if n.e.outline {
+		ring := mix(t.Border, t.Accent, k)
+		dst.StrokeRoundRect(row.Grow(t.BorderWidth), t.RadiusSm+t.BorderWidth, t.BorderWidth, pick(disabled, t.Disabled(ring), ring))
+	}
+	if fill != nil {
+		dst.FillRoundRect(row, t.RadiusSm, fill)
+	}
+	return fg, disabled
+}
+
+// ringActive rings row, n's, while the keyboard is on n, and brings it
+// into view when a key has just moved the highlight there.
+func (s *SidebarWidget) ringActive(dst *ggui.Canvas, n *sidebarNode, row ggui.Rect) {
+	if n.index != s.active {
+		return
+	}
+	s.focusRing(dst, row)
+	if s.reveal {
+		dst.RequestReveal(row)
+	}
 }
 
 // sidebarRing is the width of the ring around the row the keyboard is on.

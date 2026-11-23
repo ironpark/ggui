@@ -155,21 +155,7 @@ func (in *inputState) updateAppDrag(f frameInput) {
 		in.releasePress(f.pos, f.mods)
 	}
 	d.source.DragMoved(d.candidate.at(f.pos), d.candidate.offset(d.from))
-	now := in.topmost(func(r *hitRegion) bool {
-		t, ok := r.pointer.(DropTarget)
-		return ok && r.contains(f.pos) && t.AcceptsDrop(d.value)
-	})
-	if !in.continues(now, d.target) {
-		in.unhoverDrop(d.target)
-		if now != nil {
-			now.pointer.(DropTarget).DropHover(true)
-		}
-	} else if now != nil && (d.target == nil || !gem.Same(now.pointer, d.target.pointer)) {
-		// The drop target was rebuilt in place under the drag: tell the new
-		// instance it is hovered.
-		now.pointer.(DropTarget).DropHover(true)
-	}
-	d.target = keep(now)
+	now := in.hoverDropZone(d, f.pos)
 	if now != nil && !released {
 		now.pointer.(DropTarget).DropOver(d.value, now.offset(f.pos))
 	}
@@ -185,6 +171,28 @@ func (in *inputState) updateAppDrag(f frameInput) {
 	}
 	in.drag = nil
 	d.source.DragEnded(dropped)
+}
+
+// hoverDropZone moves d over the topmost zone under pos that accepts its
+// value, telling the zone it leaves and the one it comes over, and returns
+// that zone, or nil.
+func (in *inputState) hoverDropZone(d *appDrag, pos Point) *hitRegion {
+	now := in.topmost(func(r *hitRegion) bool {
+		t, ok := r.pointer.(DropTarget)
+		return ok && r.contains(pos) && t.AcceptsDrop(d.value)
+	})
+	if !in.continues(now, d.target) {
+		in.unhoverDrop(d.target)
+		if now != nil {
+			now.pointer.(DropTarget).DropHover(true)
+		}
+	} else if now != nil && (d.target == nil || !gem.Same(now.pointer, d.target.pointer)) {
+		// The drop target was rebuilt in place under the drag: tell the new
+		// instance it is hovered.
+		now.pointer.(DropTarget).DropHover(true)
+	}
+	d.target = keep(now)
+	return now
 }
 
 // pressCapturesDrag reports whether the handler holding the press keeps

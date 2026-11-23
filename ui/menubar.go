@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -20,7 +21,7 @@ type MenubarWidget struct {
 	sizes        []ggui.Size
 	rects        []ggui.Rect
 	theme        *uitheme.Theme
-	motion       pointerMotion
+	motion       controlkit.PointerMotion
 	compact      bool
 	naturalWidth float64
 	env          ggui.Env
@@ -121,7 +122,7 @@ func (b *MenubarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	if len(b.menus) > 0 && (b.active < 0 || b.active >= len(b.menus) || b.menus[b.active].button.IsInert()) {
 		b.hide()
-		b.active = stepIndex(max(b.active, -1), 1, len(b.menus), b.enabled)
+		b.active = controlkit.StepIndex(max(b.active, -1), 1, len(b.menus), b.enabled)
 	}
 	return b.popup.Layout(c, env)
 }
@@ -189,8 +190,8 @@ func (b *MenubarWidget) ConsumesKey(e ggui.KeyEvent) bool {
 	if e.Kind != ggui.KeyPress {
 		return false
 	}
-	return navConsumes(e, navBoth) || ggui.Activates(e) ||
-		b.popup.IsOpen() && b.active >= 0 && b.active < len(b.menus) && b.menus[b.active].consumes(e)
+	m := b.activeMenu()
+	return navConsumes(e, navBoth) || ggui.Activates(e) || b.popup.IsOpen() && m != nil && m.consumes(e)
 }
 
 // inset is the space between the bar's edge and its triggers: the border
@@ -206,46 +207,67 @@ func (b *MenubarWidget) enabled(i int) bool { return !b.menus[i].button.IsInert(
 // HandleKey implements ggui.KeyHandler.
 func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 	b.Keyboard(e, nil)
-	if e.Kind == ggui.KeyText && !b.IsInert() && b.active >= 0 && b.active < len(b.menus) && b.popup.IsOpen() {
-		b.menus[b.active].typeahead(e.Text)
+	if b.IsInert() {
 		return
 	}
-	if b.IsInert() || e.Kind != ggui.KeyPress || len(b.menus) == 0 {
+	m, open := b.activeMenu(), b.popup.IsOpen()
+	if e.Kind == ggui.KeyText && m != nil && open {
+		m.typeahead(e.Text)
 		return
 	}
-	open := b.popup.IsOpen()
-	along := navMoveOf(e.Key, navHorizontal) // Left, Right, Home or End
-	ends := along == navFirst || along == navLast
-	vertical := along == navNone && navMoveOf(e.Key, navVertical) != navNone // Up or Down
+	if e.Kind != ggui.KeyPress || len(b.menus) == 0 {
+		return
+	}
 	switch {
-	case open && b.active >= 0 && b.active < len(b.menus) && b.menus[b.active].key(e):
+	case open && m != nil && m.key(e):
 		// The open menu moved or ran an item; Left, Right and Escape
 		// belong to a submenu of it before they belong to the bar.
 	case e.Key == ggui.KeyEscape:
 		b.hide()
-	case vertical && !open:
-		// Down opens the menu on its first item. Up does nothing: Base UI
-		// opens a menu of a horizontal bar on the cross-axis key that
-		// points into it only.
-		if e.Key == ggui.KeyArrowDown {
-			b.open(b.active, true)
-		}
-	case open && (vertical || ends):
-		// The menu had nothing to move to.
-	case along != navNone:
-		// Left and Right move along the bar, taking an open menu along;
-		// Home and End, with the menu closed, go to its ends. Active is
-		// never -1, which stays put only when every menu is disabled.
-		i, _ := navIndex(e, navHorizontal, b.active, len(b.menus), b.enabled)
-		b.active = max(i, 0)
-		if open {
-			b.open(b.active, true)
-		}
+	case open:
+		b.keyAlongOpen(e)
 	default:
-		if ggui.Activates(e) && !open {
-			b.open(b.active, true)
-		}
+		b.keyClosed(e)
 	}
+}
+
+// activeMenu is the menu the bar's keyboard is on, or nil.
+func (b *MenubarWidget) activeMenu() *MenuWidget {
+	if b.active < 0 || b.active >= len(b.menus) {
+		return nil
+	}
+	return b.menus[b.active]
+}
+
+// keyAlongOpen takes the open menu along the bar with Left and Right. Up,
+// Down, Home and End reach the bar only when the menu had nothing to move
+// to, and do nothing.
+func (b *MenubarWidget) keyAlongOpen(e ggui.KeyEvent) {
+	if along := navMoveOf(e.Key, navHorizontal); along == navPrev || along == navNext {
+		b.moveActive(e)
+		b.open(b.active, true)
+	}
+}
+
+// keyClosed moves along the bar with Left, Right, Home and End, and opens
+// the menu on its first item with Down, Enter or Space. Up does nothing:
+// Base UI opens a menu of a horizontal bar on the cross-axis key that
+// points into it only.
+func (b *MenubarWidget) keyClosed(e ggui.KeyEvent) {
+	switch {
+	case navMoveOf(e.Key, navHorizontal) != navNone:
+		b.moveActive(e)
+	case e.Key == ggui.KeyArrowDown || ggui.Activates(e):
+		b.open(b.active, true)
+	}
+}
+
+// moveActive moves the active menu along the bar, to its ends with Home
+// and End. Active is never -1, which stays put only when every menu is
+// disabled.
+func (b *MenubarWidget) moveActive(e ggui.KeyEvent) {
+	i, _ := navIndex(e, navHorizontal, b.active, len(b.menus), b.enabled)
+	b.active = max(i, 0)
 }
 
 type menubarAction struct {
@@ -295,7 +317,7 @@ func (a menubarAnchor) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 		if b.Focused && b.FocusVisible && i == b.active {
 			dst.StrokeRoundRect(rr, radius, b.theme.BorderWidth, b.theme.Ring)
-			fieldHalo(dst, b.theme, rr, radius, b.theme.Ring)
+			controlkit.FieldHalo(dst, b.theme, rr, radius, b.theme.Ring)
 		}
 		x += rr.Size.W + b.gap()
 	}
@@ -361,7 +383,7 @@ func (t menubarTarget) HandlePointer(e ggui.PointerEvent) bool {
 		t.b.menus[t.i].button.Hovered = false
 		return true
 	case ggui.PointerMove:
-		if t.b.motion.drifted(e.Pos) && t.b.popup.IsOpen() && t.b.active != t.i {
+		if t.b.motion.Drifted(e.Pos) && t.b.popup.IsOpen() && t.b.active != t.i {
 			t.b.open(t.i, false)
 		}
 		return true

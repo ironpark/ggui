@@ -74,38 +74,51 @@ func cssFont(vars map[string]string, name string) *ggui.Font {
 // each var() in it.
 func fontIn(vars map[string]string, list string, depth int) *ggui.Font {
 	for len(list) > 0 && depth < 8 {
-		// One family ends at the next comma outside parentheses.
-		end, nest := len(list), 0
-		for i, r := range list {
-			if r == '(' {
-				nest++
-			} else if r == ')' {
-				nest--
-			} else if r == ',' && nest == 0 {
-				end = i
-				break
-			}
-		}
-		family := strings.TrimSpace(list[:end])
-		list = strings.TrimPrefix(list[end:], ",")
-		inner, isVar := strings.CutPrefix(family, "var(")
-		if !isVar {
-			if f := fontNamed(family); f != nil {
+		family, rest := nextFamily(list)
+		list = rest
+		if inner, isVar := strings.CutPrefix(family, "var("); isVar {
+			if f := varFont(vars, inner, depth); f != nil {
 				return f
 			}
 			continue
 		}
-		ref, fallback, _ := strings.Cut(strings.TrimSuffix(inner, ")"), ",")
-		ref = strings.TrimPrefix(strings.TrimSpace(ref), "--")
-		if value, ok := vars[ref]; ok {
-			if f := fontIn(vars, value, depth+1); f != nil {
-				return f
-			}
-		} else if f := fontNamed(strings.TrimPrefix(ref, "font-")); f != nil {
-			return f
-		} else if f := fontIn(vars, fallback, depth+1); f != nil {
+		if f := fontNamed(family); f != nil {
 			return f
 		}
+	}
+	return nil
+}
+
+// nextFamily is the first family of a font-family list and the rest after
+// it: one family ends at the next comma outside parentheses.
+func nextFamily(list string) (family, rest string) {
+	end, nest := len(list), 0
+	for i, r := range list {
+		if r == '(' {
+			nest++
+		} else if r == ')' {
+			nest--
+		} else if r == ',' && nest == 0 {
+			end = i
+			break
+		}
+	}
+	return strings.TrimSpace(list[:end]), strings.TrimPrefix(list[end:], ",")
+}
+
+// varFont is the font a var() in a font-family list names: the variable's
+// value, the family after the variable's name, or its fallback.
+func varFont(vars map[string]string, inner string, depth int) *ggui.Font {
+	ref, fallback, _ := strings.Cut(strings.TrimSuffix(inner, ")"), ",")
+	ref = strings.TrimPrefix(strings.TrimSpace(ref), "--")
+	if value, ok := vars[ref]; ok {
+		if f := fontIn(vars, value, depth+1); f != nil {
+			return f
+		}
+	} else if f := fontNamed(strings.TrimPrefix(ref, "font-")); f != nil {
+		return f
+	} else if f := fontIn(vars, fallback, depth+1); f != nil {
+		return f
 	}
 	return nil
 }

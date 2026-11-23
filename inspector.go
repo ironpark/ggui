@@ -232,31 +232,45 @@ func (s inspectSource) Semantic(i int) int {
 		return -1
 	}
 	e, w := &s.f.trace[i], s.widget(i)
-	sem := s.f.sem
 	if w == nil {
-		for j, s := range slices.Backward(sem) {
-			mid := Pt(e.Rect.Origin.X+e.Rect.Size.W/2, e.Rect.Origin.Y+e.Rect.Size.H/2)
-			if !s.node.Offscreen && s.rect.Contains(mid) {
-				return j
-			}
-		}
-		return -1
+		return s.semanticUnder(e.Rect)
 	}
+	sem := s.f.sem
 	for j := range sem {
 		if gem.Same(sem[j].handler, w) {
 			return j
 		}
 	}
+	return s.semanticMatching(e.Rect, w)
+}
+
+// semanticUnder is the last node painted on screen under the middle of r,
+// or -1.
+func (s inspectSource) semanticUnder(r Rect) int {
+	mid := Pt(r.Origin.X+r.Size.W/2, r.Origin.Y+r.Size.H/2)
+	for j, n := range slices.Backward(s.f.sem) {
+		if !n.node.Offscreen && n.rect.Contains(mid) {
+			return j
+		}
+	}
+	return -1
+}
+
+// semanticMatching is the node with the bounds full that w was painted in
+// and w's role and name, else, for a widget that says what it shows, the
+// node with those bounds named that, or -1.
+func (s inspectSource) semanticMatching(full Rect, w Widget) int {
+	sem := s.f.sem
 	n := nodeOf(w)
 	for j := range sem {
-		if sem[j].full == e.Rect && sem[j].node.Role == n.Role && sem[j].node.Name == n.Name {
+		if sem[j].full == full && sem[j].node.Role == n.Role && sem[j].node.Name == n.Name {
 			return j
 		}
 	}
 	if _, ok := w.(inspect.Labeler); ok {
 		label := inspectLabel(w)
 		for j := range sem {
-			if sem[j].full == e.Rect && sem[j].node.Name == label {
+			if sem[j].full == full && sem[j].node.Name == label {
 				return j
 			}
 		}

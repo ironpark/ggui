@@ -81,6 +81,23 @@ func Resolve(ctx context.Context, dir, cacheDir string) (*Binary, error) {
 	}
 
 	b := &Binary{Dir: dir, files: map[string]bool{}}
+	key, err := b.key(env, pkgs)
+	if err != nil {
+		return nil, err
+	}
+	b.Key = key
+	name := "ggviewer"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	b.Path = filepath.Join(cacheDir, b.Key, name)
+	return b, nil
+}
+
+// key hashes what decides the binary into its cache key: the build
+// environment and every package the viewer is built from, and records
+// the files of local packages in b.files for Affects.
+func (b *Binary) key(env map[string]string, pkgs []gotool.Package) (string, error) {
 	h := sha256.New()
 	for _, k := range buildEnv {
 		fmt.Fprintf(h, "%s=%s\n", k, env[k])
@@ -91,31 +108,35 @@ func Resolve(ctx context.Context, dir, cacheDir string) (*Binary, error) {
 		if p.Standard {
 			continue // GOVERSION covers it
 		}
-		m := p.Module
-		switch {
-		case m == nil:
-			fmt.Fprintf(h, "%s no module\n", p.ImportPath)
-		case m.Local() || m.Version == "":
-			fmt.Fprintf(h, "%s local\n", p.ImportPath)
-			for _, f := range p.Files() {
-				b.files[f] = true
-				if err := hashFile(h, f); err != nil {
-					return nil, err
-				}
-			}
-		case m.Replace != nil:
-			fmt.Fprintf(h, "%s %s@%s => %s@%s\n", p.ImportPath, m.Path, m.Version, m.Replace.Path, m.Replace.Version)
-		default:
-			fmt.Fprintf(h, "%s %s@%s\n", p.ImportPath, m.Path, m.Version)
+		if err := b.hashPackage(h, p); err != nil {
+			return "", err
 		}
 	}
-	b.Key = hex.EncodeToString(h.Sum(nil))[:20]
-	name := "ggviewer"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
+	return hex.EncodeToString(h.Sum(nil))[:20], nil
+}
+
+// hashPackage writes p's contribution to the key: a module version for
+// a released module, or the contents of the package's files for one
+// being edited.
+func (b *Binary) hashPackage(h io.Writer, p *gotool.Package) error {
+	m := p.Module
+	switch {
+	case m == nil:
+		fmt.Fprintf(h, "%s no module\n", p.ImportPath)
+	case m.Local() || m.Version == "":
+		fmt.Fprintf(h, "%s local\n", p.ImportPath)
+		for _, f := range p.Files() {
+			b.files[f] = true
+			if err := hashFile(h, f); err != nil {
+				return err
+			}
+		}
+	case m.Replace != nil:
+		fmt.Fprintf(h, "%s %s@%s => %s@%s\n", p.ImportPath, m.Path, m.Version, m.Replace.Path, m.Replace.Version)
+	default:
+		fmt.Fprintf(h, "%s %s@%s\n", p.ImportPath, m.Path, m.Version)
 	}
-	b.Path = filepath.Join(cacheDir, b.Key, name)
-	return b, nil
+	return nil
 }
 
 // missing returns an *Unavailable when the listing has no viewer, or a

@@ -32,7 +32,7 @@ func (f *Font) Picker(w Weight) *Picker {
 	sys := f.systemFallbackLocked()
 	noFb := f.noFallback.Load()
 	f.mu.Unlock()
-	fonts, _ := f.resolveChain(own, axis, fallbacks, sys, noFb, w)
+	fonts, _ := f.resolveChain(chainSpec{own: own, axis: axis, sys: sys, noFb: noFb}, fallbacks, w)
 	p := &Picker{fonts: fonts, system: sys, weight: w}
 	p.metas = make([]*text.GoTextFaceSource, 0, len(fonts))
 	for _, cf := range fonts {

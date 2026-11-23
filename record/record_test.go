@@ -494,6 +494,10 @@ func TestServe(t *testing.T) {
 		t.Fatalf("a frame named round: %d %v", code, err)
 	}
 
+	if code, err := ask(request{Format: "webp", Out: filepath.Join(dir, "x.webp")}); code != 2 || err == nil || !strings.Contains(err.Error(), `asks for format "webp"`) {
+		t.Fatalf("an unknown format: %d %v", code, err)
+	}
+
 	if code, err := serveTo(`{"v":99}`, &bytes.Buffer{}); code != 2 || err == nil || !strings.Contains(err.Error(), "version 99") {
 		t.Fatalf("another version: %d %v", code, err)
 	}

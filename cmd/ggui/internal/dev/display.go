@@ -95,21 +95,8 @@ func (d *RemoteDisplay) Start(ctx context.Context) (Viewer, error) {
 		}
 	}
 	say := ui.For(d.Log).Prefixed("ggui")
-	stage := func(exe string) (string, error) {
-		if d.Bundle == nil {
-			return exe, nil
-		}
-		staged, warnings, err := d.Bundle.Stage(ctx, exe)
-		for _, w := range warnings {
-			say.Warn("%s", w)
-		}
-		if err != nil {
-			return "", fmt.Errorf("preparing the viewer bundle: %w", err)
-		}
-		return staged, nil
-	}
 	if d.Exe != "" {
-		runExe, err := stage(d.Exe)
+		runExe, err := d.stage(ctx, say, d.Exe)
 		if err != nil {
 			return nil, err
 		}
@@ -127,6 +114,40 @@ func (d *RemoteDisplay) Start(ctx context.Context) (Viewer, error) {
 			return nil, err
 		}
 	}
+	if err := ensureViewer(ctx, say, b); err != nil {
+		return nil, err
+	}
+	runExe, err := d.stage(ctx, say, b.Path)
+	if err != nil {
+		return nil, err
+	}
+	p, err := viewer.Start(ctx, runExe, viewer.Options{Project: d.proj, Stderr: d.Stderr})
+	if err != nil {
+		return nil, fmt.Errorf("the viewer did not start: %w", err)
+	}
+	d.bin = b
+	return p, nil
+}
+
+// stage puts the viewer exe in the bundle, when there is a Bundle, and
+// returns the executable to run.
+func (d *RemoteDisplay) stage(ctx context.Context, say *ui.Output, exe string) (string, error) {
+	if d.Bundle == nil {
+		return exe, nil
+	}
+	staged, warnings, err := d.Bundle.Stage(ctx, exe)
+	for _, w := range warnings {
+		say.Warn("%s", w)
+	}
+	if err != nil {
+		return "", fmt.Errorf("preparing the viewer bundle: %w", err)
+	}
+	return staged, nil
+}
+
+// ensureViewer builds the viewer b when the cache does not have it yet,
+// and says how long that took.
+func ensureViewer(ctx context.Context, say *ui.Output, b *viewer.Binary) error {
 	// No app runs while the viewer is built, so its step may animate.
 	var s *ui.Step
 	if _, err := os.Stat(b.Path); err != nil {
@@ -136,7 +157,7 @@ func (d *RemoteDisplay) Start(ctx context.Context) (Viewer, error) {
 	built, err := b.Ensure(ctx)
 	if err != nil {
 		s.Stop()
-		return nil, err
+		return err
 	}
 	if built {
 		msg := fmt.Sprintf("built the viewer in %s; later sessions find it in %s", time.Since(start).Round(time.Millisecond), filepath.Dir(b.Path))
@@ -147,16 +168,7 @@ func (d *RemoteDisplay) Start(ctx context.Context) (Viewer, error) {
 		}
 	}
 	s.Stop()
-	runExe, err := stage(b.Path)
-	if err != nil {
-		return nil, err
-	}
-	p, err := viewer.Start(ctx, runExe, viewer.Options{Project: d.proj, Stderr: d.Stderr})
-	if err != nil {
-		return nil, fmt.Errorf("the viewer did not start: %w", err)
-	}
-	d.bin = b
-	return p, nil
+	return nil
 }
 
 // Stale resolves the viewer again when paths may change it, and reports

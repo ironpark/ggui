@@ -18,3 +18,10 @@ func TestSetResolvesAllRoles(t *testing.T) {
 		t.Fatal("Set().Resolve(unknown) != nil")
 	}
 }
+
+func TestSetIsComparable(t *testing.T) {
+	t.Parallel()
+	if Set() != Set() {
+		t.Fatal("Set() != Set()")
+	}
+}

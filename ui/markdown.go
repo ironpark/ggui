@@ -3,6 +3,7 @@ package ui
 import (
 	"image/color"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/runtime"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	"github.com/ironpark/ggui/ui/internal/markdown"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
@@ -272,18 +274,23 @@ func (m *MarkdownWidget) appendSpans(out []widget.TextSpan, inlines []markdown.I
 			s.strike = true
 			out = m.appendSpans(out, in.Children, s, size)
 		case markdown.Link, markdown.Image:
-			// An image shows as a link to it, named by its description:
-			// what it shows is not fetched.
-			s.link, s.url, s.name = true, in.URL, markdown.PlainText(in.Children)
-			children := in.Children
-			if len(children) == 0 {
-				s.name = pick(in.URL != "", in.URL, "image")
-				children = []markdown.Inline{{Kind: markdown.Text, Text: s.name}}
-			}
-			out = m.appendSpans(out, children, s, size)
+			out = m.appendLink(out, in, s, size)
 		}
 	}
 	return out
+}
+
+// appendLink appends the spans of a link, or of an image, which shows as a
+// link to it named by its description: what it shows is not fetched. One
+// with no description reads as its destination, or as "image" without one.
+func (m *MarkdownWidget) appendLink(out []widget.TextSpan, in markdown.Inline, st mdInline, size float64) []widget.TextSpan {
+	st.link, st.url, st.name = true, in.URL, markdown.PlainText(in.Children)
+	children := in.Children
+	if len(children) == 0 {
+		st.name = pick(in.URL != "", in.URL, "image")
+		children = []markdown.Inline{{Kind: markdown.Text, Text: st.name}}
+	}
+	return m.appendSpans(out, children, st, size)
 }
 
 // span is one run of text in the style st says.
@@ -707,7 +714,7 @@ func (l *mdList) paintMark(dst *ggui.Canvas, r ggui.Rect, it *mdItem) {
 		radius := side / 4
 		if done {
 			dst.FillRoundRect(box, radius, t.Primary)
-			paintIconAt(dst, l.env, icons.Check, box.Center(), side*.875, t.PrimaryFg, 0)
+			controlkit.PaintIconAt(dst, l.env, controlkit.IconMark{Role: icons.Check, Center: box.Center(), Size: side * .875, Color: t.PrimaryFg})
 		} else {
 			dst.FillRoundRect(box, radius, t.Input)
 			dst.StrokeRoundRect(box, radius, t.BorderWidth, t.InputBorder)
@@ -751,7 +758,7 @@ type mdTable struct {
 }
 
 func (t *mdTable) update(b markdown.Block) bool {
-	if t.align != nil && !equalAligns(t.align, b.Align) {
+	if t.align != nil && !slices.Equal(t.align, b.Align) {
 		return false // a column aligned another way: built again
 	}
 	t.align = b.Align
@@ -761,25 +768,7 @@ func (t *mdTable) update(b markdown.Block) bool {
 	}
 	for r, row := range all {
 		if r == len(t.cells) {
-			cells := make([]*widget.RichTextWidget, len(b.Align))
-			for c := range cells {
-				cells[c] = widget.RichText()
-				if t.m.style.selectable {
-					cells[c].Selectable()
-				}
-				switch b.Align[c] {
-				case markdown.AlignCenter:
-					cells[c].Align(.5)
-				case markdown.AlignRight:
-					cells[c].Align(1)
-				case markdown.AlignLeft:
-					cells[c].Align(0)
-				}
-				if r == 0 {
-					cells[c].Weight(ggui.WeightSemibold)
-				}
-			}
-			t.cells = append(t.cells, cells)
+			t.cells = append(t.cells, t.newRow(r, b.Align))
 			t.names = append(t.names, make([]string, len(b.Align)))
 		}
 		for c, cell := range row {
@@ -795,16 +784,28 @@ func (t *mdTable) update(b markdown.Block) bool {
 	return true
 }
 
-func equalAligns(a, b []markdown.Align) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
+// newRow makes the cells of row r, aligned as align says: selectable as
+// the document is, and in the label weight in the heading row, row 0.
+func (t *mdTable) newRow(r int, align []markdown.Align) []*widget.RichTextWidget {
+	cells := make([]*widget.RichTextWidget, len(align))
+	for c := range cells {
+		cells[c] = widget.RichText()
+		if t.m.style.selectable {
+			cells[c].Selectable()
+		}
+		switch align[c] {
+		case markdown.AlignCenter:
+			cells[c].Align(.5)
+		case markdown.AlignRight:
+			cells[c].Align(1)
+		case markdown.AlignLeft:
+			cells[c].Align(0)
+		}
+		if r == 0 {
+			cells[c].Weight(ggui.WeightSemibold)
 		}
 	}
-	return true
+	return cells
 }
 
 func (t *mdTable) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
@@ -838,26 +839,7 @@ func (t *mdTable) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	total += float64(n) * 2 * t.padX
 	copy(t.colW, need)
 	if total > avail {
-		// Each column keeps up to a few words' width; what is left goes to
-		// the columns in proportion to what more they would take.
-		floor := make([]float64, n)
-		least, want := 0.0, 0.0
-		for i, w := range need {
-			floor[i] = min(w, base*6+2*t.padX)
-			least += floor[i]
-			want += w - floor[i]
-		}
-		spare := avail - least
-		for i := range t.colW {
-			switch {
-			case spare <= 0:
-				t.colW[i] = max(0, avail) / float64(n)
-			case want > 0:
-				t.colW[i] = floor[i] + spare*(need[i]-floor[i])/want
-			default:
-				t.colW[i] = floor[i]
-			}
-		}
+		t.shrinkColumns(need, avail)
 	}
 	t.width = 0
 	for _, w := range t.colW {
@@ -877,6 +859,31 @@ func (t *mdTable) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		h += rh
 	}
 	return c.Constrain(ggui.Sz(t.width, h))
+}
+
+// shrinkColumns narrows the columns, which need would make wider than
+// avail. Each column keeps up to a few words' width; what is left goes to
+// the columns in proportion to what more they would take.
+func (t *mdTable) shrinkColumns(need []float64, avail float64) {
+	base, n := t.m.style.base, len(need)
+	floor := make([]float64, n)
+	least, want := 0.0, 0.0
+	for i, w := range need {
+		floor[i] = min(w, base*6+2*t.padX)
+		least += floor[i]
+		want += w - floor[i]
+	}
+	spare := avail - least
+	for i := range t.colW {
+		switch {
+		case spare <= 0:
+			t.colW[i] = max(0, avail) / float64(n)
+		case want > 0:
+			t.colW[i] = floor[i] + spare*(need[i]-floor[i])/want
+		default:
+			t.colW[i] = floor[i]
+		}
+	}
 }
 
 // resized is s with n elements.

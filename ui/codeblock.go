@@ -11,6 +11,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -325,7 +326,7 @@ var codeActionsSlot = ggui.NewSlot[*ggui.Motion]("code block actions")
 // Paint implements Widget.
 func (c *CodeBlockWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := c.theme
-	dark := isDark(t.Bg)
+	dark := controlkit.IsDark(t.Bg)
 	if c.copied {
 		// The check turns back into the copy icon by itself.
 		if until := c.copiedAt.Add(codeCopiedFor); ggui.FrameTime().Before(until) {
@@ -338,7 +339,7 @@ func (c *CodeBlockWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	shown := 1.0
 	if c.copyButton && !c.hasHeader {
 		p, ok := dst.Pointer()
-		shown = ease(dst, c.theme, c.Anchor(r), codeActionsSlot, pick(ok && r.Contains(p) || dst.FocusWithin(r), 1.0, 0.0), c.motion)
+		shown = controlkit.Ease(dst, c.theme, c.Anchor(r), codeActionsSlot, pick(ok && r.Contains(p) || dst.FocusWithin(r), 1.0, 0.0), c.motion)
 	}
 	border := t.InputBorder
 	if c.destructive {
@@ -350,16 +351,7 @@ func (c *CodeBlockWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst = dst.Clip(r)
 	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Name: c.caption(), Description: c.words.orDefault().CodeBlockName}, func(dst *ggui.Canvas) {
 		line := max(0, c.headerH-c.pad)
-		if c.hasHeader {
-			x := c.pad
-			if c.header != "" {
-				dst.Paint(c.title, ggui.Rct(r.Origin.Add(ggui.Pt(c.side(r, x, c.titleSize.W), c.pad+(line-c.titleSize.H)/2)), c.titleSize))
-				x += c.titleSize.W + t.Space
-			}
-			if c.language != "" {
-				dst.Paint(c.lang, ggui.Rct(r.Origin.Add(ggui.Pt(c.side(r, x, c.langSize.W), c.pad+(line-c.langSize.H)/2)), c.langSize))
-			}
-		}
+		c.paintHeader(dst, r, line)
 		if c.copied {
 			dst.Leaf(r, ggui.Node{Role: ggui.RoleStatus, Name: c.words.orDefault().CodeCopied})
 		}
@@ -378,39 +370,62 @@ func (c *CodeBlockWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			at := ggui.Pt(c.side(r, c.pad, c.footerSize.W), c.headerH+c.bodySize.H)
 			dst.Paint(c.footer, ggui.Rct(r.Origin.Add(at), c.footerSize))
 		}
-		if !c.copyButton {
-			return
-		}
-		if c.hasHeader {
-			// In the header the action hangs into the padding, so its icon
-			// lines up with the code's edge.
-			x := r.Size.W - c.pad + t.Space*.75 - c.copySize.W
-			dst.Paint(c.copy, ggui.Rct(r.Origin.Add(ggui.Pt(c.side(r, x, c.copySize.W), c.pad+(line-c.copySize.H)/2)), c.copySize))
-			return
-		}
-		inset := t.Space * pick(c.small, .75, 1.0)
-		at := ggui.Rct(r.Origin.Add(ggui.Pt(c.side(r, r.Size.W-inset-c.copySize.W, c.copySize.W), inset)), c.copySize)
-		if shown <= 0 {
-			// Out of sight it still takes Tab and a click, which bring it back.
-			c.copy.Hit(dst, at, c.copy, ggui.CursorShapeDefault)
-			return
-		}
-		float := func(dst *ggui.Canvas) {
-			radius := min(t.RadiusSm, 10)
-			dst.FillRoundRect(at, radius, t.Bg)
-			dst.StrokeRoundRect(at.Grow(1), radius+1, 1, fade(t.Fg, .1))
-			dst.Paint(c.copy, at)
-		}
-		if shown < 1 {
-			dst.Layer(ggui.LayerOptions{Fade: 1 - shown}, float)
-		} else {
-			float(dst)
+		if c.copyButton {
+			c.paintCopy(dst, r, line, shown)
 		}
 	})
 	focused := c.Focused && c.FocusVisible && !c.IsInert()
 	outer.StrokeRoundRect(r, t.Radius, t.BorderWidth, pick(focused && !c.destructive, t.Ring, border))
 	if focused {
-		fieldHalo(outer, t, r, t.Radius, pick(c.destructive, destructiveRing(t), t.Ring))
+		controlkit.FieldHalo(outer, t, r, t.Radius, pick(c.destructive, destructiveRing(t), t.Ring))
+	}
+}
+
+// paintHeader paints the title and the language along the header, line
+// tall under the padding, from the start side.
+func (c *CodeBlockWidget) paintHeader(dst *ggui.Canvas, r ggui.Rect, line float64) {
+	if !c.hasHeader {
+		return
+	}
+	t := c.theme
+	x := c.pad
+	if c.header != "" {
+		dst.Paint(c.title, ggui.Rct(r.Origin.Add(ggui.Pt(c.side(r, x, c.titleSize.W), c.pad+(line-c.titleSize.H)/2)), c.titleSize))
+		x += c.titleSize.W + t.Space
+	}
+	if c.language != "" {
+		dst.Paint(c.lang, ggui.Rct(r.Origin.Add(ggui.Pt(c.side(r, x, c.langSize.W), c.pad+(line-c.langSize.H)/2)), c.langSize))
+	}
+}
+
+// paintCopy paints the copy action: at the end of the header, or floating
+// in the block's corner, faded by shown.
+func (c *CodeBlockWidget) paintCopy(dst *ggui.Canvas, r ggui.Rect, line, shown float64) {
+	t := c.theme
+	if c.hasHeader {
+		// In the header the action hangs into the padding, so its icon
+		// lines up with the code's edge.
+		x := r.Size.W - c.pad + t.Space*.75 - c.copySize.W
+		dst.Paint(c.copy, ggui.Rct(r.Origin.Add(ggui.Pt(c.side(r, x, c.copySize.W), c.pad+(line-c.copySize.H)/2)), c.copySize))
+		return
+	}
+	inset := t.Space * pick(c.small, .75, 1.0)
+	at := ggui.Rct(r.Origin.Add(ggui.Pt(c.side(r, r.Size.W-inset-c.copySize.W, c.copySize.W), inset)), c.copySize)
+	if shown <= 0 {
+		// Out of sight it still takes Tab and a click, which bring it back.
+		c.copy.Hit(dst, at, c.copy, ggui.CursorShapeDefault)
+		return
+	}
+	float := func(dst *ggui.Canvas) {
+		radius := min(t.RadiusSm, 10)
+		dst.FillRoundRect(at, radius, t.Bg)
+		dst.StrokeRoundRect(at.Grow(1), radius+1, 1, fade(t.Fg, .1))
+		dst.Paint(c.copy, at)
+	}
+	if shown < 1 {
+		dst.Layer(ggui.LayerOptions{Fade: 1 - shown}, float)
+	} else {
+		float(dst)
 	}
 }
 
@@ -579,25 +594,7 @@ func (b *codeBlockBody) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		clear(b.lines[len(sourceLines):])
 	}
 	b.lines = b.lines[:len(sourceLines)]
-	b.gutter, b.numberW, b.markerW = 0, 0, 0
-	for i := range b.lines {
-		line := &b.lines[i]
-		line.style = c.lineStyles[i+1]
-		if c.lineNumbers {
-			line.number.Content(strconv.Itoa(c.startLine + i)).Style(style).Color(c.theme.MutedFg)
-			b.numberW = max(b.numberW, line.number.Layout(loose, env).W)
-		}
-		// Only a changed line has a marker to shape; Paint asks the same.
-		if line.style == CodeLineAdded || line.style == CodeLineRemoved {
-			line.marker.Content(pick(line.style == CodeLineAdded, "+", "−")).Style(style).Color(pick(line.style == CodeLineRemoved, c.theme.Destructive, c.theme.MutedFg))
-			b.markerW = max(b.markerW, line.marker.Layout(loose, env).W)
-		}
-	}
-	// The numbers take a column; a marker sits in the padding before it.
-	if c.lineNumbers {
-		b.numberW = max(b.numberW, codeNumberMin)
-		b.gutter = b.numberW + codeNumberGap
-	}
+	b.layoutGutter(style, loose, env)
 	if c.wrap {
 		textW = max(1, c.viewportW-b.gutter-sides)
 	}
@@ -613,42 +610,75 @@ func (b *codeBlockBody) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	return cs.Constrain(ggui.Sz(b.textSize.W+b.gutter+sides, b.textSize.H+ends))
 }
 
+// layoutGutter shapes each line's number and change marker and sizes the
+// gutter by the widest. The numbers take a column; a marker sits in the
+// padding before it.
+func (b *codeBlockBody) layoutGutter(style ggui.TextStyle, loose ggui.Constraints, env ggui.Env) {
+	c := b.owner
+	b.gutter, b.numberW, b.markerW = 0, 0, 0
+	for i := range b.lines {
+		line := &b.lines[i]
+		line.style = c.lineStyles[i+1]
+		if c.lineNumbers {
+			line.number.Content(strconv.Itoa(c.startLine + i)).Style(style).Color(c.theme.MutedFg)
+			b.numberW = max(b.numberW, line.number.Layout(loose, env).W)
+		}
+		// Only a changed line has a marker to shape; Paint asks the same.
+		if line.style == CodeLineAdded || line.style == CodeLineRemoved {
+			line.marker.Content(pick(line.style == CodeLineAdded, "+", "−")).Style(style).Color(pick(line.style == CodeLineRemoved, c.theme.Destructive, c.theme.MutedFg))
+			b.markerW = max(b.markerW, line.marker.Layout(loose, env).W)
+		}
+	}
+	if c.lineNumbers {
+		b.numberW = max(b.numberW, codeNumberMin)
+		b.gutter = b.numberW + codeNumberGap
+	}
+}
+
 func (b *codeBlockBody) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	c := b.owner
 	// The gutter draws only the lines in view; a long log has few of them.
 	visible, gutter := dst.Visible(r), dst.Inert()
 	if !visible.Empty() {
-		words := c.words.orDefault()
-		for i := range b.lines {
-			line := &b.lines[i]
-			at := r.Origin.Add(ggui.Pt(c.pad, c.padTop+line.top))
-			if at.Y+line.height < visible.Origin.Y || at.Y > visible.Origin.Y+visible.Size.H {
-				continue
-			}
-			var fill color.Color
-			var annotation string
-			switch line.style {
-			case CodeLineHighlighted:
-				fill, annotation = c.theme.Muted, words.HighlightedLineFormat
-			case CodeLineAdded:
-				fill, annotation = c.theme.Muted, words.AddedLineFormat
-			case CodeLineRemoved:
-				fill, annotation = fade(c.theme.Destructive, .1), words.RemovedLineFormat
-			}
-			if annotation != "" {
-				// The band runs from edge to edge of the viewport or the longest
-				// line, whichever is wider, with the line's leading shared above
-				// and below its glyphs.
-				dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, at.Y-b.leading/2), ggui.Sz(max(r.Size.W, c.viewportW), line.height)), fill)
-				dst.Leaf(ggui.Rct(at, ggui.Sz(max(0, r.Size.W-2*c.pad), line.height)), ggui.Node{Role: ggui.RoleText, Name: fmt.Sprintf(annotation, c.startLine+i)})
-			}
-			if line.style == CodeLineAdded || line.style == CodeLineRemoved {
-				gutter.Paint(line.marker, ggui.Rct(ggui.Pt(r.Origin.X+c.theme.Space/2, at.Y), ggui.Sz(b.markerW, b.lineH)))
-			}
-			if c.lineNumbers {
-				gutter.Paint(line.number, ggui.Rct(at, ggui.Sz(b.numberW, b.lineH)))
-			}
-		}
+		b.paintLineMarks(dst, gutter, r, visible)
 	}
 	dst.Paint(c.text, ggui.Rct(r.Origin.Add(ggui.Pt(c.pad+b.gutter, c.padTop)), b.textSize))
+}
+
+// paintLineMarks paints, for each line in visible, the band and the
+// description of a highlighted, added or removed line, and into gutter its
+// change marker and its number.
+func (b *codeBlockBody) paintLineMarks(dst, gutter *ggui.Canvas, r, visible ggui.Rect) {
+	c := b.owner
+	words := c.words.orDefault()
+	for i := range b.lines {
+		line := &b.lines[i]
+		at := r.Origin.Add(ggui.Pt(c.pad, c.padTop+line.top))
+		if at.Y+line.height < visible.Origin.Y || at.Y > visible.Origin.Y+visible.Size.H {
+			continue
+		}
+		var fill color.Color
+		var annotation string
+		switch line.style {
+		case CodeLineHighlighted:
+			fill, annotation = c.theme.Muted, words.HighlightedLineFormat
+		case CodeLineAdded:
+			fill, annotation = c.theme.Muted, words.AddedLineFormat
+		case CodeLineRemoved:
+			fill, annotation = fade(c.theme.Destructive, .1), words.RemovedLineFormat
+		}
+		if annotation != "" {
+			// The band runs from edge to edge of the viewport or the longest
+			// line, whichever is wider, with the line's leading shared above
+			// and below its glyphs.
+			dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, at.Y-b.leading/2), ggui.Sz(max(r.Size.W, c.viewportW), line.height)), fill)
+			dst.Leaf(ggui.Rct(at, ggui.Sz(max(0, r.Size.W-2*c.pad), line.height)), ggui.Node{Role: ggui.RoleText, Name: fmt.Sprintf(annotation, c.startLine+i)})
+		}
+		if line.style == CodeLineAdded || line.style == CodeLineRemoved {
+			gutter.Paint(line.marker, ggui.Rct(ggui.Pt(r.Origin.X+c.theme.Space/2, at.Y), ggui.Sz(b.markerW, b.lineH)))
+		}
+		if c.lineNumbers {
+			gutter.Paint(line.number, ggui.Rct(at, ggui.Sz(b.numberW, b.lineH)))
+		}
+	}
 }

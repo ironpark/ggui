@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -311,7 +312,7 @@ func (n *NumberInputWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		n.box = widget.Box(n.row)
 	}
 	n.row.Gap(t.Space / 2)
-	// The colors follow the field's state in Paint; see fieldChrome.
+	// The colors follow the field's state in Paint; see fieldChromeJoined.
 	fieldBoxShape(n.box, t, t.FieldPad)
 	size := n.box.Layout(c, env.With(ggui.InputDisabledKey, n.disabled))
 	n.disabled = n.disabled || n.input.IsDisabled()
@@ -332,7 +333,7 @@ func (n *NumberInputWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		n.Hit(dst, r, n.input, ggui.CursorShapeText)
 	}
 	at := ggui.Anchor{Rect: r, ID: n.input.HitID()}
-	fieldChromeJoined(dst, at, n.box, n.theme, r, n.theme.Radius, fieldState{n.input.Focused(), n.invalid, n.disabled}, n.motion, n.sides.within(dst))
+	fieldChromeJoined(dst, at, n.box, r, fieldLook{theme: n.theme, focused: n.input.Focused(), invalid: n.invalid, inert: n.disabled, motion: n.motion, sides: n.sides.within(dst)})
 	dst.Paint(n.box, r)
 }
 
@@ -377,5 +378,5 @@ func (s *numberStepper) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	role := pick(s.dir < 0, icons.Minus, icons.Plus)
 	col := pick(enabled, pick(s.Hovered, t.AccentFg, t.Fg), t.Disabled(t.MutedFg))
-	paintIconAt(dst, s.env, role, r.Center(), t.IconSize*.875, col, 0)
+	controlkit.PaintIconAt(dst, s.env, controlkit.IconMark{Role: role, Center: r.Center(), Size: t.IconSize * .875, Color: col})
 }

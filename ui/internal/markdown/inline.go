@@ -1,7 +1,6 @@
 package markdown
 
 import (
-	"html"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -141,56 +140,78 @@ func (p *inlineParser) text(s string) { p.append(&inode{kind: Text, text: s}) }
 
 // step reads what is at the position.
 func (p *inlineParser) step() {
-	s := p.s
-	c := s[p.pos]
-	switch c {
+	switch p.s[p.pos] {
 	case '\n':
 		p.lineBreak(false)
 	case '\\':
-		switch {
-		case p.pos+1 < len(s) && s[p.pos+1] == '\n':
-			p.pos++
-			p.lineBreak(true)
-		case p.pos+1 < len(s) && isPunct(s[p.pos+1]):
-			p.text(s[p.pos+1 : p.pos+2])
-			p.pos += 2
-		default:
-			p.text(`\`)
-			p.pos++
-		}
+		p.scanEscape()
 	case '`':
 		p.codeSpan()
 	case '*', '_', '~':
-		p.delimiterRun(c)
+		p.delimiterRun(p.s[p.pos])
 	case '[':
 		p.openBracket(false, 1)
 	case '!':
-		if p.pos+1 < len(s) && s[p.pos+1] == '[' {
-			p.openBracket(true, 2)
-			return
-		}
-		p.text("!")
-		p.pos++
+		p.scanBang()
 	case ']':
 		p.closeBracket()
 	case '<':
-		if !p.autolink() {
-			p.text("<")
-			p.pos++
-		}
+		p.scanAngle()
 	case '&':
 		p.entity()
 	default:
-		if (c == 'w' || c == 'h') && p.wordStart(p.pos) && p.extendedAutolink() {
-			return
-		}
-		j := p.pos + 1
-		for j < len(s) && !isSpecial(s[j]) && !((s[j] == 'w' || s[j] == 'h') && p.wordStart(j)) {
-			j++
-		}
-		p.text(s[p.pos:j])
-		p.pos = j
+		p.scanText()
 	}
+}
+
+// scanEscape reads a backslash: a hard break before a line ending, an
+// escaped punctuation as itself, else the backslash as text.
+func (p *inlineParser) scanEscape() {
+	s := p.s
+	switch {
+	case p.pos+1 < len(s) && s[p.pos+1] == '\n':
+		p.pos++
+		p.lineBreak(true)
+	case p.pos+1 < len(s) && isPunct(s[p.pos+1]):
+		p.text(s[p.pos+1 : p.pos+2])
+		p.pos += 2
+	default:
+		p.text(`\`)
+		p.pos++
+	}
+}
+
+// scanBang reads a !: an image bracket before [, else the ! as text.
+func (p *inlineParser) scanBang() {
+	if p.pos+1 < len(p.s) && p.s[p.pos+1] == '[' {
+		p.openBracket(true, 2)
+		return
+	}
+	p.text("!")
+	p.pos++
+}
+
+// scanAngle reads a <: an autolink when one follows, else the < as text.
+func (p *inlineParser) scanAngle() {
+	if !p.autolink() {
+		p.text("<")
+		p.pos++
+	}
+}
+
+// scanText reads a run of plain text, stopping where an extended autolink
+// may start.
+func (p *inlineParser) scanText() {
+	s := p.s
+	if (s[p.pos] == 'w' || s[p.pos] == 'h') && p.wordStart(p.pos) && p.extendedAutolink() {
+		return
+	}
+	j := p.pos + 1
+	for j < len(s) && !isSpecial(s[j]) && !((s[j] == 'w' || s[j] == 'h') && p.wordStart(j)) {
+		j++
+	}
+	p.text(s[p.pos:j])
+	p.pos = j
 }
 
 // isSpecial reports whether c may start something other than text.
@@ -286,16 +307,7 @@ func (p *inlineParser) delimiterRun(c byte) {
 		p.text(s[start:p.pos])
 		return
 	}
-	before, after := ' ', ' '
-	if start > 0 {
-		before, _ = utf8.DecodeLastRuneInString(s[:start])
-	}
-	if p.pos < len(s) {
-		after, _ = utf8.DecodeRuneInString(s[p.pos:])
-	} else if p.tail {
-		// What follows a run at the cut has not arrived; it may open.
-		after = 'a'
-	}
+	before, after := p.flanking(s, start)
 	left := !isSpace(after) && (!isPunctuation(after) || isSpace(before) || isPunctuation(before))
 	right := !isSpace(before) && (!isPunctuation(before) || isSpace(after) || isPunctuation(after))
 	p.nextDelimSeq++
@@ -312,6 +324,22 @@ func (p *inlineParser) delimiterRun(c byte) {
 		p.delims.nxt = d
 	}
 	p.delims = d
+}
+
+// flanking reads the runes on either side of the delimiter run that ends
+// the text before start.
+func (p *inlineParser) flanking(s string, start int) (before, after rune) {
+	before, after = ' ', ' '
+	if start > 0 {
+		before, _ = utf8.DecodeLastRuneInString(s[:start])
+	}
+	if p.pos < len(s) {
+		after, _ = utf8.DecodeRuneInString(s[p.pos:])
+	} else if p.tail {
+		// What follows a run at the cut has not arrived; it may open.
+		after = 'a'
+	}
+	return before, after
 }
 
 // isSpace reports whether r is Unicode whitespace, as the flanking rules
@@ -365,28 +393,7 @@ func (p *inlineParser) processEmphasis(bottom *delim, closeOpen bool) {
 			continue
 		}
 		idx := bottomIndex(closer)
-		stop := openersBottom[idx]
-		var opener *delim
-		for o := closer.prev; o != nil && o.seq > stop; o = o.prev {
-			if o.char != closer.char || !o.canOpen {
-				continue
-			}
-			if closer.char == '~' {
-				if o.n == closer.n {
-					opener = o
-					break
-				}
-				continue
-			}
-			// The rule of three: a run that may both open and close does not
-			// pair with one whose lengths would add to a multiple of three,
-			// unless both are such multiples.
-			if (o.canClose || closer.canOpen) && (o.orig+closer.orig)%3 == 0 && !(o.orig%3 == 0 && closer.orig%3 == 0) {
-				continue
-			}
-			opener = o
-			break
-		}
+		opener := p.findOpener(closer, openersBottom[idx])
 		if opener == nil {
 			if closer.prev != nil && closer.prev.seq > openersBottom[idx] {
 				openersBottom[idx] = closer.prev.seq
@@ -398,58 +405,94 @@ func (p *inlineParser) processEmphasis(bottom *delim, closeOpen bool) {
 			closer = next
 			continue
 		}
-		use, kind := 1, Emphasis
-		switch {
-		case closer.char == '~':
-			use, kind = closer.n, Strike
-		case closer.n >= 2 && opener.n >= 2:
-			use, kind = 2, Strong
-		}
-		opener.n -= use
-		closer.n -= use
-		opener.node.text = opener.node.text[:opener.n]
-		closer.node.text = closer.node.text[:closer.n]
-		p.wrap(&inode{kind: kind}, opener.node, closer.node)
-		// The delimiters between are inside the emphasis now, as text.
-		opener.nxt, closer.prev = closer, opener
-		if opener.n == 0 {
-			p.unlink(opener.node)
-			p.removeDelim(opener)
-		}
-		if closer.n == 0 {
-			next := closer.nxt
-			p.unlink(closer.node)
-			p.removeDelim(closer)
-			closer = next
-		}
+		closer = p.matchPair(opener, closer)
 	}
 	if closeOpen {
-		// What is still open was opened in the part of the stream that has
-		// arrived; it closes at the cut, the innermost first.
-		for d := p.delims; d != nil && d != bottom; d = d.prev {
-			if !d.canOpen || d.n == 0 {
-				continue
-			}
-			if d.node.next == nil {
-				d.node.text = ""
-				continue
-			}
-			switch {
-			case d.char == '~':
-				p.wrap(&inode{kind: Strike}, d.node, nil)
-			case d.n == 1:
-				p.wrap(&inode{kind: Emphasis}, d.node, nil)
-			default:
-				p.wrap(&inode{kind: Strong}, d.node, nil)
-				if d.n >= 3 {
-					p.wrap(&inode{kind: Emphasis}, d.node, nil)
-				}
-			}
-			d.node.text = ""
-		}
+		p.closeOpenDelims(bottom)
 	}
 	for p.delims != nil && p.delims != bottom {
 		p.removeDelim(p.delims)
+	}
+}
+
+// findOpener searches the stack above stop for a delimiter that pairs
+// with closer.
+func (p *inlineParser) findOpener(closer *delim, stop int) *delim {
+	for o := closer.prev; o != nil && o.seq > stop; o = o.prev {
+		if o.char != closer.char || !o.canOpen {
+			continue
+		}
+		if closer.char == '~' {
+			if o.n == closer.n {
+				return o
+			}
+			continue
+		}
+		// The rule of three: a run that may both open and close does not
+		// pair with one whose lengths would add to a multiple of three,
+		// unless both are such multiples.
+		if (o.canClose || closer.canOpen) && (o.orig+closer.orig)%3 == 0 && !(o.orig%3 == 0 && closer.orig%3 == 0) {
+			continue
+		}
+		return o
+	}
+	return nil
+}
+
+// matchPair wraps the nodes between opener and closer in the emphasis
+// their runs make, spends the delimiters used, and returns the closer to
+// continue with.
+func (p *inlineParser) matchPair(opener, closer *delim) *delim {
+	use, kind := 1, Emphasis
+	switch {
+	case closer.char == '~':
+		use, kind = closer.n, Strike
+	case closer.n >= 2 && opener.n >= 2:
+		use, kind = 2, Strong
+	}
+	opener.n -= use
+	closer.n -= use
+	opener.node.text = opener.node.text[:opener.n]
+	closer.node.text = closer.node.text[:closer.n]
+	p.wrap(&inode{kind: kind}, opener.node, closer.node)
+	// The delimiters between are inside the emphasis now, as text.
+	opener.nxt, closer.prev = closer, opener
+	if opener.n == 0 {
+		p.unlink(opener.node)
+		p.removeDelim(opener)
+	}
+	if closer.n == 0 {
+		next := closer.nxt
+		p.unlink(closer.node)
+		p.removeDelim(closer)
+		return next
+	}
+	return closer
+}
+
+// closeOpenDelims closes what is still open at the end of the text, the
+// innermost first.
+func (p *inlineParser) closeOpenDelims(bottom *delim) {
+	for d := p.delims; d != nil && d != bottom; d = d.prev {
+		if !d.canOpen || d.n == 0 {
+			continue
+		}
+		if d.node.next == nil {
+			d.node.text = ""
+			continue
+		}
+		switch {
+		case d.char == '~':
+			p.wrap(&inode{kind: Strike}, d.node, nil)
+		case d.n == 1:
+			p.wrap(&inode{kind: Emphasis}, d.node, nil)
+		default:
+			p.wrap(&inode{kind: Strong}, d.node, nil)
+			if d.n >= 3 {
+				p.wrap(&inode{kind: Emphasis}, d.node, nil)
+			}
+		}
+		d.node.text = ""
 	}
 }
 
@@ -531,80 +574,124 @@ func (p *inlineParser) linkTail(i int) (url, title string, end int, ok, cut bool
 	}
 	// The destination: in <angle brackets>, or up to a space with its
 	// parentheses balanced.
-	switch {
-	case s[i] == '<':
-		j := i + 1
-		for ; j < len(s) && s[j] != '>'; j++ {
-			switch s[j] {
-			case '\\':
-				j++
-			case '\n', '<':
-				return
-			}
-		}
-		if j >= len(s) {
-			return "", "", len(s), false, true
-		}
-		url = unescape(s[i+1 : j])
-		i = j + 1
-	default:
-		depth, j := 0, i
-	dest:
-		for ; j < len(s); j++ {
-			switch c := s[j]; {
-			case c == '\\' && j+1 < len(s) && isPunct(s[j+1]):
-				j++
-			case c == '(':
-				depth++
-				if depth > 32 {
-					return
-				}
-			case c == ')':
-				if depth == 0 {
-					break dest
-				}
-				depth--
-			case c <= ' ':
-				break dest
-			}
-		}
-		if j >= len(s) {
-			return "", "", len(s), false, true
-		}
-		url = unescape(s[i:j])
-		i = j
+	var cutDest bool
+	url, i, cutDest = linkURL(s, i)
+	if cutDest {
+		return "", "", len(s), false, true
+	}
+	if url == "" && i == 0 {
+		return
 	}
 	j := skipSpace(s, i)
 	if j >= len(s) {
 		return "", "", len(s), false, true
 	}
-	// A title, after a space: in "quotes", 'quotes' or (parentheses).
-	if j > i && (s[j] == '"' || s[j] == '\'' || s[j] == '(') {
-		closing := s[j]
-		if closing == '(' {
-			closing = ')'
-		}
-		k := j + 1
-		for ; k < len(s) && s[k] != closing; k++ {
-			if s[k] == '\\' {
-				k++
-			} else if closing == ')' && s[k] == '(' {
-				return
-			}
-		}
-		if k >= len(s) {
-			return "", "", len(s), false, true
-		}
-		title = unescape(s[j+1 : k])
-		j = skipSpace(s, k+1)
-		if j >= len(s) {
-			return "", "", len(s), false, true
-		}
+	title, j, titleCut := linkTitle(s, i, j)
+	if titleCut {
+		return "", "", len(s), false, true
+	}
+	if j < 0 {
+		return
+	}
+	if j >= len(s) {
+		return "", "", len(s), false, true
 	}
 	if s[j] != ')' {
 		return "", "", 0, false, false
 	}
 	return url, title, j + 1, true, false
+}
+
+// linkURL reads the destination of an inline link at i of s: its text and
+// where it ends. It returns i == 0 when s does not start one.
+func linkURL(s string, i int) (url string, next int, cut bool) {
+	switch {
+	case s[i] == '<':
+		return angleURL(s, i)
+	default:
+		return plainURL(s, i)
+	}
+}
+
+// angleURL reads a <destination>.
+func angleURL(s string, i int) (url string, next int, cut bool) {
+	j := i + 1
+	for ; j < len(s) && s[j] != '>'; j++ {
+		switch s[j] {
+		case '\\':
+			j++
+		case '\n', '<':
+			return "", 0, false
+		}
+	}
+	if j >= len(s) {
+		return "", 0, true
+	}
+	return unescape(s[i+1 : j]), j + 1, false
+}
+
+// plainURL reads a destination up to a space, its parentheses balanced.
+func plainURL(s string, i int) (url string, next int, cut bool) {
+	j, stopped := scanDest(s, i)
+	if !stopped {
+		if j >= len(s) {
+			return "", 0, true
+		}
+		return "", 0, false
+	}
+	return unescape(s[i:j]), j, false
+}
+
+// scanDest scans a bare link destination from i: escapes and balanced
+// parentheses are consumed, and it stops at a space or the ) that closes
+// the link. stopped reports a stop that ends the destination.
+func scanDest(s string, i int) (j int, stopped bool) {
+	depth := 0
+	j = i
+	for ; j < len(s); j++ {
+		switch c := s[j]; {
+		case c == '\\' && j+1 < len(s) && isPunct(s[j+1]):
+			j++
+		case c == '(':
+			depth++
+			if depth > 32 {
+				return 0, false
+			}
+		case c == ')':
+			if depth == 0 {
+				return j, true
+			}
+			depth--
+		case c <= ' ':
+			return j, true
+		}
+	}
+	return j, false
+}
+
+// linkTitle reads the title after a destination, when a quote, 'quote' or
+// (title) follows j, and returns where the title ends. It returns cut when
+// the text ends inside the title, and next < 0 when it is malformed.
+func linkTitle(s string, i, j int) (title string, next int, cut bool) {
+	if j <= i || (s[j] != '"' && s[j] != '\'' && s[j] != '(') {
+		return "", j, false
+	}
+	closing := s[j]
+	if closing == '(' {
+		closing = ')'
+	}
+	k := j + 1
+	for ; k < len(s) && s[k] != closing; k++ {
+		if s[k] == '\\' {
+			k++
+		} else if closing == ')' && s[k] == '(' {
+			return "", -1, false
+		}
+	}
+	if k >= len(s) {
+		return "", -1, true
+	}
+	return unescape(s[j+1 : k]), skipSpace(s, k+1), false
 }
 
 // skipSpace skips spaces, tabs and at most one line ending.
@@ -717,25 +804,45 @@ func (p *inlineParser) wordStart(i int) bool {
 // angle brackets as a link, as GitHub does.
 func (p *inlineParser) extendedAutolink() bool {
 	s := p.s[p.pos:]
-	var prefix string
-	scheme := 0
-	switch {
-	case strings.HasPrefix(s, "www."):
-		prefix = "http://"
-	case strings.HasPrefix(s, "http://"):
-		scheme = len("http://")
-	case strings.HasPrefix(s, "https://"):
-		scheme = len("https://")
-	default:
+	prefix, scheme, ok := autolinkPrefix(s)
+	if !ok {
 		return false
 	}
 	end := 0
 	for end < len(s) && s[end] > ' ' && s[end] != '<' && (p.brackets == nil || s[end] != ']') {
 		end++
 	}
-	link := s[:end]
-	// Punctuation at the end ends the sentence, not the address; so does a
-	// closing parenthesis the address did not open, and an entity.
+	link := trimLinkEnd(s[:end])
+	if len(link) <= scheme || !validDomain(autolinkHost(link[scheme:])) {
+		return false
+	}
+	n := &inode{kind: Link, url: prefix + link}
+	n.first = &inode{kind: Text, text: link}
+	n.last = n.first
+	p.append(n)
+	p.deactivateLinks()
+	p.pos += len(link)
+	return true
+}
+
+// autolinkPrefix is the scheme prefix an extended autolink starting s
+// takes, and the length of the scheme in it.
+func autolinkPrefix(s string) (prefix string, scheme int, ok bool) {
+	switch {
+	case strings.HasPrefix(s, "www."):
+		return "http://", 0, true
+	case strings.HasPrefix(s, "http://"):
+		return "", len("http://"), true
+	case strings.HasPrefix(s, "https://"):
+		return "", len("https://"), true
+	}
+	return "", 0, false
+}
+
+// trimLinkEnd drops the punctuation at the end of an extended autolink
+// that ends its sentence, not the address: trailing punctuation, a closing
+// parenthesis the address did not open, and an entity.
+func trimLinkEnd(link string) string {
 	for {
 		trimmed := strings.TrimRight(link, "?!.,:*_~'\"")
 		if strings.HasSuffix(trimmed, ")") && strings.Count(trimmed, ")") > strings.Count(trimmed, "(") {
@@ -747,27 +854,18 @@ func (p *inlineParser) extendedAutolink() bool {
 			}
 		}
 		if trimmed == link {
-			break
+			return link
 		}
 		link = trimmed
 	}
-	if len(link) <= scheme {
-		return false
+}
+
+// autolinkHost is the host part of an extended autolink.
+func autolinkHost(link string) string {
+	if i := strings.IndexAny(link, "/?#:"); i >= 0 {
+		return link[:i]
 	}
-	host := link[scheme:]
-	if i := strings.IndexAny(host, "/?#:"); i >= 0 {
-		host = host[:i]
-	}
-	if !validDomain(host) {
-		return false
-	}
-	n := &inode{kind: Link, url: prefix + link}
-	n.first = &inode{kind: Text, text: link}
-	n.last = n.first
-	p.append(n)
-	p.deactivateLinks()
-	p.pos += len(link)
-	return true
+	return link
 }
 
 // validDomain reports whether host is a domain an extended autolink may
@@ -795,101 +893,6 @@ func validDomain(host string) bool {
 	return true
 }
 
-// isEntityName reports whether s is letters and digits, as the name of an
-// entity is.
-func isEntityName(s string) bool {
-	if s == "" {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		if !isAlnum(s[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-// entity reads an entity or a numeric character reference as the
-// character it names, or the & as text.
-func (p *inlineParser) entity() {
-	if dec, n := entityAt(p.s[p.pos:]); n > 0 {
-		p.text(dec)
-		p.pos += n
-		return
-	}
-	p.text("&")
-	p.pos++
-}
-
-// entityAt reads the entity s starts with: its text and its length, or 0
-// when s does not start with one.
-func entityAt(s string) (string, int) {
-	end := strings.IndexByte(s, ';')
-	if end < 2 || end > 33 {
-		return "", 0
-	}
-	name := s[1:end]
-	if name[0] == '#' {
-		digits := name[1:]
-		hex := len(digits) > 0 && (digits[0] == 'x' || digits[0] == 'X')
-		if hex {
-			digits = digits[1:]
-		}
-		if digits == "" || len(digits) > 7 || hex && len(digits) > 6 {
-			return "", 0
-		}
-		for i := 0; i < len(digits); i++ {
-			c := digits[i]
-			if !(c >= '0' && c <= '9' || hex && c|0x20 >= 'a' && c|0x20 <= 'f') {
-				return "", 0
-			}
-		}
-		dec := html.UnescapeString(s[:end+1])
-		if strings.HasPrefix(dec, "\x00") {
-			dec = "�"
-		}
-		return dec, end + 1
-	} else if !isEntityName(name) {
-		return "", 0
-	}
-	dec := html.UnescapeString(s[:end+1])
-	// An unknown name stays as written. A known one decodes to a character
-	// or two; html also decodes a legacy name before more letters, which
-	// leaves those and the ; behind.
-	if dec == s[:end+1] || utf8.RuneCountInString(dec) > 2 {
-		return "", 0
-	}
-	return dec, end + 1
-}
-
-// unescape resolves the backslash escapes and entities of s, as a link
-// destination, a title or a fence's info string has them.
-func unescape(s string) string {
-	if strings.IndexByte(s, '\\') < 0 && strings.IndexByte(s, '&') < 0 {
-		return s
-	}
-	var b strings.Builder
-	for i := 0; i < len(s); {
-		switch {
-		case s[i] == '\\' && i+1 < len(s) && isPunct(s[i+1]):
-			b.WriteByte(s[i+1])
-			i += 2
-		case s[i] == '&':
-			if dec, n := entityAt(s[i:]); n > 0 {
-				b.WriteString(dec)
-				i += n
-				continue
-			}
-			b.WriteByte('&')
-			i++
-		default:
-			b.WriteByte(s[i])
-			i++
-		}
-	}
-	return b.String()
-}
-
 // convert makes Inlines of the list from first, joining text that ended
 // up side by side and leaving out what ended up empty.
 func convert(first *inode) []Inline {
@@ -898,22 +901,7 @@ func convert(first *inode) []Inline {
 	for n := first; n != nil; n = n.next {
 		switch n.kind {
 		case Text:
-			if n.next == nil || n.next.kind != Text {
-				if n.text != "" {
-					out = append(out, Inline{Kind: Text, Text: n.text})
-				}
-				continue
-			}
-			b.Reset()
-			for ; ; n = n.next {
-				b.WriteString(n.text)
-				if n.next == nil || n.next.kind != Text {
-					break
-				}
-			}
-			if b.Len() > 0 {
-				out = append(out, Inline{Kind: Text, Text: b.String()})
-			}
+			n = convertText(n, &b, &out)
 		case CodeSpan, SoftBreak, HardBreak:
 			out = append(out, Inline{Kind: n.kind, Text: n.text})
 		default:
@@ -921,4 +909,27 @@ func convert(first *inode) []Inline {
 		}
 	}
 	return out
+}
+
+// convertText appends the text of n and the text nodes after it, joined,
+// and returns the last of them.
+func convertText(n *inode, b *strings.Builder, out *[]Inline) *inode {
+	if n.next == nil || n.next.kind != Text {
+		if n.text != "" {
+			*out = append(*out, Inline{Kind: Text, Text: n.text})
+		}
+		return n
+	}
+	b.Reset()
+	for {
+		b.WriteString(n.text)
+		if n.next == nil || n.next.kind != Text {
+			break
+		}
+		n = n.next
+	}
+	if b.Len() > 0 {
+		*out = append(*out, Inline{Kind: Text, Text: b.String()})
+	}
+	return n
 }

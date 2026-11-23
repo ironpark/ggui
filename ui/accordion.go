@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -231,20 +232,20 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		// The chevron sits level with the header's first line, as shadcn's
 		// items-start puts it, which shows once a title wraps.
 		first := pick(a.line > 0, a.line, h.size.H)
-		paintIconAt(dst, a.env, pick(h.open, icons.ChevronUp, icons.ChevronDown), ggui.Pt(rect.Origin.X+rect.Size.W-t.IconSize/2, top+first/2), t.IconSize, pick(item.disabled, t.Disabled(t.MutedFg), t.MutedFg), 0)
+		controlkit.PaintIconAt(dst, a.env, controlkit.IconMark{Role: pick(h.open, icons.ChevronUp, icons.ChevronDown), Center: ggui.Pt(rect.Origin.X+rect.Size.W-t.IconSize/2, top+first/2), Size: t.IconSize, Color: pick(item.disabled, t.Disabled(t.MutedFg), t.MutedFg)})
 		var face ggui.Widget = h.text
 		if h.text == nil {
 			face = item.header
 		}
 		at := ggui.Rct(ggui.Pt(rect.Origin.X, top), h.size)
 		dst.Paint(face, at)
-		hover := ease(dst, a.theme, h.Anchor(rect), disclosureHoverSlot, pick(h.Hovered && !item.disabled, 1.0, 0.0), a.env.Motion(t.MotionFast))
+		hover := controlkit.Ease(dst, a.theme, h.Anchor(rect), disclosureHoverSlot, pick(h.Hovered && !item.disabled, 1.0, 0.0), a.env.Motion(t.MotionFast))
 		if hover > 0 && h.text != nil {
 			a.underline(dst, h, at, hover)
 		}
 		FocusRing(dst, &h.Interactive, Ring{Theme: t, Rect: rect, Radius: t.Radius, Color: t.Ring, Motion: a.env.Motion(t.MotionFast)})
 		y += a.heights[i]
-		paintDisclosure(dst, item.content, ggui.Pt(r.Origin.X, y), r.Size.W, a.sizes[i], h.progress, h.open)
+		controlkit.PaintDisclosure(dst, item.content, controlkit.Disclosure{At: ggui.Pt(r.Origin.X, y), Width: r.Size.W, Size: a.sizes[i], Progress: h.progress, Open: h.open})
 		y += (a.sizes[i].H + 1.25*t.Space) * h.progress
 		if i < len(a.items)-1 {
 			dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, y), ggui.Sz(r.Size.W, t.BorderWidth)), t.Border)
@@ -340,7 +341,7 @@ func (h *accordionHeader) Act(a ggui.Action) bool {
 }
 
 func (h *accordionHeader) HandlePointer(ev ggui.PointerEvent) bool {
-	if beyond(ev, h.at) {
+	if controlkit.Beyond(ev, h.at) {
 		return false // the section's content, which is not the header
 	}
 	if ev.Kind == ggui.PointerDown && ev.Button == ggui.MouseButtonLeft {

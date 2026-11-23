@@ -10,6 +10,7 @@ import (
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -481,41 +482,9 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 		&questionProgress{Widget: progress, current: current, total: total},
 		widget.Column(heading...).Gap(0).Align(widget.AlignStretch),
 	}
-	rows := []ggui.Widget{}
-	shortcut := 0
-	for ci, choice := range item.Choices {
-		c := &questionChoice{q: q, item: item, option: choice, index: ci}
-		c.Role = pick(item.Multiple, ggui.RoleCheckbox, ggui.RoleRadio)
-		c.SetName(choice.Label)
-		c.SetInert(choice.Disabled)
-		if !choice.Disabled {
-			if q.shortcuts == QuestionLetters && shortcut < 26 {
-				c.shortcut = string(rune('A' + shortcut))
-			}
-			if q.shortcuts == QuestionNumbers && shortcut < 9 {
-				c.shortcut = fmt.Sprint(shortcut + 1)
-			}
-			shortcut++
-		}
-		q.choices = append(q.choices, c)
-		rows = append(rows, c)
-	}
+	rows := q.choiceRows(item)
 	if item.InputLabel != "" {
-		q.input = ui.TextField(questionTextBinding{q, item}).Name(item.InputLabel).Placeholder(item.Placeholder)
-		q.inputItem = item.Name
-		q.input.Input().Key(childKey{ownerOf(&q.Interactive, q), questionInputKey(item.Name)})
-		q.input.OnKey(func(ev ggui.KeyEvent) bool {
-			if ev.Key == ggui.KeyEnter && (ev.Mods.Ctrl || ev.Mods.Meta || strings.TrimSpace(q.answer(item).Text) != "") {
-				q.Next()
-				return true
-			}
-			if q.answer(item).Text == "" && (ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyArrowDown) {
-				q.focusAnswer(pick(ev.Key == ggui.KeyArrowUp, -1, 1), len(q.choices))
-				return true
-			}
-			return false
-		})
-		rows = append(rows, &questionInput{q.input})
+		rows = append(rows, q.answerInput(item))
 	}
 	body = append(body, widget.Column(rows...).Gap(8).Align(widget.AlignStretch))
 	var message *widget.TextWidget
@@ -552,6 +521,52 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	})
 }
 
+// choiceRows makes item's choices and keeps them for focus. Each enabled
+// choice takes the next letter or number the shortcuts setting gives.
+func (q *QuestionnaireWidget) choiceRows(item Question) []ggui.Widget {
+	rows := []ggui.Widget{}
+	shortcut := 0
+	for ci, choice := range item.Choices {
+		c := &questionChoice{q: q, item: item, option: choice, index: ci}
+		c.Role = pick(item.Multiple, ggui.RoleCheckbox, ggui.RoleRadio)
+		c.SetName(choice.Label)
+		c.SetInert(choice.Disabled)
+		if !choice.Disabled {
+			if q.shortcuts == QuestionLetters && shortcut < 26 {
+				c.shortcut = string(rune('A' + shortcut))
+			}
+			if q.shortcuts == QuestionNumbers && shortcut < 9 {
+				c.shortcut = fmt.Sprint(shortcut + 1)
+			}
+			shortcut++
+		}
+		q.choices = append(q.choices, c)
+		rows = append(rows, c)
+	}
+	return rows
+}
+
+// answerInput makes item's free-text answer field. Enter moves on once the
+// field holds text, or with Ctrl or Cmd; an arrow leaves an empty field for
+// the choices.
+func (q *QuestionnaireWidget) answerInput(item Question) *questionInput {
+	q.input = ui.TextField(questionTextBinding{q, item}).Name(item.InputLabel).Placeholder(item.Placeholder)
+	q.inputItem = item.Name
+	q.input.Input().Key(childKey{ownerOf(&q.Interactive, q), questionInputKey(item.Name)})
+	q.input.OnKey(func(ev ggui.KeyEvent) bool {
+		if ev.Key == ggui.KeyEnter && (ev.Mods.Ctrl || ev.Mods.Meta || strings.TrimSpace(q.answer(item).Text) != "") {
+			q.Next()
+			return true
+		}
+		if q.answer(item).Text == "" && (ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyArrowDown) {
+			q.focusAnswer(pick(ev.Key == ggui.KeyArrowUp, -1, 1), len(q.choices))
+			return true
+		}
+		return false
+	})
+	return &questionInput{q.input}
+}
+
 // button makes an action button, worded at layout.
 func (q *QuestionnaireWidget) button(fn func(), outline bool) *questionButton {
 	b := ui.Button("", fn)
@@ -568,7 +583,7 @@ func (q *QuestionnaireWidget) focusAnswer(direction, from int) {
 		}
 		return q.input != nil
 	}
-	next := stepIndex(from, direction, len(q.choices)+1, enabled)
+	next := controlkit.StepIndex(from, direction, len(q.choices)+1, enabled)
 	if !enabled(next) {
 		return
 	}
@@ -696,7 +711,7 @@ func (b *questionButton) HandleKey(ev ggui.KeyEvent) {
 	if b.q.shortcut(ev) {
 		return
 	}
-	dir := directionalKey(ev, b.q.rtl)
+	dir := controlkit.DirectionalKey(ev, b.q.rtl)
 	if dir.Kind == ggui.KeyPress && dir.Key == ggui.KeyArrowLeft {
 		b.q.Previous()
 		return
@@ -797,12 +812,12 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// the muted surface inside a faint primary border once chosen.
 	// The colors ease from one to the next, as transition-colors has them.
 	var fill color.Color = color.Transparent
-	if isDark(t.Bg) {
+	if controlkit.IsDark(t.Bg) {
 		fill = fade(t.InputBorder, .2)
 	}
 	motion := c.env.Motion(t.MotionFast)
-	hover := ease(dst, c.theme, c.Anchor(r), questionHoverSlot, pick(c.Hovered && !c.IsInert(), 1.0, 0.0), motion)
-	chosen := ease(dst, c.theme, c.Anchor(r), questionChosenSlot, pick(selected, 1.0, 0.0), motion)
+	hover := controlkit.Ease(dst, c.theme, c.Anchor(r), questionHoverSlot, pick(c.Hovered && !c.IsInert(), 1.0, 0.0), motion)
+	chosen := controlkit.Ease(dst, c.theme, c.Anchor(r), questionChosenSlot, pick(selected, 1.0, 0.0), motion)
 	fill = mix(mix(fill, fade(t.Muted, .5), hover), t.Muted, chosen)
 	border := mix(t.InputBorder, fade(t.Primary, .4), chosen)
 	if c.q.errors[c.item.Name] != "" {
@@ -815,7 +830,7 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Paint(c.body, r)
 	// The indicator is a checkbox's 4px-round square, or a radio's circle,
 	// with a 14px check or an 8px dot, as the Checkbox and RadioGroup draw.
-	glyphSize := squareGlyph(t)
+	glyphSize := controlkit.SquareGlyph(t)
 	glyphX := r.Origin.X + tokens.QuestionChoicePadding.Left
 	if c.env.Direction() == ggui.DirRTL {
 		glyphX = r.Origin.X + r.Size.W - tokens.QuestionChoicePadding.Right - glyphSize.W
@@ -825,7 +840,7 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.FillRoundRect(glyph, radius, fade(pick(selected, t.Primary, t.Input), strength))
 	dst.StrokeRoundRect(glyph, radius, t.BorderWidth, fade(pick(selected, t.Primary, t.InputBorder), strength))
 	if selected && c.item.Multiple {
-		paintIconAt(dst, c.env, icons.Check, glyph.Center(), 14, t.PrimaryFg, 0)
+		controlkit.PaintIconAt(dst, c.env, controlkit.IconMark{Role: icons.Check, Center: glyph.Center(), Size: 14, Color: t.PrimaryFg})
 	} else if selected {
 		dst.FillCircle(glyph.Center(), 4, t.PrimaryFg)
 	}
@@ -838,37 +853,42 @@ func (c *questionChoice) HandlePointer(ev ggui.PointerEvent) bool {
 	return c.Pointer(ev, func() { c.q.selectChoice(c.index) })
 }
 func (c *questionChoice) HandleKey(ev ggui.KeyEvent) {
-	if c.IsInert() {
+	if c.IsInert() || c.q.shortcut(ev) {
 		return
 	}
-	if c.q.shortcut(ev) {
+	if ev.Kind == ggui.KeyPress && c.keyPress(ev) {
 		return
-	}
-	if ev.Kind == ggui.KeyPress {
-		dir := directionalKey(ev, c.env.Direction() == ggui.DirRTL)
-		switch dir.Key {
-		case ggui.KeyArrowUp, ggui.KeyArrowDown:
-			c.q.focusAnswer(pick(dir.Key == ggui.KeyArrowUp, -1, 1), c.index)
-			return
-		case ggui.KeyArrowLeft, ggui.KeyArrowRight:
-			if !c.item.Multiple {
-				c.q.focusAnswer(pick(dir.Key == ggui.KeyArrowLeft, -1, 1), c.index)
-			} else if dir.Key == ggui.KeyArrowLeft {
-				c.q.Previous()
-			} else {
-				c.q.Next()
-			}
-			return
-		case ggui.KeyEnter:
-			if c.selected() {
-				c.q.Next()
-			} else {
-				c.q.selectChoice(c.index)
-			}
-			return
-		}
 	}
 	c.Keyboard(ev, func() { c.q.selectChoice(c.index) })
+}
+
+// keyPress handles a pressed key and reports whether it was one: up and
+// down move among the answers, left and right among a radio's answers or,
+// on a checkbox, between the questions, and Enter chooses the answer or,
+// once it is chosen, moves on.
+func (c *questionChoice) keyPress(ev ggui.KeyEvent) bool {
+	dir := controlkit.DirectionalKey(ev, c.env.Direction() == ggui.DirRTL)
+	switch dir.Key {
+	case ggui.KeyArrowUp, ggui.KeyArrowDown:
+		c.q.focusAnswer(pick(dir.Key == ggui.KeyArrowUp, -1, 1), c.index)
+	case ggui.KeyArrowLeft, ggui.KeyArrowRight:
+		if !c.item.Multiple {
+			c.q.focusAnswer(pick(dir.Key == ggui.KeyArrowLeft, -1, 1), c.index)
+		} else if dir.Key == ggui.KeyArrowLeft {
+			c.q.Previous()
+		} else {
+			c.q.Next()
+		}
+	case ggui.KeyEnter:
+		if c.selected() {
+			c.q.Next()
+		} else {
+			c.q.selectChoice(c.index)
+		}
+	default:
+		return false
+	}
+	return true
 }
 func (c *questionChoice) ConsumesKey(ev ggui.KeyEvent) bool {
 	switch ev.Key {

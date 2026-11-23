@@ -51,6 +51,50 @@ type tooltipHover struct {
 	escape    *bool
 }
 
+// tooltipCue is what may open a tip in a frame: the pointer over its child,
+// keyboard focus on it, the frame's time, and how long the pointer must
+// rest before the tip opens.
+type tooltipCue struct {
+	hovered, focused bool
+	now              time.Time
+	delay            time.Duration
+}
+
+// timeRest times the pointer's rest on the child: from when it came over,
+// or the delay earlier when another tip of the window was open within
+// tooltipSkipDelay before, as of warm. A press while it is over the child
+// dismisses the tip until it leaves.
+func (h *tooltipHover) timeRest(dst *ggui.Canvas, c tooltipCue, warm time.Time) {
+	if c.hovered && h.since.IsZero() {
+		h.since = c.now
+		if !warm.IsZero() && c.now.Sub(warm) < tooltipSkipDelay {
+			h.since = c.now.Add(-c.delay) // another tip was just open
+		}
+	}
+	if !c.hovered {
+		h.since, h.dismissed = time.Time{}, false
+	}
+	if c.hovered && dst.PointerPressed() {
+		h.dismissed = true
+	}
+}
+
+// resting reports whether the pointer rests on the child and no press has
+// dismissed the tip.
+func (h *tooltipHover) resting(c tooltipCue) bool { return c.hovered && !h.dismissed }
+
+// escaped reports whether Escape dismissed the tip, forgetting it once
+// neither the pointer nor focus is on the child. escape is shared with the
+// shortcut decideOpen adds, which outlives the paint; only a tip that
+// opened has one.
+func (h *tooltipHover) escaped(c tooltipCue) bool {
+	escaped := h.escape != nil && *h.escape
+	if escaped && !c.hovered && !c.focused {
+		*h.escape, escaped = false, false
+	}
+	return escaped
+}
+
 const (
 	// tooltipMaxWidth is the most a tip's text runs to before it wraps:
 	// shadcn's max-w-xs.
@@ -221,42 +265,47 @@ func (t *TooltipWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		focused = t.focusOpens(dst, r)
 	}
 	p, ok := dst.Pointer()
-	now := ggui.FrameTime()
+	cue := tooltipCue{hovered: ok && r.Contains(p), focused: focused, now: ggui.FrameTime(), delay: t.delay}
+	if !t.delaySet {
+		cue.delay = t.theme.TooltipDelay
+	}
 	at := ggui.Anchor{Rect: r}
 	state, kept := dst.Retained(at, tooltipSlot)
 	if !kept {
 		// An idle tooltip keeps nothing: it comes back closed, so that
 		// opening still eases in.
-		state.reveal.MoveTo(0, now, 0)
+		state.reveal.MoveTo(0, cue.now, 0)
 	}
-	hovered := ok && r.Contains(p)
-	delay := t.delay
-	if !t.delaySet {
-		delay = t.theme.TooltipDelay
+	open := t.decideOpen(dst, &state, cue)
+	progress := state.reveal.Toggle(open, cue.now, t.env.Motion(t.theme.MotionFast))
+	// Kept only while it has something to keep: every tooltip on screen
+	// would otherwise store its idle state each frame.
+	if cue.hovered || open || progress > 0 || state.dismissed || t.escaped {
+		dst.Retain(at, tooltipSlot, state)
 	}
+	if !open && progress <= 0 {
+		return
+	}
+	if t.text != nil {
+		t.tip.Content(t.text())
+	}
+	t.effect.Progress(progress, !open) // text-only content never accepts input
+	dst.Overlay(func(dst *ggui.Canvas) { t.paintTip(dst, r) })
+}
+
+// decideOpen reports whether the tip is open this frame: on keyboard
+// focus, or once the pointer has rested on the child for the delay, unless
+// the tip is disabled or Escape dismissed it. It keeps the window's tips
+// warm, lets Escape close the open tip, and wakes the window when a rest
+// under way will have lasted the delay.
+func (t *TooltipWidget) decideOpen(dst *ggui.Canvas, state *tooltipHover, cue tooltipCue) bool {
 	warm, _ := dst.Retained(tooltipWarm, tooltipWarmSlot)
-	if hovered && state.since.IsZero() {
-		state.since = now
-		if !warm.IsZero() && now.Sub(warm) < tooltipSkipDelay {
-			state.since = now.Add(-delay) // another tip was just open
-		}
-	}
-	if !hovered {
-		state.since, state.dismissed = time.Time{}, false
-	}
-	if hovered && dst.PointerPressed() {
-		state.dismissed = true
-	}
-	// escape is shared with the shortcut below, which outlives this paint;
-	// only a tip that opened has one.
-	escaped := state.escape != nil && *state.escape
-	if escaped && !hovered && !focused {
-		*state.escape, escaped = false, false
-	}
+	state.timeRest(dst, cue, warm)
+	escaped := state.escaped(cue)
 	t.escaped = escaped
-	open := !t.disabled && !escaped && (focused || (hovered && !state.dismissed && now.Sub(state.since) >= delay))
+	open := !t.disabled && !escaped && (cue.focused || (state.resting(cue) && cue.now.Sub(state.since) >= cue.delay))
 	if open {
-		warm = now
+		warm = cue.now
 	}
 	if !warm.IsZero() {
 		dst.Retain(tooltipWarm, tooltipWarmSlot, warm)
@@ -268,23 +317,10 @@ func (t *TooltipWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		escape := state.escape
 		dst.Shortcut(tooltipEscape, func() { *escape = true; ggui.Invalidate(t.env) })
 	}
-	if hovered && !open && !t.disabled && !escaped && !state.dismissed {
-		ggui.WakeAt(state.since.Add(delay))
+	if !open && !t.disabled && !escaped && state.resting(cue) {
+		ggui.WakeAt(state.since.Add(cue.delay))
 	}
-	progress := state.reveal.Toggle(open, now, t.env.Motion(t.theme.MotionFast))
-	// Kept only while it has something to keep: every tooltip on screen
-	// would otherwise store its idle state each frame.
-	if hovered || open || progress > 0 || state.dismissed || escaped {
-		dst.Retain(at, tooltipSlot, state)
-	}
-	if !open && progress <= 0 {
-		return
-	}
-	if t.text != nil {
-		t.tip.Content(t.text())
-	}
-	t.effect.Progress(progress, !open) // text-only content never accepts input
-	dst.Overlay(func(dst *ggui.Canvas) { t.paintTip(dst, r) })
+	return open
 }
 
 func (t *TooltipWidget) paintTip(dst *ggui.Canvas, anchor ggui.Rect) {
@@ -301,7 +337,7 @@ func (t *TooltipWidget) paintTip(dst *ggui.Canvas, anchor ggui.Rect) {
 	// arrow. Which side that is takes the body's size to settle, and the
 	// opposite side is along the same axis, so the size holds either way.
 	rtl := t.env.Direction() == ggui.DirRTL
-	_, t.placed, _ = floatBeside(ggui.Size{}, anchor, ggui.Size{}, t.side, t.align, 0, 0, rtl)
+	_, t.placed, _ = floatBeside(ggui.Size{}, floatSpec{anchor: anchor, side: t.side, align: t.align, rtl: rtl})
 	size := t.effect.Layout(ggui.Loose(ggui.Sz(maxW, maxH)), t.env)
 	body := size
 	if t.arrow {
@@ -311,7 +347,7 @@ func (t *TooltipWidget) paintTip(dst *ggui.Canvas, anchor ggui.Rect) {
 			body.H -= tooltipGap
 		}
 	}
-	at, placed, _ := floatBeside(screen, anchor, body, t.side, t.align, t.alignOffset, tooltipGap, rtl)
+	at, placed, _ := floatBeside(screen, floatSpec{anchor: anchor, size: body, side: t.side, align: t.align, offset: t.alignOffset, gap: tooltipGap, rtl: rtl})
 	t.placed = placed
 	// Keep the arrow pointed at the anchor when collision shifts the body,
 	// without letting it emerge from one of the rounded corners.

@@ -240,41 +240,68 @@ func readHeader(b []byte) (map[int]any, int, error) {
 	for i := range nindex {
 		e := b[16+16*i:]
 		tag, typ, off, count := int(be.Uint32(e)), be.Uint32(e[4:]), int(be.Uint32(e[8:])), int(be.Uint32(e[12:]))
-		if off > len(data) {
-			return nil, 0, fmt.Errorf("tag %d: offset out of range", tag)
+		v, err := readTag(data, tag, int(typ), off, count)
+		if err != nil {
+			return nil, 0, err
 		}
-		switch typ {
-		case 6, 8, 9: // STRING, STRING_ARRAY, I18NSTRING
-			var ss []string
-			p := data[off:]
-			for range count {
-				end := bytes.IndexByte(p, 0)
-				if end < 0 {
-					return nil, 0, fmt.Errorf("tag %d: unterminated string", tag)
-				}
-				ss = append(ss, string(p[:end]))
-				p = p[end+1:]
-			}
-			tags[tag] = ss
-		case 3: // INT16
-			if off+2*count > len(data) {
-				return nil, 0, fmt.Errorf("tag %d: truncated", tag)
-			}
-			var v []int
-			for j := range count {
-				v = append(v, int(be.Uint16(data[off+2*j:])))
-			}
-			tags[tag] = v
-		case 4: // INT32
-			if off+4*count > len(data) {
-				return nil, 0, fmt.Errorf("tag %d: truncated", tag)
-			}
-			var v []int
-			for j := range count {
-				v = append(v, int(be.Uint32(data[off+4*j:])))
-			}
+		if v != nil {
 			tags[tag] = v
 		}
 	}
 	return tags, store + hsize, nil
+}
+
+// readTag reads one index entry's values from the data store, dispatching
+// on the entry's type.
+func readTag(data []byte, tag, typ, off, count int) (any, error) {
+	if off > len(data) {
+		return nil, fmt.Errorf("tag %d: offset out of range", tag)
+	}
+	switch typ {
+	case 6, 8, 9: // STRING, STRING_ARRAY, I18NSTRING
+		return scanStrings(data[off:], tag, count)
+	case 3: // INT16
+		return scanInt16s(data[off:], tag, count)
+	case 4: // INT32
+		return scanInt32s(data[off:], tag, count)
+	}
+	return nil, nil
+}
+
+// scanStrings reads count NUL-terminated strings.
+func scanStrings(p []byte, tag, count int) ([]string, error) {
+	var ss []string
+	for range count {
+		end := bytes.IndexByte(p, 0)
+		if end < 0 {
+			return nil, fmt.Errorf("tag %d: unterminated string", tag)
+		}
+		ss = append(ss, string(p[:end]))
+		p = p[end+1:]
+	}
+	return ss, nil
+}
+
+// scanInt16s reads count big-endian 16-bit integers.
+func scanInt16s(p []byte, tag, count int) ([]int, error) {
+	if 2*count > len(p) {
+		return nil, fmt.Errorf("tag %d: truncated", tag)
+	}
+	var v []int
+	for j := range count {
+		v = append(v, int(binary.BigEndian.Uint16(p[2*j:])))
+	}
+	return v, nil
+}
+
+// scanInt32s reads count big-endian 32-bit integers.
+func scanInt32s(p []byte, tag, count int) ([]int, error) {
+	if 4*count > len(p) {
+		return nil, fmt.Errorf("tag %d: truncated", tag)
+	}
+	var v []int
+	for j := range count {
+		v = append(v, int(binary.BigEndian.Uint32(p[4*j:])))
+	}
+	return v, nil
 }

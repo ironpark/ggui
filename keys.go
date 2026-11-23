@@ -166,23 +166,25 @@ func (in *inputState) consumeBindings(keys []KeyboardKey, mods Mods) []KeyboardK
 		in.moveFocus(gem.Pick(mods.Shift, -1, 1))
 	}
 	if modified(mods) && in.keysWithin() {
-		keys = in.withoutKeysWithin(keys, mods, claimed)
+		keys = withoutKeys(keys, func(k KeyboardKey) bool {
+			return k != KeyTab && !claimed(k) && in.offerKeyWithin(KeyEvent{Kind: KeyPress, Key: k, Mods: mods})
+		})
 	}
 	if len(in.shortcuts) > 0 {
-		keys = in.withoutShortcuts(keys, mods, claimed)
+		keys = withoutKeys(keys, func(k KeyboardKey) bool { return !claimed(k) && in.shortcut(k, mods) })
 	}
 	if len(in.chords) > 0 || len(in.painted) > 0 {
-		keys = in.withoutChords(keys, mods, claimed)
+		keys = withoutKeys(keys, func(k KeyboardKey) bool { return !claimed(k) && in.runChords(k, mods, true) })
 	}
 	return keys
 }
 
-// withoutChords returns keys less those a before-focus chord consumed, copying
-// only once one has.
-func (in *inputState) withoutChords(keys []KeyboardKey, mods Mods, claimed func(KeyboardKey) bool) []KeyboardKey {
+// withoutKeys returns keys less those drop takes, copying only once one
+// has.
+func withoutKeys[K any](keys []K, drop func(K) bool) []K {
 	out, copied := keys, false
 	for i, k := range keys {
-		switch taken := !claimed(k) && in.runChords(k, mods, true); {
+		switch taken := drop(k); {
 		case taken && !copied:
 			out, copied = slices.Clone(keys[:i]), true
 		case !taken && copied:
@@ -259,21 +261,6 @@ func (in *inputState) runChords(k KeyboardKey, mods Mods, before bool) bool {
 	return ran
 }
 
-// withoutShortcuts returns keys less those a shortcut consumed, copying
-// only once one has.
-func (in *inputState) withoutShortcuts(keys []KeyboardKey, mods Mods, claimed func(KeyboardKey) bool) []KeyboardKey {
-	out, copied := keys, false
-	for i, k := range keys {
-		switch taken := !claimed(k) && in.shortcut(k, mods); {
-		case taken && !copied:
-			out, copied = slices.Clone(keys[:i]), true
-		case !taken && copied:
-			out = append(out, k)
-		}
-	}
-	return out
-}
-
 // shortcut offers a key press to the OnKey handlers and reports whether
 // one consumed it.
 func (in *inputState) shortcut(k KeyboardKey, mods Mods) bool {
@@ -315,23 +302,6 @@ func modified(mods Mods) bool { return mods.Ctrl || mods.Alt || mods.Meta }
 // keysWithin reports whether a key press may be offered to within
 // handlers: a region was registered with HitWithin and one has focus.
 func (in *inputState) keysWithin() bool { return in.focused != nil && in.index().within }
-
-// withoutKeysWithin returns keys less those a KeyWithinHandler around the
-// focused region took, copying only once one has. A claimed chord and Tab
-// are not offered.
-func (in *inputState) withoutKeysWithin(keys []KeyboardKey, mods Mods, claimed func(KeyboardKey) bool) []KeyboardKey {
-	out, copied := keys, false
-	for i, k := range keys {
-		taken := k != KeyTab && !claimed(k) && in.offerKeyWithin(KeyEvent{Kind: KeyPress, Key: k, Mods: mods})
-		switch {
-		case taken && !copied:
-			out, copied = slices.Clone(keys[:i]), true
-		case !taken && copied:
-			out = append(out, k)
-		}
-	}
-	return out
-}
 
 // offerKeyWithin offers ev to the KeyWithinHandlers on the chain of the
 // focused region, the nearest first, and reports whether one took it.

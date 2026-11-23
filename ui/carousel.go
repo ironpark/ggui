@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -310,6 +311,33 @@ func (c *CarouselWidget) Layout(con ggui.Constraints, e ggui.Env) ggui.Size {
 		c.gap = 2 * c.theme.Space
 	}
 	size := con.Constrain(ggui.Sz(bounded(con.MaxW, 416), c.height))
+	oldView := c.view
+	viewSize := c.fitViewport(size)
+	c.starts = c.starts[:0]
+	c.extents = c.extents[:0]
+	c.snaps = c.snaps[:0]
+	c.total = 0
+	c.layoutSlides(viewSize, e)
+	c.placeSnaps()
+	if !c.ready || oldView != c.view {
+		if i := c.Selected(); i >= 0 {
+			c.offset = c.snaps[i]
+			c.target = c.offset
+			c.from = c.offset
+		}
+		c.ready = true
+		c.dragging = false
+	}
+	side := carouselButtonSide(c.theme)
+	c.prev.Layout(ggui.Tight(ggui.Sz(side, side)), e)
+	c.next.Layout(ggui.Tight(ggui.Sz(side, side)), e)
+	return size
+}
+
+// fitViewport sets the viewport the slides show through, size short of
+// the gutters the buttons hang in along the carousel's axis, and is the
+// viewport's size.
+func (c *CarouselWidget) fitViewport(size ggui.Size) ggui.Size {
 	gutter := 0.
 	if c.controls {
 		// shadcn hangs the 28px buttons 48px outside the slides.
@@ -329,16 +357,18 @@ func (c *CarouselWidget) Layout(con ggui.Constraints, e ggui.Env) ggui.Size {
 		viewSize.W = max(0, size.W-2*gutter)
 		origin.X = gutter
 	}
-	oldView := c.view
 	c.viewport = ggui.Rct(origin, viewSize)
 	c.view = viewSize.W
 	if c.vertical {
 		c.view = viewSize.H
 	}
-	c.starts = c.starts[:0]
-	c.extents = c.extents[:0]
-	c.snaps = c.snaps[:0]
-	c.total = 0
+	return viewSize
+}
+
+// layoutSlides lays out each slide at its basis of the view along the
+// carousel's axis, records where it starts and how long it is, and whether
+// the slides are long enough to loop.
+func (c *CarouselWidget) layoutSlides(viewSize ggui.Size, e ggui.Env) {
 	maxExtent := 0.
 	for _, it := range c.items {
 		basis := it.basis
@@ -359,6 +389,12 @@ func (c *CarouselWidget) Layout(con ggui.Constraints, e ggui.Env) ggui.Size {
 		it.Layout(ggui.Tight(s), e)
 	}
 	c.canLoop = c.loop && len(c.items) > 1 && c.total-maxExtent >= c.view
+}
+
+// placeSnaps sets where the view stops for each slide, aligned in the
+// view, held inside the slides unless they loop, and one stop for slides
+// that would stop at the same place.
+func (c *CarouselWidget) placeSnaps() {
 	limit := max(0, c.total-c.gap-c.view)
 	for i, start := range c.starts {
 		snap := start - (c.view-c.extents[i])*c.align
@@ -369,19 +405,6 @@ func (c *CarouselWidget) Layout(con ggui.Constraints, e ggui.Env) ggui.Size {
 			c.snaps = append(c.snaps, snap)
 		}
 	}
-	if !c.ready || oldView != c.view {
-		if i := c.Selected(); i >= 0 {
-			c.offset = c.snaps[i]
-			c.target = c.offset
-			c.from = c.offset
-		}
-		c.ready = true
-		c.dragging = false
-	}
-	side := carouselButtonSide(c.theme)
-	c.prev.Layout(ggui.Tight(ggui.Sz(side, side)), e)
-	c.next.Layout(ggui.Tight(ggui.Sz(side, side)), e)
-	return size
 }
 func (c *CarouselWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 	c.Sync()
@@ -394,12 +417,25 @@ func (c *CarouselWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 		}
 	}
 	c.offset = c.position()
+	c.runAutoplay(d, r)
+	d.DescribeNode(r, c, func(d *ggui.Canvas) {
+		if !c.IsInert() {
+			d.HitPointer(v, c)
+			d.HitKey(v, c)
+		}
+		c.paintSlides(d, v)
+		c.FocusRing(d, v, c.theme.Radius, c.theme.Ring)
+		c.paintButtons(d, r)
+	})
+}
+
+// runAutoplay moves to the next slide each time the autoplay interval
+// ends, and holds the interval at its start while autoplay waits.
+func (c *CarouselWidget) runAutoplay(d *ggui.Canvas, r ggui.Rect) {
 	// The time is read without asking for the next frame: a carousel at
 	// rest needs none, and autoplay needs one only when its interval ends.
 	now := ggui.FrameTime()
-	p, has := d.Pointer()
-	hover := has && r.Contains(p)
-	paused := c.IsInert() || c.reduced || c.dragging || hover || d.FocusWithin(r) || c.Focused || c.prev.Focused || c.next.Focused
+	paused := c.autoplayWaits(d, r)
 	if c.autoplay > 0 && !c.IsInert() {
 		d.ObserveInput(r, c.interact)
 	}
@@ -421,66 +457,86 @@ func (c *CarouselWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 		}
 		ggui.WakeAt(c.lastAuto.Add(c.autoplay))
 	}
-	d.DescribeNode(r, c, func(d *ggui.Canvas) {
-		if !c.IsInert() {
-			d.HitPointer(v, c)
-			d.HitKey(v, c)
+}
+
+// autoplayWaits reports whether autoplay waits: while the carousel is
+// inert, motion is reduced, a drag is under way, or the pointer or the
+// focus is on the carousel in r.
+func (c *CarouselWidget) autoplayWaits(d *ggui.Canvas, r ggui.Rect) bool {
+	p, has := d.Pointer()
+	hover := has && r.Contains(p)
+	return c.IsInert() || c.reduced || c.dragging || hover || d.FocusWithin(r) || c.Focused || c.prev.Focused || c.next.Focused
+}
+
+// paintSlides paints the slides that show in the view v, each a group
+// named by its place among them.
+func (c *CarouselWidget) paintSlides(d *ggui.Canvas, v ggui.Rect) {
+	clip := d.Clip(v)
+	// Locate the visible range once. Looping uses the same ordered lookup;
+	// no cloned widgets or scan over offscreen slides is necessary.
+	local := c.offset
+	if c.canLoop {
+		local = math.Mod(local, c.total)
+		if local < 0 {
+			local += c.total
 		}
-		clip := d.Clip(v)
-		// Locate the visible range once. Looping uses the same ordered lookup;
-		// no cloned widgets or scan over offscreen slides is necessary.
-		local := c.offset
-		if c.canLoop {
-			local = math.Mod(local, c.total)
-			if local < 0 {
-				local += c.total
-			}
-		}
-		first := max(0, sort.SearchFloat64s(c.starts, local)-1)
-		for step := 0; step < len(c.items); step++ {
-			i := first + step
-			cycle := 0.0
-			if i >= len(c.items) {
-				if !c.canLoop {
-					break
-				}
-				i -= len(c.items)
-				cycle = c.total
-			}
-			pos := c.starts[i] + cycle - local
-			if pos >= c.view {
+	}
+	first := max(0, sort.SearchFloat64s(c.starts, local)-1)
+	for step := 0; step < len(c.items); step++ {
+		i := first + step
+		cycle := 0.0
+		if i >= len(c.items) {
+			if !c.canLoop {
 				break
 			}
-			if pos+c.extents[i] <= 0 {
-				continue
-			}
-			at := v
-			if c.vertical {
-				at.Origin.Y += pos
-				at.Size.H = c.extents[i]
-			} else {
-				if c.rtl {
-					pos = c.view - pos - c.extents[i]
-				}
-				at.Origin.X += pos
-				at.Size.W = c.extents[i]
-			}
-			clip.Node(at, ggui.Node{Role: ggui.RoleGroup, Name: fmt.Sprintf(c.words.orDefault().SlideFormat, i+1, len(c.items))}, func(dst *ggui.Canvas) { dst.Paint(c.items[i], at) })
+			i -= len(c.items)
+			cycle = c.total
 		}
-		c.FocusRing(d, v, c.theme.Radius, c.theme.Ring)
-		side := carouselButtonSide(c.theme)
-		if c.controls && ((!c.vertical && r.Size.W >= 2*side) || (c.vertical && r.Size.H >= 2*side)) {
-			a, b := ggui.Rct(ggui.Pt(r.Origin.X, r.Center().Y-side/2), ggui.Sz(side, side)), ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-side, r.Center().Y-side/2), ggui.Sz(side, side))
-			if c.vertical {
-				a.Origin = ggui.Pt(r.Center().X-side/2, r.Origin.Y)
-				b.Origin = ggui.Pt(r.Center().X-side/2, r.Origin.Y+r.Size.H-side)
-			} else if c.rtl {
-				a, b = b, a
-			}
-			d.Paint(c.prev, a)
-			d.Paint(c.next, b)
+		pos := c.starts[i] + cycle - local
+		if pos >= c.view {
+			break
 		}
-	})
+		if pos+c.extents[i] <= 0 {
+			continue
+		}
+		at := c.slideRect(v, i, pos)
+		clip.Node(at, ggui.Node{Role: ggui.RoleGroup, Name: fmt.Sprintf(c.words.orDefault().SlideFormat, i+1, len(c.items))}, func(dst *ggui.Canvas) { dst.Paint(c.items[i], at) })
+	}
+}
+
+// slideRect is where in the view v the slide at index i lies, pos along
+// the view from its start.
+func (c *CarouselWidget) slideRect(v ggui.Rect, i int, pos float64) ggui.Rect {
+	at := v
+	if c.vertical {
+		at.Origin.Y += pos
+		at.Size.H = c.extents[i]
+		return at
+	}
+	if c.rtl {
+		pos = c.view - pos - c.extents[i]
+	}
+	at.Origin.X += pos
+	at.Size.W = c.extents[i]
+	return at
+}
+
+// paintButtons puts the previous and next buttons in the gutters at
+// either end of the carousel in r, when it is long enough for both.
+func (c *CarouselWidget) paintButtons(d *ggui.Canvas, r ggui.Rect) {
+	side := carouselButtonSide(c.theme)
+	if !c.controls || !((!c.vertical && r.Size.W >= 2*side) || (c.vertical && r.Size.H >= 2*side)) {
+		return
+	}
+	a, b := ggui.Rct(ggui.Pt(r.Origin.X, r.Center().Y-side/2), ggui.Sz(side, side)), ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-side, r.Center().Y-side/2), ggui.Sz(side, side))
+	if c.vertical {
+		a.Origin = ggui.Pt(r.Center().X-side/2, r.Origin.Y)
+		b.Origin = ggui.Pt(r.Center().X-side/2, r.Origin.Y+r.Size.H-side)
+	} else if c.rtl {
+		a, b = b, a
+	}
+	d.Paint(c.prev, a)
+	d.Paint(c.next, b)
 }
 func (c *CarouselWidget) name() string {
 	return pick(c.SemanticName() != "", c.SemanticName(), c.words.orDefault().CarouselName)
@@ -552,70 +608,86 @@ func (c *CarouselWidget) HandlePointer(e ggui.PointerEvent) bool {
 		if e.Button != ggui.MouseButtonLeft || !c.dragEnabled || len(c.snaps) < 2 {
 			return false
 		}
-		c.interact()
-		c.offset = c.position()
-		c.dragging = true
-		c.dragStart = c.axis(e.Pos)
-		c.dragOffset = c.offset
-		c.lastDrag = c.dragStart
-		c.dragTime = ggui.Now()
-		c.velocity = 0
+		c.startDrag(c.axis(e.Pos))
 	case ggui.PointerDrag:
 		if !c.dragging {
 			return false
 		}
-		p := c.axis(e.Pos)
-		dt := ggui.Now().Sub(c.dragTime).Seconds()
-		if dt > 0 && p != c.lastDrag {
-			c.velocity = (c.lastDrag - p) / dt
-			c.lastDrag = p
-			c.dragTime = ggui.Now()
-		}
-		v := c.dragOffset + c.dragStart - p
-		if !c.canLoop {
-			lo, hi := c.snaps[0], c.snaps[len(c.snaps)-1]
-			if v < lo {
-				v = lo + (v-lo)*.25
-			}
-			if v > hi {
-				v = hi + (v-hi)*.25
-			}
-		}
-		c.offset = v
+		c.dragTo(c.axis(e.Pos))
 		return true
 	case ggui.PointerUp:
 		if c.dragging {
-			// The release is Embla's: a flick, faster than 100px a second
-			// when the pointer last moved within its 170ms, carries on
-			// for what it would cover in 300ms. Less than a fifth of the
-			// view (between 50 and 225px) only nudges where the nearest
-			// snap is looked for; more goes to the snap next to the
-			// selected one, however short the drag was.
-			force := 0.0
-			if ggui.Now().Sub(c.dragTime) <= 170*time.Millisecond && math.Abs(c.velocity) > 100 {
-				force = c.velocity * .3
-			}
-			best, dir := 0, 0
-			if math.Abs(force) >= clamp(c.view*.2, 50, 225) {
-				dir = pick(force > 0, 1, -1)
-				best = c.Selected() + dir
-			} else {
-				dist := math.Inf(1)
-				for i := range c.snaps {
-					v := c.snapTarget(i, 0)
-					if delta := math.Abs(v - (c.offset + force)); delta < dist {
-						dist = delta
-						best = i
-					}
-				}
-			}
-			c.dragging = false
-			c.target = c.offset
-			c.began = time.Time{}
-			c.scroll(best, dir, false)
+			c.release()
 		}
 	}
 	return c.Pointer(e, nil)
+}
+
+// startDrag takes hold of the slides where they are, the pointer at p
+// along the carousel's axis.
+func (c *CarouselWidget) startDrag(p float64) {
+	c.interact()
+	c.offset = c.position()
+	c.dragging = true
+	c.dragStart = p
+	c.dragOffset = c.offset
+	c.lastDrag = c.dragStart
+	c.dragTime = ggui.Now()
+	c.velocity = 0
+}
+
+// dragTo moves the slides with the pointer, now at p along the carousel's
+// axis, and follows its speed. Past either end of slides that do not loop
+// they move a quarter as far.
+func (c *CarouselWidget) dragTo(p float64) {
+	dt := ggui.Now().Sub(c.dragTime).Seconds()
+	if dt > 0 && p != c.lastDrag {
+		c.velocity = (c.lastDrag - p) / dt
+		c.lastDrag = p
+		c.dragTime = ggui.Now()
+	}
+	v := c.dragOffset + c.dragStart - p
+	if !c.canLoop {
+		lo, hi := c.snaps[0], c.snaps[len(c.snaps)-1]
+		if v < lo {
+			v = lo + (v-lo)*.25
+		}
+		if v > hi {
+			v = hi + (v-hi)*.25
+		}
+	}
+	c.offset = v
+}
+
+// release lets go of the dragged slides and scrolls to a snap. The release
+// is Embla's: a flick, faster than 100px a second when the pointer last
+// moved within its 170ms, carries on for what it would cover in 300ms.
+// Less than a fifth of the view (between 50 and 225px) only nudges where
+// the nearest snap is looked for; more goes to the snap next to the
+// selected one, however short the drag was.
+func (c *CarouselWidget) release() {
+	force := 0.0
+	if ggui.Now().Sub(c.dragTime) <= 170*time.Millisecond && math.Abs(c.velocity) > 100 {
+		force = c.velocity * .3
+	}
+	best, dir := 0, 0
+	if math.Abs(force) >= clamp(c.view*.2, 50, 225) {
+		dir = pick(force > 0, 1, -1)
+		best = c.Selected() + dir
+	} else {
+		dist := math.Inf(1)
+		for i := range c.snaps {
+			v := c.snapTarget(i, 0)
+			if delta := math.Abs(v - (c.offset + force)); delta < dist {
+				dist = delta
+				best = i
+			}
+		}
+	}
+	c.dragging = false
+	c.target = c.offset
+	c.began = time.Time{}
+	c.scroll(best, dir, false)
 }
 func (c *CarouselWidget) Adopt(prev any) {
 	c.Interactive.Adopt(prev)
@@ -695,7 +767,7 @@ func (b *CarouselNavigationWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 	b.Hit(d, r, b, ggui.CursorShapeDefault)
 	t, st := b.theme, b.style
 	fill, col, border := st.Fill, st.Label, st.Border
-	hover := ease(d, b.theme, ggui.Anchor{Rect: r, ID: b.HitID()}, carouselHoverSlot, pick(b.Hovered && !b.IsInert(), 1.0, 0.0), b.motion)
+	hover := controlkit.Ease(d, b.theme, ggui.Anchor{Rect: r, ID: b.HitID()}, carouselHoverSlot, pick(b.Hovered && !b.IsInert(), 1.0, 0.0), b.motion)
 	// An outline Button to shadcn, which sets a pressed one a pixel lower.
 	if b.Pressed && b.Hovered && !b.IsInert() {
 		r.Origin.Y++
@@ -720,7 +792,7 @@ func (b *CarouselNavigationWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 	} else if b.carousel.rtl {
 		angle = math.Pi
 	}
-	paintIconAt(d, b.env, role, r.Center(), t.IconSize, col, angle)
+	controlkit.PaintIconAt(d, b.env, controlkit.IconMark{Role: role, Center: r.Center(), Size: t.IconSize, Color: col, Rotation: angle})
 	FocusRing(d, &b.Interactive, Ring{Theme: t, Rect: r, Radius: min(r.Size.W, r.Size.H) / 2, Color: t.Ring, Motion: b.motion})
 }
 func (b *CarouselNavigationWidget) HandlePointer(e ggui.PointerEvent) bool {

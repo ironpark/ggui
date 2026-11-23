@@ -147,12 +147,29 @@ func (h *histogram) palette(k int) color.Palette {
 		return color.Palette{color.RGBA{A: 0xff}}
 	}
 	if len(entries) <= k {
-		p := make(color.Palette, len(entries))
-		for i, e := range entries {
-			p[i] = color.RGBA{R: round8(e.c[0]), G: round8(e.c[1]), B: round8(e.c[2]), A: 0xff}
-		}
-		return p
+		return exactPalette(entries)
 	}
+	total := toOklab(entries)
+	anchors := keepAnchors(entries, total, k)
+	boxes := medianCut(entries, k-len(anchors))
+	centers := centersOf(anchors, boxes)
+	refine(entries, centers, len(anchors), 4)
+	return distinct(centers, anchors)
+}
+
+// exactPalette returns one palette color per entry: a recording with no
+// more than k colors keeps them all, exactly.
+func exactPalette(entries []entry) color.Palette {
+	p := make(color.Palette, len(entries))
+	for i, e := range entries {
+		p[i] = color.RGBA{R: round8(e.c[0]), G: round8(e.c[1]), B: round8(e.c[2]), A: 0xff}
+	}
+	return p
+}
+
+// toOklab moves each entry's color to Oklab, keeping its sRGB, and
+// returns the pixels counted.
+func toOklab(entries []entry) float64 {
 	var total float64
 	for i := range entries {
 		e := &entries[i]
@@ -160,6 +177,12 @@ func (h *histogram) palette(k int) color.Palette {
 		e.rgb = e.c
 		e.c = oklab(e.c[0], e.c[1], e.c[2])
 	}
+	return total
+}
+
+// keepAnchors returns the colors that cover anchorShare of the pixels
+// or more, up to a quarter of k, most pixels first.
+func keepAnchors(entries []entry, total float64, k int) []entry {
 	byCount := slices.Clone(entries)
 	slices.SortStableFunc(byCount, func(a, b entry) int {
 		switch {
@@ -177,8 +200,14 @@ func (h *histogram) palette(k int) color.Palette {
 		}
 		anchors = append(anchors, e)
 	}
+	return anchors
+}
+
+// medianCut splits entries into at most n boxes, each time the box
+// whose split lowers the squared error most.
+func medianCut(entries []entry, n int) []box {
 	boxes := []box{newBox(entries)}
-	for len(boxes) < k-len(anchors) {
+	for len(boxes) < n {
 		best, gain := -1, 0.0
 		for i := range boxes {
 			if g := boxes[i].gain(); g > gain {
@@ -192,6 +221,11 @@ func (h *histogram) palette(k int) color.Palette {
 		boxes[best] = a
 		boxes = append(boxes, b)
 	}
+	return boxes
+}
+
+// centersOf gathers the anchors' colors and the boxes' means.
+func centersOf(anchors []entry, boxes []box) [][3]float64 {
 	centers := make([][3]float64, 0, len(anchors)+len(boxes))
 	for _, a := range anchors {
 		centers = append(centers, a.c)
@@ -199,8 +233,12 @@ func (h *histogram) palette(k int) color.Palette {
 	for _, b := range boxes {
 		centers = append(centers, b.mean())
 	}
-	refine(entries, centers, len(anchors), 4)
+	return centers
+}
 
+// distinct returns centers as RGBA colors, the anchors kept exactly,
+// without a color repeated.
+func distinct(centers [][3]float64, anchors []entry) color.Palette {
 	p := make(color.Palette, 0, len(centers))
 	seen := map[color.RGBA]bool{}
 	for i, c := range centers {

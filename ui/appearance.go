@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -29,24 +29,6 @@ func panelShadow(b *widget.BoxWidget, t *uitheme.Theme) *widget.BoxWidget {
 	return b.Shadow(layers[:]...)
 }
 
-// overlayShadow gives b the shadow of what floats higher, shadcn's
-// shadow-lg: a submenu, a sheet. It is the theme's OverlayShadow over its
-// OverlayContact.
-func overlayShadow(b *widget.BoxWidget, t *uitheme.Theme) *widget.BoxWidget {
-	layers := [2]ggui.ShadowStyle{t.OverlayShadow, t.OverlayContact}
-	return b.Shadow(layers[:]...)
-}
-
-// paintShadows draws the layers of a shadow under r, for a surface that is
-// painted rather than a Box.
-func paintShadows(dst *ggui.Canvas, r ggui.Rect, radius float64, layers ...ggui.ShadowStyle) {
-	for _, s := range layers {
-		if s.Color != nil {
-			dst.Shadow(r, radius, s)
-		}
-	}
-}
-
 // paintedBaseline is where the glyphs of a line of text stand, for a line
 // whose box starts at top with the ascent layout reports, at the canvas's
 // scale. It is not quite top+ascent: text is drawn on whole pixels, the
@@ -59,24 +41,15 @@ func paintedBaseline(top, ascent, scale float64) float64 {
 }
 
 // fieldBoxShape gives a field's box what its size depends on, the padding
-// and the radius, and leaves its colors to fieldChrome.
+// and the radius, and leaves its colors to fieldChromeJoined.
 func fieldBoxShape(b *widget.BoxWidget, t *uitheme.Theme, pad ggui.EdgeInsets) {
 	b.Padding(pad).Radius(t.Radius)
-}
-
-// fieldFill is the surface of a field: the theme's Input, which may be
-// translucent and is drawn as it is, or the muted one of a disabled field.
-func fieldFill(t *uitheme.Theme, inert bool) color.Color {
-	if inert {
-		return fade(t.InputBorder, pick(isDark(t.Bg), .8, .5))
-	}
-	return t.Input
 }
 
 // invalidBorder is the border of a control that failed validation: the
 // Destructive color, at half strength on a dark page as shadcn draws it.
 func invalidBorder(t *uitheme.Theme) color.Color {
-	if isDark(t.Bg) {
+	if controlkit.IsDark(t.Bg) {
 		return fade(t.Destructive, .5)
 	}
 	return t.Destructive
@@ -89,43 +62,44 @@ var (
 	focusRingSlot    = ggui.NewSlot[*ggui.Motion]("focus ring")
 )
 
-// fieldState is what a field's chrome shows.
-type fieldState struct {
+// fieldLook is what a field's chrome is drawn from: the theme, what the
+// field shows, the motion it eases between states over, and the sides it
+// is joined on. Its corners are the theme's Radius.
+type fieldLook struct {
+	theme                   *uitheme.Theme
 	focused, invalid, inert bool
+	motion                  time.Duration
+	sides                   JoinedSides
 }
 
-// fieldChrome colors a field's box for its state and draws the halo around
-// it; see fieldTones. Call it in Paint, before painting b in r.
-func fieldChrome(dst *ggui.Canvas, at ggui.Anchor, b *widget.BoxWidget, t *uitheme.Theme, r ggui.Rect, radius float64, s fieldState, motion time.Duration) {
-	fill, border := fieldTones(dst, at, t, r, radius, s, motion)
-	b.Fill(fill).Border(t.BorderWidth, border)
-}
-
-// fieldChromeJoined is fieldChrome for a field that may sit in a
-// ButtonGroup: on the sides joined to a neighbour its corners are square,
-// its border gives way to the neighbour's, and its halo, which the group
-// draws above its children, runs past the seam. With no side joined it is
-// fieldChrome.
-func fieldChromeJoined(dst *ggui.Canvas, at ggui.Anchor, b *widget.BoxWidget, t *uitheme.Theme, r ggui.Rect, radius float64, s fieldState, motion time.Duration, sides JoinedSides) {
-	if !sides.Any() {
-		fieldChrome(dst, at, b, t, r, radius, s, motion)
+// fieldChromeJoined colors a field's box for its look and draws the halo
+// around it; see fieldTones. Call it in Paint, before painting b in r. The
+// field may sit in a ButtonGroup: on the sides joined to a neighbour its
+// corners are square, its border gives way to the neighbour's, and its
+// halo, which the group draws above its children, runs past the seam.
+func fieldChromeJoined(dst *ggui.Canvas, at ggui.Anchor, b *widget.BoxWidget, r ggui.Rect, look fieldLook) {
+	if !look.sides.Any() {
+		fill, border := fieldTones(dst, at, r, look)
+		b.Fill(fill).Border(look.theme.BorderWidth, border)
 		return
 	}
 	b.Fill(nil).Border(0, nil)
-	fieldSurface(dst, at, t, r, radius, s, motion, sides)
+	fieldSurface(dst, at, r, look)
 }
 
 // fieldSurface paints a field's fill, border and halo in r itself, for a
 // field that draws its own surface rather than through a box, following
 // the sides it is joined on.
-func fieldSurface(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, r ggui.Rect, radius float64, s fieldState, motion time.Duration, sides JoinedSides) {
-	fill, border, halo, ringed := fieldToneParts(dst, at, t, s, motion)
-	paintJoinedBox(dst, r, radius, sides, fill, t.BorderWidth, border)
+func fieldSurface(dst *ggui.Canvas, at ggui.Anchor, r ggui.Rect, look fieldLook) {
+	t := look.theme
+	fill, border, halo, ringed := fieldToneParts(dst, at, look)
+	shape := joinedBox{rect: r, radius: t.Radius, sides: look.sides}
+	paintJoinedBox(dst, shape, fill, t.BorderWidth, border)
 	if !ringed {
 		return
 	}
-	f := joinedFocus{on: true, r: r, radius: radius, sides: sides, width: t.BorderWidth, line: border, halo: halo}
-	if g, ok := dst.Enclosing().(*ButtonGroupWidget); ok && sides.Any() {
+	f := joinedFocus{joinedBox: shape, on: true, width: t.BorderWidth, line: border, halo: halo}
+	if g, ok := dst.Enclosing().(*ButtonGroupWidget); ok && look.sides.Any() {
 		g.ring(f)
 		return
 	}
@@ -133,62 +107,39 @@ func fieldSurface(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, r ggui.Rec
 }
 
 // fieldTones draws the halo around a field in r and returns the fill and
-// the border its state calls for, easing between states over motion: the
-// border moves from InputBorder to the Ring while the editor has the
+// the border its look calls for, easing between states over its motion:
+// the border moves from InputBorder to the Ring while the editor has the
 // keyboard, and to the destructive border while the field is invalid,
 // focused or not, when it also keeps a destructive halo. The motions are
 // retained under at and rest once they arrive, so an idle field asks for
 // no frame.
-func fieldTones(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, r ggui.Rect, radius float64, s fieldState, motion time.Duration) (fill, border color.Color) {
-	fill, border, halo, ringed := fieldToneParts(dst, at, t, s, motion)
+func fieldTones(dst *ggui.Canvas, at ggui.Anchor, r ggui.Rect, look fieldLook) (fill, border color.Color) {
+	fill, border, halo, ringed := fieldToneParts(dst, at, look)
 	if ringed {
-		haloStroke(dst, r, radius, halo)
+		controlkit.HaloStroke(dst, r, look.theme.Radius, halo)
 	}
 	return fill, border
 }
 
-// ease is Canvas.Ease along the theme's Ease, the curve of a Tailwind
-// transition: what a control's hover, focus, checked and invalid states
-// move on. A nil t is the default theme's.
-func ease(dst *ggui.Canvas, t *uitheme.Theme, at ggui.Anchor, s ggui.Slot[*ggui.Motion], target float64, d time.Duration) float64 {
-	var c uitheme.Curve
-	if t != nil {
-		c = t.Ease
-	}
-	return dst.EaseWith(at, s, target, d, c.Easing())
-}
-
 // fieldToneParts is fieldTones without the drawing: the fill, the border,
-// and the halo with whether there is one to draw.
-func fieldToneParts(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, s fieldState, motion time.Duration) (fill, border, halo color.Color, ringed bool) {
-	focus := ease(dst, t, at, fieldFocusSlot, pick(s.focused && !s.inert, 1.0, 0.0), motion)
-	invalid := ease(dst, t, at, fieldInvalidSlot, pick(s.invalid, 1.0, 0.0), motion)
+// and the halo with whether there is one to draw. The fill is the theme's
+// Input, which may be translucent and is drawn as it is, or the muted
+// surface of a disabled field.
+func fieldToneParts(dst *ggui.Canvas, at ggui.Anchor, look fieldLook) (fill, border, halo color.Color, ringed bool) {
+	t := look.theme
+	focus := controlkit.Ease(dst, t, at, fieldFocusSlot, pick(look.focused && !look.inert, 1.0, 0.0), look.motion)
+	invalid := controlkit.Ease(dst, t, at, fieldInvalidSlot, pick(look.invalid, 1.0, 0.0), look.motion)
+	fill = t.Input
 	border = mix(mix(t.InputBorder, t.Ring, focus), invalidBorder(t), invalid)
-	if s.inert {
+	if look.inert {
+		fill = fade(t.InputBorder, pick(controlkit.IsDark(t.Bg), .8, .5))
 		border = t.Disabled(border)
 	} else if focus > 0 || invalid > 0 {
 		// An invalid field shows the destructive halo whether or not it
 		// is focused, as aria-invalid outranks focus-visible in shadcn.
 		halo, ringed = mix(fade(t.Halo(t.Ring), focus), t.Halo(destructiveRing(t)), invalid), true
 	}
-	return fieldFill(t, s.inert), border, halo, ringed
-}
-
-// haloStroke draws the three-pixel halo just outside r in col, as it is.
-func haloStroke(dst *ggui.Canvas, r ggui.Rect, radius float64, col color.Color) {
-	dst.StrokeRoundRect(ggui.Rct(r.Origin.Add(ggui.Pt(-2, -2)), ggui.Sz(r.Size.W+4, r.Size.H+4)), radius+2, 3, col)
-}
-
-// chevron resolves the directional role shared by selects and accordions.
-// dy points the tip down when positive and up when negative.
-func chevron(dst *ggui.Canvas, env ggui.Env, t *uitheme.Theme, center ggui.Point, dy float64, col color.Color) {
-	paintIconAt(dst, env, pick(dy < 0, icons.ChevronUp, icons.ChevronDown), center, t.IconSize, col, 0)
-}
-
-// fieldHalo draws the focus ring just outside a text field, at the theme's
-// halo opacity.
-func fieldHalo(dst *ggui.Canvas, t *uitheme.Theme, r ggui.Rect, radius float64, ring color.Color) {
-	haloStroke(dst, r, radius, t.Halo(ring))
+	return fill, border, halo, ringed
 }
 
 // fieldRing is the focus ring for a field: the theme's, or the destructive
@@ -203,35 +154,7 @@ func fieldRing(t *uitheme.Theme, invalid bool) color.Color {
 // destructiveRing is the focus ring of anything that warns: destructive
 // buttons and invalid fields.
 func destructiveRing(t *uitheme.Theme) color.Color {
-	return fade(t.Destructive, pick(isDark(t.Bg), .8, .4))
-}
-
-// isDark reports whether c is closer to black than to white.
-func isDark(c color.Color) bool {
-	r, g, b, _ := c.RGBA()
-	return r+g+b < 3*32768
-}
-
-// paintDisclosure paints content folding open below y: the body is clipped
-// to progress of its height and inert while closing. The progress comes
-// from Motion.LayoutToggle, which lays the disclosure out again for each
-// step while it moves.
-func paintDisclosure(dst *ggui.Canvas, content ggui.Widget, at ggui.Point, width float64, size ggui.Size, progress float64, open bool) {
-	if progress <= 0 {
-		return
-	}
-	body := dst.Clip(ggui.Rct(at, ggui.Sz(width, size.H*progress)))
-	if !open {
-		body = body.Inert()
-	}
-	body.Paint(content, ggui.Rct(at, size))
-}
-
-func colorOr(value, fallback color.Color) color.Color {
-	if value != nil {
-		return value
-	}
-	return fallback
+	return fade(t.Destructive, pick(controlkit.IsDark(t.Bg), .8, .4))
 }
 
 // Shared hover timing for disclosure headers, independent of their opening motion.
@@ -256,12 +179,12 @@ type Ring struct {
 // once it arrives, so an idle control asks for no frame.
 func FocusRing(dst *ggui.Canvas, state *ggui.Interactive, ring Ring) {
 	on := state.Focused && state.FocusVisible && !state.IsInert()
-	k := ease(dst, ring.Theme, state.Anchor(ring.Rect), focusRingSlot, pick(on, 1.0, 0.0), ring.Motion)
+	k := controlkit.Ease(dst, ring.Theme, state.Anchor(ring.Rect), focusRingSlot, pick(on, 1.0, 0.0), ring.Motion)
 	if k <= 0 {
 		return
 	}
 	dst.StrokeRoundRect(ring.Rect, ring.Radius, ring.Theme.BorderWidth, fade(ring.Color, k))
-	haloStroke(dst, ring.Rect, ring.Radius, fade(ring.Theme.Halo(ring.Color), k))
+	controlkit.HaloStroke(dst, ring.Rect, ring.Radius, fade(ring.Theme.Halo(ring.Color), k))
 }
 
 // DashedBorder strokes a rounded dashed outline inside r with the given corner

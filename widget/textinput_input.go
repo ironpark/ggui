@@ -28,13 +28,20 @@ func (t *TextInputWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 // the modified arrows, Home, End and deletes; ⌘/Ctrl+Enter too when the
 // editor submits with it; and any key ClaimKeys claims.
 func (t *TextInputWidget) ClaimsChord(ev ggui.KeyEvent) bool {
-	m := ev.Mods
 	if ev.Kind != ggui.KeyPress || t.IsDisabled() {
 		return false
 	}
 	if t.claims != nil && t.composition == "" && t.claims(ev) {
 		return true
 	}
+	return t.editingChord(ev)
+}
+
+// editingChord reports whether ev is one of the editor's own chords: a
+// clipboard, undo or select-all chord, a modified arrow, Home, End or
+// delete, or ⌘/Ctrl+Enter when the editor submits with it.
+func (t *TextInputWidget) editingChord(ev ggui.KeyEvent) bool {
+	m := ev.Mods
 	if !(m.Ctrl || m.Alt || m.Meta) {
 		return false
 	}
@@ -163,6 +170,12 @@ func (t *TextInputWidget) key(k ggui.KeyboardKey, m ggui.Mods) {
 	t.moveKey(k, m)
 }
 
+// wordWise reports whether the modifiers held ask for the word-wise form of
+// a motion or a delete: Alt (Option) anywhere, or Ctrl without Meta. Ctrl
+// stands in for Cmd off macOS, but no Cmd shortcut uses an arrow or a
+// delete, which is why Ctrl+Left jumps a word on Windows and Linux.
+func wordWise(m ggui.Mods) bool { return m.Alt || (m.Ctrl && !m.Meta) }
+
 // editKey handles the keys that change the text: Enter, Escape and the two
 // deletes. Enter in a single-line field submits instead, which commits
 // through committed rather than through the caller.
@@ -184,11 +197,11 @@ func (t *TextInputWidget) editKey(k ggui.KeyboardKey, m ggui.Mods) bool {
 		t.blink = ggui.Now()
 	case ggui.KeyBackspace:
 		t.ime.Confirm()
-		t.ed.Backspace(textedit.WordWise(m.Alt, m.Ctrl, m.Meta))
+		t.ed.Backspace(wordWise(m))
 		return true
 	case ggui.KeyDelete:
 		t.ime.Confirm()
-		t.ed.DeleteForward(textedit.WordWise(m.Alt, m.Ctrl, m.Meta))
+		t.ed.DeleteForward(wordWise(m))
 		return true
 	}
 	return false
@@ -222,7 +235,7 @@ func (t *TextInputWidget) moveKey(k ggui.KeyboardKey, m ggui.Mods) {
 			}
 			t.ed.MoveTo(gem.Pick(dir < 0, lo, hi), m.Shift)
 		} else {
-			t.ed.MoveBy(dir, textedit.WordWise(m.Alt, m.Ctrl, m.Meta), m.Shift)
+			t.ed.MoveBy(dir, wordWise(m), m.Shift)
 		}
 		t.blink = ggui.Now()
 	case ggui.KeyHome, ggui.KeyEnd:
@@ -263,22 +276,30 @@ func (t *TextInputWidget) clipboardKey(k ggui.KeyboardKey, m ggui.Mods) bool {
 			return true
 		}
 	case ggui.KeyV:
-		t.ime.Confirm()
-		clip := ggui.CurrentClipboard().Read()
-		if clip == "" && t.onPasteImage != nil {
-			if png, ok := runtime.ReadImage(ggui.CurrentClipboard()); ok && t.onPasteImage(png) {
-				return false
-			}
-		}
-		s := strings.ReplaceAll(clip, "\r\n", "\n")
-		s = strings.ReplaceAll(s, "\r", "\n")
-		if !t.multiline {
-			s = strings.ReplaceAll(s, "\n", " ")
-		}
-		t.ed.Replace(s)
-		return true
+		return t.paste()
 	}
 	return false
+}
+
+// paste replaces the selection with the clipboard's text, its line breaks
+// made \n, and in a single-line field spaces. With no text there, an image
+// goes to OnPasteImage instead, which leaves the text alone when it takes
+// it. Reports whether the text mutated.
+func (t *TextInputWidget) paste() bool {
+	t.ime.Confirm()
+	clip := ggui.CurrentClipboard().Read()
+	if clip == "" && t.onPasteImage != nil {
+		if png, ok := runtime.ReadImage(ggui.CurrentClipboard()); ok && t.onPasteImage(png) {
+			return false
+		}
+	}
+	s := strings.ReplaceAll(clip, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	if !t.multiline {
+		s = strings.ReplaceAll(s, "\n", " ")
+	}
+	t.ed.Replace(s)
+	return true
 }
 
 // historyKey handles the Cmd/Ctrl shortcuts for undo and redo. Both report

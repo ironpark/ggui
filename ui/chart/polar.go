@@ -9,13 +9,22 @@ import (
 	"github.com/ironpark/ggui/ui"
 )
 
-func chartSector(dst *ggui.Canvas, center ggui.Point, inner, outer, start, end float64, col color.Color, separator color.Color, rounded float64) {
+// sectorSpec is an annular wedge: the ring between inner and outer about
+// center, swept from start to end degrees, its corners rounded by up to
+// rounded.
+type sectorSpec struct {
+	center                            ggui.Point
+	inner, outer, start, end, rounded float64
+}
+
+func chartSector(dst *ggui.Canvas, s sectorSpec, col color.Color, separator color.Color) {
+	center, inner, outer, start, end := s.center, s.inner, s.outer, s.start, s.end
 	if dst == nil || dst.Image == nil || outer <= inner || end == start {
 		return
 	}
 	sweep := end - start
 	sign := math.Copysign(1, sweep)
-	corner := min(max(0, rounded), (outer-inner)/2, math.Abs(sweep)*math.Pi/180*max(inner, 1)/2)
+	corner := min(max(0, s.rounded), (outer-inner)/2, math.Abs(sweep)*math.Pi/180*max(inner, 1)/2)
 	if math.Abs(sweep) >= 359.9 {
 		corner = 0
 	}
@@ -45,195 +54,250 @@ func chartSector(dst *ggui.Canvas, center ggui.Point, inner, outer, start, end f
 	chartDrawPath(dst, &path, col, separator, 2)
 }
 func (c *Widget) paintPolar(dst *ggui.Canvas, progress float64) {
-	center, radius := c.polarBounds()
-	if radius <= 0 {
+	frame := c.polarFrame()
+	if frame.radius <= 0 {
 		return
 	}
 	switch c.kind {
 	case KindRadar:
-		c.paintRadar(dst, center, radius, progress)
+		c.paintRadar(dst, frame, progress)
 	case KindPie:
-		c.paintPie(dst, center, radius, progress)
+		c.paintPie(dst, frame, progress)
 	case KindRadial:
-		c.paintRadial(dst, center, radius, progress)
+		c.paintRadial(dst, frame, progress)
 	}
 	if c.centerValue != "" {
-		c.text(dst, c.centerValue, center.Add(ggui.Pt(0., -22.)), 28, c.theme.Fg, .5)
-		c.text(dst, c.centerLabel, center.Add(ggui.Pt(0., 12.)), 12, c.theme.MutedFg, .5)
+		c.text(dst, c.centerValue, frame.center.Add(ggui.Pt(0., -22.)), 28, c.theme.Fg, .5)
+		c.text(dst, c.centerLabel, frame.center.Add(ggui.Pt(0., 12.)), 12, c.theme.MutedFg, .5)
 	}
 }
-func (c *Widget) paintPie(dst *ggui.Canvas, center ggui.Point, radius, progress float64) {
+
+// pieRing is one series' ring of a pie: its radii, and the positive total
+// its slices share.
+type pieRing struct {
+	series              int
+	inner, outer, total float64
+}
+
+// pieRingFor places series j's ring: the series split the disc's band
+// evenly, the first outermost, unless a series sets its own radii.
+func (c *Widget) pieRingFor(j int, frame polarFrame) pieRing {
+	radius := frame.radius
 	rings := len(c.config)
+	outer := radius - float64(j)*(radius*(1-c.inner))/float64(rings)
+	inner := frame.inner
+	if rings > 1 {
+		inner = outer - radius*(1-c.inner)/float64(rings) + 3
+	}
+	series := c.config[j]
+	if series.OuterRadius > 0 {
+		outer = radius * clamp(series.OuterRadius, 0, 1)
+		inner = radius * clamp(series.InnerRadius, 0, series.OuterRadius)
+	}
+	return pieRing{series: j, inner: inner, outer: outer, total: c.positiveTotal(j)}
+}
+func (c *Widget) paintPie(dst *ggui.Canvas, frame polarFrame, progress float64) {
 	for j := range c.config {
-		total := c.positiveTotal(j)
-		if total <= 0 {
+		if ring := c.pieRingFor(j, frame); ring.total > 0 {
+			c.paintPieRing(dst, frame, ring, progress)
+		}
+	}
+}
+
+// paintPieRing draws a ring's slices, the selected one pulled out and, with
+// an active ring, circled, and their labels once the entrance is over.
+func (c *Widget) paintPieRing(dst *ggui.Canvas, frame polarFrame, ring pieRing, progress float64) {
+	j := ring.series
+	var sep color.Color
+	if c.separators {
+		sep = c.theme.Card
+	}
+	angle := c.startAngle
+	for i := range c.data {
+		v, ok := c.value(i, j)
+		if !ok || v <= 0 {
 			continue
 		}
-		outer := radius - float64(j)*(radius*(1-c.inner))/float64(rings)
-		inner := radius * c.inner
-		if rings > 1 {
-			inner = outer - radius*(1-c.inner)/float64(rings) + 3
+		sweep := (c.endAngle - c.startAngle) * v / ring.total * progress
+		end := angle + sweep
+		slice := sectorSpec{center: frame.center, inner: ring.inner, outer: ring.outer, start: angle, end: end}
+		if i == c.selected {
+			slice.outer += 10
 		}
-		series := c.config[j]
-		if series.OuterRadius > 0 {
-			outer = radius * clamp(series.OuterRadius, 0, 1)
-			inner = radius * clamp(series.InnerRadius, 0, series.OuterRadius)
+		chartSector(dst, slice, c.pointColor(i, j), sep)
+		if c.activeRing && i == c.selected {
+			chartSector(dst, sectorSpec{center: frame.center, inner: ring.outer + 12, outer: ring.outer + 25, start: angle, end: end}, c.pointColor(i, j), nil)
+		}
+		if c.labels && progress == 1 {
+			mid := (angle + end) / 2
+			p := polarPoint(frame.center, (slice.inner+slice.outer)/2, mid)
+			if !c.labelInside {
+				p = polarPoint(frame.center, slice.outer+18, mid)
+			}
+			p.Y += 16
+			c.paintLabel(dst, c.context(i, j, p))
+		}
+		angle = end
+	}
+}
+func (c *Widget) paintRadial(dst *ggui.Canvas, frame polarFrame, progress float64) {
+	if c.grid {
+		for k := 1; k <= 5; k++ {
+			chartPath(dst, circlePoints(frame.center, frame.radius*float64(k)/5), nil, c.theme.Border, 1)
+		}
+	}
+	if c.stack != StackUnstacked {
+		c.paintRadialStacks(dst, frame, progress)
+		return
+	}
+	c.paintRadialBands(dst, frame, progress)
+}
+
+// paintRadialStacks gives each category a band of its own, its sweep split
+// among the series in proportion to their positive values.
+func (c *Widget) paintRadialStacks(dst *ggui.Canvas, frame polarFrame, progress float64) {
+	band := (frame.radius - frame.inner) / float64(len(c.data))
+	for i := range c.data {
+		total := 0.
+		for j := range c.config {
+			if v, ok := c.value(i, j); ok && v > 0 {
+				total += v
+			}
+		}
+		if total == 0 {
+			continue
 		}
 		angle := c.startAngle
-		for i := range c.data {
+		in := frame.inner + float64(i)*band
+		out := in + band*.8
+		if c.radialTrack {
+			chartSector(dst, sectorSpec{center: frame.center, inner: in, outer: out, start: 0, end: 360}, c.theme.Muted, nil)
+		}
+		for j := range c.config {
 			v, ok := c.value(i, j)
 			if !ok || v <= 0 {
 				continue
 			}
-			sweep := (c.endAngle - c.startAngle) * v / total * progress
-			end := angle + sweep
-			r := outer
-			if i == c.selected {
-				r += 10
-			}
-			var sep color.Color
-			if c.separators {
-				sep = c.theme.Card
-			}
-			chartSector(dst, center, inner, r, angle, end, c.pointColor(i, j), sep, 0)
-			if c.activeRing && i == c.selected {
-				chartSector(dst, center, outer+12, outer+25, angle, end, c.pointColor(i, j), nil, 0)
-			}
-			if c.labels && progress == 1 {
-				p := polarPoint(center, (inner+r)/2, (angle+end)/2)
-				if !c.labelInside {
-					p = polarPoint(center, r+18, (angle+end)/2)
-					p.Y += 16
-				}
-				ctx := c.context(i, j, p)
-				if c.labelInside {
-					ctx.Position.Y += 16
-				}
-				c.paintLabel(dst, ctx)
-			}
+			end := angle + (c.endAngle-c.startAngle)*v/total*progress
+			chartSector(dst, sectorSpec{center: frame.center, inner: in, outer: out, start: angle, end: end, rounded: c.corner}, c.seriesColor(j), nil)
 			angle = end
 		}
 	}
 }
-func (c *Widget) paintRadial(dst *ggui.Canvas, center ggui.Point, radius, progress float64) {
-	inner := radius * c.inner
-	n := len(c.data)
-	if c.grid {
-		for k := 1; k <= 5; k++ {
-			chartPath(dst, circlePoints(center, radius*float64(k)/5), nil, c.theme.Border, 1)
-		}
-	}
 
-	if c.stack != StackUnstacked {
-		band := (radius - inner) / float64(n)
-		for i := range c.data {
-			total := 0.
-			for j := range c.config {
-				if v, ok := c.value(i, j); ok && v > 0 {
-					total += v
-				}
-			}
-			if total == 0 {
-				continue
-			}
-			angle := c.startAngle
-			in := inner + float64(i)*band
-			out := in + band*.8
-			if c.radialTrack {
-				chartSector(dst, center, in, out, 0, 360, c.theme.Muted, nil, 0)
-			}
-			for j := range c.config {
-				v, ok := c.value(i, j)
-				if !ok || v <= 0 {
-					continue
-				}
-				end := angle + (c.endAngle-c.startAngle)*v/total*progress
-				chartSector(dst, center, in, out, angle, end, c.seriesColor(j), nil, c.corner)
-				angle = end
-			}
-		}
-		return
+// radialMaximum is the value a full sweep of an unstacked radial chart
+// stands for: the domain's maximum when set, else the largest value shown.
+func (c *Widget) radialMaximum() float64 {
+	if c.domainSet {
+		return c.domainMax
 	}
-	maximum := c.domainMax
-	if !c.domainSet {
-		maximum = max(0, c.geometry.hi)
-		if n == 1 {
-			maximum = 0
-			for j := range c.config {
-				if v, ok := c.value(0, j); ok {
-					maximum = max(maximum, v)
-				}
-			}
-		}
-		for i := range c.data {
-			if v, ok := c.value(i, 0); ok {
+	maximum := max(0, c.geometry.hi)
+	if len(c.data) == 1 {
+		maximum = 0
+		for j := range c.config {
+			if v, ok := c.value(0, j); ok {
 				maximum = max(maximum, v)
 			}
 		}
 	}
+	for i := range c.data {
+		if v, ok := c.value(i, 0); ok {
+			maximum = max(maximum, v)
+		}
+	}
+	return maximum
+}
+
+// paintRadialBands gives each category's first-series value an arc on a
+// band of its own, over a track, and labels the bands along their arcs.
+func (c *Widget) paintRadialBands(dst *ggui.Canvas, frame polarFrame, progress float64) {
+	maximum := c.radialMaximum()
 	if maximum <= 0 {
 		return
 	}
-	band := (radius - inner) / float64(n)
+	band := (frame.radius - frame.inner) / float64(len(c.data))
 	for i := range c.data {
 		v, ok := c.value(i, 0)
 		if !ok || v <= 0 {
 			continue
 		}
-		in := inner + float64(i)*band + band*.1
+		in := frame.inner + float64(i)*band + band*.1
 		out := in + band*.8
 		if c.radialTrack {
-			chartSector(dst, center, in, out, 0, 360, c.theme.Muted, nil, 0)
+			chartSector(dst, sectorSpec{center: frame.center, inner: in, outer: out, start: 0, end: 360}, c.theme.Muted, nil)
 		}
 		end := c.startAngle + (c.endAngle-c.startAngle)*clamp(v/maximum, 0, 1)*progress
-		chartSector(dst, center, in, out, c.startAngle, end, c.pointColor(i, 0), nil, c.corner)
+		chartSector(dst, sectorSpec{center: frame.center, inner: in, outer: out, start: c.startAngle, end: end, rounded: c.corner}, c.pointColor(i, 0), nil)
 		if c.labels && progress == 1 {
 			label := c.data[i].Label
-			ctx := c.context(i, 0, polarPoint(center, (in+out)/2, c.startAngle))
+			ctx := c.context(i, 0, polarPoint(frame.center, (in+out)/2, c.startAngle))
 			if c.labelFormat != nil {
 				label = c.labelFormat(ctx)
 			}
-			c.arcLabel(dst, label, center, (in+out)/2, c.startAngle, c.theme.Fg)
+			c.arcLabel(dst, label, frame.center, (in+out)/2, c.startAngle, c.theme.Fg)
 		}
 	}
 }
-func (c *Widget) paintRadar(dst *ggui.Canvas, center ggui.Point, radius, progress float64) {
-	n := len(c.data)
-	if n < 3 {
+func (c *Widget) paintRadar(dst *ggui.Canvas, frame polarFrame, progress float64) {
+	if len(c.data) < 3 {
 		return
 	}
-	grid := c.polarGrid
-	rings := grid.Rings
+	rings := c.polarGrid.Rings
 	if rings <= 0 {
 		rings = 5
 	}
 	if c.grid {
-		if !grid.HideRings {
-			for k := rings; k >= 1; k-- {
-				r := radius * float64(k) / float64(rings)
-				var fill color.Color
-				if grid.Fill && k == rings {
-					fill = fade(c.seriesColor(0), .2)
-				}
-				points := circlePoints(center, r)
-				if !grid.Circle {
-					points = make([]ggui.Point, n)
-					for i := range points {
-						points[i] = polarPoint(center, r, radarAngle(i, n))
-					}
-				}
-				chartPath(dst, points, fill, c.theme.Border, 1)
-			}
-		}
-		if !grid.HideSpokes {
-			for i := range c.data {
-				dst.StrokeLine(center, polarPoint(center, radius, radarAngle(i, n)), 1, c.theme.Border)
-			}
+		c.paintRadarGrid(dst, frame, rings)
+	}
+	c.paintRadarCategories(dst, frame)
+	if c.yAxis {
+		for k := 1; k <= rings; k++ {
+			f := float64(k) / float64(rings)
+			p := polarPoint(frame.center, frame.radius*f, 60)
+			c.text(dst, fmt.Sprintf("%g", c.geometry.lo+(c.geometry.hi-c.geometry.lo)*f), p, 11, c.theme.Fg, .5)
 		}
 	}
+	for j := range c.config {
+		c.paintRadarSeries(dst, frame, j, progress)
+	}
+}
+
+// paintRadarGrid draws the radar's rings, the outermost first, as circles or
+// as polygons through the spokes, and then the spokes, as PolarGrid asks.
+func (c *Widget) paintRadarGrid(dst *ggui.Canvas, frame polarFrame, rings int) {
+	grid := c.polarGrid
+	n := len(c.data)
+	if !grid.HideRings {
+		for k := rings; k >= 1; k-- {
+			r := frame.radius * float64(k) / float64(rings)
+			var fill color.Color
+			if grid.Fill && k == rings {
+				fill = fade(c.seriesColor(0), .2)
+			}
+			points := circlePoints(frame.center, r)
+			if !grid.Circle {
+				points = make([]ggui.Point, n)
+				for i := range points {
+					points[i] = polarPoint(frame.center, r, radarAngle(i, n))
+				}
+			}
+			chartPath(dst, points, fill, c.theme.Border, 1)
+		}
+	}
+	if !grid.HideSpokes {
+		for i := range c.data {
+			dst.StrokeLine(frame.center, polarPoint(frame.center, frame.radius, radarAngle(i, n)), 1, c.theme.Border)
+		}
+	}
+}
+
+// paintRadarCategories names each spoke past the rim: through the tick
+// painter when set, else with the category's icon, else with its label.
+func (c *Widget) paintRadarCategories(dst *ggui.Canvas, frame polarFrame) {
+	n := len(c.data)
 	for i, d := range c.data {
 		angle := radarAngle(i, n)
-		p := polarPoint(center, radius+16, angle)
+		p := polarPoint(frame.center, frame.radius+16, angle)
 		label := d.Label
 		if c.tickFormat != nil {
 			label = c.tickFormat(label)
@@ -246,39 +310,36 @@ func (c *Widget) paintRadar(dst *ggui.Canvas, center ggui.Point, radius, progres
 			c.text(dst, label, p.Add(ggui.Pt(0., -6.)), 12, c.theme.MutedFg, .5)
 		}
 	}
-	if c.yAxis {
-		for k := 1; k <= rings; k++ {
-			f := float64(k) / float64(rings)
-			p := polarPoint(center, radius*f, 60)
-			c.text(dst, fmt.Sprintf("%g", c.geometry.lo+(c.geometry.hi-c.geometry.lo)*f), p, 11, c.theme.Fg, .5)
-		}
-	}
+}
 
-	for j := range c.config {
-		points := make([]ggui.Point, n)
-		for i := range c.data {
-			v, ok := c.value(i, j)
-			if !ok {
-				v = 0
-			}
-			f := clamp((v-c.geometry.lo)/(c.geometry.hi-c.geometry.lo), 0, 1)
-			points[i] = polarPoint(center, radius*f*progress, radarAngle(i, n))
+// paintRadarSeries draws series j's polygon, grown out from the center by
+// progress, and once it is whole, its dots and labels.
+func (c *Widget) paintRadarSeries(dst *ggui.Canvas, frame polarFrame, j int, progress float64) {
+	n := len(c.data)
+	points := make([]ggui.Point, n)
+	for i := range c.data {
+		v, ok := c.value(i, j)
+		if !ok {
+			v = 0
 		}
-		col := c.seriesColor(j)
-		chartPath(dst, points, fade(col, c.seriesOpacity(j)), col, c.stroke)
-		if progress == 1 {
-			for i, p := range points {
-				if _, ok := c.value(i, j); !ok {
-					continue
-				}
-				ctx := c.context(i, j, p)
-				if c.dots || c.active == i {
-					c.paintDot(dst, ctx)
-				}
-				if c.labels {
-					c.paintLabel(dst, ctx)
-				}
-			}
+		f := clamp((v-c.geometry.lo)/(c.geometry.hi-c.geometry.lo), 0, 1)
+		points[i] = polarPoint(frame.center, frame.radius*f*progress, radarAngle(i, n))
+	}
+	col := c.seriesColor(j)
+	chartPath(dst, points, fade(col, c.seriesOpacity(j)), col, c.stroke)
+	if progress != 1 {
+		return
+	}
+	for i, p := range points {
+		if _, ok := c.value(i, j); !ok {
+			continue
+		}
+		ctx := c.context(i, j, p)
+		if c.dots || c.active == i {
+			c.paintDot(dst, ctx)
+		}
+		if c.labels {
+			c.paintLabel(dst, ctx)
 		}
 	}
 }

@@ -209,35 +209,7 @@ func (a *App) handleEvent(ev ggwd.Event) error {
 		return a.drain()
 	}
 	if _, ok := ev.(ggwd.StartEvent); ok {
-		a.running = true
-		if Appearance(appearance.Load()) != AppearanceSystem {
-			applyAppearance()
-		}
-		for i, w := range a.Windows() {
-			if err := w.open(); err != nil {
-				if i > 0 && remotedisplay.On() {
-					// The viewer shows the first; the app runs on without
-					// the others rather than not at all.
-					remoteNotice(fmt.Sprintf("window %q does not open", w.Title()))
-					continue
-				}
-				return err
-			}
-		}
-		// The menu bar and the status bar exist once the engine has a
-		// window. Rebuild a pre-Run menu set so signal changes made before
-		// StartEvent (or during Setup) are reflected in the installed menu.
-		nativemenu.OnSelect(a.menuSelected)
-		if a.menu != nil {
-			a.SetMenu(a.menu.items...)
-		}
-		for _, t := range a.trays {
-			t.install()
-		}
-		// A click on a notification that came before the windows, such
-		// as the one that launched the app, has somewhere to go now.
-		a.notificationsReady()
-		return nil
+		return a.onStart()
 	}
 	switch ev.(type) {
 	case ggwd.QuitEvent:
@@ -267,6 +239,41 @@ func (a *App) handleEvent(ev ggwd.Event) error {
 		a.Close()
 		return ggwd.Termination
 	}
+	return nil
+}
+
+// onStart opens the windows made before Run, then what needs a window to
+// exist first: the menu bar, the status bar and somewhere for a click on a
+// notification to go.
+func (a *App) onStart() error {
+	a.running = true
+	if Appearance(appearance.Load()) != AppearanceSystem {
+		applyAppearance()
+	}
+	for i, w := range a.Windows() {
+		if err := w.open(); err != nil {
+			if i > 0 && remotedisplay.On() {
+				// The viewer shows the first; the app runs on without
+				// the others rather than not at all.
+				remoteNotice(fmt.Sprintf("window %q does not open", w.Title()))
+				continue
+			}
+			return err
+		}
+	}
+	// The menu bar and the status bar exist once the engine has a
+	// window. Rebuild a pre-Run menu set so signal changes made before
+	// StartEvent (or during Setup) are reflected in the installed menu.
+	nativemenu.OnSelect(a.menuSelected)
+	if a.menu != nil {
+		a.SetMenu(a.menu.items...)
+	}
+	for _, t := range a.trays {
+		t.install()
+	}
+	// A click on a notification that came before the windows, such
+	// as the one that launched the app, has somewhere to go now.
+	a.notificationsReady()
 	return nil
 }
 
@@ -379,6 +386,15 @@ func (a *App) forgetClosed() {
 
 // eventWindow is the window ev is for, or nil for an event that has none.
 func eventWindow(ev ggwd.Event) *ggwd.Window {
+	if nw := windowEventWindow(ev); nw != nil {
+		return nw
+	}
+	return inputEventWindow(ev)
+}
+
+// windowEventWindow is the window ev is for when ev is about the window
+// itself: a frame, its placement, focus or state, or its closing.
+func windowEventWindow(ev ggwd.Event) *ggwd.Window {
 	switch ev := ev.(type) {
 	case ggwd.FrameEvent:
 		return ev.Window
@@ -394,6 +410,14 @@ func eventWindow(ev ggwd.Event) *ggwd.Window {
 		return ev.Window
 	case ggwd.ClosedEvent:
 		return ev.Window
+	}
+	return nil
+}
+
+// inputEventWindow is the window ev is for when ev is input: keys, text,
+// the pointer, touches, or files dragged from the desktop.
+func inputEventWindow(ev ggwd.Event) *ggwd.Window {
+	switch ev := ev.(type) {
 	case ggwd.KeyEvent:
 		return ev.Window
 	case ggwd.TextEvent:

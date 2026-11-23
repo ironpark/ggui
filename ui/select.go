@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -428,15 +429,7 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		s.list.Width(max(w, least))
 		return s.popup.Layout(ggui.Constraints{MinW: w, MaxW: w, MinH: min(c.MaxH, max(c.MinH, minH)), MaxH: c.MaxH}, env)
 	}
-	// As wide as the widest option, so the field does not resize as the
-	// value changes, and never wider than the row wants unless told to.
-	widest := 0.0
-	for _, it := range s.items {
-		widest = max(widest, it.text.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env).W)
-	}
-	if s.placeholder != "" && index < 0 {
-		widest = max(widest, s.text.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env).W)
-	}
+	widest := s.widestLabel(c, env, index)
 	// The field holds its label, a gap and the chevron; the list under it,
 	// just as wide, holds the same label and the room for a check mark.
 	trail := s.chevronRoom(t)
@@ -454,6 +447,21 @@ func (s *SelectWidget[T]) chevronRoom(t *uitheme.Theme) float64 {
 	return menuGap(t) + t.IconSize + s.pad.Right
 }
 
+// widestLabel is the width of the widest option's label, or of the
+// placeholder while nothing is chosen: the field is as wide as that, so it
+// does not resize as the value changes, and never wider than the row wants
+// unless told to.
+func (s *SelectWidget[T]) widestLabel(c ggui.Constraints, env ggui.Env, index int) float64 {
+	widest := 0.0
+	for _, it := range s.items {
+		widest = max(widest, it.text.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env).W)
+	}
+	if s.placeholder != "" && index < 0 {
+		widest = max(widest, s.text.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env).W)
+	}
+	return widest
+}
+
 // selectHoverSlot keeps the field's hover fill easing across rebuilds.
 var selectHoverSlot = ggui.NewSlot[*ggui.Motion]("select hover")
 
@@ -468,7 +476,7 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	radius := s.radius(t)
 	// On a dark theme the field lightens under the pointer.
 	fill := t.Input
-	if hover := ease(dst, s.theme, s.Anchor(r), selectHoverSlot, pick(s.Hovered && !inert && isDark(t.Bg), 1.0, 0.0), s.motion); hover > 0 {
+	if hover := controlkit.Ease(dst, s.theme, s.Anchor(r), selectHoverSlot, pick(s.Hovered && !inert && controlkit.IsDark(t.Bg), 1.0, 0.0), s.motion); hover > 0 {
 		fill = mix(fill, fade(t.InputBorder, .5), hover)
 	}
 	// The border keeps the InputBorder while the list is open or the field
@@ -476,7 +484,7 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	// below, as shadcn's focus-visible:border-ring.
 	border := t.InputBorder
 	if s.shownInvalid {
-		border = pick(isDark(t.Bg), fade(t.Destructive, .5), t.Destructive)
+		border = pick(controlkit.IsDark(t.Bg), fade(t.Destructive, .5), t.Destructive)
 	}
 	muted := t.MutedFg
 	if inert {
@@ -489,24 +497,14 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	if sides.Any() {
 		radius = t.Radius
 		s.box.Fill(nil).Border(0, nil)
-		paintJoinedBox(dst, r, radius, sides, fill, t.BorderWidth, border)
-		ring := joinedFocus{on: true, r: r, radius: radius, sides: sides, width: t.BorderWidth}
-		switch {
-		case inert:
-			ring.on = false
-		case s.shownInvalid:
-			ring.line, ring.halo = border, t.Halo(fieldRing(t, true))
-		case s.Focused && s.FocusVisible:
-			ring.line, ring.halo = t.Ring, t.Halo(t.Ring)
-		default:
-			ring.on = false
-		}
-		if g, ok := dst.Enclosing().(*ButtonGroupWidget); ok && ring.on {
-			g.ring(ring)
+		shape := joinedBox{rect: r, radius: radius, sides: sides}
+		paintJoinedBox(dst, shape, fill, t.BorderWidth, border)
+		if !inert {
+			s.ringJoined(dst, shape, border)
 		}
 	} else {
 		if s.shownInvalid && !inert {
-			fieldHalo(dst, t, r, radius, fieldRing(t, true))
+			controlkit.FieldHalo(dst, t, r, radius, fieldRing(t, true))
 		}
 		s.box.Fill(fill).Border(t.BorderWidth, border)
 	}
@@ -519,10 +517,30 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Clip(r).Paint(s.text, ggui.Rct(ggui.Pt(r.Origin.X+s.pad.Left, r.Origin.Y+(r.Size.H-s.textSize.H)/2), s.textSize))
 		// The chevron is muted and points down whether or not the list is open.
 		center := ggui.Pt(r.Origin.X+r.Size.W-s.pad.Right-t.IconSize/2, r.Origin.Y+r.Size.H/2)
-		chevron(dst, s.env, t, center, 2, muted)
+		controlkit.PaintIconAt(dst, s.env, controlkit.IconMark{Role: icons.ChevronDown, Center: center, Size: t.IconSize, Color: muted})
 	}
 	if !s.shownInvalid && !sides.Any() {
 		FocusRing(dst, &s.Interactive, Ring{Theme: t, Rect: r, Radius: radius, Color: t.Ring, Motion: s.motion})
+	}
+}
+
+// ringJoined hands the ButtonGroup the field is joined in the field's
+// ring, which the group draws over the neighbours painted after it: the
+// destructive ring while the field is invalid, the keyboard's while it
+// has visible focus, and none otherwise.
+func (s *SelectWidget[T]) ringJoined(dst *ggui.Canvas, shape joinedBox, border color.Color) {
+	t := s.theme
+	ring := joinedFocus{joinedBox: shape, on: true, width: t.BorderWidth}
+	switch {
+	case s.shownInvalid:
+		ring.line, ring.halo = border, t.Halo(fieldRing(t, true))
+	case s.Focused && s.FocusVisible:
+		ring.line, ring.halo = t.Ring, t.Halo(t.Ring)
+	default:
+		return
+	}
+	if g, ok := dst.Enclosing().(*ButtonGroupWidget); ok {
+		g.ring(ring)
 	}
 }
 
@@ -640,43 +658,57 @@ func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
 	if ev.Kind != ggui.KeyPress {
 		return
 	}
-	open := s.popup.IsOpen()
 	if ev.Key == ggui.KeySpace && s.search.active(ggui.Now(), selectTypeaheadReset) {
 		// A space in the middle of a search is part of it, as Base UI's
 		// typeahead has it; the text event that follows adds it.
 		return
 	}
 	if ggui.Activates(ev) {
-		if open && s.highlight >= 0 {
-			s.choose(s.highlight)
-			return
-		}
-		s.toggle()
-		if !open && s.highlight < 0 && len(s.options) > 0 {
-			// Opened from the keyboard with nothing chosen, the list
-			// starts on its first option.
-			s.highlight = stepIndex(-1, 1, len(s.options), s.enabled)
-		}
+		s.keyActivate()
 		return
 	}
 	switch ev.Key {
 	case ggui.KeyEscape:
 		s.popup.Hide()
 	case ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd:
-		if len(s.options) == 0 {
-			return
-		}
-		if open {
-			// The list does not wrap: Base UI's Select leaves loopFocus off.
-			s.highlight, _ = navIndexBounded(ev, navVertical, s.highlight, len(s.options), s.enabled)
-			s.viewport.reveal = true
-		} else if ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyArrowDown {
-			// An arrow opens the list on the chosen option, as Base UI's
-			// trigger does, or on the near end when nothing is chosen.
-			s.toggle()
-			if s.highlight < 0 {
-				s.highlight, _ = navIndex(ev, navVertical, -1, len(s.options), s.enabled)
-			}
+		s.keyMove(ev)
+	}
+}
+
+// keyActivate chooses the highlighted option of the open list, or else
+// opens or closes the list.
+func (s *SelectWidget[T]) keyActivate() {
+	open := s.popup.IsOpen()
+	if open && s.highlight >= 0 {
+		s.choose(s.highlight)
+		return
+	}
+	s.toggle()
+	if !open && s.highlight < 0 && len(s.options) > 0 {
+		// Opened from the keyboard with nothing chosen, the list
+		// starts on its first option.
+		s.highlight = controlkit.StepIndex(-1, 1, len(s.options), s.enabled)
+	}
+}
+
+// keyMove moves the highlight of the open list on an arrow, Home or End,
+// and opens the closed list on an arrow.
+func (s *SelectWidget[T]) keyMove(ev ggui.KeyEvent) {
+	if len(s.options) == 0 {
+		return
+	}
+	if s.popup.IsOpen() {
+		// The list does not wrap: Base UI's Select leaves loopFocus off.
+		s.highlight, _ = navIndexBounded(ev, navVertical, s.highlight, len(s.options), s.enabled)
+		s.viewport.reveal = true
+		return
+	}
+	if ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyArrowDown {
+		// An arrow opens the list on the chosen option, as Base UI's
+		// trigger does, or on the near end when nothing is chosen.
+		s.toggle()
+		if s.highlight < 0 {
+			s.highlight, _ = navIndex(ev, navVertical, -1, len(s.options), s.enabled)
 		}
 	}
 }
@@ -693,8 +725,8 @@ func (s *SelectWidget[T]) typeahead(text string) {
 	if start < 0 && open {
 		start = s.highlight
 	}
-	i := s.search.search(text, ggui.Now(), selectTypeaheadReset, len(s.options), start,
-		func(i int) string { return s.label(s.options[i]) }, s.enabled)
+	i := s.search.search(text, ggui.Now(), selectTypeaheadReset, start,
+		typeaheadRows{n: len(s.options), label: func(i int) string { return s.label(s.options[i]) }, available: s.enabled})
 	switch {
 	case i < 0:
 	case open:
@@ -732,298 +764,4 @@ func (s *SelectWidget[T]) HandlePointer(ev ggui.PointerEvent) bool {
 		return false
 	}
 	return s.Pointer(ev, s.toggle)
-}
-
-// selectAnchor is the popup's anchor: the field, painted by its Select.
-type selectAnchor[T comparable] struct{ s *SelectWidget[T] }
-
-func (a selectAnchor[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	s := a.s
-	size := s.textSize
-	if s.triggerContent != nil {
-		size = s.triggerSize
-	}
-	s.box.Size(c.MaxW, s.pad.Inflate(size).H)
-	return s.box.Layout(c, env)
-}
-
-func (a selectAnchor[T]) Paint(dst *ggui.Canvas, r ggui.Rect) { a.s.paintField(dst, r) }
-
-// selectItem is one option row in the open list.
-type selectItem[T comparable] struct {
-	ggui.Interactive
-	owner  *SelectWidget[T]
-	index  int
-	text   *widget.TextWidget
-	active bool // highlighted from the keyboard
-
-	pad      ggui.EdgeInsets
-	textSize ggui.Size
-	theme    *uitheme.Theme // the list's, which may be the menus' own
-}
-
-func (it *selectItem[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	it.Sync()
-	t := uitheme.Of(env)
-	it.theme = t
-	// The label starts at the row's padding, and the room at the right is
-	// the check mark's.
-	it.pad = t.ItemPad
-	it.pad.Right = menuMarkRoom(t)
-	it.text.Color(pick(it.IsInert(), t.Disabled(t.PopoverFg), t.PopoverFg)) // Paint swaps in AccentFg under the highlight
-	it.textSize = it.text.Layout(it.pad.Shrink(c).Loosen(), env)
-	return c.Constrain(it.pad.Inflate(it.textSize))
-}
-
-// Describe implements ggui.Describer: whether this option is the value.
-func (it *selectItem[T]) Describe() ggui.Node {
-	return ggui.Node{
-		Role:     ggui.RoleOption,
-		Name:     it.SemanticName(),
-		Selected: it.index == it.owner.selectedIndex,
-		Disabled: it.IsInert(),
-		Actions:  ggui.ActionSelect | ggui.ActionPress | ggui.ActionFocus,
-	}
-}
-
-func (it *selectItem[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	t := it.theme
-	dst.Describe(r, it)
-	ink := t.Disabled(t.PopoverFg)
-	if !it.IsInert() {
-		dst.HitPointer(r, it)
-		dst.HitCursor(r, ggui.CursorShapeDefault)
-		lit := it.Hovered || it.active
-		if lit {
-			dst.FillRoundRect(r, t.RadiusSm, t.Accent)
-		}
-		ink = pick(lit, t.AccentFg, t.PopoverFg)
-	}
-	it.text.Color(ink)
-	at := ggui.Pt(r.Origin.X+it.pad.Left, r.Origin.Y+(r.Size.H-it.textSize.H)/2)
-	dst.Clip(r).Paint(it.text, ggui.Rct(at, it.textSize))
-	if it.index == it.owner.selectedIndex {
-		// The mark is the row's own color, not the theme's accent.
-		center := ggui.Pt(r.Origin.X+r.Size.W-t.Space-t.IconSize/2, r.Origin.Y+r.Size.H/2)
-		paintIconAt(dst, it.owner.env, icons.Check, center, t.IconSize, ink, 0)
-	}
-}
-
-// Act implements ggui.Actor: choosing this option.
-func (it *selectItem[T]) Act(a ggui.Action) bool {
-	if it.IsInert() || (a.Kind != ggui.ActionSelect && a.Kind != ggui.ActionPress) {
-		return false
-	}
-	it.owner.choose(it.index)
-	return true
-}
-
-func (it *selectItem[T]) HandlePointer(ev ggui.PointerEvent) bool {
-	if it.IsInert() {
-		return ev.Kind != ggui.PointerScroll
-	}
-	if ev.Kind == ggui.PointerEnter || ev.Kind == ggui.PointerMove {
-		it.owner.highlight = it.index
-	}
-	return it.Pointer(ev, func() { it.owner.choose(it.index) })
-}
-
-// selectViewport measures the full list without changing its scroll position.
-// Popup first measures with unlimited height to choose above/below placement;
-// only the final painted viewport may clamp the scroll offset.
-type selectViewport[T comparable] struct {
-	owner    *SelectWidget[T]
-	column   *menuColumn
-	scroll   *widget.ScrollWidget
-	offset   *ggui.StateValue[float64]
-	reveal   bool
-	env      ggui.Env
-	natural  float64 // the height of the whole list
-	up, down selectScrollArrow[T]
-}
-
-func (v *selectViewport[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	v.env = env
-	natural := v.column.Layout(ggui.Constraints{MinW: c.MinW, MaxW: c.MaxW, MaxH: ggui.Unbounded}, env)
-	v.natural = natural.H
-	return c.Constrain(natural)
-}
-
-func (v *selectViewport[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	t := uitheme.Of(v.env)
-	// What a scroll arrow covers of the viewport: its strip starts at the
-	// panel's edge, in the padding around the list.
-	coverTop, coverBottom := selectArrowHeight(t)-t.PanelPad.Top, selectArrowHeight(t)-t.PanelPad.Bottom
-	limit := max(0, v.natural-r.Size.H)
-	offset := scrollEdge(ggui.Untrack(v.offset.Get), limit)
-	v.up.view, v.up.up, v.down.view = v, true, v
-	for _, a := range []*selectScrollArrow[T]{&v.up, &v.down} {
-		if a.due(offset, limit) {
-			offset = a.step(offset, limit, r.Size.H, pick(a.up, coverTop, coverBottom))
-			v.offset.Set(offset)
-		}
-	}
-	if v.reveal {
-		v.reveal = false
-		if i := v.owner.highlight; i >= 0 && i < len(v.owner.items) {
-			// The row is shown clear of the arrow that stands over the
-			// list's edge while there is more that way.
-			top, height := v.owner.rowSpan(i)
-			if top < offset+coverTop {
-				offset = scrollEdge(top-coverTop, limit)
-				v.offset.Set(offset)
-			} else if top+height > offset+r.Size.H-coverBottom {
-				offset = scrollEdge(top+height-r.Size.H+coverBottom, limit)
-				v.offset.Set(offset)
-			}
-		}
-	}
-	v.scroll.Layout(ggui.Constraints{MinW: r.Size.W, MaxW: r.Size.W, MinH: r.Size.H, MaxH: r.Size.H}, v.env)
-	dst.Paint(v.scroll, r)
-	v.up.paint(dst, t, r, offset > 0)
-	v.down.paint(dst, t, r, offset < limit)
-}
-
-// selectArrowHeight is the height of a scroll arrow: shadcn's py-1 around
-// a size-4 icon.
-func selectArrowHeight(t *uitheme.Theme) float64 { return t.IconSize + t.Space }
-
-// selectArrowPace is how often a list scrolls a row while the pointer is on
-// one of its arrows, as Base UI's SelectScrollArrow has it.
-const selectArrowPace = 40 * time.Millisecond
-
-// scrollEdge is offset kept within a list that scrolls as far as limit, and
-// brought to an end it is within a pixel of: Base UI's
-// normalizeScrollOffset, which is what decides whether an arrow shows.
-func scrollEdge(offset, limit float64) float64 {
-	const tolerance = 1
-	limit = max(limit, 0)
-	offset = clamp(offset, 0, limit)
-	switch {
-	case offset <= tolerance && limit-offset <= tolerance:
-		return pick(offset <= limit-offset, 0, limit)
-	case offset <= tolerance:
-		return 0
-	case limit-offset <= tolerance:
-		return limit
-	}
-	return offset
-}
-
-// selectScrollArrow is the chevron over the top or bottom edge of a list
-// with more options that way: shadcn's SelectScrollUpButton and
-// SelectScrollDownButton. The list scrolls a row at a time while the
-// pointer is moved onto one and stays there.
-type selectScrollArrow[T comparable] struct {
-	view  *selectViewport[T]
-	up    bool
-	at    ggui.Point // where the pointer was last seen on it
-	seen  bool
-	shown bool      // painted last: there is more that way
-	next  time.Time // when the list scrolls next, zero while it is not scrolling
-}
-
-// due reports whether the pointer has rested on the arrow long enough for
-// the next row, and asks for the frame that is.
-func (a *selectScrollArrow[T]) due(offset, limit float64) bool {
-	if a.next.IsZero() {
-		return false
-	}
-	if (a.up && offset <= 0) || (!a.up && offset >= limit) {
-		a.next = time.Time{}
-		return false
-	}
-	now := ggui.FrameTime()
-	due := !now.Before(a.next)
-	if due {
-		a.next = now.Add(selectArrowPace)
-	}
-	ggui.WakeAt(a.next)
-	return due
-}
-
-// step is the offset one row on from offset in the arrow's direction, in a
-// viewport height tall whose arrow covers cover of it: the row before the
-// first one wholly shown comes out from under the up arrow, and the row
-// after the last one from under the down arrow.
-func (a *selectScrollArrow[T]) step(offset, limit, height, cover float64) float64 {
-	const tolerance = 1
-	s := a.view.owner
-	n := len(s.items)
-	if n == 0 {
-		return pick(a.up, 0, limit)
-	}
-	if a.up {
-		first := 0
-		for i := range n {
-			if top, _ := s.rowSpan(i); top >= offset+cover-tolerance {
-				first = i
-				break
-			}
-		}
-		if first == 0 {
-			return 0
-		}
-		top, _ := s.rowSpan(first - 1)
-		return scrollEdge(top-cover, limit)
-	}
-	last := n - 1
-	for i := range n {
-		if top, h := s.rowSpan(i); top+h > offset+height-cover+tolerance {
-			last = max(0, i-1)
-			break
-		}
-	}
-	if last >= n-1 {
-		return limit
-	}
-	top, h := s.rowSpan(last + 1)
-	return scrollEdge(top+h-height+cover, limit)
-}
-
-// paint draws the arrow over its edge of the viewport r and takes the
-// pointer there, while shown.
-func (a *selectScrollArrow[T]) paint(dst *ggui.Canvas, t *uitheme.Theme, r ggui.Rect, shown bool) {
-	if a.shown = shown; !shown {
-		a.seen, a.next = false, time.Time{}
-		return
-	}
-	// The strip runs from the panel's edge, inside its border, over the
-	// padding and the first or last of the list.
-	pad, line, h := t.PanelPad, t.BorderWidth, selectArrowHeight(t)
-	panel := ggui.Rct(ggui.Pt(r.Origin.X-pad.Left+line, r.Origin.Y-pad.Top+line), ggui.Sz(r.Size.W+pad.Horizontal()-2*line, r.Size.H+pad.Vertical()-2*line))
-	strip := ggui.Rct(panel.Origin, ggui.Sz(panel.Size.W, h-line))
-	if !a.up {
-		strip.Origin.Y = panel.Origin.Y + panel.Size.H - strip.Size.H
-	}
-	dst.Clip(strip).FillRoundRect(panel, max(t.Radius-line, 0), t.Popover)
-	dst.HitPointer(strip, a)
-	dst.HitCursor(strip, ggui.CursorShapeDefault)
-	center := ggui.Pt(strip.Origin.X+strip.Size.W/2, pick(a.up, panel.Origin.Y-line+h/2, panel.Origin.Y+panel.Size.H+line-h/2))
-	paintIconAt(dst, a.view.env, pick(a.up, icons.ChevronUp, icons.ChevronDown), center, t.IconSize, t.PopoverFg, 0)
-}
-
-// HandlePointer implements ggui.PointerHandler: the pointer moving on the
-// arrow starts the scroll and leaving it stops it. An arrow that appears
-// under a pointer at rest does nothing until it moves, so a list opened
-// over its trigger does not run off.
-func (a *selectScrollArrow[T]) HandlePointer(ev ggui.PointerEvent) bool {
-	switch ev.Kind {
-	case ggui.PointerEnter:
-		a.at, a.seen = ev.Pos, true
-	case ggui.PointerMove:
-		if a.seen && ev.Pos != a.at {
-			a.view.owner.highlight = -1
-			if a.next.IsZero() {
-				a.next = ggui.FrameTime().Add(selectArrowPace)
-				ggui.WakeAt(a.next)
-			}
-		}
-		a.at, a.seen = ev.Pos, true
-	case ggui.PointerExit:
-		a.seen, a.next = false, time.Time{}
-	case ggui.PointerScroll:
-		return false
-	}
-	return true
 }

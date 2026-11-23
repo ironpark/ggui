@@ -113,12 +113,7 @@ func post(n Notification) error {
 	fd.Unlock()
 	r, err := conn.call(fdService, fdPath, fdService, "Notify", fdNotify, notifyArgs(n, fo)...)
 	if err != nil {
-		fd.Lock()
-		fd.inFlight--
-		if fd.inFlight == 0 {
-			fd.early = nil
-		}
-		fd.Unlock()
+		failPost()
 		return err
 	}
 	var num uint32
@@ -126,9 +121,31 @@ func post(n Notification) error {
 		num, _ = r.body[0].(uint32)
 	}
 	sent := fdSent{id: n.ID, data: n.Data, foreground: foregroundIDs(n.Actions)}
-	var early *fdEarly
+	if early := finishPost(fo, n, num, sent); early != nil {
+		for _, key := range early.actions {
+			deliverFDAction(sent, key)
+		}
+	}
+	return nil
+}
+
+// failPost releases a Notify call that failed.
+func failPost() {
 	fd.Lock()
 	fd.inFlight--
+	if fd.inFlight == 0 {
+		fd.early = nil
+	}
+	fd.Unlock()
+}
+
+// finishPost records the outcome of a Notify call under fd's lock and
+// returns the early signals it consumed.
+func finishPost(fo fdOptions, n Notification, num uint32, sent fdSent) *fdEarly {
+	fd.Lock()
+	defer fd.Unlock()
+	fd.inFlight--
+	var early *fdEarly
 	if fd.early != nil {
 		early = fd.early[num]
 		delete(fd.early, num)
@@ -149,13 +166,7 @@ func post(n Notification) error {
 		}
 		fd.sent[num] = sent
 	}
-	fd.Unlock()
-	if early != nil {
-		for _, key := range early.actions {
-			deliverFDAction(sent, key)
-		}
-	}
-	return nil
+	return early
 }
 
 func remove(id string) {
@@ -191,7 +202,20 @@ func onSignal(m *message) {
 		return
 	}
 	num, _ := m.body[0].(uint32)
+	s, ok := trackSignal(m, num)
+	if m.member != "ActionInvoked" || !ok {
+		return
+	}
+	key, _ := m.body[1].(string)
+	deliverFDAction(s, key)
+}
+
+// trackSignal records m's signal under fd's lock: a sent notification
+// that closed is forgotten, and a signal that came before its answer is
+// kept as early. It returns the sent notification m names, if any.
+func trackSignal(m *message, num uint32) (fdSent, bool) {
 	fd.Lock()
+	defer fd.Unlock()
 	s, ok := fd.sent[num]
 	if ok {
 		if m.member == "NotificationClosed" {
@@ -217,12 +241,7 @@ func onSignal(m *message) {
 			}
 		}
 	}
-	fd.Unlock()
-	if m.member != "ActionInvoked" || !ok {
-		return
-	}
-	key, _ := m.body[1].(string)
-	deliverFDAction(s, key)
+	return s, ok
 }
 
 func deliverFDAction(s fdSent, key string) {

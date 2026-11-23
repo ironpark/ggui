@@ -71,40 +71,63 @@ func parseCommand(line []byte, debug bool) (command, error) {
 	if err := json.Unmarshal(line, &c); err != nil {
 		return command{}, fmt.Errorf("a control line that is not a JSON object: %w", err)
 	}
+	if err := c.checkType(debug); err != nil {
+		return command{}, err
+	}
+	if err := c.checkDebug(); err != nil {
+		return command{}, err
+	}
+	return c, nil
+}
+
+// checkType reports whether c's type is a known command, and whether a debug
+// command is allowed.
+func (c command) checkType(debug bool) error {
 	switch c.Type {
 	case cmdBuilding, cmdBuildFailed, cmdAppExited, cmdClear, cmdQuit:
-		return c, nil
+		return nil
 	case cmdDebugDump, cmdDebugWindow, cmdDebugInput:
 		if !debug {
-			return command{}, fmt.Errorf("%s needs -debug", c.Type)
+			return fmt.Errorf("%s needs -debug", c.Type)
 		}
+		return nil
 	case "":
-		return command{}, errors.New("a control line with no type")
+		return errors.New("a control line with no type")
 	default:
-		return command{}, fmt.Errorf("an unknown control command %q", c.Type)
+		return fmt.Errorf("an unknown control command %q", c.Type)
 	}
+}
+
+// checkDebug checks the fields of a debug command.
+func (c command) checkDebug() error {
 	switch c.Type {
 	case cmdDebugDump:
 		if c.Path == "" {
-			return command{}, errors.New("debug-dump with no path")
+			return errors.New("debug-dump with no path")
 		}
 	case cmdDebugWindow:
-		known := false
-		for _, a := range windowActions {
-			known = known || a == c.Action
-		}
-		if !known {
-			return command{}, fmt.Errorf("debug-window: an action of %q, not one of %s", c.Action, strings.Join(windowActions, ", "))
-		}
-		if c.Action == "resize" && (c.Width < 1 || c.Height < 1) {
-			return command{}, errors.New("debug-window: resize to no size")
-		}
+		return c.checkWindowAction()
 	case cmdDebugInput:
 		if c.Input == nil {
-			return command{}, errors.New("debug-input with no input")
+			return errors.New("debug-input with no input")
 		}
 	}
-	return c, nil
+	return nil
+}
+
+// checkWindowAction checks a debug-window command's action and size.
+func (c command) checkWindowAction() error {
+	known := false
+	for _, a := range windowActions {
+		known = known || a == c.Action
+	}
+	if !known {
+		return fmt.Errorf("debug-window: an action of %q, not one of %s", c.Action, strings.Join(windowActions, ", "))
+	}
+	if c.Action == "resize" && (c.Width < 1 || c.Height < 1) {
+		return errors.New("debug-window: resize to no size")
+	}
+	return nil
 }
 
 // event is one line the viewer writes.

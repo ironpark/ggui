@@ -390,22 +390,28 @@ func (c *CommandWidget) key(ev ggui.KeyEvent) bool {
 			// In a combobox these move the caret in its input.
 			return false
 		}
-		fallthrough
+		c.moveHighlight(ev)
+		return true
 	case ggui.KeyArrowDown, ggui.KeyArrowUp:
-		c.filter()
-		at := slices.Index(c.matched, c.highlight)
-		next, _ := navIndex(ev, navVertical, at, len(c.matched), func(j int) bool { return !c.entries[c.matched[j]].disabled })
-		if !c.loop && !c.menuRows && at >= 0 && (ev.Key == ggui.KeyArrowDown && next < at || ev.Key == ggui.KeyArrowUp && next > at) {
-			// Past either end the highlight stays where it is.
-			next = at
-		}
-		if next >= 0 {
-			c.highlight = c.matched[next]
-			c.revealPending = true
-		}
+		c.moveHighlight(ev)
 		return true
 	}
 	return false
+}
+
+// moveHighlight moves the highlight to the enabled match ev steps to.
+func (c *CommandWidget) moveHighlight(ev ggui.KeyEvent) {
+	c.filter()
+	at := slices.Index(c.matched, c.highlight)
+	next, _ := navIndex(ev, navVertical, at, len(c.matched), func(j int) bool { return !c.entries[c.matched[j]].disabled })
+	if !c.loop && !c.menuRows && at >= 0 && (ev.Key == ggui.KeyArrowDown && next < at || ev.Key == ggui.KeyArrowUp && next > at) {
+		// Past either end the highlight stays where it is.
+		next = at
+	}
+	if next >= 0 {
+		c.highlight = c.matched[next]
+		c.revealPending = true
+	}
 }
 
 // Layout implements ggui.Widget.
@@ -568,24 +574,7 @@ func (r *commandResults) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		}
 	}
 	if actions == 0 {
-		// Nothing matched: a line of body text 24 below the search, and as
-		// far above the panel's own padding, with no group around it; a
-		// combobox's is muted and 8 from either side.
-		if r.empty == nil {
-			r.empty = widget.Text("")
-		}
-		r.empty.Content(c.emptyLabel())
-		room := t.Space * 6
-		if c.menuRows {
-			r.empty.Color(t.MutedFg)
-			room = t.Space * 2
-		}
-		r.emptySize = r.empty.Layout(cs.Loosen(), env)
-		height := r.emptySize.H + room - t.PanelPad.Vertical()
-		if c.stable {
-			height = max(height, c.height)
-		}
-		return cs.Constrain(ggui.Sz(bounded(cs.MaxW, r.emptySize.W), height))
+		return r.layoutEmpty(cs, env, t)
 	}
 	// Each group has a panel's padding above and below its rows, so two
 	// groups are that twice apart, with a separator, if any, between.
@@ -621,6 +610,29 @@ func (r *commandResults) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	return cs.Constrain(ggui.Sz(bounded(cs.MaxW, w), h))
 }
+
+// layoutEmpty lays out what shows when nothing matched: a line of body
+// text 24 below the search, and as far above the panel's own padding, with
+// no group around it; a combobox's is muted and 8 from either side.
+func (r *commandResults) layoutEmpty(cs ggui.Constraints, env ggui.Env, t *uitheme.Theme) ggui.Size {
+	c := r.owner
+	if r.empty == nil {
+		r.empty = widget.Text("")
+	}
+	r.empty.Content(c.emptyLabel())
+	room := t.Space * 6
+	if c.menuRows {
+		r.empty.Color(t.MutedFg)
+		room = t.Space * 2
+	}
+	r.emptySize = r.empty.Layout(cs.Loosen(), env)
+	height := r.emptySize.H + room - t.PanelPad.Vertical()
+	if c.stable {
+		height = max(height, c.height)
+	}
+	return cs.Constrain(ggui.Sz(bounded(cs.MaxW, r.emptySize.W), height))
+}
+
 func (r *commandResults) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	c := r.owner
 	if len(r.rows) == 0 {

@@ -14,19 +14,6 @@ import (
 // when the theme changes), they need no renderer, so their geometry is
 // tested without one, and they come out the same on every machine.
 
-// roundRectCov returns how much of the pixel centred on (px, py) the
-// rectangle from (x0, y0) to (x1, y1), its corners rounded by r, covers:
-// 1 inside, 0 outside, a ramp one pixel wide across the edge.
-func roundRectCov(px, py, x0, y0, x1, y1, r float64) float32 {
-	cx, cy := (x0+x1)/2, (y0+y1)/2
-	hw, hh := (x1-x0)/2, (y1-y0)/2
-	r = max(min(r, hw, hh), 0)
-	qx := math.Abs(px-cx) - hw + r
-	qy := math.Abs(py-cy) - hh + r
-	d := math.Hypot(max(qx, 0), max(qy, 0)) + min(max(qx, qy), 0) - r
-	return float32(clamp01(0.5 - d))
-}
-
 // circleCov returns how much of the pixel centred on (px, py) a circle
 // covers.
 func circleCov(px, py, cx, cy, r float64) float32 {
@@ -137,6 +124,32 @@ func boxLine(line []float32, stride, n, r int, tmp []float32) {
 
 // pt is a point in device pixels.
 type pt struct{ x, y float64 }
+
+// bounds is a rectangle in device pixels, its corners at (x0, y0) and
+// (x1, y1).
+type bounds struct{ x0, y0, x1, y1 float64 }
+
+func boundsOf(r image.Rectangle) bounds {
+	return bounds{float64(r.Min.X), float64(r.Min.Y), float64(r.Max.X), float64(r.Max.Y)}
+}
+
+// inset moves each edge of b in by d.
+func (b bounds) inset(d float64) bounds {
+	return bounds{b.x0 + d, b.y0 + d, b.x1 - d, b.y1 - d}
+}
+
+// roundRectCov returns how much of the pixel centred on (px, py) the
+// rounded rectangle r covers: 1 inside, 0 outside, a ramp one pixel
+// wide across the edge.
+func roundRectCov(px, py float64, r bounds, radius float64) float32 {
+	cx, cy := (r.x0+r.x1)/2, (r.y0+r.y1)/2
+	hw, hh := (r.x1-r.x0)/2, (r.y1-r.y0)/2
+	radius = max(min(radius, hw, hh), 0)
+	qx := math.Abs(px-cx) - hw + radius
+	qy := math.Abs(py-cy) - hh + radius
+	d := math.Hypot(max(qx, 0), max(qy, 0)) + min(max(qx, qy), 0) - radius
+	return float32(clamp01(0.5 - d))
+}
 
 // fillPolys fills each polygon into dst, a coverage mask, at full
 // opacity, antialiased; where they overlap they unite.

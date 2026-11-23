@@ -86,45 +86,57 @@ func Assemble(t Tree) (dir string, warnings []string, err error) {
 		return "", nil, err
 	}
 
-	hasIcon := t.Icon != ""
-	if hasIcon {
-		name := t.IconName
-		if name == "" {
-			name = t.Icon
-		}
-		icons, skipped, err := Icons(t.Icon)
+	if t.Icon != "" {
+		iconWarnings, err := installIcons(t, write)
 		if err != nil {
-			return "", nil, fmt.Errorf("icon %s: %w", name, err)
+			return "", nil, err
 		}
-		for _, ic := range icons {
-			if err := write(iconPath(t.App, ic.Size), ic.PNG, 0o644); err != nil {
-				return "", nil, err
-			}
-		}
-		if len(skipped) > 0 {
-			var s []string
-			for _, n := range skipped {
-				s = append(s, strconv.Itoa(n))
-			}
-			warnings = append(warnings, fmt.Sprintf("icon %s is smaller than %s pixels, so the hicolor theme has no icon at that size, and desktops scale a smaller one up", name, strings.Join(s, ", ")))
-		}
-		if t.SVG != "" {
-			svg, err := os.ReadFile(t.SVG)
-			if err != nil {
-				return "", nil, err
-			}
-			if err := write(svgPath(t.App), svg, 0o644); err != nil {
-				return "", nil, err
-			}
-		}
+		warnings = append(warnings, iconWarnings...)
 	}
-	if err := write(desktopPath(t.App), DesktopEntry(t.App, hasIcon), 0o644); err != nil {
+	if err := write(desktopPath(t.App), DesktopEntry(t.App, t.Icon != ""), 0o644); err != nil {
 		return "", nil, err
 	}
 	if err := write(metainfoPath(t.App), Metainfo(t.App), 0o644); err != nil {
 		return "", nil, err
 	}
 	return dir, warnings, nil
+}
+
+// installIcons writes the hicolor PNG sizes for t's icon, the SVG beside
+// them when one is set, and returns a warning when the source is too
+// small for some sizes.
+func installIcons(t Tree, write func(string, []byte, fs.FileMode) error) ([]string, error) {
+	name := t.IconName
+	if name == "" {
+		name = t.Icon
+	}
+	icons, skipped, err := Icons(t.Icon)
+	if err != nil {
+		return nil, fmt.Errorf("icon %s: %w", name, err)
+	}
+	for _, ic := range icons {
+		if err := write(iconPath(t.App, ic.Size), ic.PNG, 0o644); err != nil {
+			return nil, err
+		}
+	}
+	var warnings []string
+	if len(skipped) > 0 {
+		sizes := make([]string, len(skipped))
+		for i, n := range skipped {
+			sizes[i] = strconv.Itoa(n)
+		}
+		warnings = append(warnings, fmt.Sprintf("icon %s is smaller than %s pixels, so the hicolor theme has no icon at that size, and desktops scale a smaller one up", name, strings.Join(sizes, ", ")))
+	}
+	if t.SVG != "" {
+		svg, err := os.ReadFile(t.SVG)
+		if err != nil {
+			return nil, err
+		}
+		if err := write(svgPath(t.App), svg, 0o644); err != nil {
+			return nil, err
+		}
+	}
+	return warnings, nil
 }
 
 // Icon is one size of the icon, as a PNG file.

@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
 	"github.com/ironpark/ggui/ui/icons/lucide"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -453,15 +454,26 @@ func (t *ToasterWidget) paintNotices(dst *ggui.Canvas) {
 		index++
 	}
 	clip := dst.Clip(ggui.Rct(ggui.Pt(0, 0), screen))
+	spec := noticeSpec{theme: theme, now: now, left: left, width: width, gap: step}
 	for _, e := range t.entries {
-		t.paintNotice(clip, e, theme, now, left, width, step)
+		t.paintNotice(clip, e, spec)
 	}
+}
+
+// noticeSpec is what every notice of one paint is drawn with: the theme,
+// the frame's time, the left edge and the width of the stack, and the gap
+// between two notices spread out.
+type noticeSpec struct {
+	theme            *uitheme.Theme
+	now              time.Time
+	left, width, gap float64
 }
 
 // paintNotice draws one notice where its motions have it: the surface
 // scaled about the middle of its near edge, and the content, when it shows
 // at all, scaled and faded with it.
-func (t *ToasterWidget) paintNotice(dst *ggui.Canvas, e *toastEntry, theme *uitheme.Theme, now time.Time, left, width, gap float64) {
+func (t *ToasterWidget) paintNotice(dst *ggui.Canvas, e *toastEntry, spec noticeSpec) {
+	theme, now := spec.theme, spec.now
 	screen := dst.Size()
 	margin := theme.Space * 2
 	scale, height := e.scale.Value(now), e.height.Value(now)
@@ -470,18 +482,18 @@ func (t *ToasterWidget) paintNotice(dst *ggui.Canvas, e *toastEntry, theme *uith
 	top := t.position.top()
 	// box is the notice before it is scaled, about the middle of its
 	// near edge, into shown.
-	box := ggui.Rct(ggui.Pt(left, screen.H-margin-near-height), ggui.Sz(width, height))
-	about := ggui.Pt(left+width/2, box.Origin.Y+height)
+	box := ggui.Rct(ggui.Pt(spec.left, screen.H-margin-near-height), ggui.Sz(spec.width, height))
+	about := ggui.Pt(spec.left+spec.width/2, box.Origin.Y+height)
 	if top {
 		box.Origin.Y = margin + near
 		about.Y = box.Origin.Y
 	}
-	shown := ggui.Rct(ggui.Pt(about.X-width*scale/2, about.Y-pick(top, 0, height*scale)), ggui.Sz(width*scale, height*scale))
+	shown := ggui.Rct(ggui.Pt(about.X-spec.width*scale/2, about.Y-pick(top, 0, height*scale)), ggui.Sz(spec.width*scale, height*scale))
 	if scale <= 0 {
 		return
 	}
 	radius := theme.RadiusXl * scale
-	paintShadows(dst, shown, radius, theme.OverlayShadow, theme.OverlayContact)
+	controlkit.PaintShadows(dst, shown, radius, theme.OverlayShadow, theme.OverlayContact)
 	dst.FillRoundRect(shown, radius, theme.Popover)
 	dst.StrokeRoundRect(shown, radius, theme.BorderWidth, theme.Border)
 	e.hit = ggui.Rect{}
@@ -491,9 +503,9 @@ func (t *ToasterWidget) paintNotice(dst *ggui.Canvas, e *toastEntry, theme *uith
 		// go of the stack.
 		e.hit = shown
 		if t.expanded {
-			e.hit.Size.H += gap
+			e.hit.Size.H += spec.gap
 			if top {
-				e.hit.Origin.Y -= gap
+				e.hit.Origin.Y -= spec.gap
 			}
 		}
 		dst.HitPointer(e.hit, e)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -77,13 +78,13 @@ func (m *sortMark) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (m *sortMark) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t, center := m.theme, r.Center()
 	if m.state.Column == m.id {
-		paintIconAt(dst, m.env, pick(m.state.Descending, icons.ChevronDown, icons.ChevronUp), center, t.IconSize, t.Fg, 0)
+		controlkit.PaintIconAt(dst, m.env, controlkit.IconMark{Role: pick(m.state.Descending, icons.ChevronDown, icons.ChevronUp), Center: center, Size: t.IconSize, Color: t.Fg})
 		return
 	}
 	// The two chevrons of an up-down icon, drawn from the roles there are.
 	size, shift := t.IconSize*5/6, t.IconSize*.23
-	paintIconAt(dst, m.env, icons.ChevronUp, center.Add(ggui.Pt(0, -shift)), size, t.MutedFg, 0)
-	paintIconAt(dst, m.env, icons.ChevronDown, center.Add(ggui.Pt(0, shift)), size, t.MutedFg, 0)
+	controlkit.PaintIconAt(dst, m.env, controlkit.IconMark{Role: icons.ChevronUp, Center: center.Add(ggui.Pt(0, -shift)), Size: size, Color: t.MutedFg})
+	controlkit.PaintIconAt(dst, m.env, controlkit.IconMark{Role: icons.ChevronDown, Center: center.Add(ggui.Pt(0, shift)), Size: size, Color: t.MutedFg})
 }
 
 // withMutedText draws the text widgets under child in the theme's muted
@@ -267,7 +268,7 @@ func (m *TableModel[T, K]) SetColumnVisible(id string, visible bool) {
 	if !found || (!visible && m.ColumnVisible(id) && count <= 1) {
 		return
 	}
-	m.hidden.Set(withKey(m.hidden.Get(), id, !visible))
+	m.hidden.Set(controlkit.WithKey(m.hidden.Get(), id, !visible))
 }
 
 // IsSelected reports selection by row key.
@@ -275,7 +276,7 @@ func (m *TableModel[T, K]) IsSelected(key K) bool { return m.selected.Get()[key]
 
 // Select updates one key without disturbing other pages.
 func (m *TableModel[T, K]) Select(key K, selected bool) {
-	m.selected.Set(withKey(m.selected.Get(), key, selected))
+	m.selected.Set(controlkit.WithKey(m.selected.Get(), key, selected))
 }
 
 // SelectPage selects or clears only rows on the current filtered page.
@@ -320,89 +321,106 @@ func DataTable[T any, K comparable](m *TableModel[T, K]) ggui.Widget {
 	return ggui.Component(func() ggui.Widget {
 		// What the table says of itself is worded at layout, in the
 		// Strings it is laid out under: see localize.
-		search := TextField(ggui.Bind(m.Query, m.SetQuery))
-		entries := make([]ggui.Widget, 0, len(m.cols))
-		items := make([]*MenuItemWidget, 0, len(m.cols))
-		titles := make([]string, 0, len(m.cols))
-		for _, c := range m.cols {
-			title := c.Title
-			if title == "" {
-				title = c.ID
-			}
-			item := MenuItem(title, func() { m.SetColumnVisible(c.ID, !m.ColumnVisible(c.ID)) }).
-				BindChecked(ggui.Derived(func() bool { return m.ColumnVisible(c.ID) }))
-			entries = append(entries, item)
-			items, titles = append(items, item), append(titles, title)
-		}
-		// shadcn opens the column menu with align="end", under the button's
-		// trailing edge, so it does not run past the table's.
-		columns := Menu("", entries...)
-		columns.button.TrailingIcon(Icon(icons.ChevronDown))
-		columns.Popup().Align(widget.PopupEnd)
-		// shadcn puts the filter above the table's border, so this is not
-		// the Table's own Toolbar, which sits inside it.
-		toolbar := localize(widget.Row(widget.Expanded(search), columns).Gap(12), func(s *Strings) {
-			search.Placeholder(s.FilterRowsHint).Name(s.FilterRows)
-			columns.button.relabel(s.Columns)
-			for i, item := range items {
-				item.SetName(fmt.Sprintf(s.ShowColumnFormat, titles[i]))
-			}
-		})
-		isEmpty := ggui.Map(m.visible, func(rows []T) bool { return len(rows) == 0 })
-		page := ggui.Derived(m.pageSelection)
-		table := ggui.Reactive(func() ggui.Widget {
-			cols := []Column[T]{Col("", func(row ggui.Readable[T]) ggui.Widget {
-				key := m.key(ggui.Untrack(row.Get))
-				box := Checkbox(ggui.Bind(func() bool { return m.IsSelected(key) }, func(v bool) { m.Select(key, v) }), "")
-				return localize(box, func(s *Strings) { box.Name(fmt.Sprintf(s.SelectRowFormat, key)) })
-			}).W(40)}
-			all := Checkbox(ggui.Bind(func() bool { return page.Get().all }, m.SelectPage), "").
-				BindIndeterminate(ggui.Map(page, func(p pageSelection) bool { return p.mixed })).BindDisabled(isEmpty)
-			cols[0].Header = localize(all, func(s *Strings) { all.Name(s.SelectPage) })
-			// Only visibility rebuilds the table. Sorting and data changes update its
-			// keyed rows; heading labels read the sort state independently.
-			for _, c := range m.cols {
-				if m.ColumnVisible(c.ID) {
-					if c.Compare != nil {
-						c.Header = sortHeading(c.Title, m.sort, c.ID, func() { m.ToggleSort(c.ID) })
-					}
-					cols = append(cols, c)
-				}
-			}
-			t := Table(m.visible, m.key, cols...).RowHeight(48).BindSelectedRows(m.selected)
-			empty := ggui.View(isEmpty, func(empty bool) ggui.Widget {
-				if empty {
-					return widget.Box().Height(96)
-				}
-				return widget.Box()
-			})
-			box := widget.Box(widget.Column(t, empty).Align(widget.AlignStretch))
-			minWidth := 0.0
-			for _, c := range cols {
-				minWidth += cmp.Or(c.Width, 160)
-			}
-			message := widget.Text("")
-			return &dataTableFrame{minWidth: max(560, minWidth), box: box, scroll: widget.Scroll(box).Horizontal(), isEmpty: isEmpty, text: message, message: widget.Center(message)}
-		})
-		// The summary and the page read the model as the footer is worded,
-		// at layout, as widget.TextOf would.
-		summary := widget.Text("")
-		pageLabel := widget.Text("").NoWrap()
-		previous := Button("", func() { m.SetPage(m.Page() - 1) }).Outline().Size(ButtonSmall).BindDisabled(ggui.Derived(func() bool { return m.Page() <= 1 }))
-		next := Button("", func() { m.SetPage(m.Page() + 1) }).Outline().Size(ButtonSmall).BindDisabled(ggui.Derived(func() bool { return m.Page() >= m.PageCount() }))
-		sizes := Select(ggui.Bind(m.PageSize, m.SetPageSize)).Options([]int{5, 10, 20, 50})
-		size := widget.Box(sizes).Width(72)
-		sizeLabel := widget.Text("").NoWrap()
-		footer := localize(widget.Wrap(withMutedText(summary), widget.Row(ggui.WithEnv(tableLabelText, sizeLabel), size).Gap(8).Align(widget.AlignCenter), pageLabel, widget.Row(previous, next).Gap(8)).Gap(12).Align(widget.AlignCenter), func(s *Strings) {
-			rows := m.filtered.Get()
-			summary.Content(fmt.Sprintf(s.RowsSelectedFormat, m.countSelected(rows), len(rows)))
-			pageLabel.Content(fmt.Sprintf(s.PageOfFormat, m.Page(), m.PageCount()))
-			previous.relabel(s.Previous)
-			next.relabel(s.Next)
-			sizes.Name(s.RowsPerPage)
-			sizeLabel.Content(s.RowsPerPage)
-		})
+		toolbar := dataTableToolbar(m)
+		table := dataTableBody(m)
+		footer := dataTableFooter(m)
 		return widget.Column(toolbar, table, footer).Gap(16).Align(widget.AlignStretch)
+	})
+}
+
+// dataTableToolbar is the filter field and the column visibility menu of a
+// DataTable. shadcn puts the filter above the table's border, so this is
+// not the Table's own Toolbar, which sits inside it.
+func dataTableToolbar[T any, K comparable](m *TableModel[T, K]) ggui.Widget {
+	search := TextField(ggui.Bind(m.Query, m.SetQuery))
+	entries := make([]ggui.Widget, 0, len(m.cols))
+	items := make([]*MenuItemWidget, 0, len(m.cols))
+	titles := make([]string, 0, len(m.cols))
+	for _, c := range m.cols {
+		title := c.Title
+		if title == "" {
+			title = c.ID
+		}
+		item := MenuItem(title, func() { m.SetColumnVisible(c.ID, !m.ColumnVisible(c.ID)) }).
+			BindChecked(ggui.Derived(func() bool { return m.ColumnVisible(c.ID) }))
+		entries = append(entries, item)
+		items, titles = append(items, item), append(titles, title)
+	}
+	// shadcn opens the column menu with align="end", under the button's
+	// trailing edge, so it does not run past the table's.
+	columns := Menu("", entries...)
+	columns.button.TrailingIcon(Icon(icons.ChevronDown))
+	columns.Popup().Align(widget.PopupEnd)
+	return localize(widget.Row(widget.Expanded(search), columns).Gap(12), func(s *Strings) {
+		search.Placeholder(s.FilterRowsHint).Name(s.FilterRows)
+		columns.button.relabel(s.Columns)
+		for i, item := range items {
+			item.SetName(fmt.Sprintf(s.ShowColumnFormat, titles[i]))
+		}
+	})
+}
+
+// dataTableBody is the table of a DataTable: a column of row checkboxes
+// under one for the page, then the visible columns, with sortable
+// headings for those that compare.
+func dataTableBody[T any, K comparable](m *TableModel[T, K]) ggui.Widget {
+	isEmpty := ggui.Map(m.visible, func(rows []T) bool { return len(rows) == 0 })
+	page := ggui.Derived(m.pageSelection)
+	return ggui.Reactive(func() ggui.Widget {
+		cols := []Column[T]{Col("", func(row ggui.Readable[T]) ggui.Widget {
+			key := m.key(ggui.Untrack(row.Get))
+			box := Checkbox(ggui.Bind(func() bool { return m.IsSelected(key) }, func(v bool) { m.Select(key, v) }), "")
+			return localize(box, func(s *Strings) { box.Name(fmt.Sprintf(s.SelectRowFormat, key)) })
+		}).W(40)}
+		all := Checkbox(ggui.Bind(func() bool { return page.Get().all }, m.SelectPage), "").
+			BindIndeterminate(ggui.Map(page, func(p pageSelection) bool { return p.mixed })).BindDisabled(isEmpty)
+		cols[0].Header = localize(all, func(s *Strings) { all.Name(s.SelectPage) })
+		// Only visibility rebuilds the table. Sorting and data changes update its
+		// keyed rows; heading labels read the sort state independently.
+		for _, c := range m.cols {
+			if m.ColumnVisible(c.ID) {
+				if c.Compare != nil {
+					c.Header = sortHeading(c.Title, m.sort, c.ID, func() { m.ToggleSort(c.ID) })
+				}
+				cols = append(cols, c)
+			}
+		}
+		t := Table(m.visible, m.key, cols...).RowHeight(48).BindSelectedRows(m.selected)
+		empty := ggui.View(isEmpty, func(empty bool) ggui.Widget {
+			if empty {
+				return widget.Box().Height(96)
+			}
+			return widget.Box()
+		})
+		box := widget.Box(widget.Column(t, empty).Align(widget.AlignStretch))
+		minWidth := 0.0
+		for _, c := range cols {
+			minWidth += cmp.Or(c.Width, 160)
+		}
+		message := widget.Text("")
+		return &dataTableFrame{minWidth: max(560, minWidth), box: box, scroll: widget.Scroll(box).Horizontal(), isEmpty: isEmpty, text: message, message: widget.Center(message)}
+	})
+}
+
+// dataTableFooter is the count of selected rows, the page size and the
+// pager under a DataTable. The summary and the page read the model as the
+// footer is worded, at layout, as widget.TextOf would.
+func dataTableFooter[T any, K comparable](m *TableModel[T, K]) ggui.Widget {
+	summary := widget.Text("")
+	pageLabel := widget.Text("").NoWrap()
+	previous := Button("", func() { m.SetPage(m.Page() - 1) }).Outline().Size(ButtonSmall).BindDisabled(ggui.Derived(func() bool { return m.Page() <= 1 }))
+	next := Button("", func() { m.SetPage(m.Page() + 1) }).Outline().Size(ButtonSmall).BindDisabled(ggui.Derived(func() bool { return m.Page() >= m.PageCount() }))
+	sizes := Select(ggui.Bind(m.PageSize, m.SetPageSize)).Options([]int{5, 10, 20, 50})
+	size := widget.Box(sizes).Width(72)
+	sizeLabel := widget.Text("").NoWrap()
+	return localize(widget.Wrap(withMutedText(summary), widget.Row(ggui.WithEnv(tableLabelText, sizeLabel), size).Gap(8).Align(widget.AlignCenter), pageLabel, widget.Row(previous, next).Gap(8)).Gap(12).Align(widget.AlignCenter), func(s *Strings) {
+		rows := m.filtered.Get()
+		summary.Content(fmt.Sprintf(s.RowsSelectedFormat, m.countSelected(rows), len(rows)))
+		pageLabel.Content(fmt.Sprintf(s.PageOfFormat, m.Page(), m.PageCount()))
+		previous.relabel(s.Previous)
+		next.relabel(s.Next)
+		sizes.Name(s.RowsPerPage)
+		sizeLabel.Content(s.RowsPerPage)
 	})
 }
 

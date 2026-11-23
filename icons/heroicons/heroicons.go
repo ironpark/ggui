@@ -16,62 +16,57 @@ package heroicons
 
 //go:generate go run github.com/ironpark/ggui/icons/internal/gen -lib heroicons -out .
 
-import "github.com/ironpark/ggui/ui/icons"
+import (
+	"sync"
 
+	"github.com/ironpark/ggui/ui/icons"
+)
+
+// library is the comparable Set Set returns. The role table is built the
+// first time a role is resolved, inside Resolve and not at package
+// initialization, so a program that never asks for the set links none of
+// these icons, and each icon is parsed only when its role is drawn.
 type library struct{}
+
+var (
+	rolesOnce  sync.Once
+	roleGlyphs map[icons.Role]*icons.Glyph
+)
+
+func (library) Resolve(role icons.Role) *icons.SVG {
+	rolesOnce.Do(func() {
+		roleGlyphs = map[icons.Role]*icons.Glyph{
+			icons.Check:          Check,
+			icons.Close:          XMark,
+			icons.ChevronDown:    ChevronDown,
+			icons.ChevronUp:      ChevronUp,
+			icons.ChevronLeft:    ChevronLeft,
+			icons.ChevronRight:   ChevronRight,
+			icons.Search:         MagnifyingGlass,
+			icons.Alert:          ExclamationCircle,
+			icons.Info:           InformationCircle,
+			icons.Plus:           Plus,
+			icons.Minus:          Minus,
+			icons.Download:       ArrowDownTray,
+			icons.File:           Document,
+			icons.Sun:            Sun,
+			icons.Moon:           Moon,
+			icons.Grip:           Bars2,
+			icons.Loader:         ArrowPath,
+			icons.Undo:           ArrowUturnLeft,
+			icons.Redo:           ArrowUturnRight,
+			icons.MoreHorizontal: EllipsisHorizontal,
+			icons.Copy:           DocumentDuplicate,
+			icons.ArrowDown:      ArrowDown,
+			icons.PanelLeft:      Bars3,
+		}
+	})
+	if g := roleGlyphs[role]; g != nil {
+		return g.SVG()
+	}
+	return nil
+}
 
 // Set maps the roles the controls draw to Heroicons's icons, for
 // icons.SetKey in a theme or an Env.
 func Set() icons.Set { return library{} }
-
-func (library) Resolve(role icons.Role) *icons.SVG {
-	switch role {
-	case icons.Check:
-		return Check.SVG()
-	case icons.Close:
-		return XMark.SVG()
-	case icons.ChevronDown:
-		return ChevronDown.SVG()
-	case icons.ChevronUp:
-		return ChevronUp.SVG()
-	case icons.ChevronLeft:
-		return ChevronLeft.SVG()
-	case icons.ChevronRight:
-		return ChevronRight.SVG()
-	case icons.Search:
-		return MagnifyingGlass.SVG()
-	case icons.Alert:
-		return ExclamationCircle.SVG()
-	case icons.Info:
-		return InformationCircle.SVG()
-	case icons.Plus:
-		return Plus.SVG()
-	case icons.Minus:
-		return Minus.SVG()
-	case icons.Download:
-		return ArrowDownTray.SVG()
-	case icons.File:
-		return Document.SVG()
-	case icons.Sun:
-		return Sun.SVG()
-	case icons.Moon:
-		return Moon.SVG()
-	case icons.Grip:
-		return Bars2.SVG()
-	case icons.Loader:
-		return ArrowPath.SVG()
-	case icons.Undo:
-		return ArrowUturnLeft.SVG()
-	case icons.Redo:
-		return ArrowUturnRight.SVG()
-	case icons.MoreHorizontal:
-		return EllipsisHorizontal.SVG()
-	case icons.Copy:
-		return DocumentDuplicate.SVG()
-	case icons.ArrowDown:
-		return ArrowDown.SVG()
-	case icons.PanelLeft:
-		return Bars3.SVG()
-	}
-	return nil
-}

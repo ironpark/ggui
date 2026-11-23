@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -155,21 +156,7 @@ func (i *ItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	// shadcn's transition-colors duration-100, two thirds of the 150ms
 	// the theme's MotionFast stands for.
 	i.motion = env.Motion(t.MotionFast * 2 / 3)
-	// The padding counts the border every item keeps room for, drawn or
-	// not, so the three looks line up in one list.
-	pad, gap := ggui.Insets(t.Space*1.25+t.BorderWidth, t.Space*1.5+t.BorderWidth), t.Space*1.25
-	i.textGap = t.Space / 2
-	description := t.Text
-	if i.size == itemExtraSmall {
-		pad, gap = ggui.Insets(t.Space+t.BorderWidth, t.Space*1.25+t.BorderWidth), t.Space
-		i.textGap = 0
-		description = t.Text.Merge(t.Caption)
-	}
-	i.title.Style(t.Text.Merge(t.Label)).Color(t.Fg)
-	if i.description != nil {
-		description.Color = t.MutedFg
-		i.description.Style(description)
-	}
+	pad, gap := i.style(t)
 
 	inner := pad.Shrink(c).Loosen()
 	bounded := !math.IsInf(inner.MaxW, 1)
@@ -235,6 +222,27 @@ func (i *ItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	return c.Constrain(ggui.Sz(width+pad.Left+pad.Right, y+pad.Bottom))
 }
 
+// style sets the text styles of the title and the description for the
+// row's size, and returns the row's padding and the gap between its parts.
+func (i *ItemWidget) style(t *uitheme.Theme) (pad ggui.EdgeInsets, gap float64) {
+	// The padding counts the border every item keeps room for, drawn or
+	// not, so the three looks line up in one list.
+	pad, gap = ggui.Insets(t.Space*1.25+t.BorderWidth, t.Space*1.5+t.BorderWidth), t.Space*1.25
+	i.textGap = t.Space / 2
+	description := t.Text
+	if i.size == itemExtraSmall {
+		pad, gap = ggui.Insets(t.Space+t.BorderWidth, t.Space*1.25+t.BorderWidth), t.Space
+		i.textGap = 0
+		description = t.Text.Merge(t.Caption)
+	}
+	i.title.Style(t.Text.Merge(t.Label)).Color(t.Fg)
+	if i.description != nil {
+		description.Color = t.MutedFg
+		i.description.Style(description)
+	}
+	return pad, gap
+}
+
 // Paint implements ggui.Widget. A row groups what is inside it, so a screen
 // reader reads the title, the description and the action as one item.
 func (i *ItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
@@ -242,14 +250,14 @@ func (i *ItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	i.hover = 0
 	if i.onTap != nil {
 		// shadcn's [a]:hover:bg-muted, whatever the row's own surface.
-		i.hover = ease(dst, t, i.Anchor(r), itemHoverSlot, pick(i.Hovered && !i.IsInert(), 1.0, 0.0), i.motion)
+		i.hover = controlkit.Ease(dst, t, i.Anchor(r), itemHoverSlot, pick(i.Hovered && !i.IsInert(), 1.0, 0.0), i.motion)
 	}
 	var fill color.Color
 	if i.look == itemMuted {
 		fill = fade(t.Muted, .5)
 	}
 	if i.hover > 0 {
-		fill = pick(fill == nil, fade(t.Muted, i.hover), mix(colorOr(fill, t.Muted), t.Muted, i.hover))
+		fill = pick(fill == nil, fade(t.Muted, i.hover), mix(controlkit.ColorOr(fill, t.Muted), t.Muted, i.hover))
 	}
 	if fill != nil {
 		dst.FillRoundRect(r, t.Radius, fill)

@@ -547,52 +547,77 @@ func (s *ScrollWidget) Reveal(target ggui.Rect) {
 }
 
 // HandlePointer implements PointerHandler: wheel movement along the scroll
-// axis moves the window.
+// axis moves the window, and a drag of the thumb does.
 func (s *ScrollWidget) HandlePointer(ev ggui.PointerEvent) bool {
-	axis := gem.Pick(s.horizontal, ev.Pos.X, ev.Pos.Y)
 	switch ev.Kind {
 	case ggui.PointerDown:
-		if ev.Button != ggui.MouseButtonLeft || !s.thumbHit.Contains(ev.Pos) || s.extent(s.rect.Size) <= s.thumbLength() {
-			return false
-		}
-		s.dragging, s.dragStart, s.dragOffset = true, axis, s.position()
-		return true
+		return s.thumbGrab(ev)
 	case ggui.PointerDrag:
-		if !s.dragging {
-			return false
-		}
-		travel := s.extent(s.rect.Size) - s.thumbLength()
-		s.phys.input(s)
-		if travel > 0 {
-			before := s.position()
-			s.scrollTo(s.dragOffset + (axis-s.dragStart)*s.maxOffset()/travel)
-			if moved := s.position() - before; moved != 0 {
-				s.phys.dir = math.Copysign(1, moved)
-			}
-		}
-		return true
+		return s.thumbDrag(ev)
 	case ggui.PointerUp:
-		if !s.dragging || ev.Button != ggui.MouseButtonLeft {
-			return false
-		}
-		s.dragging = false
-		return true
-	case ggui.PointerMove, ggui.PointerEnter:
-		return s.thumbHit.Contains(ev.Pos)
-	case ggui.PointerTap:
+		return s.thumbRelease(ev)
+	case ggui.PointerMove, ggui.PointerEnter, ggui.PointerTap:
 		return s.thumbHit.Contains(ev.Pos)
 	}
-
 	if ev.Kind != ggui.PointerScroll {
 		return false
 	}
+	return s.scrollWheel(ev)
+}
+
+// thumbGrab takes a left press on the thumb as the start of a drag, when
+// the content is long enough to scroll. It reports whether the press was
+// taken.
+func (s *ScrollWidget) thumbGrab(ev ggui.PointerEvent) bool {
+	if ev.Button != ggui.MouseButtonLeft || !s.thumbHit.Contains(ev.Pos) || s.extent(s.rect.Size) <= s.thumbLength() {
+		return false
+	}
+	axis := gem.Pick(s.horizontal, ev.Pos.X, ev.Pos.Y)
+	s.dragging, s.dragStart, s.dragOffset = true, axis, s.position()
+	return true
+}
+
+// thumbDrag follows a pressed pointer with the thumb, mapping its travel
+// along the axis onto the offset. It reports the event used while a drag
+// is on, whether or not the thumb moved.
+func (s *ScrollWidget) thumbDrag(ev ggui.PointerEvent) bool {
+	if !s.dragging {
+		return false
+	}
+	axis := gem.Pick(s.horizontal, ev.Pos.X, ev.Pos.Y)
+	travel := s.extent(s.rect.Size) - s.thumbLength()
+	s.phys.input(s)
+	if travel > 0 {
+		before := s.position()
+		s.scrollTo(s.dragOffset + (axis-s.dragStart)*s.maxOffset()/travel)
+		if moved := s.position() - before; moved != 0 {
+			s.phys.dir = math.Copysign(1, moved)
+		}
+	}
+	return true
+}
+
+// thumbRelease ends a thumb drag when its left button goes up. It reports
+// whether a drag was on.
+func (s *ScrollWidget) thumbRelease(ev ggui.PointerEvent) bool {
+	if !s.dragging || ev.Button != ggui.MouseButtonLeft {
+		return false
+	}
+	s.dragging = false
+	return true
+}
+
+// scrollWheel moves the window by a wheel or trackpad scroll along the
+// axis, and reports whether the event was used: one at the end of the
+// content, or that moves nothing, is left to the scroll around. A lift,
+// the fingers lifting or their momentum stopping, settles the gesture;
+// it comes with no movement, or with the frame's last.
+func (s *ScrollWidget) scrollWheel(ev ggui.PointerEvent) bool {
 	by := ev.ScrollBy()
 	if s.speed > 0 && !ev.ScrollPixels {
 		by = ggui.Pt(ev.Scroll.X*s.speed, ev.Scroll.Y*s.speed)
 	}
 	delta := gem.Pick(s.horizontal, by.X, by.Y)
-	// The fingers lifting, or their momentum stopping, comes with no
-	// movement, or with the frame's last.
 	lift := ev.ScrollPixels && (ev.ScrollPhase == ggui.ScrollPhaseEnded || ev.ScrollPhase == ggui.ScrollPhaseMomentumEnded)
 	if delta == 0 && lift {
 		return s.lift(ev.ScrollPhase == ggui.ScrollPhaseMomentumEnded)
@@ -664,21 +689,6 @@ func (s *ScrollWidget) wheelStep(d float64) bool {
 	return true
 }
 
-// Overscroll says what a Scroll does when a touch pan, a fling or the wheel
-// pushes past either end of its content.
-type Overscroll uint8
-
-const (
-	// OverscrollClamp stops at the end. It is the default.
-	OverscrollClamp Overscroll = iota
-	// OverscrollBounce lets the content follow past the end with growing
-	// resistance and springs it back once the input stops, as iOS does.
-	OverscrollBounce
-	// OverscrollStretch stretches the content along the axis from the end
-	// it is pulled at, instead of moving it, and relaxes it the same way.
-	OverscrollStretch
-)
-
 const (
 	// scrollSettleDelay is how long input must pause before an overscroll
 	// springs back and a snapping scroll settles. A wheel reports no end
@@ -692,40 +702,6 @@ const (
 	scrollWheelEase = 150 * time.Millisecond
 	scrollAnimation = 300 * time.Millisecond
 )
-
-// scrollPhysics is the part of a ScrollWidget that moves on its own:
-// overscroll, snapping and the animated scrolls a ScrollController asks for.
-type scrollPhysics struct {
-	mode   Overscroll
-	snap   float64 // snap interval; 0 snaps nowhere
-	paging bool    // snap to the viewport's extent
-	ctrl   *ScrollController
-
-	scrollMotionState // carried across a rebuild by adopt
-
-	applied *scrollRequest // what attach applied in this layout, until paint
-	painted bool           // painted, so adopted what it replaces: requests apply at once
-}
-
-// scrollMotionState is what a scroll is doing on its own, which a rebuilt
-// one carries on with.
-type scrollMotionState struct {
-	over       float64 // how far the content is pulled past an end: offset minus where it shows
-	overMotion ggui.Motion
-	relaxing   bool // over is springing back
-	lastInput  time.Time
-	from       float64 // the offset when the gesture began
-	dir        float64 // the sign of the last movement
-	settle     bool    // waiting for input to pause
-	lifted     bool    // the fingers lifted, or their momentum stopped: settle now
-	released   bool    // they lifted past an end; the momentum after is let go
-	anim       ggui.Motion
-	animating  bool
-	steppedAt  time.Time // the frame anim last moved the window in
-	stepping   bool      // anim is a wheel's notch easing; see wheelStep
-}
-
-func (p *scrollPhysics) adopt(q *scrollPhysics) { p.scrollMotionState = q.scrollMotionState }
 
 // Overscroll sets what happens at either end: OverscrollClamp, the
 // default, stops there; OverscrollBounce and OverscrollStretch follow the
@@ -752,21 +728,6 @@ func (s *ScrollWidget) Paging() *ScrollWidget {
 	defer property.Watch(&s.props, &s.phys.paging)()
 	s.phys.paging = true
 	return s
-}
-
-// input notes a scroll gesture: what settling waits on and where it began.
-// It stops a programmatic scroll and a spring-back under way.
-func (p *scrollPhysics) input(s *ScrollWidget) {
-	now := ggui.FrameTime()
-	if p.lastInput.IsZero() || now.Sub(p.lastInput) >= scrollSettleDelay {
-		p.from = s.position()
-	}
-	p.lastInput, p.lifted, p.released = now, false, false
-	p.animating, p.stepping, p.relaxing = false, false, false
-	p.settle = p.mode != OverscrollClamp || p.snap > 0 || p.paging
-	if p.settle {
-		ggui.WakeAt(now.Add(scrollSettleDelay))
-	}
 }
 
 // wheel moves the content by d along the axis, as the wheel, a trackpad or
@@ -831,58 +792,6 @@ func (s *ScrollWidget) wheelBy(d float64, momentum, gesture bool) bool {
 // past either end resisted the further it goes; see kinetics.Rubber.
 func (s *ScrollWidget) rubber(raw, d float64, momentum bool) float64 {
 	return kinetics.Rubber(raw, d, 0, s.maxOffset(), s.extent(s.viewport), momentum)
-}
-
-// step advances a programmatic scroll; Layout calls it before laying out
-// the child for the new window. It moves the window once a frame: a frame
-// lays the scroll out again until nothing changes, and content laid out
-// at the new window, rows measured as they come into it, can move where
-// the layout then holds the window, which another step to where the
-// animation is would undo, writing a bound offset on every pass and never
-// letting the frame settle.
-func (p *scrollPhysics) step(s *ScrollWidget) {
-	now := ggui.FrameTime()
-	if !p.animating || now.Equal(p.steppedAt) {
-		return
-	}
-	p.steppedAt = now
-	v := p.anim.Value(now)
-	if v == p.anim.Target() {
-		p.animating = false
-	}
-	s.scrollTo(v)
-}
-
-// paint keeps a programmatic scroll and a spring-back moving, and settles
-// a scroll once its input pauses.
-func (p *scrollPhysics) paint(s *ScrollWidget) {
-	now := ggui.FrameTime()
-	p.applied, p.painted = nil, true // Adopt, if any, has run
-	if p.animating {
-		s.contain(true, s.relayout) // the next frame lays out the child for the next step
-	}
-	if p.relaxing {
-		p.over = p.overMotion.Value(now)
-		p.relaxing = p.over != 0
-	}
-	if !p.settle || s.dragging || p.animating && p.stepping {
-		return
-	}
-	if wait := p.lastInput.Add(scrollSettleDelay); now.Before(wait) && !p.lifted {
-		ggui.WakeAt(wait)
-		return
-	}
-	p.settle, p.lifted = false, false
-	if p.over != 0 {
-		p.overMotion = ggui.Motion{}
-		p.overMotion.MoveTo(p.over, now, 0)
-		p.overMotion.MoveTo(0, now, s.barEnv.Motion(scrollSpringBack))
-		p.over = p.overMotion.Value(now)
-		p.relaxing = p.over != 0
-	}
-	if t, ok := s.snapTarget(); ok && t != s.position() {
-		s.animateTo(t, true)
-	}
 }
 
 // snapTarget returns where a snapping scroll settles from where it is.

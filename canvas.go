@@ -2,10 +2,8 @@ package ggui
 
 import (
 	"image"
-	"maps"
 	"math"
 	"reflect"
-	"time"
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/gem"
@@ -112,60 +110,6 @@ func (f *frameState) endPass() {
 	f.clock = nil
 }
 
-// paintedInput is what a paint registers for input to take when it ends:
-// the hit regions, with the last frame's for Adopter handoff, and the
-// requests, observers and shortcuts widgets made as they painted.
-type paintedInput struct {
-	hits []hitRegion
-	prev []hitRegion // last frame's regions, for Adopter handoff
-	// withins are the handlers of the hits registered with HitWithin, and
-	// prevWithins last frame's, which input routes to until this paint
-	// ends.
-	withins, prevWithins []withinEntry
-	focusRequest         KeyHandler
-	focusClaim           *FocusRef // a Focus waiting for the next key region painted
-	revealRequests       []Rect
-	inputObservers       []inputObserver
-	shortcuts            []paintedShortcut
-}
-
-// regionSwap records the spare buffers rotated out by swapBuffers so a frame
-// that ends before painting can restore hits/prev without allocating a closure.
-type regionSwap struct {
-	spare        []hitRegion
-	spareWithins []withinEntry
-}
-
-// swapBuffers rotates hits/withins into prev/prevWithins and clears the spare
-// buffers for the new paint, keeping last frame's regions readable for Adopter
-// handoff and input routing until the paint finishes.
-func (p *paintedInput) swapBuffers() regionSwap {
-	spare, spareWithins := p.prev, p.prevWithins
-	clear(spare)
-	clear(spareWithins)
-	spare, spareWithins = spare[:0], spareWithins[:0]
-	p.prev, p.hits = p.hits, spare
-	p.prevWithins, p.withins = p.withins, spareWithins
-	return regionSwap{spare: spare, spareWithins: spareWithins}
-}
-
-// unswapBuffers restores the double-buffer state after an aborted paint before
-// anything painted into the spare buffers.
-func (p *paintedInput) unswapBuffers(s regionSwap) {
-	p.hits, p.prev = p.prev, s.spare
-	p.withins, p.prevWithins = p.prevWithins, s.spareWithins
-}
-
-// regionCursor is where in the region tree the paint is, as indices plus
-// one into the paint's regions, 0 for none. Canvas.Paint saves it as it
-// opens a widget's scope and makes at the widget's outer, and restores it
-// as the scope closes, so it needs nothing of a scope to be correct where a
-// widget is painted with none open, as the root is in a test.
-type regionCursor struct {
-	at    int32 // the last region the widget painting registered, else outer
-	outer int32 // the region the widget painting is inside
-}
-
 // parentFor returns, as an index plus one, the region h is inside: the
 // nearest region the widget painting registered itself whose unclipped
 // Rect covers h's in the same space, else the region the widget is inside.
@@ -183,142 +127,6 @@ func (f *frameState) parentFor(h *hitRegion) int32 {
 		}
 	}
 	return f.cur.outer
-}
-
-// inputView is where input stood as the paint began, which the Canvas's
-// focus and pointer queries answer from: the paint cannot see input move.
-type inputView struct {
-	pointer    Point
-	hasPointer bool
-	// pointerRead records that a widget read the pointer in the last
-	// whole paint, or in a part painted since: what such a widget draws
-	// follows the pointer with no event reaching it, so a mouse move paints
-	// it again. pointerAt are the bounds those widgets drew in, in the
-	// window, which the move paints in part, as it would a widget that read
-	// the time; pointerLost, that one read it where that cannot be told,
-	// under a Transform or outside any widget's Paint, and the move repaints
-	// the whole window.
-	pointerRead  bool
-	pointerLost  bool
-	pointerAt    []Rect
-	focusBounds  Rect       // focused input region at the start of this paint
-	focusKey     KeyHandler // its handler
-	focusPainted bool       // the focused handler registered since PaintFocus began
-	focusVisible bool       // focus came there by keyboard
-	pressed      bool       // a pointer button is held
-	pressPointer PointerHandler
-
-	// found is what the paint learns of its regions as it registers them,
-	// for input to start from: see regionIndex.
-	found regionIndex
-}
-
-// take records where in stands, for a paint about to begin.
-func (v *inputView) take(in *inputState) {
-	v.focusBounds, v.focusKey, v.focusPainted = Rect{}, nil, false
-	if in.focused != nil {
-		v.focusBounds, v.focusKey = in.focused.rect, in.focused.key
-	}
-	v.focusVisible = in.focused != nil && in.focusVisible
-	v.pressed, v.pressPointer = in.pressed != nil, nil
-	if in.pressed != nil {
-		v.pressPointer = in.pressed.pointer
-	}
-	v.pointerRead, v.pointerLost, v.pointerAt = false, false, v.pointerAt[:0]
-	v.found = regionIndex{scopeAt: -1}
-	if v.focusKey != nil {
-		v.found.key = handlerHint{h: v.focusKey, at: -1}
-	}
-	if v.pressPointer != nil {
-		v.found.pointer = handlerHint{h: v.pressPointer, at: -1}
-	}
-}
-
-// note records that the region at i of the paint's regions is r, which
-// was just registered there or merged into: the last registered of a
-// handler or a scope is the topmost.
-func (v *inputView) note(r *hitRegion, i int) {
-	x := &v.found
-	if r.scope != nil {
-		x.scopeAt = i
-	}
-	if r.shaped {
-		x.cursors = true
-	}
-	if r.within {
-		x.within = true
-	}
-	if r.key != nil && x.key.h != nil && gem.Same(r.key, x.key.h) {
-		x.key.at = i
-	}
-	if r.pointer != nil && x.pointer.h != nil && gem.Same(r.pointer, x.pointer.h) {
-		x.pointer.at = i
-	}
-}
-
-// retained is what Retain stored this frame, and last frame's, which
-// Retained reads.
-//
-// A frame painted in part paints some widgets and leaves the rest as they
-// were, so it keeps what the frame before stored and stores over it: keeps
-// is then both. read and stored are the slots the widgets it painted read
-// and stored, and a slot read but not stored again is dropped as the frame
-// ends, as a whole frame drops it, while one no widget it painted touched
-// stays.
-type retained struct {
-	keeps        map[retainKey]any
-	prevKeeps    map[retainKey]any
-	staged       map[retainKey]any // partial-frame writes, committed only on partial completion
-	read, stored map[retainKey]struct{}
-}
-
-// next makes this frame's values last frame's.
-func (r *retained) next() {
-	r.prevKeeps, r.keeps = r.keeps, r.prevKeeps
-	clear(r.keeps)
-}
-
-// endPartial commits staged writes from a completed partial frame and drops
-// slots read in it and not stored again.
-func (r *retained) endPartial() {
-	for k := range r.read {
-		if _, ok := r.stored[k]; !ok {
-			delete(r.keeps, k)
-		}
-	}
-	if len(r.staged) > 0 {
-		if r.keeps == nil {
-			r.keeps = make(map[retainKey]any, len(r.staged))
-		}
-		maps.Copy(r.keeps, r.staged)
-	}
-	r.abortPartial()
-}
-
-// abortPartial discards staged partial-frame writes without modifying keeps.
-func (r *retained) abortPartial() {
-	clear(r.staged)
-	clear(r.read)
-	clear(r.stored)
-}
-
-// adoptIndex is where last frame's regions are, for adopt. It is built on
-// a frame's first handoff and not at all in a frame with none, which is
-// most of them: only a handful of widgets adopt.
-type adoptIndex struct {
-	prevByID    map[any]int  // id to its place in prev, the last one painted
-	prevByRect  map[Rect]int // the same for a region with no id
-	prevHandler map[any]bool // the handlers of prev that are pointers
-	prevIndexed bool
-}
-
-// reset forgets the index, which a new prev makes stale. The maps keep
-// their storage for the next frame that needs them.
-func (x *adoptIndex) reset() {
-	x.prevIndexed = false
-	clear(x.prevByID)
-	clear(x.prevByRect)
-	clear(x.prevHandler)
 }
 
 // canvasPool holds the Canvases Clip hands out, made once and handed out
@@ -359,119 +167,6 @@ type overlay struct {
 	fn    func(*Canvas)
 	owner SemRef
 	env   envScope // what CurrentEnv returned where the overlay was scheduled
-}
-
-// Slot names one value a widget retains on the Canvas between frames,
-// typed like an EnvKey. Make one per animated value or timer with
-// NewSlot, as a package variable.
-type Slot[T any] struct {
-	id   *byte
-	name string
-}
-
-// NewSlot creates a distinct Slot; name is for messages only.
-func NewSlot[T any](name string) Slot[T] { return Slot[T]{id: new(byte), name: name} }
-
-// Anchor is what retained state is attached to: the widget's ID when it
-// has one, so the state follows it wherever it moves, or else the Rect it
-// painted.
-type Anchor struct {
-	Rect Rect
-	ID   any
-}
-
-// retainKey identifies a Retain slot: the anchor and the slot.
-type retainKey struct {
-	rect Rect
-	id   any
-	slot *byte
-}
-
-func (a Anchor) key(slot *byte) retainKey {
-	if a.ID != nil {
-		return retainKey{id: a.ID, slot: slot}
-	}
-	return retainKey{rect: a.Rect, slot: slot}
-}
-
-// Retain stores v for the next frame under at and s, and Retained returns
-// what was stored under the same pair last frame. It is how a widget
-// rebuilt every frame keeps state that has no signal: a ui.Tooltip's hover
-// timer, a Transition's start time. A slot nobody retains again is
-// dropped, so state goes away with the widget.
-func (c *Canvas) Retain[T any](at Anchor, s Slot[T], v T) {
-	if c == nil {
-		return
-	}
-	f := c.fs()
-	k := at.key(s.id)
-	if f.partial {
-		if f.staged == nil {
-			f.staged = make(map[retainKey]any)
-		}
-		if f.stored == nil {
-			f.stored = make(map[retainKey]struct{})
-		}
-		f.staged[k] = v
-		f.stored[k] = struct{}{}
-		return
-	}
-	if f.keeps == nil {
-		f.keeps = make(map[retainKey]any)
-	}
-	f.keeps[k] = v
-}
-
-// Retained returns what Retain stored under at and s last frame.
-func (c *Canvas) Retained[T any](at Anchor, s Slot[T]) (T, bool) {
-	if c == nil {
-		var zero T
-		return zero, false
-	}
-	f := c.fs()
-	k := at.key(s.id)
-	keeps := f.prevKeeps
-	if f.partial {
-		// The last frame's values are what keeps holds; see retained. Read
-		// from those the whole frame before that left, a Transition that
-		// appeared in the last whole frame would start again at every frame
-		// painted in part, and never end.
-		keeps = f.keeps
-		if f.read == nil {
-			f.read = make(map[retainKey]struct{})
-		}
-		f.read[k] = struct{}{}
-	}
-	v, ok := keeps[k].(T)
-	return v, ok
-}
-
-// Ease moves a Motion retained under at and s toward target over d and
-// returns where it is now, so a control rebuilt every frame keeps
-// animating; a switch knob and a tab underline use it. It moves along
-// EaseOut; EaseWith takes another curve.
-func (c *Canvas) Ease(at Anchor, s Slot[*Motion], target float64, d time.Duration) float64 {
-	return c.EaseWith(at, s, target, d, nil)
-}
-
-// EaseWith is Ease along e, as Motion.Easing takes it: a design system
-// whose transitions run on a curve of its own, CSS's
-// cubic-bezier(0.4, 0, 0.2, 1) say, passes it here. Pass the same Easing
-// every frame rather than one made anew, which would be an allocation a
-// frame; a nil e is EaseOut.
-func (c *Canvas) EaseWith(at Anchor, s Slot[*Motion], target float64, d time.Duration, e Easing) float64 {
-	now := FrameTime()
-	if c == nil {
-		// Nothing keeps the motion: a new one would be at target at once.
-		return target
-	}
-	m, ok := c.Retained(at, s)
-	if !ok {
-		m = new(Motion)
-	}
-	m.Easing(e).MoveTo(target, now, d)
-	c.Retain(at, s, m)
-	return m.Value(now)
 }
 
 // nextFrame moves this frame's retained values to last frame's place and
@@ -709,45 +404,6 @@ func (c *Canvas) PaintFocus(w Widget, r Rect) bool {
 	held := f.focusPainted
 	f.focusPainted = outer || held
 	return held
-}
-
-// HitMark is a place in the frame's hit regions, which KeysSince reads
-// from: what Canvas.HitMark returned was where the regions registered next
-// begin. The zero HitMark is the start of the frame. A mark is good for
-// the frame it was taken in.
-type HitMark struct{ n int }
-
-// HitMark marks where the hit regions registered from now on begin, for
-// KeysSince to read what they hold.
-func (c *Canvas) HitMark() HitMark {
-	if c == nil {
-		return HitMark{}
-	}
-	return HitMark{n: len(c.fs().hits)}
-}
-
-// KeysSince appends to keys the key handler of every region registered
-// since m, in the order registered, and returns the slice. A focus trap
-// marks before painting its content and learns from it what it holds:
-// whether focus is inside, by HasFocus on each, and what to focus first.
-// Pass the slice it returned last frame, emptied, so painting allocates
-// nothing once it is large enough. A handler registered in several regions
-// is there as often. One registered at the Rect of the region just before
-// m, with nothing there to conflict, is merged into that region and so is
-// not there: a container that registers a region of its own at its
-// content's Rect before marking, as a popup's surface does, leaves a
-// content control of the same Rect out.
-func (c *Canvas) KeysSince(m HitMark, keys []KeyHandler) []KeyHandler {
-	if c == nil {
-		return keys
-	}
-	hits := c.fs().hits
-	for i := min(m.n, len(hits)); i < len(hits); i++ {
-		if k := hits[i].key; k != nil {
-			keys = append(keys, k)
-		}
-	}
-	return keys
 }
 
 // FocusVisibleWithin is FocusWithin for focus moved there with the
@@ -1016,48 +672,78 @@ func (c *Canvas) addWithin(h hitRegion, within any) {
 	}
 	h.within = within != nil
 	h.full = h.rect
-	if c.clipped {
-		h.rect = h.rect.Intersect(c.clip)
-		if h.rect.Empty() {
-			if h.key == nil {
-				return
-			}
-			// A key region outside the clip stays registered with no area,
-			// so Tab can reach it and Reveal can scroll it into view.
-			h.rect = Rect{Origin: h.full.Origin}
-		}
-		// A reach is cut as the Rect is, and goes with it: a control
-		// scrolled out of a list is not hit through the list's edge.
-		if h.reach = h.reach.Intersect(c.clip); h.reach.Empty() || h.rect.Empty() {
-			h.reach = Rect{}
-		}
+	if !c.trimToClip(&h) {
+		return
 	}
 	if c.space != nil && !c.space.placeRegion(&h) {
 		return
 	}
 	f := c.fs()
 	f.adopt(&h)
-	if h.key != nil && f.focusKey != nil && gem.Same(h.key, f.focusKey) {
-		f.focusPainted = true
-	}
-	if h.key != nil && f.focusClaim != nil {
-		f.focusRequest, f.focusClaim = h.key, nil
-	}
-	i := len(f.hits)
-	if i > 0 && f.hits[i-1].merge(h) {
-		// One node: what the widget paints next is inside the merged
-		// region, which stays where it was in the tree.
-		i--
-	} else {
-		h.parent = f.parentFor(&h)
-		f.hits = append(f.hits, h)
-	}
+	f.claimKeyFocus(&h)
+	i := f.mergeOrAppend(&h)
 	f.cur.at = int32(i + 1)
 	if within != nil {
 		// In the order of the regions: one merged into is the last.
 		f.withins = append(f.withins, withinEntry{at: int32(i), h: within})
 	}
 	f.note(&f.hits[i], i)
+}
+
+// trimToClip cuts a region's rect and reach to the Canvas's clip. It
+// reports whether the region stays registered: one clipped away entirely
+// is dropped, unless it carries a key, which keeps its origin with no
+// area, so Tab can reach it and Reveal can scroll it into view.
+func (c *Canvas) trimToClip(h *hitRegion) bool {
+	if !c.clipped {
+		return true
+	}
+	h.rect = h.rect.Intersect(c.clip)
+	if h.rect.Empty() {
+		if h.key == nil {
+			return false
+		}
+		h.rect = Rect{Origin: h.full.Origin}
+	}
+	// A reach is cut as the Rect is, and goes with it: a control
+	// scrolled out of a list is not hit through the list's edge.
+	if h.reach = h.reach.Intersect(c.clip); h.reach.Empty() || h.rect.Empty() {
+		h.reach = Rect{}
+	}
+	return true
+}
+
+// claimKeyFocus settles what a key region means for the frame's focus: a
+// region carrying the focused handler marks the focus as painted, and one
+// registered while a Focus waits to claim it turns the wait into the
+// focus request, which moves focus to the region's handler.
+func (f *frameState) claimKeyFocus(h *hitRegion) {
+	if h.key == nil {
+		return
+	}
+	if f.focusKey != nil && gem.Same(h.key, f.focusKey) {
+		f.focusPainted = true
+	}
+	if f.focusClaim != nil {
+		f.focusRequest, f.focusClaim = h.key, nil
+	}
+}
+
+// mergeOrAppend registers h on the frame's hit list: a region at the same
+// Rect as the previous one is merged into it, so a widget that calls
+// HitPointer and HitKey for the same Rect is one region with both
+// handlers; otherwise h becomes a new node parented under what encloses
+// it. It returns the index of the region h landed in.
+func (f *frameState) mergeOrAppend(h *hitRegion) int {
+	i := len(f.hits)
+	if i > 0 && f.hits[i-1].merge(*h) {
+		// One node: what the widget paints next is inside the merged
+		// region, which stays where it was in the tree.
+		return i - 1
+	}
+	h.parent = f.parentFor(h)
+	f.hits = append(f.hits, *h)
+	return i
 }
 
 // adopt hands h's new handlers the ones that held the same region last
@@ -1102,7 +788,7 @@ func (f *frameState) lastFrame(h *hitRegion) *hitRegion {
 		f.indexPrev()
 	}
 	if h.id != nil {
-		if !comparableID(h.id) {
+		if !isHashable(h.id) {
 			return nil
 		}
 		if i, ok := f.prevByID[h.id]; ok {
@@ -1135,16 +821,11 @@ func (f *frameState) indexPrev() {
 		switch p := &f.prev[i]; {
 		case p.id == nil:
 			f.prevByRect[p.rect] = i
-		case comparableID(p.id):
+		case isHashable(p.id):
 			f.prevByID[p.id] = i
 		}
 	}
 }
-
-// comparableID reports whether id may be used as a map key. A map operation
-// on a key the language cannot compare panics where == only would have if
-// the dynamic types matched, so both sides of the index check first.
-func comparableID(id any) bool { return isHashable(id) }
 
 // Group paints fn with every hit region it registers marked as belonging
 // to g, so that GroupBusy can tell, frames later, whether g holds the focus
@@ -1184,32 +865,7 @@ func (c *Canvas) Grouped() any {
 // a row go. Outside every frame loop, and for a nil or uncomparable g, it
 // is false.
 func GroupBusy(g any) bool {
-	return g != nil && comparableID(g) && activeWorld().busy[g]
-}
-
-// focusScope is a focus trap for one frame: while regions carrying it
-// exist, Tab cycles within them and an unconsumed Escape calls escape.
-// Frames compare scopes by owner.
-type focusScope struct {
-	owner  any
-	escape func()
-}
-
-// FocusTrap paints through fn as a focus scope, which is what a dialog or
-// popup is: while any region fn registered exists, Tab and Shift+Tab move
-// only among those regions, focus is moved inside when the scope appears
-// and returned to where it was when the scope goes, and an Escape the
-// focused widget did not consume calls onEscape. owner identifies the
-// scope from frame to frame.
-func (c *Canvas) FocusTrap(owner any, onEscape func(), fn func(dst *Canvas)) {
-	if c == nil {
-		fn(nil)
-		return
-	}
-	prev := c.scope
-	c.scope = &focusScope{owner: owner, escape: onEscape}
-	defer func() { c.scope = prev }()
-	fn(c)
+	return g != nil && isHashable(g) && activeWorld().busy[g]
 }
 
 // HitPointer registers r as a region that receives pointer events. Regions
@@ -1280,51 +936,5 @@ func (c *Canvas) RequestReveal(r Rect) {
 	if c != nil && !c.inert {
 		f := c.fs()
 		f.revealRequests = append(f.revealRequests, c.toWindow(r))
-	}
-}
-
-// paintedShortcut is a chord a widget listens for while it is painted.
-type paintedShortcut struct {
-	chord Chord
-	fn    func()
-	scope *focusScope
-}
-
-// Shortcut runs fn on chord for as long as the caller is painted: a
-// widget registers it from Paint every frame, as it does its hit regions,
-// so the shortcut goes when the widget does, when it is inert, and while a
-// focus trap it is not inside, such as a dialog over it, is open. It runs
-// where Window.Shortcut's would: a chord with a modifier before the
-// focused widget, a bare key only if the focused widget left it.
-func (c *Canvas) Shortcut(chord Chord, fn func()) {
-	if c == nil || c.inert || fn == nil {
-		return
-	}
-	f := c.fs()
-	f.shortcuts = append(f.shortcuts, paintedShortcut{chord, fn, c.scope})
-}
-
-type inputObserver struct {
-	rect   Rect
-	scope  *focusScope
-	notify func()
-}
-
-// ObserveInput is notified before a pointer press, wheel or keyboard input in
-// r, including input handled by descendants. It does not consume the event.
-// This lets a streaming viewport pause before a reader interacts with content.
-func (c *Canvas) ObserveInput(r Rect, notify func()) {
-	if c == nil || c.inert || notify == nil {
-		return
-	}
-	if c.clipped {
-		r = r.Intersect(c.clip)
-	}
-	if c.space != nil {
-		r = c.space.window(r, false)
-	}
-	if !r.Empty() {
-		f := c.fs()
-		f.inputObservers = append(f.inputObservers, inputObserver{r, c.scope, notify})
 	}
 }

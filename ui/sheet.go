@@ -300,28 +300,7 @@ func (s *SheetWidget) paintPanel(dst *ggui.Canvas, v float64, open bool) {
 	if screen == (ggui.Size{}) {
 		screen = ggui.Sz(s.extent, s.extent)
 	}
-	var cs ggui.Constraints
-	if s.horizontal() {
-		w := min(sheetWidth, screen.W*sheetWidthShare)
-		if s.extent > 0 {
-			w = min(s.extent, screen.W)
-		}
-		cs = ggui.Constraints{MinW: w, MaxW: w, MinH: screen.H, MaxH: screen.H}
-	} else {
-		h := min(s.extent, screen.H)
-		if s.isDrawer() && len(s.snapPoints) > 0 {
-			h = min(s.snapPoints[len(s.snapPoints)-1], screen.H)
-		}
-		if s.fitsContent() {
-			room := screen.H
-			if s.isDrawer() {
-				room = max(screen.H-drawerHeadroom, 0)
-			}
-			h = s.panel.Layout(ggui.Constraints{MinW: screen.W, MaxW: screen.W, MaxH: room}, s.env).H
-		}
-		cs = ggui.Constraints{MinW: screen.W, MaxW: screen.W, MinH: h, MaxH: h}
-	}
-	size := s.effect.Layout(cs, s.env)
+	size := s.effect.Layout(s.panelConstraints(screen), s.env)
 	s.viewportHeight = screen.H
 	visible := size.H
 	if s.isDrawer() {
@@ -372,6 +351,32 @@ func (s *SheetWidget) paintPanel(dst *ggui.Canvas, v float64, open bool) {
 		scrimProgress *= clamp(visible/size.H, 0, 1)
 	}
 	s.paintContent(dst, screen, rect, fade(t.Scrim, scrimProgress), s, s.effect)
+}
+
+// panelConstraints is how the panel is laid out on screen: a sheet on the
+// left or right is full height at its width; one on the top or bottom is
+// full width at its height, a drawer's at its last snap point, and one
+// that fits its content as tall as that, leaving a drawer its headroom.
+func (s *SheetWidget) panelConstraints(screen ggui.Size) ggui.Constraints {
+	if s.horizontal() {
+		w := min(sheetWidth, screen.W*sheetWidthShare)
+		if s.extent > 0 {
+			w = min(s.extent, screen.W)
+		}
+		return ggui.Constraints{MinW: w, MaxW: w, MinH: screen.H, MaxH: screen.H}
+	}
+	h := min(s.extent, screen.H)
+	if s.isDrawer() && len(s.snapPoints) > 0 {
+		h = min(s.snapPoints[len(s.snapPoints)-1], screen.H)
+	}
+	if s.fitsContent() {
+		room := screen.H
+		if s.isDrawer() {
+			room = max(screen.H-drawerHeadroom, 0)
+		}
+		h = s.panel.Layout(ggui.Constraints{MinW: screen.W, MaxW: screen.W, MaxH: room}, s.env).H
+	}
+	return ggui.Constraints{MinW: screen.W, MaxW: screen.W, MinH: h, MaxH: h}
 }
 
 // BindName follows a non-nil accessible-name reader.
@@ -593,28 +598,38 @@ func (h *drawerHandle) HandlePointer(ev ggui.PointerEvent) bool {
 		}
 	case ggui.PointerUp:
 		if s.dragging {
-			s.dragExtent = clamp(s.dragExtent+s.dragStart-ev.Pos.Y, 0, s.rect.Size.H)
-			s.dragging = false
-			// Seed the settling animation at the release position, including a
-			// release that came without an intervening drag frame.
-			s.snapMotion.MoveTo(s.dragExtent, ggui.FrameTime(), 0)
-			s.visibleExtent = s.dragExtent
-			lowest := min(s.rect.Size.H, s.viewportHeight)
-			if len(s.snapPoints) > 0 {
-				lowest = min(s.snapPoints[0], s.viewportHeight)
-			}
-			if s.dismissible && s.dragExtent < lowest*.5 {
-				s.Close()
-			} else if len(s.snapPoints) > 0 {
-				best := s.selectedSnap()
-				for i, p := range s.snapPoints {
-					if math.Abs(min(p, s.viewportHeight)-s.dragExtent) < math.Abs(min(s.snapPoints[best], s.viewportHeight)-s.dragExtent) {
-						best = i
-					}
-				}
-				s.selectSnap(best)
-			}
+			s.endDrag(ev.Pos.Y)
 		}
 	}
 	return h.Pointer(ev, nil)
+}
+
+// endDrag lets the drawer go at y: a dismissible drawer let go under half
+// its lowest height closes, and one with snap points otherwise settles on
+// the snap point nearest where it was let go.
+func (s *SheetWidget) endDrag(y float64) {
+	s.dragExtent = clamp(s.dragExtent+s.dragStart-y, 0, s.rect.Size.H)
+	s.dragging = false
+	// Seed the settling animation at the release position, including a
+	// release that came without an intervening drag frame.
+	s.snapMotion.MoveTo(s.dragExtent, ggui.FrameTime(), 0)
+	s.visibleExtent = s.dragExtent
+	lowest := min(s.rect.Size.H, s.viewportHeight)
+	if len(s.snapPoints) > 0 {
+		lowest = min(s.snapPoints[0], s.viewportHeight)
+	}
+	if s.dismissible && s.dragExtent < lowest*.5 {
+		s.Close()
+		return
+	}
+	if len(s.snapPoints) == 0 {
+		return
+	}
+	best := s.selectedSnap()
+	for i, p := range s.snapPoints {
+		if math.Abs(min(p, s.viewportHeight)-s.dragExtent) < math.Abs(min(s.snapPoints[best], s.viewportHeight)-s.dragExtent) {
+			best = i
+		}
+	}
+	s.selectSnap(best)
 }

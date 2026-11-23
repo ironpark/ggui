@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -165,35 +166,38 @@ func (i *NavigationMenuItemWidget) activateWith(focus bool) {
 	if i.disabled() {
 		return
 	}
-	if i.panel != nil {
-		if i.owner != nil {
-			if n := i.owner; i.isOpen() && !focus && n.hoverShown == slices.Index(n.items, i) {
-				// The pointer opened it on its way here: the click keeps
-				// it open, now until it is dismissed.
-				n.hoverShown, n.hoverOpened, n.hoverLeft = -1, false, time.Time{}
-			} else if i.isOpen() {
-				i.owner.popup.Hide()
-				if !focus {
-					// Closed with a click: resting on it does not open it
-					// again until the pointer has been off it.
-					i.owner.hoverBlocked = slices.Index(i.owner.items, i)
-				}
-			} else {
-				i.owner.open(i, focus)
+	n := i.owner
+	if i.panel == nil {
+		if i.closeOnClick {
+			if i.popup != nil {
+				i.popup.Hide()
 			}
+			if n != nil {
+				n.popup.Hide()
+			}
+		}
+		if i.onNavigate != nil {
+			i.onNavigate()
 		}
 		return
 	}
-	if i.closeOnClick {
-		if i.popup != nil {
-			i.popup.Hide()
-		}
-		if i.owner != nil {
-			i.owner.popup.Hide()
-		}
+	if n == nil {
+		return
 	}
-	if i.onNavigate != nil {
-		i.onNavigate()
+	switch {
+	case i.isOpen() && !focus && n.hoverShown == slices.Index(n.items, i):
+		// The pointer opened it on its way here: the click keeps
+		// it open, now until it is dismissed.
+		n.hoverShown, n.hoverOpened, n.hoverLeft = -1, false, time.Time{}
+	case i.isOpen():
+		n.popup.Hide()
+		if !focus {
+			// Closed with a click: resting on it does not open it
+			// again until the pointer has been off it.
+			n.hoverBlocked = slices.Index(n.items, i)
+		}
+	default:
+		n.open(i, focus)
 	}
 }
 
@@ -258,8 +262,8 @@ func (i *NavigationMenuItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// for the current destination and the open dropdown.
 	focused := i.Focused && i.FocusVisible && !i.quiet
 	at := i.Anchor(r)
-	hover := ease(dst, i.theme, at, navigationHoverSlot, pick((i.Hovered || focused) && !inert, 1.0, 0.0), i.motion)
-	on := ease(dst, i.theme, at, navigationActiveSlot, pick((i.selected || i.isOpen()) && !inert, 1.0, 0.0), i.motion)
+	hover := controlkit.Ease(dst, i.theme, at, navigationHoverSlot, pick((i.Hovered || focused) && !inert, 1.0, 0.0), i.motion)
+	on := controlkit.Ease(dst, i.theme, at, navigationActiveSlot, pick((i.selected || i.isOpen()) && !inert, 1.0, 0.0), i.motion)
 	var fill color.Color
 	if alpha := .5*on + (1-.5*on)*hover; alpha > 0 {
 		fill = fade(t.Muted, alpha)
@@ -307,35 +311,44 @@ func (i *NavigationMenuItemWidget) HandleKey(e ggui.KeyEvent) {
 		i.quiet = false
 	}
 	i.Keyboard(e, nil)
-	if i.owner != nil && e.Kind == ggui.KeyPress {
-		n := i.owner
-		cur := slices.Index(n.items, i)
-		if next, ok := navTarget(directionalKey(e, n.rtl).Key, navHorizontal, cur, len(n.items)); ok {
-			next = max(0, min(next, len(n.items)-1))
-			direction := 1
-			if next < cur {
-				direction = -1
-			}
-			for next >= 0 && next < len(n.items) && !n.enabled(next) {
-				next += direction
-			}
-			if next < 0 || next >= len(n.items) {
-				next = cur
-			}
-			if next >= 0 {
-				n.pending = n.items[next]
-			}
-			n.popup.Hide()
-			return
-		}
-		if i.panel != nil && (e.Key == ggui.KeyArrowDown || e.Key == ggui.KeyArrowUp) {
-			n.open(i, true)
-			return
-		}
+	if i.owner != nil && e.Kind == ggui.KeyPress && i.keyMove(e) {
+		return
 	}
 	if ggui.Activates(e) {
 		i.activate()
 	}
+}
+
+// keyMove moves to the neighbouring enabled top-level entry on a
+// horizontal arrow, Home or End, closing the open dropdown, or opens the
+// entry's own dropdown on a vertical arrow. It reports whether the key did
+// either.
+func (i *NavigationMenuItemWidget) keyMove(e ggui.KeyEvent) bool {
+	n := i.owner
+	cur := slices.Index(n.items, i)
+	if next, ok := navTarget(controlkit.DirectionalKey(e, n.rtl).Key, navHorizontal, cur, len(n.items)); ok {
+		next = max(0, min(next, len(n.items)-1))
+		direction := 1
+		if next < cur {
+			direction = -1
+		}
+		for next >= 0 && next < len(n.items) && !n.enabled(next) {
+			next += direction
+		}
+		if next < 0 || next >= len(n.items) {
+			next = cur
+		}
+		if next >= 0 {
+			n.pending = n.items[next]
+		}
+		n.popup.Hide()
+		return true
+	}
+	if i.panel != nil && (e.Key == ggui.KeyArrowDown || e.Key == ggui.KeyArrowUp) {
+		n.open(i, true)
+		return true
+	}
+	return false
 }
 
 // HandlePointer activates only enabled navigation entries.
@@ -573,20 +586,7 @@ func (n *NavigationMenuWidget) hover(dst *ggui.Canvas, r ggui.Rect) {
 	if over != n.hoverItem {
 		n.hoverItem, n.hoverSince, n.hoverShown = over, now, -1
 	}
-	open := n.popup.IsOpen()
-	switch {
-	case over < 0 || over == n.hoverBlocked:
-	case open && over != n.active:
-		hovered := n.hoverOpened
-		n.open(n.items[over], false)
-		n.hoverOpened, n.hoverShown = hovered, over
-	case !open && dst.PointerPressed():
-	case !open && now.Sub(n.hoverSince) >= navigationMenuDelay:
-		n.open(n.items[over], false)
-		n.hoverOpened, n.hoverShown = true, over
-	case !open:
-		ggui.WakeAt(n.hoverSince.Add(navigationMenuDelay))
-	}
+	n.openRested(dst, over, now)
 	if !n.popup.IsOpen() || !n.hoverOpened {
 		n.hoverLeft = time.Time{}
 		return
@@ -606,6 +606,27 @@ func (n *NavigationMenuWidget) hover(dst *ggui.Canvas, r ggui.Rect) {
 		return
 	}
 	ggui.WakeAt(n.hoverLeft.Add(navigationMenuLinger))
+}
+
+// openRested opens the dropdown of trigger over, the one the pointer rests
+// on, once it has rested there for navigationMenuDelay while the pointer
+// is up, or at once in place of another open dropdown. A trigger closed
+// with a click stays shut.
+func (n *NavigationMenuWidget) openRested(dst *ggui.Canvas, over int, now time.Time) {
+	open := n.popup.IsOpen()
+	switch {
+	case over < 0 || over == n.hoverBlocked:
+	case open && over != n.active:
+		hovered := n.hoverOpened
+		n.open(n.items[over], false)
+		n.hoverOpened, n.hoverShown = hovered, over
+	case !open && dst.PointerPressed():
+	case !open && now.Sub(n.hoverSince) >= navigationMenuDelay:
+		n.open(n.items[over], false)
+		n.hoverOpened, n.hoverShown = true, over
+	case !open:
+		ggui.WakeAt(n.hoverSince.Add(navigationMenuDelay))
+	}
 }
 
 // HandlePointer registers the group's retained identity without consuming input.
@@ -814,7 +835,7 @@ func (f *navigationMenuFace) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	// The chevron turns over as the dropdown opens, a pixel below center as
 	// shadcn's top-px sets it.
-	turn := ease(dst, i.theme, i.Anchor(r), navigationTurnSlot, pick(i.isOpen(), math.Pi, 0.0), f.env.Motion(navigationMenuTurn))
+	turn := controlkit.Ease(dst, i.theme, i.Anchor(r), navigationTurnSlot, pick(i.isOpen(), math.Pi, 0.0), f.env.Motion(navigationMenuTurn))
 	cx := pick(f.env.Direction() == ggui.DirRTL, r.Origin.X+navigationMenuChevron/2, r.Origin.X+r.Size.W-navigationMenuChevron/2)
-	paintIconAt(dst, f.env, icons.ChevronDown, ggui.Pt(cx, r.Center().Y+1), navigationMenuChevron, col, turn)
+	controlkit.PaintIconAt(dst, f.env, controlkit.IconMark{Role: icons.ChevronDown, Center: ggui.Pt(cx, r.Center().Y+1), Size: navigationMenuChevron, Color: col, Rotation: turn})
 }

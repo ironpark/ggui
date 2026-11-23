@@ -119,41 +119,74 @@ func Equal[T any](a, b T) bool {
 		// is the same as another.
 		return any(a) == any(b)
 	}
-	if ca, ok := any(a).(color.Color); ok {
-		if cb, ok := any(b).(color.Color); ok {
-			aNil, bNil := isNilColor(ca), isNilColor(cb)
-			if aNil || bNil {
-				return aNil && bNil
-			}
-			ar, ag, ab, aa := ca.RGBA()
-			br, bg, bb, ba := cb.RGBA()
-			return ar == br && ag == bg && ab == bb && aa == ba
-		}
+	if eq, ok := sameColors(a, b); ok {
+		return eq
 	}
-	switch av := any(a).(type) {
-	case float64:
-		bv, ok := any(b).(float64)
-		return ok && (av == bv || math.IsNaN(av) && math.IsNaN(bv))
-	case float32:
-		bv, ok := any(b).(float32)
-		return ok && (av == bv || math.IsNaN(float64(av)) && math.IsNaN(float64(bv)))
-	}
-	if k := t.Kind(); k == reflect.Float64 || k == reflect.Float32 {
-		av := reflect.ValueOf(a).Float()
-		bv := reflect.ValueOf(b).Float()
-		return av == bv || math.IsNaN(av) && math.IsNaN(bv)
-	}
-	if t.Kind() == reflect.Interface && any(a) != nil && any(b) != nil {
-		ra, rb := reflect.ValueOf(a), reflect.ValueOf(b)
-		if ra.Type() == rb.Type() && (ra.Kind() == reflect.Float64 || ra.Kind() == reflect.Float32) {
-			av, bv := ra.Float(), rb.Float()
-			return av == bv || math.IsNaN(av) && math.IsNaN(bv)
-		}
+	if eq, ok := sameFloats(t, a, b); ok {
+		return eq
 	}
 	if Same(a, b) {
 		return true
 	}
 	return reflect.DeepEqual(a, b)
+}
+
+// sameFloats compares a and b when they are floats, or interfaces holding
+// floats, so that equal NaNs compare equal; it reports whether they are.
+func sameFloats[T any](t reflect.Type, a, b T) (eq, ok bool) {
+	switch av := any(a).(type) {
+	case float64:
+		bv, ok := any(b).(float64)
+		return ok && sameNumber(av, bv), true
+	case float32:
+		bv, ok := any(b).(float32)
+		return ok && sameNumber(float64(av), float64(bv)), true
+	}
+	switch t.Kind() {
+	case reflect.Float64, reflect.Float32:
+		return sameNumber(reflect.ValueOf(a).Float(), reflect.ValueOf(b).Float()), true
+	case reflect.Interface:
+		return sameBoxedFloats(any(a), any(b))
+	}
+	return false, false
+}
+
+// sameBoxedFloats compares a and b when both hold a float of one type; it
+// reports whether they do.
+func sameBoxedFloats(a, b any) (eq, ok bool) {
+	if a == nil || b == nil {
+		return false, false
+	}
+	ra, rb := reflect.ValueOf(a), reflect.ValueOf(b)
+	if ra.Type() != rb.Type() || (ra.Kind() != reflect.Float64 && ra.Kind() != reflect.Float32) {
+		return false, false
+	}
+	return sameNumber(ra.Float(), rb.Float()), true
+}
+
+// sameColors compares a and b by the channels they draw, when both are
+// colors; it reports whether they are.
+func sameColors[T any](a, b T) (eq, ok bool) {
+	ca, ok := any(a).(color.Color)
+	if !ok {
+		return false, false
+	}
+	cb, ok := any(b).(color.Color)
+	if !ok {
+		return false, false
+	}
+	aNil, bNil := isNilColor(ca), isNilColor(cb)
+	if aNil || bNil {
+		return aNil && bNil, true
+	}
+	ar, ag, ab, aa := ca.RGBA()
+	br, bg, bb, ba := cb.RGBA()
+	return ar == br && ag == bg && ab == bb && aa == ba, true
+}
+
+// sameNumber compares two floats, NaN equal to NaN.
+func sameNumber(av, bv float64) bool {
+	return av == bv || math.IsNaN(av) && math.IsNaN(bv)
 }
 
 func isNilColor(c color.Color) bool {

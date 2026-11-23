@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"image"
+	"image/color"
 	"runtime"
 	"slices"
 	"strings"
@@ -400,27 +401,7 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 			f.retained.abortPartial()
 		}
 	}()
-	opened := func() bool {
-		defer reactive.EnterLayout()()
-		for _, d := range damage {
-			f.damage = d
-			at := c.Clip(d)
-			at.inert = true
-			at.Image.Fill(background)
-			at.Paint(w.root, Rect{Size: w.rootSize})
-			if len(f.overlays) > 0 {
-				// The last frame painted no overlay, or this one would not be
-				// painted in part: one opens now, as a tooltip does at its
-				// delay, and shows beyond the regions. The frame is painted
-				// whole instead, over what this one painted, and its overlays
-				// queued again.
-				clear(f.overlays)
-				f.overlays = f.overlays[:0]
-				return true
-			}
-		}
-		return false
-	}()
+	opened := w.paintDamage(f, damage, background)
 	switch {
 	case opened:
 		framestats.Refuse("overlay")
@@ -439,20 +420,52 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 		framestats.CountPointer()
 	}
 	w.drew = FramePartial
-	if setDamage != nil {
-		// setDamage copies what it is given: the slice is the window's.
-		bounds := target.Bounds()
-		w.damagePx = w.damagePx[:0]
-		for _, r := range now {
-			if px := c.physical(r).Intersect(bounds); !px.Empty() {
-				w.damagePx = append(w.damagePx, px)
-			}
-		}
-		setDamage(w.damagePx)
-	}
+	w.reportDamage(target, now, setDamage)
 	w.noteMotion(target)
 	w.finishBackdrop(screen, target, true)
 	return true
+}
+
+// paintDamage paints the tree, inert, into each of damage over background,
+// and reports whether an overlay opened, which a frame painted in part
+// cannot show.
+func (w *Window) paintDamage(f *frameState, damage []Rect, background color.Color) bool {
+	defer reactive.EnterLayout()()
+	for _, d := range damage {
+		f.damage = d
+		at := w.canvas.Clip(d)
+		at.inert = true
+		at.Image.Fill(background)
+		at.Paint(w.root, Rect{Size: w.rootSize})
+		if len(f.overlays) > 0 {
+			// The last frame painted no overlay, or this one would not be
+			// painted in part: one opens now, as a tooltip does at its
+			// delay, and shows beyond the regions. The frame is painted
+			// whole instead, over what this one painted, and its overlays
+			// queued again.
+			clear(f.overlays)
+			f.overlays = f.overlays[:0]
+			return true
+		}
+	}
+	return false
+}
+
+// reportDamage gives setDamage, when there is one, the parts of target
+// that now covers, in pixels.
+func (w *Window) reportDamage(target *ggfx.Image, now []Rect, setDamage func([]image.Rectangle)) {
+	if setDamage == nil {
+		return
+	}
+	// setDamage copies what it is given: the slice is the window's.
+	bounds := target.Bounds()
+	w.damagePx = w.damagePx[:0]
+	for _, r := range now {
+		if px := w.canvas.physical(r).Intersect(bounds); !px.Empty() {
+			w.damagePx = append(w.damagePx, px)
+		}
+	}
+	setDamage(w.damagePx)
 }
 
 // partialRefusal is why the next frame cannot be painted over the last one

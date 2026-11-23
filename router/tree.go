@@ -142,45 +142,70 @@ func (c *compiler) walk(nodes []Route, section []seg, layouts []*route) {
 		c.mark(n)
 		switch n := n.(type) {
 		case *layoutNode:
-			if n.build == nil {
-				c.fail("nil layout at %s", patternString(section))
-			}
-			p := c.join(section, n.path, false)
-			l := c.add(&route{kind: kindLayout, pattern: p, layouts: layouts, layout: n.build})
-			c.walk(n.children, p, append(slices.Clip(layouts), l))
+			c.walkLayout(n, section, layouts)
 		case *groupNode:
-			c.walk(n.children, c.join(section, n.path, false), layouts)
+			c.walkGroup(n, section, layouts)
 		case *Target:
-			if n.build == nil {
-				c.fail("nil page at %s", n.path)
-			}
-			if n.r != nil {
-				c.fail("page %s already belongs to a router", n.path)
-			}
-			p := c.join(section, n.path, true)
-			n.r = c.r
-			n.rt = c.leaf(&route{kind: kindPage, pattern: p, layouts: layouts, page: n.build, target: n})
+			c.walkTarget(n, section, layouts)
 		case *redirectNode:
-			p := c.join(section, n.path, true)
-			to, err := parseURL(n.to)
-			if err != nil {
-				c.fail("redirect %s → %q: %v", patternString(p), n.to, err)
-			}
-			c.leaf(&route{kind: kindRedirect, pattern: p, layouts: layouts, to: to})
+			c.walkRedirect(n, section, layouts)
 		case *notFoundNode:
-			if n.build == nil {
-				c.fail("nil not-found page at %s", patternString(section))
-			}
-			sig := signature(section)
-			if c.notFounds[sig] != nil {
-				c.fail("two NotFound nodes for section %s", patternString(section))
-			}
-			c.notFounds[sig] = c.add(&route{kind: kindNotFound, pattern: section, layouts: layouts, page: n.build})
-			c.r.notFounds = append(c.r.notFounds, c.notFounds[sig])
+			c.walkNotFound(n, section, layouts)
 		default:
 			c.fail("unknown route node %T", n)
 		}
 	}
+}
+
+// walkLayout registers the layout and walks its children within it.
+func (c *compiler) walkLayout(n *layoutNode, section []seg, layouts []*route) {
+	if n.build == nil {
+		c.fail("nil layout at %s", patternString(section))
+	}
+	p := c.join(section, n.path, false)
+	l := c.add(&route{kind: kindLayout, pattern: p, layouts: layouts, layout: n.build})
+	c.walk(n.children, p, append(slices.Clip(layouts), l))
+}
+
+// walkGroup walks the group's children within its section.
+func (c *compiler) walkGroup(n *groupNode, section []seg, layouts []*route) {
+	c.walk(n.children, c.join(section, n.path, false), layouts)
+}
+
+// walkTarget registers the page.
+func (c *compiler) walkTarget(n *Target, section []seg, layouts []*route) {
+	if n.build == nil {
+		c.fail("nil page at %s", n.path)
+	}
+	if n.r != nil {
+		c.fail("page %s already belongs to a router", n.path)
+	}
+	p := c.join(section, n.path, true)
+	n.r = c.r
+	n.rt = c.leaf(&route{kind: kindPage, pattern: p, layouts: layouts, page: n.build, target: n})
+}
+
+// walkRedirect registers the redirect's destination.
+func (c *compiler) walkRedirect(n *redirectNode, section []seg, layouts []*route) {
+	p := c.join(section, n.path, true)
+	to, err := parseURL(n.to)
+	if err != nil {
+		c.fail("redirect %s → %q: %v", patternString(p), n.to, err)
+	}
+	c.leaf(&route{kind: kindRedirect, pattern: p, layouts: layouts, to: to})
+}
+
+// walkNotFound registers the section's not-found page, one at most.
+func (c *compiler) walkNotFound(n *notFoundNode, section []seg, layouts []*route) {
+	if n.build == nil {
+		c.fail("nil not-found page at %s", patternString(section))
+	}
+	sig := signature(section)
+	if c.notFounds[sig] != nil {
+		c.fail("two NotFound nodes for section %s", patternString(section))
+	}
+	c.notFounds[sig] = c.add(&route{kind: kindNotFound, pattern: section, layouts: layouts, page: n.build})
+	c.r.notFounds = append(c.r.notFounds, c.notFounds[sig])
 }
 
 func (c *compiler) leaf(r *route) *route {

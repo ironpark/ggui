@@ -16,63 +16,57 @@ package lucide
 
 //go:generate go run github.com/ironpark/ggui/icons/internal/gen -lib lucide -out .
 
-import "github.com/ironpark/ggui/ui/icons"
+import (
+	"sync"
 
+	"github.com/ironpark/ggui/ui/icons"
+)
+
+// library is the comparable Set Set returns. The role table is built the
+// first time a role is resolved, inside Resolve and not at package
+// initialization, so a program that never asks for the set links none of
+// these icons, and each icon is parsed only when its role is drawn.
 type library struct{}
+
+var (
+	rolesOnce  sync.Once
+	roleGlyphs map[icons.Role]*icons.Glyph
+)
+
+func (library) Resolve(role icons.Role) *icons.SVG {
+	rolesOnce.Do(func() {
+		roleGlyphs = map[icons.Role]*icons.Glyph{
+			icons.Check:          Check,
+			icons.Close:          X,
+			icons.ChevronDown:    ChevronDown,
+			icons.ChevronUp:      ChevronUp,
+			icons.ChevronLeft:    ChevronLeft,
+			icons.ChevronRight:   ChevronRight,
+			icons.Search:         Search,
+			icons.Alert:          CircleExclamationPoint, // Lucide 1.73 renamed circle-alert to circle-exclamation-point.
+			icons.Info:           Info,
+			icons.Plus:           Plus,
+			icons.Minus:          Minus,
+			icons.Download:       Download,
+			icons.File:           File,
+			icons.Sun:            Sun,
+			icons.Moon:           Moon,
+			icons.Grip:           GripVertical,
+			icons.Loader:         LoaderCircle,
+			icons.Undo:           Undo2,
+			icons.Redo:           Redo2,
+			icons.MoreHorizontal: Ellipsis,
+			icons.Copy:           Copy,
+			icons.ArrowDown:      ArrowDown,
+			icons.PanelLeft:      PanelLeft,
+		}
+	})
+	if g := roleGlyphs[role]; g != nil {
+		return g.SVG()
+	}
+	return nil
+}
 
 // Set maps the roles the controls draw to Lucide's icons, for
 // icons.SetKey in a theme or an Env.
 func Set() icons.Set { return library{} }
-
-func (library) Resolve(role icons.Role) *icons.SVG {
-	switch role {
-	case icons.Check:
-		return Check.SVG()
-	case icons.Close:
-		return X.SVG()
-	case icons.ChevronDown:
-		return ChevronDown.SVG()
-	case icons.ChevronUp:
-		return ChevronUp.SVG()
-	case icons.ChevronLeft:
-		return ChevronLeft.SVG()
-	case icons.ChevronRight:
-		return ChevronRight.SVG()
-	case icons.Search:
-		return Search.SVG()
-	case icons.Alert:
-		// Lucide 1.73 renamed circle-alert to circle-exclamation-point.
-		return CircleExclamationPoint.SVG()
-	case icons.Info:
-		return Info.SVG()
-	case icons.Plus:
-		return Plus.SVG()
-	case icons.Minus:
-		return Minus.SVG()
-	case icons.Download:
-		return Download.SVG()
-	case icons.File:
-		return File.SVG()
-	case icons.Sun:
-		return Sun.SVG()
-	case icons.Moon:
-		return Moon.SVG()
-	case icons.Grip:
-		return GripVertical.SVG()
-	case icons.Loader:
-		return LoaderCircle.SVG()
-	case icons.Undo:
-		return Undo2.SVG()
-	case icons.Redo:
-		return Redo2.SVG()
-	case icons.MoreHorizontal:
-		return Ellipsis.SVG()
-	case icons.Copy:
-		return Copy.SVG()
-	case icons.ArrowDown:
-		return ArrowDown.SVG()
-	case icons.PanelLeft:
-		return PanelLeft.SVG()
-	}
-	return nil
-}

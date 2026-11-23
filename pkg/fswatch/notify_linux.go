@@ -303,29 +303,11 @@ func (s *inotify) event(wd int32, mask uint32, name string) {
 	dir := info.dir
 	if ok && mask&(syscall.IN_IGNORED|syscall.IN_DELETE_SELF) != 0 {
 		// Gone, and its watch with it.
-		delete(s.wds, wd)
-		if s.dirs[dir] == wd {
-			delete(s.dirs, dir)
-		}
+		s.forgetWatch(wd, dir)
 	}
-	// A directory moved keeps its watch, which follows the directory, not
-	// its name. Moved within a watched directory, it was reported there
-	// by its new name, and adding that name found the same watch and
-	// renamed it, before IN_MOVE_SELF, so the name it has is right. Moved
-	// elsewhere, or replaced by another directory at the same path, its
-	// identity (Dev, Ino) no longer matches, so the stale watch goes and
-	// any replacement directory at dir is watched afresh.
 	readd := false
 	if ok && mask&syscall.IN_MOVE_SELF != 0 {
-		cur, curOK := statDirID(dir)
-		if !curOK || !info.hasID || cur != info.id {
-			s.rmWatch(wd)
-			delete(s.wds, wd)
-			if s.dirs[dir] == wd {
-				delete(s.dirs, dir)
-			}
-			readd = curOK
-		}
+		readd = s.movedSelf(wd, info, dir)
 	}
 	s.mu.Unlock()
 	if !ok {
@@ -337,19 +319,58 @@ func (s *inotify) event(wd int32, mask uint32, name string) {
 	}
 	s.push(path)
 	if readd && !s.closing.Load() {
-		if s.recursive {
-			s.addTree(dir)
-		} else {
-			s.mu.Lock()
-			err := s.add(dir)
-			s.mu.Unlock()
-			if errors.Is(err, errWatchLimit) || errors.Is(err, errTooManyDirs) {
-				s.fail(err)
-			} else if err != nil && !s.closing.Load() && !errors.Is(err, os.ErrClosed) {
-				s.lost()
-			}
-		}
+		s.watchAgain(dir)
 	}
+	s.dirAppeared(path, mask, name)
+}
+
+// forgetWatch drops wd's watch of dir from the maps. s.mu is held.
+func (s *inotify) forgetWatch(wd int32, dir string) {
+	delete(s.wds, wd)
+	if s.dirs[dir] == wd {
+		delete(s.dirs, dir)
+	}
+}
+
+// movedSelf answers whether a directory reported IN_MOVE_SELF must be
+// watched again, and takes its stale watch out if so. A directory moved
+// keeps its watch, which follows the directory, not its name. Moved
+// within a watched directory, it was reported there by its new name,
+// and adding that name found the same watch and renamed it, before
+// IN_MOVE_SELF, so the name it has is right. Moved elsewhere, or
+// replaced by another directory at the same path, its identity (Dev,
+// Ino) no longer matches, so the stale watch goes and any replacement
+// directory at dir is watched afresh. s.mu is held.
+func (s *inotify) movedSelf(wd int32, info wdInfo, dir string) bool {
+	cur, curOK := statDirID(dir)
+	if !curOK || !info.hasID || cur != info.id {
+		s.rmWatch(wd)
+		s.forgetWatch(wd, dir)
+		return curOK
+	}
+	return false
+}
+
+// watchAgain watches a moved directory afresh, and, when the watch is
+// recursive, what reappeared below it.
+func (s *inotify) watchAgain(dir string) {
+	if s.recursive {
+		s.addTree(dir)
+		return
+	}
+	s.mu.Lock()
+	err := s.add(dir)
+	s.mu.Unlock()
+	if errors.Is(err, errWatchLimit) || errors.Is(err, errTooManyDirs) {
+		s.fail(err)
+	} else if err != nil && !s.closing.Load() && !errors.Is(err, os.ErrClosed) {
+		s.lost()
+	}
+}
+
+// dirAppeared watches a directory made or moved into a watched one,
+// with everything below it when the watch is recursive.
+func (s *inotify) dirAppeared(path string, mask uint32, name string) {
 	if s.recursive && mask&syscall.IN_ISDIR != 0 && mask&(syscall.IN_CREATE|syscall.IN_MOVED_TO) != 0 && name != "" {
 		if s.skip == nil || !s.skip(path) {
 			s.addTree(path)

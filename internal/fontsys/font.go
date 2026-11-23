@@ -418,7 +418,7 @@ func (f *Font) SpacedFaceFor(size float64, weight Weight, spacing float64, emoji
 	gen := f.generation
 	f.mu.Unlock()
 
-	face := f.buildFace(own, axis, fallbacks, sys, noFb, size, weight, spacing, key.emoji)
+	face := f.buildFace(chainSpec{own: own, axis: axis, sys: sys, noFb: noFb}, fallbacks, size, weight, spacing, key.emoji)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -450,25 +450,34 @@ func (f *Font) keepFaceLocked(key faceKey, face text.Face) {
 	f.faces[key] = face
 }
 
+// chainSpec is which fonts a face falls back through, resolved under
+// f.mu: f's own font for the weight, and whether the system's fonts join.
+type chainSpec struct {
+	own  *Font
+	axis bool
+	sys  bool
+	noFb bool
+}
+
 // buildFace makes f's face at size and weight beside emoji, with spacing
 // after each letter, from a snapshot taken under f.mu so fallback fonts
 // are never locked while f.mu is held.
-func (f *Font) buildFace(own *Font, axis bool, fallbacks []*Font, sys, noFb bool, size float64, weight Weight, spacing float64, emoji *EmojiChoice) text.Face {
-	fonts, multi := f.resolveChain(own, axis, fallbacks, sys, noFb, weight)
+func (f *Font) buildFace(spec chainSpec, fallbacks []*Font, size float64, weight Weight, spacing float64, emoji *EmojiChoice) text.Face {
+	fonts, multi := f.resolveChain(spec, fallbacks, weight)
 	var face text.Face = fonts[0].Font.chainFace(size, weight, fonts[0].Axis, spacing)
 	if multi {
 		faces := []text.Face{face}
 		for _, cf := range fonts[1:] {
 			faces = append(faces, cf.Font.chainFace(size, weight, cf.Axis, spacing))
 		}
-		if sys {
+		if spec.sys {
 			faces = append(faces, systemFallbackFace(size, weight, spacing, face))
 		}
 		if m, err := text.NewMultiFace(faces...); err == nil {
 			face = m
 		}
 	}
-	if !noFb {
+	if !spec.noFb {
 		face = WithEmoji(face, size, emoji)
 		if ef, ok := face.(*EmojiFace); ok {
 			ef.spacing = spacing
@@ -494,9 +503,9 @@ func (f *Font) systemFallbackLocked() bool {
 // then each fallback's for w. multi reports whether f has fallbacks at all,
 // its own or the system's, which makes the face a fallback chain even when
 // the only one is f itself.
-func (f *Font) resolveChain(own *Font, axis bool, fallbacks []*Font, sys, noFb bool, w Weight) (fonts []ChainFont, multi bool) {
-	fonts = []ChainFont{{own, axis}}
-	if fallbacks == nil && !noFb {
+func (f *Font) resolveChain(spec chainSpec, fallbacks []*Font, w Weight) (fonts []ChainFont, multi bool) {
+	fonts = []ChainFont{{spec.own, spec.axis}}
+	if fallbacks == nil && !spec.noFb {
 		fallbacks = SystemFonts()
 	}
 	for _, fb := range fallbacks {
@@ -505,5 +514,5 @@ func (f *Font) resolveChain(own *Font, axis bool, fallbacks []*Font, sys, noFb b
 			fonts = append(fonts, ChainFont{fbFont, fbAxis})
 		}
 	}
-	return fonts, len(fallbacks) > 0 || sys
+	return fonts, len(fallbacks) > 0 || spec.sys
 }

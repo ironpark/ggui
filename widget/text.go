@@ -82,10 +82,10 @@ func (t *TextWidget) lineStyles(line string) []paragraph.LineStyle {
 	return []paragraph.LineStyle{{Start: 0, End: len(line), Style: st}}
 }
 
-// paintBidi draws line i in visual order at y, aligned at align in r, and
+// paintBidi draws line i in visual order, aligned at align in r, and
 // reports whether it did; a line that needs no reordering is left to the
 // caller.
-func (t *TextWidget) paintBidi(dst *ggui.Canvas, i int, r ggui.Rect, align, y float64, col color.Color, place func(op *text.DrawOptions, x, y float64)) bool {
+func (t *TextWidget) paintBidi(dst *ggui.Canvas, i int, r ggui.Rect, align float64, col color.Color, place func(op *text.DrawOptions, x, y float64)) bool {
 	if t.bidi == nil || i >= len(t.bidi.lines) || t.bidi.lines[i] == nil {
 		return false
 	}
@@ -93,10 +93,11 @@ func (t *TextWidget) paintBidi(dst *ggui.Canvas, i int, r ggui.Rect, align, y fl
 	bidiScale := sanitizeScale(t.bidi.key.scale)
 	scale := sanitizeScale(dst.Scale())
 	x := r.Origin.X + (r.Size.W-paragraph.Width(ps)/bidiScale)*align
+	y := t.lineY(r, i)
 	baseline := t.faceAt(scale).Metrics().HAscent
-	paragraph.Draw(dst.Image, &t.bidi.pieceOp, line, ps, t.bidi.styles[i], scale/bidiScale, baseline,
-		func(int) color.Color { return col },
-		func(op *text.DrawOptions) { place(op, x, y) })
+	paragraph.Draw(dst.Image, &t.bidi.pieceOp, paragraph.DrawSpec{
+		S: line, Pieces: ps, Styles: t.bidi.styles[i], Scale: scale / bidiScale, Baseline: baseline,
+	}, func(int) color.Color { return col }, func(op *text.DrawOptions) { place(op, x, y) })
 	return true
 }
 
@@ -581,19 +582,24 @@ func (t *TextWidget) paintLines(dst *ggui.Canvas, r ggui.Rect, upright bool, pla
 			lw = textlayout.Width(line, face) / scale
 		}
 		x := r.Origin.X + (r.Size.W-lw)*align
-		y := r.Origin.Y + t.lead + float64(i)*t.spacing()
+		y := t.lineY(r, i)
 		// A line's glyphs can reach past its box, by an accent, a tall
 		// emoji or a long tail, by up to a line more.
 		if upright && !dst.Draws(ggui.Rct(ggui.Pt(r.Origin.X, y), ggui.Sz(r.Size.W, t.spacing())), t.spacing()) {
 			continue
 		}
-		if t.paintBidi(dst, i, r, align, y, col, place) {
+		if t.paintBidi(dst, i, r, align, col, place) {
 			continue
 		}
 		op.GeoM.Reset()
 		place(op, x, y)
 		t.drawLine(dst.Image, i, line, face, op)
 	}
+}
+
+// lineY is where line i starts down r.
+func (t *TextWidget) lineY(r ggui.Rect, i int) float64 {
+	return r.Origin.Y + t.lead + float64(i)*t.spacing()
 }
 
 // drawLine draws line i, from the glyphs it keeps when it can.

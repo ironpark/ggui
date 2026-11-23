@@ -374,24 +374,10 @@ func (p *PopupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.RestoreFocus(p.opener)
 		p.restore = false
 	}
-	open := p.IsOpen()
 	if p.nonmodal {
-		if open && !p.paintedOpen {
-			p.opener = dst.Focused()
-			p.focusContent = p.focusContent || !p.keepFocus
-			p.hadContentFocus = false
-		}
-		inside := p.ownsFocus(dst)
-		p.hadContentFocus = p.hadContentFocus || inside
-		if open && !p.focusContent && p.hadContentFocus && !inside && !anchorFocused && dst.Focused() != nil {
-			if !dst.FocusStale() {
-				p.SetOpen(false)
-				open = p.IsOpen()
-			} else {
-				p.focusContent = true
-			}
-		}
+		p.trackFocus(dst, anchorFocused)
 	}
+	open := p.IsOpen()
 	p.paintedOpen = open
 	now := ggui.FrameTime()
 	duration := p.env.Motion(p.env.PopupDuration())
@@ -409,6 +395,29 @@ func (p *PopupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 		p.paintContent(dst, r)
 	}, dst.SemanticRef(p.owner))
+}
+
+// trackFocus keeps a nonmodal popup's focus: it notes what had the focus
+// when the popup opened, and closes the popup once the focus moves from
+// its content to somewhere neither in it nor on the anchor, unless that
+// focus is stale, when the content takes the focus back.
+func (p *PopupWidget) trackFocus(dst *ggui.Canvas, anchorFocused bool) {
+	open := p.IsOpen()
+	if open && !p.paintedOpen {
+		p.opener = dst.Focused()
+		p.focusContent = p.focusContent || !p.keepFocus
+		p.hadContentFocus = false
+	}
+	inside := p.ownsFocus(dst)
+	p.hadContentFocus = p.hadContentFocus || inside
+	if !open || p.focusContent || !p.hadContentFocus || inside || anchorFocused || dst.Focused() == nil {
+		return
+	}
+	if dst.FocusStale() {
+		p.focusContent = true
+		return
+	}
+	p.SetOpen(false)
 }
 
 // paintContent lays the content out for the room around the anchor and

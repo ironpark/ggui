@@ -236,6 +236,20 @@ func windowsArg(s string) string {
 	if space {
 		b.WriteByte('"')
 	}
+	slashes := writeEscapedArg(&b, s)
+	if space {
+		for ; slashes > 0; slashes-- {
+			b.WriteByte('\\')
+		}
+		b.WriteByte('"')
+	}
+	return b.String()
+}
+
+// writeEscapedArg writes s to b with each quote escaped with a backslash
+// and the backslashes before it doubled, and returns how many backslashes
+// s ends with, which a closing quote doubles too.
+func writeEscapedArg(b *strings.Builder, s string) int {
 	slashes := 0
 	for i := 0; i < len(s); i++ {
 		c := s[i]
@@ -252,13 +266,7 @@ func windowsArg(s string) string {
 		}
 		b.WriteByte(c)
 	}
-	if space {
-		for ; slashes > 0; slashes-- {
-			b.WriteByte('\\')
-		}
-		b.WriteByte('"')
-	}
-	return b.String()
+	return slashes
 }
 
 // setLoginFile writes data to path when enabled, or removes path when not,
@@ -270,7 +278,7 @@ func setLoginFile(path string, data []byte, enabled bool) error {
 		}
 		return nil
 	}
-	return writeFileReplacing(path, data)
+	return replaceFile(path, data, 0o644)
 }
 
 // loginFileExists reports whether the login item at path is there.
@@ -283,34 +291,4 @@ func loginFileExists(path string) (bool, error) {
 		return false, nil
 	}
 	return false, err
-}
-
-// writeFileReplacing writes data to path through a file beside it, renamed
-// over path once complete, so that a reader never sees half of it, and
-// makes the directory if it is missing.
-func writeFileReplacing(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+"-*")
-	if err != nil {
-		return err
-	}
-	_, err = f.Write(data)
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	if err == nil {
-		err = os.Chmod(f.Name(), 0o644)
-	}
-	if err == nil {
-		err = robustio.Rename(f.Name(), path)
-	}
-	if err != nil {
-		if rerr := os.Remove(f.Name()); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
-			err = errors.Join(err, rerr)
-		}
-	}
-	return err
 }

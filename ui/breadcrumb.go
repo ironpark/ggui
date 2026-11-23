@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/property"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -133,18 +134,7 @@ func (b *BreadcrumbWidget) build() {
 	var parts []ggui.Widget
 	for i, c := range crumbs {
 		if i > 0 {
-			switch {
-			case b.custom != nil:
-				parts = append(parts, &breadcrumbSeparatorOf{child: b.custom})
-			case b.separator != "":
-				sep := widget.Text(b.separator).NoWrap()
-				b.muted = append(b.muted, sep)
-				parts = append(parts, sep)
-			default:
-				sep := Icon(icons.ChevronRight).Size(breadcrumbSeparator)
-				b.chevrons = append(b.chevrons, sep)
-				parts = append(parts, sep)
-			}
+			parts = append(parts, b.newSeparator())
 		}
 		last := i == len(crumbs)-1
 		switch {
@@ -162,6 +152,24 @@ func (b *BreadcrumbWidget) build() {
 		}
 	}
 	b.row = widget.Wrap(parts...).Gap(breadcrumbGap).Align(widget.AlignCenter)
+}
+
+// newSeparator makes what goes between two crumbs: the custom separator,
+// the separator text, which Layout mutes, or a chevron, which it mutes and
+// turns with the direction.
+func (b *BreadcrumbWidget) newSeparator() ggui.Widget {
+	switch {
+	case b.custom != nil:
+		return &breadcrumbSeparatorOf{child: b.custom}
+	case b.separator != "":
+		sep := widget.Text(b.separator).NoWrap()
+		b.muted = append(b.muted, sep)
+		return sep
+	default:
+		sep := Icon(icons.ChevronRight).Size(breadcrumbSeparator)
+		b.chevrons = append(b.chevrons, sep)
+		return sep
+	}
 }
 
 // Layout implements ggui.Widget.
@@ -233,14 +241,14 @@ func (l *breadcrumbLink) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	l.theme, l.motion = t, env.Motion(t.MotionFast)
 	// Paint recolors the label as the pointer crosses it; here it keeps
 	// the color it was last drawn in, so a layout does not undo a hover.
-	l.label.Color(colorOr(l.ink, t.MutedFg))
+	l.label.Color(controlkit.ColorOr(l.ink, t.MutedFg))
 	return l.label.Layout(c, env.WithText(t.Text))
 }
 
 // Paint implements ggui.Widget.
 func (l *breadcrumbLink) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := l.theme
-	hover := ease(dst, l.theme, l.Anchor(r), breadcrumbHoverSlot, pick(l.Hovered && !l.IsInert(), 1.0, 0.0), l.motion)
+	hover := controlkit.Ease(dst, l.theme, l.Anchor(r), breadcrumbHoverSlot, pick(l.Hovered && !l.IsInert(), 1.0, 0.0), l.motion)
 	l.ink = t.MutedFg
 	if hover >= 1 {
 		l.ink = t.Fg

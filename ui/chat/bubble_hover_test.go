@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui/internal/controlkit"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 	"github.com/ironpark/ggui/widget"
 )
@@ -14,7 +15,7 @@ import (
 func TestBubbleVariantsHoverOnTheirOwnSurfaces(t *testing.T) {
 	t.Parallel()
 	for _, th := range []*uitheme.Theme{uitheme.Default(), uitheme.Dark()} {
-		dark := isDark(th.Bg)
+		dark := controlkit.IsDark(th.Bg)
 		for _, tc := range []struct {
 			name string
 			set  func(*BubbleWidget) *BubbleWidget
