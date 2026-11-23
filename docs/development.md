@@ -68,18 +68,18 @@ command and packaging jobs; CI/tooling changes, nightly runs, and manual runs
 execute everything:
 
 - **test**, on Linux, macOS, and Windows: builds a `go.work` workspace over
-  `.`, `docs/examples/sqlite`, `fonts/notoemoji`, `icons/*`, and `cmd/ggui`,
-  runs `go test` across `./...`, `docs/examples/sqlite`,
+  `.`, `docs/examples/sqlite`, `fonts/notoemoji`, `icons/*`, `cmd/ggui`, and
+  `pkg/fswatch`, runs `go test` across `./...`, `docs/examples/sqlite`,
   `fonts/notoemoji`, and `icons/*`, and re-runs tests with `-tags ggui_inspector`,
   `-tags ggui_debug`, and `-tags ggwd_remote` (including building
   `docs/examples/counter` with `ggwd_remote,ggui_inspector,ggui_debug`).
-- **command**, on Linux, macOS, and Windows: tests `cmd/ggui`
+- **command**, on Linux, macOS, and Windows: tests `cmd/ggui` and `pkg/fswatch`
   against the checkout in a workspace (including building the app `ggui init`
   writes), re-tests the watcher with `GGUI_WATCH=poll` and `CGO_ENABLED=0`, and
-  checks that the module builds, vets, and compiles tests standalone with
+  checks that both modules build, vet, and compile tests standalone with
   `GOWORK=off`.
 - **race**, on Ubuntu (`ubuntu-latest`): runs `go test -race` for the library
-  (`./...`) and for `cmd/ggui`.
+  (`./...`) and for `pkg/fswatch` and `cmd/ggui`.
 - **remote**, on Linux, macOS, and Windows: runs `cmd/ggviewer`'s
   `TestEndToEnd` (`GGUI_E2E=1`) against `docs/examples/counter` with the remote
   backend end to end on the runner's window system and GPU — attaching and
@@ -250,7 +250,7 @@ those guides as historical measurements; rerun them on your target hardware.
 | Testing and diagnostics | [probe.go](../probe.go), [inspect/panel/](../inspect/panel) (the panel, build tag `ggui_inspector`), [inspector.go](../inspector.go) (its registration, and the frame built from the trace), [inspect/](../inspect) (the frame model the panel and `App.OnInspect` share, and `ReadFrameStats` and `ReadMotionReport`), [internal/framestats/](../internal/framestats/) (the process's frame counters those read), [overlay.go](../overlay.go) (the Overlay the panel draws as), [widget.go](../widget.go) (Cached) |
 | Runnable applications | [docs/examples/](examples/README.md) |
 | The ggui command | [cmd/ggui/](../cmd/ggui/): `init`, `dev`, `build`, `release`, `record`, `i18n`, and `doctor`, a module of its own that drives the go command and imports nothing of ggui, and signs, notarizes and packages macOS builds with the packages of [zapp](https://github.com/ironpark/zapp); its [internal/](../cmd/ggui/internal/) packages keep what the watcher knows of Go, the process runner, the builders, the viewer's launcher and the bundle writers apart |
-| Watching files | [cmd/ggui/internal/fswatch/](../cmd/ggui/internal/fswatch/): the file watcher `ggui dev` is built on: a scan of every path is the truth, FSEvents, inotify and ReadDirectoryChangesW only wake it, and a content hook lets the caller say which edits matter |
+| Watching files | [pkg/fswatch/](../pkg/fswatch/): the file watcher `ggui dev` is built on, a module of its own that any Go program can use: a scan of every path is the truth, FSEvents, inotify and ReadDirectoryChangesW only wake it, and a content hook lets the caller say which edits matter |
 | The dev viewer | [cmd/ggviewer/](../cmd/ggviewer/) (`viewer.go`, `conn.go`, `replay.go`, `menu.go`, `overlay.go`, `control.go`): the window `ggui dev` shows an app in while it restarts, replaying the app's command stream; [internal/platform/remotedisplay/](../internal/platform/remotedisplay/) is what the app gives up in it |
 
 The module is built in three layers, each importing only those below it:
@@ -288,6 +288,18 @@ The command is a module of its own, released by a tag on its directory:
 ```sh
 git tag cmd/ggui/v0.2.0
 git push origin cmd/ggui/v0.2.0
+```
+
+It requires [pkg/fswatch](../pkg/fswatch/), the file watcher, by a tagged
+version, so a release that needs a change to the watcher tags the watcher
+first, `pkg/fswatch/vX.Y.Z`, raises the requirement in `cmd/ggui/go.mod`
+to it, and tags the command after. While the command requires a version
+of the watcher not yet tagged, the go command looks for it even in a
+workspace that has the module; a replace in the workspace, not in
+`go.mod`, stands in for it, as CI's does:
+
+```sh
+go work edit -replace github.com/ironpark/ggui/pkg/fswatch@v0.1.0=./pkg/fswatch
 ```
 
 The tag runs `.github/workflows/release-cli.yml`: GoReleaser builds the
