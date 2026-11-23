@@ -183,9 +183,3 @@ func (f *fakeSource) close()                    { close(f.closed) }
 func withFake(w *Watcher, src *fakeSource) {
 	w.newSource = func(bool, func(string) bool) (source, error) { return src, nil }
 }
-
-func watched(w *Watcher) int {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return len(w.files)
-}
