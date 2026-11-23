@@ -15,6 +15,7 @@ import (
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
 	"github.com/ironpark/ggui/cmd/ggui/internal/i18n"
+	"github.com/ironpark/ggui/cmd/ggui/internal/installer"
 	"github.com/ironpark/ggui/cmd/ggui/internal/linux"
 	"github.com/ironpark/ggui/cmd/ggui/internal/macos"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
@@ -37,15 +38,17 @@ Targets:
   macos    Name.app in the output directory: the program, Info.plist from
            [app] and [macos], the icon made from app.icon, signed with
            macos.signing_identity (ad hoc by default). With --dmg or
-           [macos.dmg] also Name.dmg, and with --pkg or [macos.pkg]
-           Name.pkg; with --notarize each is notarized and stapled. A
-           build signed with an identity is verified at the end. The
-           default on macOS.
+           [macos.dmg] also Name.dmg, and with --installer, --pkg,
+           [installer], [installer.macos] or [macos.pkg] Name.pkg; with
+           --notarize each is notarized and stapled. A build signed with
+           an identity is verified at the end. The default on macOS.
   windows  Name.exe in the output directory, for the go command's GOARCH
            (amd64, arm64 or 386), with the icon made from app.icon,
            version information from [app] and [windows], and a manifest,
            linked as a GUI program that opens no console (--console keeps
-           it). The default on Windows.
+           it). With --installer, [installer] or [installer.windows] also
+           Name-Setup.exe, a ggui-based installer and uninstaller. The
+           default on Windows.
   linux    an install tree, name-linux-arch, in the output directory: the
            program in usr/bin, built for the go command's GOARCH (amd64,
            arm64 or riscv64) without cgo, a desktop entry, the icon made
@@ -82,7 +85,7 @@ identity takes a Mac. docs/cli.md has the details.`,
 // and the ones macFlags gathers for signing a macOS build.
 type buildFlags struct {
 	cfgPath, tgt, out               *string
-	universal, console              *bool
+	universal, console, installer   *bool
 	format, tags, ldflags, renderer *string
 	mac                             macFlags
 	isSet                           func(string) bool
@@ -95,6 +98,7 @@ func newBuildFlags(fs *flag.FlagSet) *buildFlags {
 	f.out = fs.String("out", "", "the output `directory`, replacing build.output")
 	f.universal = fs.Bool("universal", false, "with --target macos, build for Apple silicon and Intel and join them into one universal program")
 	f.console = fs.Bool("console", false, "with --target windows, link for the console, which Windows opens a window of, replacing windows.console")
+	f.installer = fs.Bool("installer", false, "also make a platform installer (Name.pkg on macOS, Name-Setup.exe on Windows); --installer=false skips what [installer] or [macos.pkg] asks for")
 	f.format = fs.String("format", "", "with --target linux, what to make of the install tree: `formats` from tar, deb and rpm, comma-separated, replacing linux.formats")
 	f.tags = fs.String("tags", "", "build `tags`, comma-separated, replacing build.tags")
 	f.ldflags = fs.String("ldflags", "", "linker `flags` after -s -w, replacing build.ldflags")
@@ -148,6 +152,8 @@ func (f *buildFlags) run(ctx context.Context, pos, rest []string) error {
 	if f.isSet("console") {
 		b.console = *f.console
 	}
+	b.installerSet = f.isSet("installer")
+	b.installerVal = *f.installer
 	lo, err := b.planTarget(ctx, *f.tgt)
 	if err != nil {
 		return err
@@ -233,6 +239,12 @@ func (f *buildFlags) checkTarget(b *builder, tgt string) error {
 	if tgt != "windows" && f.isSet("console") {
 		return errors.New("--console is for a Windows build: add --target windows")
 	}
+	if f.isSet("installer") && tgt != "macos" && tgt != "windows" {
+		return errors.New("--installer is for a macOS or Windows build: add --target macos or --target windows")
+	}
+	if tgt == "macos" && f.isSet("installer") && f.mac.isSet("pkg") && *f.installer != *f.mac.pkg {
+		return errors.New("--installer and --pkg disagree: pass one of them")
+	}
 	b.formats = b.proj.Config.Linux.Formats
 	if f.isSet("format") {
 		if tgt != "linux" {
@@ -270,9 +282,46 @@ type builder struct {
 	rendererFlagSet bool // --renderer was passed on the command line
 	universal       bool
 	mac             macFlags
+	installerSet    bool     // --installer was passed on the command line
+	installerVal    bool     // value of --installer
 	console         bool     // link a Windows program for the console
 	arch            string   // the GOARCH of a Windows or Linux build
 	formats         []string // what a Linux build makes of its tree
+}
+
+func (b *builder) wantMacOSInstaller() bool {
+	if b.mac.isSet != nil && b.mac.isSet("pkg") {
+		return *b.mac.pkg
+	}
+	if b.installerSet {
+		return b.installerVal
+	}
+	return b.proj.Config.MakeMacOSInstaller()
+}
+
+func (b *builder) wantWindowsInstaller() bool {
+	if b.installerSet {
+		return b.installerVal
+	}
+	return b.proj.Config.MakeWindowsInstaller()
+}
+
+// buildInstaller runs an installer.Builder as a step and logs any warnings.
+func (b *builder) buildInstaller(ctx context.Context, ib installer.Builder, spec installer.Spec) (string, error) {
+	out := ib.OutputPath(spec)
+	var res installer.Result
+	err := step(ctx, "Making "+filepath.Base(out), "Made "+filepath.Base(out), func() error {
+		var err error
+		res, err = ib.Build(ctx, spec)
+		return err
+	})
+	if err != nil {
+		return "", err
+	}
+	for _, w := range res.Warnings {
+		ui.Stderr.Warn("%s", w)
+	}
+	return res.Path, nil
 }
 
 // macFlags are the flags that sign, notarize and package a macOS build.
@@ -319,10 +368,11 @@ func (f macFlags) boolean(name string, flag *bool, configured bool) bool {
 // which take precedence, and the environment, which holds the secrets.
 func (b *builder) signing() (s macos.Signing, notarize bool, err error) {
 	m, f := b.proj.Config.MacOS, b.mac
+	pkgCfg := b.proj.Config.ResolvedMacOSPKG()
 	s = macos.Signing{
 		Identity:     f.str("identity", f.identity, m.SigningIdentity),
 		Entitlements: b.proj.Path(m.Entitlements),
-		PKGIdentity:  m.PKG.SigningIdentity,
+		PKGIdentity:  pkgCfg.SigningIdentity,
 	}
 	if s.Identity == "" {
 		return s, false, errors.New(`--identity must name an identity, or "-" to sign ad hoc`)
@@ -446,7 +496,6 @@ func (b *builder) macos(ctx context.Context) error {
 	if err := b.proj.CheckIcon(); err != nil {
 		return err
 	}
-	cfg := b.proj.Config
 	dir, err := b.proj.OutDir(b.out)
 	if err != nil {
 		return err
@@ -476,7 +525,7 @@ func (b *builder) macos(ctx context.Context) error {
 	if !sg.AdHoc() {
 		logf("Signing as %s, from %s", sg.Identity, s.Describe())
 	}
-	if b.mac.boolean("pkg", b.mac.pkg, cfg.MacOS.PKG.Make) {
+	if b.wantMacOSInstaller() {
 		if err := sg.CheckInstaller(ctx); err != nil {
 			return err
 		}
@@ -667,7 +716,7 @@ func (b *builder) macosArtifacts(ctx context.Context, sg *macos.Signer, app, dir
 		}
 		artifacts = append(artifacts, out)
 	}
-	if b.mac.boolean("pkg", b.mac.pkg, cfg.MacOS.PKG.Make) {
+	if b.wantMacOSInstaller() {
 		out, err := b.macosPKG(ctx, sg, app, dir, notarize)
 		if err != nil {
 			return nil, err
@@ -719,16 +768,24 @@ func (b *builder) macosDMG(ctx context.Context, sg *macos.Signer, app, dir strin
 // after a warning.
 func (b *builder) macosPKG(ctx context.Context, sg *macos.Signer, app, dir string, notarize bool) (string, error) {
 	cfg := b.proj.Config
-	p := cfg.MacOS.PKG
+	p := cfg.ResolvedMacOSPKG()
 	m := cfg.MacOS
-	out := filepath.Join(dir, b.main.Name+".pkg")
-	err := step(ctx, "Making "+filepath.Base(out), "Made "+filepath.Base(out), func() error {
-		return macos.MakePKG(ctx, macos.PKG{
-			App: app, Out: out, ID: b.main.ID, Version: cfg.App.Version,
-			MinOS: m.MinimumSystemVersion, InstallLocation: p.InstallLocation,
-			Scripts: b.proj.Path(p.Scripts), License: b.proj.Path(p.License),
-		})
-	})
+	spec := installer.Spec{
+		Name:       b.main.Name,
+		Executable: b.main.Executable,
+		ID:         b.main.ID,
+		Version:    cfg.App.Version,
+		ProjectDir: b.proj.Root,
+		Artifact:   app,
+		OutDir:     dir,
+		License:    b.proj.Path(p.License),
+		MacOS: installer.MacOSOptions{
+			MinOS:           m.MinimumSystemVersion,
+			InstallLocation: p.InstallLocation,
+			Scripts:         b.proj.Path(p.Scripts),
+		},
+	}
+	out, err := b.buildInstaller(ctx, macos.PKGBuilder{}, spec)
 	if err != nil {
 		return "", err
 	}
@@ -919,7 +976,17 @@ func (b *builder) windows(ctx context.Context) error {
 			log.Warn("the Zig renderer is not available for windows/%s; building with the Go renderer", b.arch)
 		}
 	}
-	cleanup, err := b.windowsResources(ctx, exe)
+	tmp, err := os.MkdirTemp("", "ggui-build-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmp)
+	icon, err := b.icon(ctx, tmp)
+	if err != nil {
+		return err
+	}
+
+	cleanup, err := b.windowsResources(ctx, exe, icon)
 	if err != nil {
 		return err
 	}
@@ -940,24 +1007,70 @@ func (b *builder) windows(ctx context.Context) error {
 	if err := b.build(ctx, o, "windows/"+b.arch); err != nil {
 		return err
 	}
+	var extraFiles []string
 	if useZig {
 		dll := filepath.Join(dir, ziglib.FileName("windows"))
 		if err := ziglib.Extract(ctx, b.proj.Root, "windows", b.arch, dll); err != nil {
 			return err
 		}
+		extraFiles = append(extraFiles, dll)
 		log.Note("%s", log.Dim("bundled Zig driver library "+shortPath(dll)+" beside "+exe))
 	}
 	if runtime.GOOS != "windows" && b.arch == runtime.GOARCH && b.arch != "amd64" && os.Getenv("GOARCH") == "" {
 		log.Note("%s", log.Dim("for "+b.arch+", this machine's architecture; most PCs need GOARCH=amd64"))
 	}
-	return report(o.Output, "windows/"+b.arch)
+	var setupPath string
+	if b.wantWindowsInstaller() {
+		cfg := b.proj.Config
+		wi := cfg.ResolvedWindowsInstaller()
+		desc := cfg.Windows.Description
+		if desc == "" {
+			desc = cfg.Linux.Description
+		}
+		spec := installer.Spec{
+			Name:        b.main.Name,
+			Executable:  b.main.Executable,
+			ID:          b.main.ID,
+			Version:     cfg.App.Version,
+			Arch:        b.arch,
+			ProjectDir:  b.proj.Root,
+			Artifact:    o.Output,
+			ExtraFiles:  extraFiles,
+			OutDir:      dir,
+			Description: desc,
+			Publisher:   wi.Publisher,
+			Copyright:   cfg.Windows.Copyright,
+			Homepage:    wi.URL,
+			Icon:        icon,
+			License:     b.proj.Path(wi.License),
+			Windows: installer.WindowsOptions{
+				Scope:             wi.Scope,
+				InstallLocation:   wi.InstallLocation,
+				StartMenuShortcut: wi.StartMenuShortcut,
+				DesktopShortcut:   wi.DesktopShortcut,
+				LaunchAfter:       wi.LaunchAfter,
+			},
+			Logf: func(format string, args ...any) { log.Println(log.Dim(fmt.Sprintf(format, args...))) },
+		}
+		setupPath, err = b.buildInstaller(ctx, windows.SetupBuilder{}, spec)
+		if err != nil {
+			return err
+		}
+	}
+	if err := report(o.Output, "windows/"+b.arch); err != nil {
+		return err
+	}
+	if setupPath != "" {
+		return report(setupPath, "windows/"+b.arch)
+	}
+	return nil
 }
 
 // windowsResources writes the .syso the go command links the program's
 // icon, version information and manifest from, in the main package's
 // directory, for the build only; a package that links resources of its
 // own keeps them.
-func (b *builder) windowsResources(ctx context.Context, exe string) (func(), error) {
+func (b *builder) windowsResources(ctx context.Context, exe, icon string) (func(), error) {
 	cfg := b.proj.Config
 	log := ui.Stderr
 
@@ -973,15 +1086,6 @@ func (b *builder) windowsResources(ctx context.Context, exe string) (func(), err
 		log.Info("%s links resources of its own from %s, so %s has those rather than ggui's icon, version information and manifest",
 			target(b.main), strings.Join(theirs, ", "), exe)
 		return func() {}, nil
-	}
-	tmp, err := os.MkdirTemp("", "ggui-build-")
-	if err != nil {
-		return nil, err
-	}
-	defer os.RemoveAll(tmp)
-	icon, err := b.icon(ctx, tmp)
-	if err != nil {
-		return nil, err
 	}
 	w := cfg.Windows
 	r := windows.Resources{
@@ -1001,7 +1105,7 @@ func (b *builder) windowsResources(ctx context.Context, exe string) (func(), err
 		remove   func() error
 		warnings []string
 	)
-	err = step(ctx, "Writing the "+what+" of "+exe, "Wrote the "+what+" of "+exe, func() error {
+	err := step(ctx, "Writing the "+what+" of "+exe, "Wrote the "+what+" of "+exe, func() error {
 		obj, ws, err := windows.Object(r)
 		if err != nil {
 			return err

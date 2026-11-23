@@ -393,6 +393,8 @@ func ContentType(name string) string {
 		return "application/vnd.debian.binary-package"
 	case strings.HasSuffix(n, ".rpm"):
 		return "application/x-rpm"
+	case strings.HasSuffix(n, ".exe"):
+		return "application/vnd.microsoft.portable-executable"
 	case filepath.Base(n) == strings.ToLower(release.SumsName), strings.HasSuffix(n, ".txt"):
 		return "text/plain; charset=utf-8"
 	}

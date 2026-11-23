@@ -10,6 +10,12 @@ import (
 	"text/template"
 )
 
+// Requested UAC execution levels for the generated application manifest.
+const (
+	ExecutionLevelAsInvoker    = "asInvoker"
+	ExecutionLevelRequireAdmin = "requireAdministrator"
+)
+
 // manifestTemplate is the application manifest Name.exe carries. Without
 // one Windows runs a program as one written for Vista and older:
 //
@@ -57,7 +63,7 @@ var manifestTemplate = template.Must(template.New("manifest").Parse(`<?xml versi
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
       <requestedPrivileges>
-        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
+        <requestedExecutionLevel level="{{.Level}}" uiAccess="false"/>
       </requestedPrivileges>
     </security>
   </trustInfo>
@@ -65,14 +71,22 @@ var manifestTemplate = template.Must(template.New("manifest").Parse(`<?xml versi
 `))
 
 // manifest returns the generated manifest for the application id, a
-// reverse-DNS identifier, at version v. An assembly's name takes the
-// letters, digits, dots and hyphens such an identifier is made of; the
-// configuration has checked it is one.
-func manifest(id string, v [4]uint16) []byte {
+// reverse-DNS identifier, at version v, requesting execution level
+// (asInvoker when empty). An assembly's name takes the letters, digits,
+// dots and hyphens such an identifier is made of; the configuration has
+// checked it is one.
+func manifest(id string, v [4]uint16, level string) []byte {
+	if level == "" {
+		level = ExecutionLevelAsInvoker
+	}
 	var b bytes.Buffer
 	var esc bytes.Buffer
 	xml.EscapeText(&esc, []byte(id))
-	err := manifestTemplate.Execute(&b, map[string]string{"ID": esc.String(), "Version": versionString(v)})
+	err := manifestTemplate.Execute(&b, map[string]string{
+		"ID":      esc.String(),
+		"Version": versionString(v),
+		"Level":   level,
+	})
 	if err != nil {
 		panic(err) // the template is fixed, and its data strings
 	}

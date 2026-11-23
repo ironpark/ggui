@@ -65,6 +65,7 @@ func (c *Config) validate() []problem {
 	v.validatePlist()
 	v.ps = append(v.ps, v.cfg.Linux.validate()...)
 	v.ps = append(v.ps, v.cfg.Release.validate()...)
+	v.validateInstaller()
 	v.validateWebBase()
 	v.validateWebWasmOpt()
 	v.validateI18nFuncs()
@@ -273,6 +274,30 @@ func (v *validator) validateDmgPositions() {
 func (v *validator) validatePkg() {
 	if !strings.HasPrefix(v.cfg.MacOS.PKG.InstallLocation, "/") {
 		v.add(fmt.Sprintf("macos.pkg.install_location %q must be an absolute path, such as /Applications", v.cfg.MacOS.PKG.InstallLocation), "macos", "pkg", "install_location")
+	}
+}
+
+func (v *validator) validateInstaller() {
+	in := v.cfg.Installer
+	if strings.ContainsAny(in.License, "\n\r") {
+		v.add("installer.license must name one file", "installer", "license")
+	}
+	if in.MacOS.InstallLocation != "" && !strings.HasPrefix(in.MacOS.InstallLocation, "/") {
+		v.add(fmt.Sprintf("installer.macos.install_location %q must be an absolute path, such as /Applications", in.MacOS.InstallLocation), "installer", "macos", "install_location")
+	}
+	if strings.ContainsAny(in.MacOS.License, "\n\r") {
+		v.add("installer.macos.license must name one file", "installer", "macos", "license")
+	}
+	switch in.Windows.Scope {
+	case InstallerScopeUser, InstallerScopeMachine:
+	default:
+		v.add(fmt.Sprintf(`installer.windows.scope %q must be "user" or "machine"`, in.Windows.Scope), "installer", "windows", "scope")
+	}
+	if strings.ContainsAny(in.Windows.License, "\n\r") {
+		v.add("installer.windows.license must name one file", "installer", "windows", "license")
+	}
+	if in.Windows.URL != "" && !httpURL(in.Windows.URL) {
+		v.add(fmt.Sprintf("installer.windows.url %q must be an http or https URL", in.Windows.URL), "installer", "windows", "url")
 	}
 }
 

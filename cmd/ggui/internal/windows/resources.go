@@ -25,12 +25,19 @@ type Resources struct {
 	// Name is the name people see, Name.exe's; Executable the main
 	// package directory's, its internal name.
 	Name, Executable string
-	ID               string // the reverse-DNS application ID, for the manifest
-	Version          string // app.version
-	Description      string // FileDescription; empty is Name
-	Company          string
-	Copyright        string
-	Icon             string // a PNG, or ""
+	// OriginalName is the version info's OriginalFilename; empty is
+	// Name + ".exe".
+	OriginalName string
+	ID           string // the reverse-DNS application ID, for the manifest
+	Version      string // app.version
+	Description  string // FileDescription; empty is Name
+	Company      string
+	Copyright    string
+	Icon         string // a PNG, or ""
+	// ExecutionLevel is the generated manifest's requestedExecutionLevel
+	// ("asInvoker" by default, or "requireAdministrator"). Ignored when
+	// Manifest is set.
+	ExecutionLevel string
 	// Manifest is a manifest file to link instead of the generated one,
 	// or "".
 	Manifest string
@@ -50,15 +57,19 @@ func Object(r Resources) (obj []byte, warnings []string, err error) {
 	if desc == "" {
 		desc = r.Name
 	}
+	orig := r.OriginalName
+	if orig == "" {
+		orig = r.Name + ".exe"
+	}
 	res := []resource{{rtVersion, 1, langENUS, versionInfo(Version{
 		Version: v, Text: r.Version, Product: r.Name, Description: desc,
 		Company: r.Company, Copyright: r.Copyright,
-		Internal: r.Executable, Original: r.Name + ".exe",
+		Internal: r.Executable, Original: orig,
 	})}}
 
 	// The manifest's ID, 1, is the one Windows reads a program's manifest
 	// from when it starts it.
-	m := manifest(r.ID, v)
+	m := manifest(r.ID, v, r.ExecutionLevel)
 	if r.Manifest != "" {
 		if m, err = ReadManifest(r.Manifest); err != nil {
 			return nil, nil, fmt.Errorf("windows.manifest: %w", err)

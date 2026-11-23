@@ -40,9 +40,11 @@ architecture, collects the files in build/release/VERSION, and publishes
 them.
 
   macos    Name.dmg when [macos.dmg] asks for one, else a zip of Name.app;
-           one universal build when both amd64 and arm64 are built.
-           Signed and notarized as [macos] says.
-  windows  a zip of Name.exe for each architecture.
+           one universal build when both amd64 and arm64 are built, plus
+           Name.pkg when [installer], [installer.macos] or [macos.pkg] asks
+           for one. Signed and notarized as [macos] says.
+  windows  a zip of Name.exe for each architecture, plus Name-Setup.exe
+           when [installer] or [installer.windows] asks for one.
   linux    the tarball and packages linux.formats names, for each
            architecture.
 
@@ -666,7 +668,13 @@ func (p *releasePlan) buildWindows(ctx context.Context, b *builder, arch, dir st
 	if err != nil {
 		return err
 	}
-	return p.add(zip, filepath.Base(zip), "windows", arch)
+	if err := p.add(zip, filepath.Base(zip), "windows", arch); err != nil {
+		return err
+	}
+	if setup := filepath.Join(dir, b.main.Name+"-Setup.exe"); exists(setup) {
+		return p.add(setup, release.WindowsSetupName(p.slug, p.version, arch), "windows", arch)
+	}
+	return nil
 }
 
 func (p *releasePlan) buildLinux(ctx context.Context, b *builder, arch, dir string) error {
@@ -805,7 +813,7 @@ func (p *releasePlan) writeChoco() error {
 		pkg.Description = cmpOr(pkg.Summary, p.main.Name+" "+p.version)
 	}
 	for _, a := range p.assets {
-		if a.Target != "windows" {
+		if a.Target != "windows" || !strings.HasSuffix(a.Name, ".zip") {
 			continue
 		}
 		switch a.Arch {

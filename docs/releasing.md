@@ -63,9 +63,11 @@ tags = ["hello", "gui"]
    `build/release/1.2.0/`:
 
    ```text
-   hello-world-1.2.0-macos-universal.dmg     (or .zip of Hello World.app)
+   hello-world-1.2.0-macos-universal.dmg     (or .zip of Hello World.app; plus .pkg with [installer] / [macos.pkg])
    hello-world-1.2.0-windows-amd64.zip       (Hello World.exe; plus ggfx_driver.dll with renderer = "zig")
+   hello-world-1.2.0-windows-amd64-setup.exe (with [installer] or [installer.windows])
    hello-world-1.2.0-windows-arm64.zip
+   hello-world-1.2.0-windows-arm64-setup.exe
    hello-world-1.2.0-linux-amd64.tar.gz
    hello-world_1.2.0_amd64.deb
    hello-world-1.2.0-1.x86_64.rpm

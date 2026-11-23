@@ -391,6 +391,14 @@ func checkWindowsBuild(r *Report, proj *project.Project) {
 		}
 		manifest = "the manifest " + m
 	}
+	if cfg.MakeWindowsInstaller() {
+		wi := cfg.ResolvedWindowsInstaller()
+		if wi.License != "" {
+			if _, err := os.Stat(proj.Path(wi.License)); err != nil {
+				problems = append(problems, "installer license: "+err.Error())
+			}
+		}
+	}
 	if len(problems) > 0 {
 		r.fail("Windows build", strings.Join(problems, "\n"), "ggui build --target windows needs these fixed; other targets build as they are")
 		return
@@ -407,7 +415,12 @@ func checkWindowsBuild(r *Report, proj *project.Project) {
 	if cfg.App.Icon != "" {
 		icon = "app.icon"
 	}
-	r.ok("Windows build", fmt.Sprintf("%s.exe, %s, with %s, version %s and %s", name, link, icon, cfg.App.Version, manifest))
+	detail := fmt.Sprintf("%s.exe, %s, with %s, version %s and %s", name, link, icon, cfg.App.Version, manifest)
+	if cfg.MakeWindowsInstaller() {
+		wi := cfg.ResolvedWindowsInstaller()
+		detail += fmt.Sprintf("; %s-Setup.exe (%s installer)", name, wi.Scope)
+	}
+	r.ok("Windows build", detail)
 }
 
 func checkIcon(r *Report, path string) {

@@ -65,6 +65,11 @@ func WindowsName(slug, version, arch string) string {
 	return slug + "-" + version + "-windows-" + arch + ".zip"
 }
 
+// WindowsSetupName is the Windows installer asset's name.
+func WindowsSetupName(slug, version, arch string) string {
+	return slug + "-" + version + "-windows-" + arch + "-setup.exe"
+}
+
 // Hash fills in a's size and SHA-256 from its file.
 func (a *Asset) Hash() error {
 	f, err := os.Open(a.Path)

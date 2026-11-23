@@ -402,7 +402,7 @@ func TestTemplate(t *testing.T) {
 	if !reflect.DeepEqual(cfg, want) {
 		t.Errorf("template parses to %+v, want %+v", cfg, want)
 	}
-	for _, table := range []string{"app", "build", "dev", "macos", "macos.notary", "macos.dmg", "macos.pkg", "windows", "linux", "web", "i18n", "release", "release.homebrew", "release.chocolatey"} {
+	for _, table := range []string{"app", "build", "dev", "macos", "macos.notary", "macos.dmg", "macos.pkg", "windows", "linux", "web", "i18n", "release", "release.homebrew", "release.chocolatey", "installer", "installer.macos", "installer.windows"} {
 		for _, key := range knownKeys(strings.Split(table, ".")) {
 			if !strings.Contains(string(data), "\n"+key+" =") && !strings.Contains(string(data), "\n# "+key+" =") &&
 				!strings.Contains(string(data), "["+table+"."+key+"]") {
@@ -472,5 +472,97 @@ func TestPlistTakesAnArrayOfTables(t *testing.T) {
 	src := "[[macos.plist.CFBundleURLTypes]]\nCFBundleURLName = \"com.example.app\"\nCFBundleURLSchemes = [\"example\"]\n"
 	if _, err := Parse("ggui.toml", []byte(src)); err != nil {
 		t.Fatalf("an array of tables in Info.plist was rejected: %v", err)
+	}
+}
+
+func TestInstallerConfig(t *testing.T) {
+	// Defaults do not enable either platform installer.
+	d := Defaults()
+	if d.MakeMacOSInstaller() || d.MakeWindowsInstaller() {
+		t.Fatalf("defaults should not enable installers")
+	}
+	if d.Installer.Windows.Scope != InstallerScopeUser || !d.Installer.Windows.StartMenuShortcut || d.Installer.Windows.DesktopShortcut || !d.Installer.Windows.LaunchAfter {
+		t.Fatalf("unexpected windows installer defaults: %+v", d.Installer.Windows)
+	}
+
+	// Bare [installer] enables both macOS and Windows.
+	cfg, err := Parse("ggui.toml", []byte("[installer]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.MakeMacOSInstaller() || !cfg.MakeWindowsInstaller() {
+		t.Errorf("bare [installer]: macos=%v windows=%v, want both true", cfg.MakeMacOSInstaller(), cfg.MakeWindowsInstaller())
+	}
+
+	// [installer.windows] alone enables only Windows, and inherits fallbacks.
+	cfg, err = Parse("ggui.toml", []byte(`[windows]
+company = "Example Ltd"
+
+[linux]
+homepage = "https://example.com"
+
+[installer.windows]
+scope = "machine"
+desktop_shortcut = true
+launch_after = false
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MakeMacOSInstaller() || !cfg.MakeWindowsInstaller() {
+		t.Errorf("[installer.windows] alone: macos=%v windows=%v, want false/true", cfg.MakeMacOSInstaller(), cfg.MakeWindowsInstaller())
+	}
+	w := cfg.ResolvedWindowsInstaller()
+	if w.Scope != InstallerScopeMachine || w.Publisher != "Example Ltd" || w.URL != "https://example.com" || !w.StartMenuShortcut || !w.DesktopShortcut || w.LaunchAfter {
+		t.Errorf("resolved windows installer = %+v", w)
+	}
+
+	// Shared [installer] license with [installer.macos] disabled and legacy [macos.pkg] precedence.
+	cfg, err = Parse("ggui.toml", []byte(`[installer]
+license = "LICENSE"
+
+[installer.macos]
+enabled = false
+install_location = "/Applications/Utilities"
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MakeMacOSInstaller() || !cfg.MakeWindowsInstaller() {
+		t.Errorf("disabled macos: macos=%v windows=%v, want false/true", cfg.MakeMacOSInstaller(), cfg.MakeWindowsInstaller())
+	}
+	if got := cfg.ResolvedWindowsInstaller().License; got != "LICENSE" {
+		t.Errorf("windows license fallback = %q, want LICENSE", got)
+	}
+
+	// [macos.pkg] takes precedence over [installer.macos] > [installer].
+	cfg, err = Parse("ggui.toml", []byte(`[installer]
+license = "SHARED_LICENSE"
+
+[installer.macos]
+install_location = "/Applications/Custom"
+scripts = "scripts/a"
+
+[macos.pkg]
+license = "MAC_LICENSE"
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkg := cfg.ResolvedMacOSPKG()
+	if pkg.License != "MAC_LICENSE" || pkg.InstallLocation != "/Applications/Custom" || pkg.Scripts != "scripts/a" {
+		t.Errorf("resolved macos pkg = %+v", pkg)
+	}
+
+	// Validation catches bad scope, URL, and macOS install_location.
+	es := errorsOf(t, `[installer.macos]
+install_location = "Applications"
+
+[installer.windows]
+scope = "admin"
+url = "example.com"
+`)
+	if len(es) != 3 {
+		t.Fatalf("got %d errors, want 3:\n%v", len(es), es)
 	}
 }
