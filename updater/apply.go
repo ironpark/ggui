@@ -1537,26 +1537,6 @@ func formatWin32Args(args []string) (string, error) {
 	return strings.Join(quoted, " "), nil
 }
 
-func mergeEnv(base, overrides []string) []string {
-	overrideKeys := make(map[string]struct{}, len(overrides))
-	for _, kv := range overrides {
-		if k, _, ok := strings.Cut(kv, "="); ok {
-			overrideKeys[strings.ToUpper(k)] = struct{}{}
-		}
-	}
-	out := make([]string, 0, len(base)+len(overrides))
-	for _, kv := range base {
-		if k, _, ok := strings.Cut(kv, "="); ok {
-			if _, drop := overrideKeys[strings.ToUpper(k)]; drop {
-				continue
-			}
-		}
-		out = append(out, kv)
-	}
-	out = append(out, overrides...)
-	return out
-}
-
 // buildWindowsSilentRelaunchHelper builds a static PowerShell helper invocation
 // that passes all dynamic paths/arguments exclusively through environment variables.
 func buildWindowsSilentRelaunchHelper(pid int, setupPath string, args []string, targetExe string) (*windowsHelperSpec, error) {

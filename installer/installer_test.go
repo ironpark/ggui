@@ -305,10 +305,10 @@ func TestDescribeProtocol(t *testing.T) {
 	t.Setenv(DescribeEnv, outPath)
 
 	app := &App{
-		Name:        "Acme",
-		License:     "Apache 2.0",
-		Publisher:   "Acme Corp",
-		Homepage:    "https://acme.example",
+		Name:      "Acme",
+		License:   "Apache 2.0",
+		Publisher: "Acme Corp",
+		Homepage:  "https://acme.example",
 		Windows: WindowsConfig{
 			Scope:             ScopeMachine,
 			InstallDir:        `%ProgramFiles%\Acme`,

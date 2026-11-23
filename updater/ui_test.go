@@ -1126,8 +1126,7 @@ func TestControllerCheckSilentSkipRace(t *testing.T) {
 	}
 
 	ctrl := NewController(u)
-	var probe *ggui.Probe
-	probe = ggui.ProbeBuilder(func() ggui.Widget {
+	probe := ggui.ProbeBuilder(func() ggui.Widget {
 		return widget.Box(Dialog(ctrl))
 	}, ggui.Sz(700, 540))
 	defer probe.Close()

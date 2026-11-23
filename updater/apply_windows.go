@@ -171,3 +171,23 @@ func applyWindowsPortable(ctx context.Context, upd *DownloadedUpdate, targetExe 
 	}
 	return nil
 }
+
+func mergeEnv(base, overrides []string) []string {
+	overrideKeys := make(map[string]struct{}, len(overrides))
+	for _, kv := range overrides {
+		if k, _, ok := strings.Cut(kv, "="); ok {
+			overrideKeys[strings.ToUpper(k)] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(base)+len(overrides))
+	for _, kv := range base {
+		if k, _, ok := strings.Cut(kv, "="); ok {
+			if _, drop := overrideKeys[strings.ToUpper(k)]; drop {
+				continue
+			}
+		}
+		out = append(out, kv)
+	}
+	out = append(out, overrides...)
+	return out
+}

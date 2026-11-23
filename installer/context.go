@@ -48,11 +48,11 @@ type Context struct {
 	dialogs  runtime.Dialogs
 	closeWin func()
 
-	optMu       sync.Mutex
-	boolOpts    map[string]*ggui.StateValue[bool]
-	stringOpts  map[string]*ggui.StateValue[string]
-	boolSnap    map[string]bool
-	stringSnap  map[string]string
+	optMu      sync.Mutex
+	boolOpts   map[string]*ggui.StateValue[bool]
+	stringOpts map[string]*ggui.StateValue[string]
+	boolSnap   map[string]bool
+	stringSnap map[string]string
 
 	txMu     sync.Mutex
 	activeTx *installTx

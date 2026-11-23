@@ -49,21 +49,23 @@ func (portableBackend) RemoveShortcut(lnkPath string) error {
 	return err
 }
 
-func (portableBackend) NotifyShell()                                                           {}
-func (portableBackend) WriteUninstallEntry(UninstallEntry) error                               { return nil }
-func (portableBackend) DeleteUninstallEntry(Metadata) error                                    { return nil }
-func (portableBackend) GetEnv(string, string) (string, bool, error)                            { return "", false, nil }
-func (portableBackend) SetEnv(string, string, string) error                                    { return nil }
-func (portableBackend) DeleteEnv(string, string) error                                         { return nil }
-func (portableBackend) AddToPath(string, string) error                                         { return nil }
-func (portableBackend) RemoveFromPath(string, string) error                                    { return nil }
-func (portableBackend) RegistryKeyExists(RegistryRoot, string) (bool, error)                   { return false, nil }
+func (portableBackend) NotifyShell()                                         {}
+func (portableBackend) WriteUninstallEntry(UninstallEntry) error             { return nil }
+func (portableBackend) DeleteUninstallEntry(Metadata) error                  { return nil }
+func (portableBackend) GetEnv(string, string) (string, bool, error)          { return "", false, nil }
+func (portableBackend) SetEnv(string, string, string) error                  { return nil }
+func (portableBackend) DeleteEnv(string, string) error                       { return nil }
+func (portableBackend) AddToPath(string, string) error                       { return nil }
+func (portableBackend) RemoveFromPath(string, string) error                  { return nil }
+func (portableBackend) RegistryKeyExists(RegistryRoot, string) (bool, error) { return false, nil }
 func (portableBackend) GetRegistryValue(RegistryRoot, string, string) (RegistryValue, bool, error) {
 	return RegistryValue{}, false, nil
 }
-func (portableBackend) SetRegistryValue(RegistryRoot, string, string, RegistryValue) error { return nil }
-func (portableBackend) DeleteRegistryValue(RegistryRoot, string, string) error             { return nil }
-func (portableBackend) DeleteRegistryKey(RegistryRoot, string, bool) error                 { return nil }
+func (portableBackend) SetRegistryValue(RegistryRoot, string, string, RegistryValue) error {
+	return nil
+}
+func (portableBackend) DeleteRegistryValue(RegistryRoot, string, string) error { return nil }
+func (portableBackend) DeleteRegistryKey(RegistryRoot, string, bool) error     { return nil }
 
 func (portableBackend) Launch(exePath string) error {
 	cmd := exec.Command(exePath)
