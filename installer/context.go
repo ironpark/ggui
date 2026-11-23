@@ -97,6 +97,11 @@ func newContext(app *App, payload *Payload, opts CLIOptions, targetDir string, i
 		launchAfter = !opts.NoLaunch
 	}
 	_, prevVer, isUpgrade := b.ExistingInstall(meta)
+	if !isUpgrade && !opts.Uninstall && !isPreview && targetDir != "" && meta.Executable != "" {
+		if fileExists(filepath.Join(targetDir, filepath.FromSlash(meta.Executable))) {
+			isUpgrade = true
+		}
+	}
 
 	var steps []Step
 	if opts.Uninstall {

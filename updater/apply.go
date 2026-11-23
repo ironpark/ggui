@@ -1441,14 +1441,16 @@ const (
 	// windowsSilentRelaunchScript is a static PowerShell script (zero string
 	// interpolation) that waits for GGUI_UPDATER_PID to exit (up to 30s), runs
 	// GGUI_UPDATER_SETUP with GGUI_UPDATER_ARGS using ProcessStartInfo
-	// (UseShellExecute = $false), and launches GGUI_UPDATER_TARGET if ExitCode == 0.
-	windowsSilentRelaunchScript = `$ErrorActionPreference = 'SilentlyContinue'; $pidVal = 0; if ([int]::TryParse($env:GGUI_UPDATER_PID, [ref]$pidVal) -and $pidVal -gt 0) { try { $p = [System.Diagnostics.Process]::GetProcessById($pidVal); $p.WaitForExit(30000) | Out-Null } catch {} }; $setup = $env:GGUI_UPDATER_SETUP; if (-not [string]::IsNullOrEmpty($setup)) { $psi = New-Object System.Diagnostics.ProcessStartInfo; $psi.FileName = $setup; $psi.Arguments = [string]$env:GGUI_UPDATER_ARGS; $psi.UseShellExecute = $false; $proc = [System.Diagnostics.Process]::Start($psi); if ($null -ne $proc) { $proc.WaitForExit(); if ($proc.ExitCode -eq 0 -and -not [string]::IsNullOrEmpty($env:GGUI_UPDATER_TARGET)) { $rpsi = New-Object System.Diagnostics.ProcessStartInfo; $rpsi.FileName = $env:GGUI_UPDATER_TARGET; $rpsi.UseShellExecute = $false; [System.Diagnostics.Process]::Start($rpsi) | Out-Null } } }`
+	// (UseShellExecute = $false), and launches GGUI_UPDATER_TARGET (with
+	// optional GGUI_UPDATER_RELAUNCH_ARGS) if ExitCode == 0.
+	windowsSilentRelaunchScript = `$ErrorActionPreference = 'SilentlyContinue'; $pidVal = 0; if ([int]::TryParse($env:GGUI_UPDATER_PID, [ref]$pidVal) -and $pidVal -gt 0) { try { $p = [System.Diagnostics.Process]::GetProcessById($pidVal); $p.WaitForExit(30000) | Out-Null } catch {} }; $setup = $env:GGUI_UPDATER_SETUP; if (-not [string]::IsNullOrEmpty($setup)) { $psi = New-Object System.Diagnostics.ProcessStartInfo; $psi.FileName = $setup; $psi.Arguments = [string]$env:GGUI_UPDATER_ARGS; $psi.UseShellExecute = $false; $proc = [System.Diagnostics.Process]::Start($psi); if ($null -ne $proc) { $proc.WaitForExit(); if ($proc.ExitCode -eq 0 -and -not [string]::IsNullOrEmpty($env:GGUI_UPDATER_TARGET)) { $rpsi = New-Object System.Diagnostics.ProcessStartInfo; $rpsi.FileName = $env:GGUI_UPDATER_TARGET; if (-not [string]::IsNullOrEmpty($env:GGUI_UPDATER_RELAUNCH_ARGS)) { $rpsi.Arguments = [string]$env:GGUI_UPDATER_RELAUNCH_ARGS }; $rpsi.UseShellExecute = $false; [System.Diagnostics.Process]::Start($rpsi) | Out-Null } } }`
 
 	// windowsPortableHelperScript is a static PowerShell script (zero string
 	// interpolation) that waits for GGUI_UPDATER_PID to exit (up to 30s),
-	// launches GGUI_UPDATER_TARGET if set, and retries Remove-Item -LiteralPath
-	// on each JSON-encoded path in GGUI_UPDATER_CLEANUP.
-	windowsPortableHelperScript = `$ErrorActionPreference = 'SilentlyContinue'; $pidVal = 0; if ([int]::TryParse($env:GGUI_UPDATER_PID, [ref]$pidVal) -and $pidVal -gt 0) { try { $p = [System.Diagnostics.Process]::GetProcessById($pidVal); $p.WaitForExit(30000) | Out-Null } catch {} }; if (-not [string]::IsNullOrEmpty($env:GGUI_UPDATER_TARGET)) { $rpsi = New-Object System.Diagnostics.ProcessStartInfo; $rpsi.FileName = $env:GGUI_UPDATER_TARGET; $rpsi.UseShellExecute = $false; [System.Diagnostics.Process]::Start($rpsi) | Out-Null }; if (-not [string]::IsNullOrEmpty($env:GGUI_UPDATER_CLEANUP)) { $items = @(ConvertFrom-Json $env:GGUI_UPDATER_CLEANUP); for ($i = 0; $i -lt 20; $i++) { $rem = @(); foreach ($item in $items) { if (-not [string]::IsNullOrEmpty($item) -and (Test-Path -LiteralPath $item)) { Remove-Item -LiteralPath $item -Force -ErrorAction SilentlyContinue; if (Test-Path -LiteralPath $item) { $rem += $item } } }; if ($rem.Count -eq 0) { break }; $items = $rem; Start-Sleep -Milliseconds 250 } }`
+	// launches GGUI_UPDATER_TARGET (with optional GGUI_UPDATER_RELAUNCH_ARGS)
+	// if set, and retries Remove-Item -LiteralPath on each JSON-encoded path in
+	// GGUI_UPDATER_CLEANUP.
+	windowsPortableHelperScript = `$ErrorActionPreference = 'SilentlyContinue'; $pidVal = 0; if ([int]::TryParse($env:GGUI_UPDATER_PID, [ref]$pidVal) -and $pidVal -gt 0) { try { $p = [System.Diagnostics.Process]::GetProcessById($pidVal); $p.WaitForExit(30000) | Out-Null } catch {} }; if (-not [string]::IsNullOrEmpty($env:GGUI_UPDATER_TARGET)) { $rpsi = New-Object System.Diagnostics.ProcessStartInfo; $rpsi.FileName = $env:GGUI_UPDATER_TARGET; if (-not [string]::IsNullOrEmpty($env:GGUI_UPDATER_RELAUNCH_ARGS)) { $rpsi.Arguments = [string]$env:GGUI_UPDATER_RELAUNCH_ARGS }; $rpsi.UseShellExecute = $false; [System.Diagnostics.Process]::Start($rpsi) | Out-Null }; if (-not [string]::IsNullOrEmpty($env:GGUI_UPDATER_CLEANUP)) { $items = @(ConvertFrom-Json $env:GGUI_UPDATER_CLEANUP); for ($i = 0; $i -lt 20; $i++) { $rem = @(); foreach ($item in $items) { if (-not [string]::IsNullOrEmpty($item) -and (Test-Path -LiteralPath $item)) { Remove-Item -LiteralPath $item -Force -ErrorAction SilentlyContinue; if (Test-Path -LiteralPath $item) { $rem += $item } } }; if ($rem.Count -eq 0) { break }; $items = $rem; Start-Sleep -Milliseconds 250 } }`
 )
 
 type windowsHelperSpec struct {
@@ -1540,6 +1542,10 @@ func formatWin32Args(args []string) (string, error) {
 // buildWindowsSilentRelaunchHelper builds a static PowerShell helper invocation
 // that passes all dynamic paths/arguments exclusively through environment variables.
 func buildWindowsSilentRelaunchHelper(pid int, setupPath string, args []string, targetExe string) (*windowsHelperSpec, error) {
+	return buildWindowsSilentRelaunchHelperWithArgs(pid, setupPath, args, targetExe, nil)
+}
+
+func buildWindowsSilentRelaunchHelperWithArgs(pid int, setupPath string, args []string, targetExe string, relaunchArgs []string) (*windowsHelperSpec, error) {
 	if strings.TrimSpace(setupPath) == "" {
 		return nil, errors.New("updater: empty Windows setup path")
 	}
@@ -1553,6 +1559,19 @@ func buildWindowsSilentRelaunchHelper(pid int, setupPath string, args []string, 
 	if err != nil {
 		return nil, err
 	}
+	formattedRelaunchArgs, err := formatWin32Args(relaunchArgs)
+	if err != nil {
+		return nil, err
+	}
+	env := []string{
+		"GGUI_UPDATER_PID=" + strconv.Itoa(pid),
+		"GGUI_UPDATER_SETUP=" + setupPath,
+		"GGUI_UPDATER_ARGS=" + formattedArgs,
+		"GGUI_UPDATER_TARGET=" + targetExe,
+	}
+	if formattedRelaunchArgs != "" {
+		env = append(env, "GGUI_UPDATER_RELAUNCH_ARGS="+formattedRelaunchArgs)
+	}
 	return &windowsHelperSpec{
 		Exe: windowsPowerShellExe(),
 		Args: []string{
@@ -1561,12 +1580,7 @@ func buildWindowsSilentRelaunchHelper(pid int, setupPath string, args []string, 
 			"-WindowStyle", "Hidden",
 			"-Command", windowsSilentRelaunchScript,
 		},
-		Env: []string{
-			"GGUI_UPDATER_PID=" + strconv.Itoa(pid),
-			"GGUI_UPDATER_SETUP=" + setupPath,
-			"GGUI_UPDATER_ARGS=" + formattedArgs,
-			"GGUI_UPDATER_TARGET=" + targetExe,
-		},
+		Env: env,
 	}, nil
 }
 
@@ -1574,10 +1588,18 @@ func buildWindowsSilentRelaunchHelper(pid int, setupPath string, args []string, 
 // waits for pid to exit, optionally launches targetExe, and cleans up oldFiles
 // via JSON-encoded GGUI_UPDATER_CLEANUP with Remove-Item -LiteralPath.
 func buildWindowsPortableHelper(pid int, targetExe string, oldFiles []string) (*windowsHelperSpec, error) {
+	return buildWindowsPortableHelperWithArgs(pid, targetExe, nil, oldFiles)
+}
+
+func buildWindowsPortableHelperWithArgs(pid int, targetExe string, relaunchArgs []string, oldFiles []string) (*windowsHelperSpec, error) {
 	if strings.TrimSpace(targetExe) == "" && len(oldFiles) == 0 {
 		return nil, nil
 	}
 	if err := validateWindowsHelperValue("Windows target executable path", targetExe); err != nil {
+		return nil, err
+	}
+	formattedRelaunchArgs, err := formatWin32Args(relaunchArgs)
+	if err != nil {
 		return nil, err
 	}
 	for _, p := range oldFiles {
@@ -1593,6 +1615,14 @@ func buildWindowsPortableHelper(pid int, targetExe string, oldFiles []string) (*
 		}
 		cleanupJSON = string(encoded)
 	}
+	env := []string{
+		"GGUI_UPDATER_PID=" + strconv.Itoa(pid),
+		"GGUI_UPDATER_TARGET=" + targetExe,
+		"GGUI_UPDATER_CLEANUP=" + cleanupJSON,
+	}
+	if formattedRelaunchArgs != "" {
+		env = append(env, "GGUI_UPDATER_RELAUNCH_ARGS="+formattedRelaunchArgs)
+	}
 	return &windowsHelperSpec{
 		Exe: windowsPowerShellExe(),
 		Args: []string{
@@ -1601,11 +1631,7 @@ func buildWindowsPortableHelper(pid int, targetExe string, oldFiles []string) (*
 			"-WindowStyle", "Hidden",
 			"-Command", windowsPortableHelperScript,
 		},
-		Env: []string{
-			"GGUI_UPDATER_PID=" + strconv.Itoa(pid),
-			"GGUI_UPDATER_TARGET=" + targetExe,
-			"GGUI_UPDATER_CLEANUP=" + cleanupJSON,
-		},
+		Env: env,
 	}, nil
 }
 
@@ -1694,20 +1720,41 @@ func locateWindowsPortableReplacements(extractedDir, targetExe string) ([]portab
 		{Src: newExe, Dst: filepath.Join(dstDir, filepath.Base(targetExe))},
 	}
 
-	entries, err := os.ReadDir(srcDir)
+	err = filepath.WalkDir(srcDir, func(p string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			if p != srcDir && (d.Name() == "__MACOSX" || strings.HasPrefix(d.Name(), ".")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !d.Type().IsRegular() || p == newExe {
+			return nil
+		}
+		rel, relErr := filepath.Rel(srcDir, p)
+		if relErr != nil {
+			return nil
+		}
+		slashRel := filepath.ToSlash(rel)
+		low := strings.ToLower(d.Name())
+		inSubdir := strings.Contains(slashRel, "/")
+		if !strings.HasSuffix(low, ".dll") && !(inSubdir && strings.HasSuffix(low, ".exe")) {
+			return nil
+		}
+		dst := filepath.Join(dstDir, rel)
+		if !isSubpath(dstDir, dst) {
+			return nil
+		}
+		replacements = append(replacements, portableReplacement{
+			Src: p,
+			Dst: dst,
+		})
+		return nil
+	})
 	if err != nil {
 		return nil, fmt.Errorf("updater: reading extracted directory %s: %w", srcDir, err)
-	}
-	for _, e := range entries {
-		if e.IsDir() || !e.Type().IsRegular() {
-			continue
-		}
-		if strings.HasSuffix(strings.ToLower(e.Name()), ".dll") {
-			replacements = append(replacements, portableReplacement{
-				Src: filepath.Join(srcDir, e.Name()),
-				Dst: filepath.Join(dstDir, e.Name()),
-			})
-		}
 	}
 	return replacements, nil
 }
@@ -1777,6 +1824,10 @@ func replacePortableFilesWithInstaller(
 			return nil, fmt.Errorf("updater: checking %s: %w", r.Dst, err)
 		}
 
+		if err := os.MkdirAll(filepath.Dir(r.Dst), 0o755); err != nil {
+			rollback()
+			return nil, fmt.Errorf("updater: creating parent directory for %s: %w", r.Dst, err)
+		}
 		if err := installFn(r.Src, r.Dst); err != nil {
 			_ = os.Remove(r.Dst)
 			rollback()
@@ -1963,7 +2014,14 @@ func locateLinuxBundledLibs(extractedDir, newBin, targetExe string) []portableRe
 					return nil
 				}
 				low := strings.ToLower(d.Name())
-				if !strings.HasSuffix(low, ".so") && !strings.Contains(low, ".so.") {
+				isSharedLib := strings.HasSuffix(low, ".so") || strings.Contains(low, ".so.")
+				isExec := false
+				if !isSharedLib {
+					if info, infoErr := d.Info(); infoErr == nil && info.Mode()&0o111 != 0 {
+						isExec = true
+					}
+				}
+				if !isSharedLib && !isExec {
 					return nil
 				}
 				rel, relErr := filepath.Rel(srcLibRoot, p)

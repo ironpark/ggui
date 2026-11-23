@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -85,11 +86,12 @@ identity takes a Mac. docs/cli.md has the details.`,
 // buildFlags are the flags of ggui build: the ones that pick the target
 // and the ones macFlags gathers for signing a macOS build.
 type buildFlags struct {
-	cfgPath, tgt, out                             *string
-	universal, console, installer                 *bool
-	installerPkg, format, tags, ldflags, renderer *string
-	mac                                           macFlags
-	isSet                                         func(string) bool
+	cfgPath, tgt, out               *string
+	universal, console, installer   *bool
+	installerPkg, installerExtraDir *string
+	format, tags, ldflags, renderer *string
+	mac                             macFlags
+	isSet                           func(string) bool
 }
 
 func newBuildFlags(fs *flag.FlagSet) *buildFlags {
@@ -101,6 +103,7 @@ func newBuildFlags(fs *flag.FlagSet) *buildFlags {
 	f.console = fs.Bool("console", false, "with --target windows, link for the console, which Windows opens a window of, replacing windows.console")
 	f.installer = fs.Bool("installer", false, "also make a platform installer (Name.pkg on macOS, Name-Setup.exe on Windows); --installer=false skips any Go installer package or [macos.pkg]")
 	f.installerPkg = fs.String("installer-pkg", "", "Go main `package` defining the installer with github.com/ironpark/ggui/installer, replacing build.installer and auto-discovery")
+	f.installerExtraDir = fs.String("installer-extra-dir", "", "with --target windows, `directory` of extra files (preserving subdirectories) to embed into Name-Setup.exe")
 	f.format = fs.String("format", "", "with --target linux, what to make of the install tree: `formats` from tar, deb and rpm, comma-separated, replacing linux.formats")
 	f.tags = fs.String("tags", "", "build `tags`, comma-separated, replacing build.tags")
 	f.ldflags = fs.String("ldflags", "", "linker `flags` after -s -w, replacing build.ldflags")
@@ -158,6 +161,7 @@ func (f *buildFlags) run(ctx context.Context, pos, rest []string) error {
 	b.installerVal = *f.installer
 	b.installerPkgSet = f.isSet("installer-pkg")
 	b.installerPkgFlag = *f.installerPkg
+	b.installerExtraDir = *f.installerExtraDir
 	lo, err := b.planTarget(ctx, *f.tgt)
 	if err != nil {
 		return err
@@ -243,6 +247,9 @@ func (f *buildFlags) checkTarget(b *builder, tgt string) error {
 	if tgt != "windows" && f.isSet("console") {
 		return errors.New("--console is for a Windows build: add --target windows")
 	}
+	if tgt != "windows" && f.isSet("installer-extra-dir") {
+		return errors.New("--installer-extra-dir is for a Windows build: add --target windows")
+	}
 	if (f.isSet("installer") || f.isSet("installer-pkg")) && tgt != "macos" && tgt != "windows" {
 		return errors.New("--installer is for a macOS or Windows build: add --target macos or --target windows")
 	}
@@ -283,25 +290,26 @@ func defaultTarget() string {
 }
 
 type builder struct {
-	proj             *project.Project
-	main             *project.Main
-	out              string
-	tags             []string
-	ldflags          string
-	zig              bool // build with ggfx's Zig native graphics driver
-	rendererFlagSet  bool // --renderer was passed on the command line
-	universal        bool
-	mac              macFlags
-	installerSet     bool   // --installer was passed on the command line
-	installerVal     bool   // value of --installer
-	installerPkgSet  bool   // --installer-pkg was passed on the command line
-	installerPkgFlag string // value of --installer-pkg
-	instResolved     bool
-	instPkg          *installer.Package
-	instDesc         *installer.Description
-	console          bool     // link a Windows program for the console
-	arch             string   // the GOARCH of a Windows or Linux build
-	formats          []string // what a Linux build makes of its tree
+	proj              *project.Project
+	main              *project.Main
+	out               string
+	tags              []string
+	ldflags           string
+	zig               bool // build with ggfx's Zig native graphics driver
+	rendererFlagSet   bool // --renderer was passed on the command line
+	universal         bool
+	mac               macFlags
+	installerSet      bool   // --installer was passed on the command line
+	installerVal      bool   // value of --installer
+	installerPkgSet   bool   // --installer-pkg was passed on the command line
+	installerPkgFlag  string // value of --installer-pkg
+	installerExtraDir string // value of --installer-extra-dir
+	instResolved      bool
+	instPkg           *installer.Package
+	instDesc          *installer.Description
+	console           bool     // link a Windows program for the console
+	arch              string   // the GOARCH of a Windows or Linux build
+	formats           []string // what a Linux build makes of its tree
 }
 
 // resolveInstaller discovers any Go installer package (from --installer-pkg,
@@ -1158,26 +1166,62 @@ func (b *builder) windows(ctx context.Context) error {
 				licPath = b.proj.Path(b.instDesc.Windows.LicenseFile)
 			}
 		}
+		var extraEntries map[string]string
+		if b.installerExtraDir != "" {
+			extraRoot, absErr := filepath.Abs(b.installerExtraDir)
+			if absErr != nil {
+				return fmt.Errorf("--installer-extra-dir: %w", absErr)
+			}
+			fi, statErr := os.Stat(extraRoot)
+			if statErr != nil {
+				return fmt.Errorf("--installer-extra-dir: %w", statErr)
+			}
+			if !fi.IsDir() {
+				return fmt.Errorf("--installer-extra-dir %q is not a directory", b.installerExtraDir)
+			}
+			extraEntries = map[string]string{}
+			err = filepath.WalkDir(extraRoot, func(p string, d fs.DirEntry, werr error) error {
+				if werr != nil {
+					return werr
+				}
+				if d.IsDir() {
+					return nil
+				}
+				if !d.Type().IsRegular() {
+					return nil
+				}
+				rel, relErr := filepath.Rel(extraRoot, p)
+				if relErr != nil {
+					return relErr
+				}
+				extraEntries[filepath.ToSlash(rel)] = p
+				return nil
+			})
+			if err != nil {
+				return fmt.Errorf("--installer-extra-dir: %w", err)
+			}
+		}
 		spec := installer.Spec{
-			Name:        b.main.Name,
-			Executable:  b.main.Executable,
-			ID:          b.main.ID,
-			Version:     cfg.App.Version,
-			Arch:        b.arch,
-			ProjectDir:  b.proj.Root,
-			Artifact:    o.Output,
-			ExtraFiles:  extraFiles,
-			OutDir:      dir,
-			Package:     b.instPkg,
-			Description: desc,
-			Publisher:   publisher,
-			Copyright:   copyright,
-			Homepage:    homepage,
-			Icon:        icon,
-			License:     licPath,
-			LicenseText: licText,
-			Windows:     winOpts,
-			Logf:        func(format string, args ...any) { log.Println(log.Dim(fmt.Sprintf(format, args...))) },
+			Name:         b.main.Name,
+			Executable:   b.main.Executable,
+			ID:           b.main.ID,
+			Version:      cfg.App.Version,
+			Arch:         b.arch,
+			ProjectDir:   b.proj.Root,
+			Artifact:     o.Output,
+			ExtraFiles:   extraFiles,
+			ExtraEntries: extraEntries,
+			OutDir:       dir,
+			Package:      b.instPkg,
+			Description:  desc,
+			Publisher:    publisher,
+			Copyright:    copyright,
+			Homepage:     homepage,
+			Icon:         icon,
+			License:      licPath,
+			LicenseText:  licText,
+			Windows:      winOpts,
+			Logf:         func(format string, args ...any) { log.Println(log.Dim(fmt.Sprintf(format, args...))) },
 		}
 		setupPath, err = b.buildInstaller(ctx, windows.SetupBuilder{}, spec)
 		if err != nil {

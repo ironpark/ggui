@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -78,6 +79,17 @@ func (SetupBuilder) Validate(spec installer.Spec) error {
 			return fmt.Errorf("windows installer: extra file %s: %w", extra, err)
 		} else if fi.IsDir() {
 			return fmt.Errorf("windows installer: extra file %s is a directory", extra)
+		}
+	}
+	for rel, src := range spec.ExtraEntries {
+		clean := cleanPayloadRel(rel)
+		if clean == "" {
+			return fmt.Errorf("windows installer: invalid extra entry path %q", rel)
+		}
+		if fi, err := os.Stat(src); err != nil {
+			return fmt.Errorf("windows installer: extra entry %s (%s): %w", rel, src, err)
+		} else if fi.IsDir() {
+			return fmt.Errorf("windows installer: extra entry %s (%s) is a directory", rel, src)
 		}
 	}
 	if spec.OutDir == "" {
@@ -233,7 +245,7 @@ func (b SetupBuilder) buildCustomPackage(ctx context.Context, spec installer.Spe
 		GOOS:     "windows",
 		GOARCH:   spec.Arch,
 		Trimpath: true,
-		LDFlags:  "-s -w -H=windowsgui",
+		LDFlags:  "-s -w -buildid= -H=windowsgui",
 		Mod:      "readonly",
 		Overlay:  ovPath,
 		TmpDir:   tmp,
@@ -280,7 +292,7 @@ func (b SetupBuilder) buildDefaultPackage(ctx context.Context, spec installer.Sp
 		GOOS:     "windows",
 		GOARCH:   spec.Arch,
 		Trimpath: true,
-		LDFlags:  "-s -w -H=windowsgui",
+		LDFlags:  "-s -w -buildid= -H=windowsgui",
 		Mod:      "readonly",
 		Env:      []string{"CGO_ENABLED=0"},
 	}
@@ -447,13 +459,13 @@ func buildPayloadZip(spec installer.Spec, scope string) ([]byte, error) {
 	}
 
 	seen := map[string]bool{}
-	addAppFile := func(path string) error {
-		base := filepath.Base(path)
+	addAppFile := func(p string) error {
+		base := filepath.Base(p)
 		if seen[base] {
 			return nil
 		}
 		seen[base] = true
-		return writeFile("files/"+base, path)
+		return writeFile("files/"+base, p)
 	}
 	if err := addAppFile(spec.Artifact); err != nil {
 		return nil, err
@@ -463,11 +475,50 @@ func buildPayloadZip(spec installer.Spec, scope string) ([]byte, error) {
 			return nil, err
 		}
 	}
+	if len(spec.ExtraEntries) > 0 {
+		rels := make([]string, 0, len(spec.ExtraEntries))
+		byClean := make(map[string]string, len(spec.ExtraEntries))
+		for rel, src := range spec.ExtraEntries {
+			clean := cleanPayloadRel(rel)
+			if clean == "" {
+				return nil, fmt.Errorf("windows installer: invalid extra entry path %q", rel)
+			}
+			if _, dup := byClean[clean]; !dup {
+				rels = append(rels, clean)
+				byClean[clean] = src
+			}
+		}
+		slices.Sort(rels)
+		for _, rel := range rels {
+			if seen[rel] {
+				continue
+			}
+			seen[rel] = true
+			if err := writeFile("files/"+rel, byClean[rel]); err != nil {
+				return nil, err
+			}
+		}
+	}
 
 	if err := zw.Close(); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func cleanPayloadRel(rel string) string {
+	norm := strings.ReplaceAll(strings.TrimSpace(rel), `\`, "/")
+	if norm == "" || strings.HasPrefix(norm, "/") || strings.ContainsRune(norm, 0) {
+		return ""
+	}
+	clean := path.Clean(norm)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || strings.HasPrefix(clean, "/") {
+		return ""
+	}
+	if !filepath.IsLocal(filepath.FromSlash(clean)) {
+		return ""
+	}
+	return clean
 }
 
 func projectGGUI(ctx context.Context, dir string) (gotool.Module, error) {

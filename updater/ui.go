@@ -2,7 +2,6 @@ package updater
 
 import (
 	"errors"
-	"fmt"
 	"net/url"
 	"strings"
 
@@ -73,7 +72,7 @@ func (s dialogDismissSync) Get() string {
 	canDismiss := p != PhaseDownloading && p != PhaseInstalling
 	s.dlg.Dismissible(canDismiss)
 	s.dlg.CloseButton(canDismiss)
-	return "Software Update"
+	return s.ctrl.tr("Software Update")
 }
 
 // Dialog wraps Panel(ctrl) in a modal ui.Dialog bound to ctrl.Open.
@@ -98,7 +97,7 @@ func Dialog(ctrl *Controller) *ui.DialogWidget {
 	dlg := ui.Dialog(openBinding, Panel(ctrl)).
 		Width(500).
 		Compact().
-		Name("Software Update").
+		Name(ctrl.tr("Software Update")).
 		OnClose(ctrl.Dismiss)
 
 	syncDismissible := func(p Phase) {
@@ -135,7 +134,7 @@ func ShowWindow(app *ggui.App, ctrl *Controller) (*ggui.Window, error) {
 	ctrl.ensureQuit(app.Quit)
 
 	win, err := app.OpenWindow(ggui.Config{
-		Title:     "Software Update",
+		Title:     ctrl.tr("Software Update"),
 		Width:     520,
 		Height:    420,
 		Resizable: false,
@@ -190,7 +189,7 @@ func appDisplayName(ctrl *Controller) string {
 	if id := strings.TrimSpace(cfg.AppID); id != "" {
 		return id
 	}
-	return "Application"
+	return ctrl.tr("Application")
 }
 
 func buildIdlePanel(ctrl *Controller) ggui.Widget {
@@ -198,15 +197,15 @@ func buildIdlePanel(ctrl *Controller) ggui.Widget {
 	body := widget.Row(
 		iconTile(ui.Icon(icons.Download).Size(20)),
 		widget.Expanded(widget.Column(
-			ui.Heading("Software Update"),
-			ui.Caption(fmt.Sprintf("Check whether a newer version of %s is available.", appName)),
+			ui.Heading(ctrl.tr("Software Update")),
+			ui.Caption(ctrl.tr("Check whether a newer version of %s is available.", appName)),
 		).Space(0.5).Align(widget.AlignStretch)),
 	).Space(1.5).Align(widget.AlignCenter)
 
 	footer := widget.Row(
 		widget.Spacer(),
-		ui.Button("Close", ctrl.Dismiss).Outline(),
-		ui.Button("Check for Updates", ctrl.CheckNow),
+		ui.Button(ctrl.tr("Close"), ctrl.Dismiss).Outline(),
+		ui.Button(ctrl.tr("Check for Updates"), ctrl.CheckNow),
 	).Space(1)
 
 	return panelFrame(body, footer)
@@ -217,14 +216,14 @@ func buildCheckingPanel(ctrl *Controller) ggui.Widget {
 	body := widget.Row(
 		iconTile(ui.Spinner().Size(20).Name("")),
 		widget.Expanded(widget.Column(
-			ui.Heading("Checking for updates…"),
-			ui.Caption(fmt.Sprintf("Looking for the latest version of %s.", appName)),
+			ui.Heading(ctrl.tr("Checking for updates…")),
+			ui.Caption(ctrl.tr("Looking for the latest version of %s.", appName)),
 		).Space(0.5).Align(widget.AlignStretch)),
 	).Space(1.5).Align(widget.AlignCenter)
 
 	footer := widget.Row(
 		widget.Spacer(),
-		ui.Button("Cancel", ctrl.Dismiss).Outline(),
+		ui.Button(ctrl.tr("Cancel"), ctrl.Dismiss).Outline(),
 	).Space(1)
 
 	return panelFrame(body, footer)
@@ -234,22 +233,22 @@ func buildUpToDatePanel(ctrl *Controller) ggui.Widget {
 	cfg := ctrl.updater.Config()
 	appName := appDisplayName(ctrl)
 	curVer := strings.TrimSpace(cfg.CurrentVersion)
-	desc := fmt.Sprintf("%s is currently the newest version available.", appName)
+	desc := ctrl.tr("%s is currently the newest version available.", appName)
 	if curVer != "" {
-		desc = fmt.Sprintf("%s %s is currently the newest version available.", appName, curVer)
+		desc = ctrl.tr("%s %s is currently the newest version available.", appName, curVer)
 	}
 
 	body := widget.Row(
 		iconTile(ui.Icon(icons.Check).Size(20).Color(uitheme.Primary)),
 		widget.Expanded(widget.Column(
-			ui.Heading("You're up to date!"),
+			ui.Heading(ctrl.tr("You're up to date!")),
 			ui.Caption(desc),
 		).Space(0.5).Align(widget.AlignStretch)),
 	).Space(1.5).Align(widget.AlignCenter)
 
 	footer := widget.Row(
 		widget.Spacer(),
-		ui.Button("OK", ctrl.Dismiss),
+		ui.Button(ctrl.tr("OK"), ctrl.Dismiss),
 	).Space(1)
 
 	return panelFrame(body, footer)
@@ -264,19 +263,20 @@ func buildAvailablePanel(ctrl *Controller, rel *Release) ggui.Widget {
 	curVer := strings.TrimSpace(cfg.CurrentVersion)
 	newVer := rel.DisplayVersion()
 	critical := rel.IsCriticalFor(curVer)
+	ext := ctrl.externalUpdate(rel)
 
 	titleParts := []ggui.Widget{
-		ui.Heading(fmt.Sprintf("A new version of %s is available!", appName)),
+		ui.Heading(ctrl.tr("A new version of %s is available!", appName)),
 	}
 	if critical {
-		titleParts = append(titleParts, ui.Badge("Critical").Destructive())
+		titleParts = append(titleParts, ui.Badge(ctrl.tr("Critical")).Destructive())
 	}
 
 	var subtitle string
 	if curVer != "" {
-		subtitle = fmt.Sprintf("%s %s is now available — you have %s.", appName, newVer, curVer)
+		subtitle = ctrl.tr("%s %s is now available — you have %s.", appName, newVer, curVer)
 	} else {
-		subtitle = fmt.Sprintf("%s %s is now available.", appName, newVer)
+		subtitle = ctrl.tr("%s %s is now available.", appName, newVer)
 	}
 
 	header := widget.Box(widget.Row(
@@ -297,7 +297,7 @@ func buildAvailablePanel(ctrl *Controller, rel *Release) ggui.Widget {
 		).Height(180).Border(1, uitheme.Border).Radius(6).Fill(uitheme.Bg).Clip()
 	} else {
 		notesWidget = widget.Box(
-			ui.Caption("No release notes were provided for this version."),
+			ui.Caption(ctrl.tr("No release notes were provided for this version.")),
 		).Pad(12).Border(1, uitheme.Border).Radius(6).Fill(uitheme.Muted)
 	}
 
@@ -306,11 +306,20 @@ func buildAvailablePanel(ctrl *Controller, rel *Release) ggui.Widget {
 		notesWidget,
 	}
 
+	if ext != nil {
+		if msg := strings.TrimSpace(ext.Message); msg != "" {
+			bodyItems = append(bodyItems, ui.Caption(msg))
+		}
+		if cmd := strings.TrimSpace(ext.Command); cmd != "" {
+			bodyItems = append(bodyItems, ui.CodeBlock(cmd).Small().CopyButton(true))
+		}
+	}
+
 	if link := strings.TrimSpace(rel.Item.ReleaseNotesLink); link != "" {
 		if parsed, err := validateURLString(link, cfg.AllowInsecureHTTP); err == nil {
 			safeURL := parsed.String()
 			bodyItems = append(bodyItems, widget.Row(
-				ui.Button("View full release notes", func() { openLink(safeURL) }).
+				ui.Button(ctrl.tr("View full release notes"), func() { openLink(safeURL) }).
 					Link().
 					Pad(2, 0),
 				widget.Spacer(),
@@ -319,7 +328,7 @@ func buildAvailablePanel(ctrl *Controller, rel *Release) ggui.Widget {
 	}
 
 	bodyItems = append(bodyItems,
-		ui.Checkbox(ctrl.AutoCheck, "Automatically check for updates").
+		ui.Checkbox(ctrl.AutoCheck, ctrl.tr("Automatically check for updates")).
 			OnChange(func(enabled bool) { ctrl.ToggleAutoCheck(enabled) }),
 	)
 
@@ -327,13 +336,29 @@ func buildAvailablePanel(ctrl *Controller, rel *Release) ggui.Widget {
 
 	var footerItems []ggui.Widget
 	if !critical {
-		footerItems = append(footerItems, ui.Button("Skip This Version", ctrl.Skip).Outline())
+		footerItems = append(footerItems, ui.Button(ctrl.tr("Skip This Version"), ctrl.Skip).Outline())
 	}
 	footerItems = append(footerItems,
 		widget.Spacer(),
-		ui.Button("Remind Me Later", ctrl.RemindLater).Outline(),
-		ui.Button("Install Update", ctrl.Download),
+		ui.Button(ctrl.tr("Remind Me Later"), ctrl.RemindLater).Outline(),
 	)
+	if ext != nil {
+		label := strings.TrimSpace(ext.ActionLabel)
+		if label == "" {
+			if strings.TrimSpace(ext.Command) != "" {
+				label = ctrl.tr("Copy command")
+			} else {
+				label = ctrl.tr("Open release page")
+			}
+		}
+		onAction := ext.OnAction
+		if onAction == nil {
+			onAction = ctrl.Dismiss
+		}
+		footerItems = append(footerItems, ui.Button(label, onAction))
+	} else {
+		footerItems = append(footerItems, ui.Button(ctrl.tr("Install Update"), ctrl.Download))
+	}
 	footer := widget.Row(footerItems...).Space(1)
 
 	return panelFrame(body, footer)
@@ -341,9 +366,9 @@ func buildAvailablePanel(ctrl *Controller, rel *Release) ggui.Widget {
 
 func buildDownloadingPanel(ctrl *Controller, rel *Release) ggui.Widget {
 	appName := appDisplayName(ctrl)
-	heading := fmt.Sprintf("Downloading %s…", appName)
+	heading := ctrl.tr("Downloading %s…", appName)
 	if rel != nil && rel.DisplayVersion() != "" {
-		heading = fmt.Sprintf("Downloading %s %s…", appName, rel.DisplayVersion())
+		heading = ctrl.tr("Downloading %s %s…", appName, rel.DisplayVersion())
 	}
 
 	body := widget.Column(
@@ -354,7 +379,7 @@ func buildDownloadingPanel(ctrl *Controller, rel *Release) ggui.Widget {
 
 	footer := widget.Row(
 		widget.Spacer(),
-		ui.Button("Cancel", ctrl.CancelDownload).Outline(),
+		ui.Button(ctrl.tr("Cancel"), ctrl.CancelDownload).Outline(),
 	).Space(1)
 
 	return panelFrame(body, footer)
@@ -370,21 +395,23 @@ func buildReadyPanel(ctrl *Controller, rel *Release, upd *DownloadedUpdate) ggui
 	}
 
 	titleParts := []ggui.Widget{
-		ui.Heading("Ready to Install"),
+		ui.Heading(ctrl.tr("Ready to Install")),
 	}
 	if upd != nil && upd.Verified {
-		titleParts = append(titleParts, ui.Badge("Verified").Secondary())
+		titleParts = append(titleParts, ui.Badge(ctrl.tr("Verified")).Secondary())
 	}
 
 	var desc string
-	verifiedPhrase := "downloaded and verified"
-	if upd != nil && !upd.Verified {
-		verifiedPhrase = "downloaded"
-	}
-	if ver != "" {
-		desc = fmt.Sprintf("%s %s has been %s. Click below to install and relaunch.", appName, ver, verifiedPhrase)
-	} else {
-		desc = fmt.Sprintf("The update for %s has been %s. Click below to install and relaunch.", appName, verifiedPhrase)
+	verified := upd != nil && upd.Verified
+	switch {
+	case ver != "" && verified:
+		desc = ctrl.tr("%s %s has been downloaded and verified. Click below to install and relaunch.", appName, ver)
+	case ver != "":
+		desc = ctrl.tr("%s %s has been downloaded. Click below to install and relaunch.", appName, ver)
+	case verified:
+		desc = ctrl.tr("The update for %s has been downloaded and verified. Click below to install and relaunch.", appName)
+	default:
+		desc = ctrl.tr("The update for %s has been downloaded. Click below to install and relaunch.", appName)
 	}
 
 	body := widget.Row(
@@ -397,8 +424,8 @@ func buildReadyPanel(ctrl *Controller, rel *Release, upd *DownloadedUpdate) ggui
 
 	footer := widget.Row(
 		widget.Spacer(),
-		ui.Button("Later", ctrl.Dismiss).Outline(),
-		ui.Button("Install and Relaunch", ctrl.Install),
+		ui.Button(ctrl.tr("Later"), ctrl.Dismiss).Outline(),
+		ui.Button(ctrl.tr("Install and Relaunch"), ctrl.Install),
 	).Space(1)
 
 	return panelFrame(body, footer)
@@ -409,8 +436,8 @@ func buildInstallingPanel(ctrl *Controller) ggui.Widget {
 	body := widget.Row(
 		iconTile(ui.Spinner().Size(20).Name("")),
 		widget.Expanded(widget.Column(
-			ui.Heading("Installing update…"),
-			ui.Caption(fmt.Sprintf("%s will restart shortly.", appName)),
+			ui.Heading(ctrl.tr("Installing update…")),
+			ui.Caption(ctrl.tr("%s will restart shortly.", appName)),
 		).Space(0.5).Align(widget.AlignStretch)),
 	).Space(1.5).Align(widget.AlignCenter)
 
@@ -419,16 +446,16 @@ func buildInstallingPanel(ctrl *Controller) ggui.Widget {
 
 func buildErrorPanel(ctrl *Controller, errText string) ggui.Widget {
 	if strings.TrimSpace(errText) == "" {
-		errText = "An unexpected error occurred while updating."
+		errText = ctrl.tr("An unexpected error occurred while updating.")
 	}
 	body := widget.Column(
-		ui.Alert("Update Failed", errText).Destructive().Icon(icons.Alert),
+		ui.Alert(ctrl.tr("Update Failed"), errText).Destructive().Icon(icons.Alert),
 	).Align(widget.AlignStretch)
 
 	footer := widget.Row(
 		widget.Spacer(),
-		ui.Button("Close", ctrl.Dismiss).Outline(),
-		ui.Button("Retry", ctrl.Retry),
+		ui.Button(ctrl.tr("Close"), ctrl.Dismiss).Outline(),
+		ui.Button(ctrl.tr("Retry"), ctrl.Retry),
 	).Space(1)
 
 	return panelFrame(body, footer)

@@ -246,6 +246,31 @@ func install(ctx context.Context, payload *Payload, opts InstallOptions, b Backe
 		}
 	}
 
+	// Preserve tracked PATH, environment, and registry entries from an earlier
+	// manifest for this same application so silent upgrades keep clean uninstall
+	// tracking for options the user chose during initial setup.
+	mfPath := filepath.Join(absDir, manifestName)
+	if prevRaw, err := os.ReadFile(mfPath); err == nil {
+		var prev InstallManifest
+		if json.Unmarshal(prevRaw, &prev) == nil && prev.ID == payload.Meta.ID {
+			for _, pe := range prev.Path {
+				if !slices.Contains(pathEntries, pe) {
+					pathEntries = append(pathEntries, pe)
+				}
+			}
+			for _, ee := range prev.Env {
+				if !slices.Contains(envEntries, ee) {
+					envEntries = append(envEntries, ee)
+				}
+			}
+			for _, re := range prev.Registry {
+				if !slices.Contains(regEntries, re) {
+					regEntries = append(regEntries, re)
+				}
+			}
+		}
+	}
+
 	// Persist manifest after declarative settings and AfterInstall so extra
 	// files, shortcuts, env vars, PATH entries, and registry entries are
 	// recorded for clean Uninstall.
@@ -264,7 +289,6 @@ func install(ctx context.Context, payload *Payload, opts InstallOptions, b Backe
 		rollback()
 		return err
 	}
-	mfPath := filepath.Join(absDir, manifestName)
 	if err := writeFileAtomic(mfPath, mfBytes, 0o644); err != nil {
 		rollback()
 		return fmt.Errorf("writing %s: %w", manifestName, err)
@@ -517,19 +541,33 @@ func writeFileAtomic(dst string, data []byte, mode os.FileMode) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpName, dst); err != nil {
-		// On Windows, os.Rename onto an existing file succeeds in Go 1.24+,
-		// or fallback to removing first if an older FS rejects it.
-		if rmErr := os.Remove(dst); rmErr == nil {
-			if err2 := os.Rename(tmpName, dst); err2 == nil {
-				ok = true
-				return nil
-			}
-		}
+	if err := renameWithRetry(tmpName, dst); err != nil {
 		return err
 	}
 	ok = true
 	return nil
+}
+
+// renameWithRetry atomically replaces dst with src, retrying briefly if dst
+// is transiently locked on Windows (for example while an updated application
+// finishes exiting right before a silent upgrade).
+func renameWithRetry(src, dst string) error {
+	var err error
+	for attempt := range 20 {
+		if err = os.Rename(src, dst); err == nil {
+			return nil
+		}
+		if rmErr := os.Remove(dst); rmErr == nil {
+			if err = os.Rename(src, dst); err == nil {
+				return nil
+			}
+		}
+		if attempt == 19 {
+			return err
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	return err
 }
 
 func copyFileAtomic(src, dst string, mode os.FileMode) (int64, error) {

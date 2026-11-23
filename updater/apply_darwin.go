@@ -87,10 +87,13 @@ func (darwinApplier) Apply(ctx context.Context, upd *DownloadedUpdate, opts Appl
 	}
 
 	if opts.Relaunch {
-		cmd := exec.Command("/bin/sh", "-c",
-			`pid="$1"; app="$2"; i=0; while [ "$i" -lt 150 ] && kill -0 "$pid" 2>/dev/null; do sleep 0.1; i=$((i+1)); done; open -n "$app"`,
+		shArgs := []string{
+			"-c",
+			`pid="$1"; app="$2"; shift 2; i=0; while [ "$i" -lt 300 ] && kill -0 "$pid" 2>/dev/null; do sleep 0.1; i=$((i+1)); done; if [ "$#" -gt 0 ]; then open -n "$app" --args "$@"; else open -n "$app"; fi`,
 			"_", strconv.Itoa(os.Getpid()), currentApp,
-		)
+		}
+		shArgs = append(shArgs, opts.RelaunchArgs...)
+		cmd := exec.Command("/bin/sh", shArgs...)
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		cmd.Stdin = nil
 		cmd.Stdout = nil

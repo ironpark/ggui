@@ -63,10 +63,13 @@ func (linuxApplier) Apply(ctx context.Context, upd *DownloadedUpdate, opts Apply
 	}
 
 	if opts.Relaunch {
-		cmd := exec.Command("/bin/sh", "-c",
-			`pid="$1"; bin="$2"; i=0; while [ "$i" -lt 150 ] && kill -0 "$pid" 2>/dev/null; do sleep 0.1; i=$((i+1)); done; exec "$bin"`,
+		shArgs := []string{
+			"-c",
+			`pid="$1"; bin="$2"; shift 2; i=0; while [ "$i" -lt 300 ] && kill -0 "$pid" 2>/dev/null; do sleep 0.1; i=$((i+1)); done; exec "$bin" "$@"`,
 			"_", strconv.Itoa(os.Getpid()), targetExe,
-		)
+		}
+		shArgs = append(shArgs, opts.RelaunchArgs...)
+		cmd := exec.Command("/bin/sh", shArgs...)
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		cmd.Stdin = nil
 		cmd.Stdout = nil

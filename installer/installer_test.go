@@ -741,6 +741,57 @@ func TestMachineScopeAndValidation(t *testing.T) {
 	}
 }
 
+func TestLegacyUpgradeDetectionAndManifestPreservation(t *testing.T) {
+	fb := newFakeBackend(t)
+	dir := fb.defaultDir
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate an existing legacy install (e.g. install.ps1) with Hello.exe on disk
+	// and NO Windows Uninstall registry entry yet.
+	if err := os.WriteFile(filepath.Join(dir, "Hello.exe"), []byte("legacy-v1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw := testPayloadBytes(t, "")
+	app := &App{Payload: raw}
+	ic, err := NewContext(app, nil, fb)
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	if !ic.IsUpgrade() {
+		t.Fatalf("IsUpgrade() = false for existing legacy executable in targetDir, want true")
+	}
+
+	// First install adds a custom PATH entry via AfterInstall.
+	appWithPath := &App{
+		Payload: raw,
+		AfterInstall: func(ctx *Context) error {
+			return ctx.AddToUserPath(filepath.Join(ctx.Dir(), "bin"))
+		},
+	}
+	if err := runWithBackend(appWithPath, []string{"--silent", "--dir", dir}, fb); err != nil {
+		t.Fatalf("initial install: %v", err)
+	}
+
+	// Second silent upgrade without AfterInstall must preserve the prior
+	// manifest's Path tracking so Uninstall still cleans it up.
+	if err := runWithBackend(&App{Payload: raw}, []string{"--silent", "--dir", dir}, fb); err != nil {
+		t.Fatalf("silent upgrade: %v", err)
+	}
+	mfBytes, err := os.ReadFile(filepath.Join(dir, manifestName))
+	if err != nil {
+		t.Fatalf("reading manifest: %v", err)
+	}
+	var mf InstallManifest
+	if err := json.Unmarshal(mfBytes, &mf); err != nil {
+		t.Fatalf("decoding manifest: %v", err)
+	}
+	wantBin := filepath.Join(dir, "bin")
+	if !slices.Contains(mf.Path, ManifestPathEntry{Scope: ScopeUser, Dir: wantBin}) {
+		t.Errorf("upgraded manifest lost prior Path entry %q: %+v", wantBin, mf.Path)
+	}
+}
+
 func waitUntil(t *testing.T, timeout time.Duration, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

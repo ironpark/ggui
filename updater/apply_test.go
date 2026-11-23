@@ -1401,4 +1401,73 @@ func TestLinuxUpdateHelpers(t *testing.T) {
 			t.Errorf("unexpected leftover .old-* files after success: %v", leftover)
 		}
 	})
+
+	t.Run("locate nested companion binaries on Windows portable and Linux usr/lib", func(t *testing.T) {
+		winInstall := t.TempDir()
+		winTarget := filepath.Join(winInstall, "MyApp.exe")
+		_ = os.WriteFile(winTarget, []byte("app-v1"), 0o755)
+
+		winZip := filepath.Join(t.TempDir(), "MyApp-2.0.0-windows-amd64.zip")
+		writeTestZip(t, winZip, []testArchiveEntry{
+			{Name: "MyApp.exe", Body: []byte("app-v2"), Mode: 0o755},
+			{Name: "ggfx_driver.dll", Body: []byte("dll-v2"), Mode: 0o644},
+			{Name: "bin/docker.exe", Body: []byte("docker-v2"), Mode: 0o755},
+			{Name: "cli-plugins/docker-buildx.exe", Body: []byte("buildx-v2"), Mode: 0o755},
+			{Name: "README.txt", Body: []byte("ignored"), Mode: 0o644},
+		})
+		winStage := t.TempDir()
+		if err := extractZipSafe(winZip, winStage); err != nil {
+			t.Fatalf("extractZipSafe: %v", err)
+		}
+		repls, err := locateWindowsPortableReplacements(winStage, winTarget)
+		if err != nil {
+			t.Fatalf("locateWindowsPortableReplacements: %v", err)
+		}
+		if len(repls) != 4 {
+			t.Fatalf("replacements = %d, want 4 (%+v)", len(repls), repls)
+		}
+		if _, err := replacePortableFiles(repls); err != nil {
+			t.Fatalf("replacePortableFiles: %v", err)
+		}
+		if got, err := os.ReadFile(filepath.Join(winInstall, "bin", "docker.exe")); err != nil || string(got) != "docker-v2" {
+			t.Errorf("bin/docker.exe = (%q, %v), want docker-v2", got, err)
+		}
+		if got, err := os.ReadFile(filepath.Join(winInstall, "cli-plugins", "docker-buildx.exe")); err != nil || string(got) != "buildx-v2" {
+			t.Errorf("cli-plugins/docker-buildx.exe = (%q, %v), want buildx-v2", got, err)
+		}
+
+		// RelaunchArgs on Windows helpers.
+		spec, err := buildWindowsSilentRelaunchHelperWithArgs(42, `C:\tmp\setup.exe`, []string{"--silent"}, `C:\app\MyApp.exe`, []string{"--data-dir", `C:\my data`})
+		if err != nil {
+			t.Fatalf("buildWindowsSilentRelaunchHelperWithArgs: %v", err)
+		}
+		joinedEnv := strings.Join(spec.Env, "\n")
+		if !strings.Contains(joinedEnv, `GGUI_UPDATER_RELAUNCH_ARGS=--data-dir "C:\my data"`) {
+			t.Errorf("missing GGUI_UPDATER_RELAUNCH_ARGS in %s", joinedEnv)
+		}
+
+		// Linux usr/lib/<pkg>/bin/* and cli-plugins/*
+		linuxTgz := filepath.Join(t.TempDir(), "demo-2.0.0-linux-amd64.tar.gz")
+		writeTestTarGz(t, linuxTgz, []testArchiveEntry{
+			{Name: "usr/bin/demo", Body: []byte("elf-v2"), Mode: 0o755},
+			{Name: "usr/lib/demo/libggfx_driver.so", Body: []byte("so-v2"), Mode: 0o644},
+			{Name: "usr/lib/demo/bin/docker", Body: []byte("docker-elf"), Mode: 0o755},
+			{Name: "usr/lib/demo/cli-plugins/docker-compose", Body: []byte("compose-elf"), Mode: 0o755},
+			{Name: "usr/lib/demo/README.txt", Body: []byte("non-exec"), Mode: 0o644},
+		})
+		linuxStage := t.TempDir()
+		if err := extractTarGzSafe(linuxTgz, linuxStage); err != nil {
+			t.Fatalf("extractTarGzSafe: %v", err)
+		}
+		newBin, err := locateLinuxBinary(linuxStage, "demo")
+		if err != nil {
+			t.Fatalf("locateLinuxBinary: %v", err)
+		}
+		prefix := t.TempDir()
+		targetExe := filepath.Join(prefix, "bin", "demo")
+		libs := locateLinuxBundledLibs(linuxStage, newBin, targetExe)
+		if len(libs) != 3 {
+			t.Fatalf("locateLinuxBundledLibs = %d, want 3 (%+v)", len(libs), libs)
+		}
+	})
 }

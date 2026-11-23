@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,7 +22,7 @@ const defaultUpdateKeyEnv = "GGUI_UPDATE_PRIVATE_KEY"
 
 var updateCmd = &command{
 	name:    "update",
-	args:    "keygen|sign|verify|appcast [args]",
+	args:    "keygen|pubkey|sign|verify|appcast [args]",
 	summary: "generate Ed25519 keys, sign or verify files, and build Sparkle 2 appcast.xml feeds",
 	help: `Update manages Sparkle 2-compatible Ed25519 update keys, file signatures,
 and appcast.xml feeds.
@@ -29,6 +30,8 @@ and appcast.xml feeds.
   keygen   generate an Ed25519 key pair (32-byte public key for SUPublicEDKey
            and 32-byte private seed). With --out-private FILE the private key
            is written with mode 0600 instead of printed.
+  pubkey   derive and print the base64 Ed25519 public key (SUPublicEDKey) from
+           --key-file or $GGUI_UPDATE_PRIVATE_KEY (or --key-env).
   sign     sign a release file with an Ed25519 private key from --key-file or
            $GGUI_UPDATE_PRIVATE_KEY (or --key-env) and print its Sparkle 2
            enclosure attributes: sparkle:edSignature, length and sparkle:sha256.
@@ -93,6 +96,7 @@ func newUpdateFlags(fs *flag.FlagSet) *updateFlags {
 
 var updateAllowedFlags = map[string][]string{
 	"keygen": {"out-private"},
+	"pubkey": {"key-file", "key-env"},
 	"sign":   {"key-file", "key-env"},
 	"verify": {"signature", "public-key"},
 	"appcast": {
@@ -111,13 +115,13 @@ var allUpdateFlagNames = []string{
 
 func (f *updateFlags) run(ctx context.Context, pos, rest []string, stdout io.Writer, getenv func(string) string) error {
 	if len(pos) == 0 || len(rest) > 0 {
-		fmt.Fprintln(os.Stderr, "ggui update: takes keygen, sign, verify, or appcast")
+		fmt.Fprintln(os.Stderr, "ggui update: takes keygen, pubkey, sign, verify, or appcast")
 		return errUsage
 	}
 	sub := pos[0]
 	allowed, ok := updateAllowedFlags[sub]
 	if !ok {
-		fmt.Fprintf(os.Stderr, "ggui update: %q is not keygen, sign, verify, or appcast\n", sub)
+		fmt.Fprintf(os.Stderr, "ggui update: %q is not keygen, pubkey, sign, verify, or appcast\n", sub)
 		return errUsage
 	}
 	for _, name := range allUpdateFlagNames {
@@ -132,6 +136,12 @@ func (f *updateFlags) run(ctx context.Context, pos, rest []string, stdout io.Wri
 			return errUsage
 		}
 		return f.runKeygen(stdout)
+	case "pubkey":
+		if len(pos) != 1 {
+			fmt.Fprintln(os.Stderr, "ggui update pubkey: takes no positional arguments")
+			return errUsage
+		}
+		return f.runPubkey(stdout, getenv)
 	case "sign":
 		if len(pos) != 2 {
 			fmt.Fprintln(os.Stderr, "ggui update sign: takes one file path")
@@ -218,6 +228,19 @@ func readUpdatePrivateKey(keyFile, keyEnv string, getenv func(string) string) (s
 		return "", fmt.Errorf("$%s: %w", env, err)
 	}
 	return key, nil
+}
+
+func (f *updateFlags) runPubkey(stdout io.Writer, getenv func(string) string) error {
+	priv, err := readUpdatePrivateKey(*f.keyFile, *f.keyEnv, getenv)
+	if err != nil {
+		return err
+	}
+	pub, err := appcast.PublicKeyFromPrivate(priv)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(stdout, pub)
+	return nil
 }
 
 func (f *updateFlags) runSign(file string, stdout io.Writer, getenv func(string) string) error {
@@ -342,6 +365,15 @@ func (f *updateFlags) runAppcast(ctx context.Context, getenv func(string) string
 		return fmt.Errorf("scanning %s: %w", dir, err)
 	}
 
+	pubDate := time.Now().UTC()
+	if rawEpoch := strings.TrimSpace(getenv("SOURCE_DATE_EPOCH")); rawEpoch != "" {
+		sec, parseErr := strconv.ParseInt(rawEpoch, 10, 64)
+		if parseErr != nil {
+			return fmt.Errorf("SOURCE_DATE_EPOCH=%q: %w", rawEpoch, parseErr)
+		}
+		pubDate = time.Unix(sec, 0).UTC()
+	}
+
 	// If --min-os is given for a multi-OS release directory containing macOS
 	// alongside Windows/Linux, apply it only to macOS so a macOS version like
 	// "13.0" does not block Windows or Linux clients.
@@ -349,7 +381,7 @@ func (f *updateFlags) runAppcast(ctx context.Context, getenv func(string) string
 		Version:               ver,
 		ShortVersion:          ver,
 		Title:                 "Version " + ver,
-		PubDate:               time.Now().UTC(),
+		PubDate:               pubDate,
 		Channel:               ch,
 		PhasedRolloutInterval: rolloutSec,
 		CriticalUpdate:        *f.critical,

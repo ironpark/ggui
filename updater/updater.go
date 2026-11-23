@@ -181,6 +181,10 @@ type ApplyOptions struct {
 
 	// ExtraArgs appends additional arguments for installer-based updates.
 	ExtraArgs []string
+
+	// RelaunchArgs optionally passes command-line arguments to the relaunched
+	// application when Relaunch is true.
+	RelaunchArgs []string
 }
 
 // Applier installs a DownloadedUpdate on the host platform.

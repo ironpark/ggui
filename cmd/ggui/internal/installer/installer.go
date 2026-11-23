@@ -21,10 +21,11 @@ type Spec struct {
 	Version    string // app.version (e.g. "1.2.0")
 	Arch       string // target GOARCH, or "universal" on macOS
 
-	ProjectDir string   // module root directory
-	Artifact   string   // primary built artifact (Name.app on macOS, Name.exe on Windows)
-	ExtraFiles []string // additional files shipped beside Artifact (e.g. ggfx_driver.dll)
-	OutDir     string   // directory where the installer file is written
+	ProjectDir   string            // module root directory
+	Artifact     string            // primary built artifact (Name.app on macOS, Name.exe on Windows)
+	ExtraFiles   []string          // additional top-level files shipped beside Artifact (e.g. ggfx_driver.dll)
+	ExtraEntries map[string]string // additional files shipped at relative slash paths inside the install dir (e.g. "bin/tool.exe" -> "/path/to/tool.exe")
+	OutDir       string            // directory where the installer file is written
 
 	// Package is the user's Go main package defining the installer with
 	// github.com/ironpark/ggui/installer, or nil for the built-in default.

@@ -157,4 +157,42 @@ func TestSetupBuilderValidateAndPayload(t *testing.T) {
 			}
 		}
 	}
+
+	// Nested ExtraEntries are packed deterministically under files/<rel>.
+	helperExe := filepath.Join(dir, "docker.exe")
+	pluginExe := filepath.Join(dir, "docker-buildx.exe")
+	os.WriteFile(helperExe, []byte("docker-bytes"), 0o755)
+	os.WriteFile(pluginExe, []byte("buildx-bytes"), 0o755)
+	nestedSpec := spec
+	nestedSpec.ExtraEntries = map[string]string{
+		"bin/docker.exe":                helperExe,
+		"cli-plugins/docker-buildx.exe": pluginExe,
+	}
+	if err := b.Validate(nestedSpec); err != nil {
+		t.Fatalf("Validate(nestedSpec): %v", err)
+	}
+	rawNestedA, err := buildPayloadZip(nestedSpec, installer.ScopeUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawNestedB, err := buildPayloadZip(nestedSpec, installer.ScopeUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(rawNestedA, rawNestedB) {
+		t.Error("buildPayloadZip with ExtraEntries is not deterministic")
+	}
+	zr3, err := zip.NewReader(bytes.NewReader(rawNestedA), int64(len(rawNestedA)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotNested := map[string]bool{}
+	for _, f := range zr3.File {
+		gotNested[f.Name] = true
+	}
+	for _, want := range []string{"files/Hello.exe", "files/ggfx_driver.dll", "files/bin/docker.exe", "files/cli-plugins/docker-buildx.exe"} {
+		if !gotNested[want] {
+			t.Errorf("nested payload missing %s", want)
+		}
+	}
 }

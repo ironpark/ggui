@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/i18n"
 )
 
 // Phase describes the current UI stage of an update Controller.
@@ -49,6 +50,20 @@ func (p Phase) String() string {
 	}
 }
 
+// ExternalUpdate describes how a user updates an installation managed by an
+// external package manager (such as Homebrew, Chocolatey, APT, or DNF) or a
+// read-only installation that cannot replace itself in place.
+type ExternalUpdate struct {
+	// Message explains how to update this installation (shown in the panel).
+	Message string
+	// Command is an optional terminal command rendered in a copyable code block.
+	Command string
+	// ActionLabel overrides the primary action button text.
+	ActionLabel string
+	// OnAction runs when the user clicks the primary action button.
+	OnAction func()
+}
+
 // ControllerConfig configures a reactive Controller for an Updater.
 type ControllerConfig struct {
 	// Post marshals callbacks onto the UI goroutine (for example app.Post or
@@ -63,9 +78,36 @@ type ControllerConfig struct {
 	// Relaunch controls ApplyOptions.Relaunch. Defaults to true when nil.
 	Relaunch *bool
 
+	// RelaunchArgs optionally returns command-line arguments passed to the
+	// relaunched application via ApplyOptions.RelaunchArgs.
+	RelaunchArgs func() []string
+
 	// SilentInstall controls ApplyOptions.Silent. Defaults to true when nil so
 	// installer-based upgrades (such as Windows Name-Setup.exe) run seamlessly.
 	SilentInstall *bool
+
+	// AutoOpenOnBackground controls whether CheckSilent and StartBackground
+	// automatically open the update dialog (Controller.Open) when an update is
+	// discovered. Defaults to true when nil. Set to false when the application
+	// surfaces background updates through its own banner or tray menu.
+	AutoOpenOnBackground *bool
+
+	// BeforeInstall, when non-nil, is invoked on the UI goroutine before
+	// Controller.Install applies a downloaded update. Call proceed to continue
+	// installing (for example after confirming with the user or stopping child
+	// processes); omitting proceed cancels the install and leaves the controller
+	// in PhaseReadyToInstall.
+	BeforeInstall func(rel *Release, proceed func())
+
+	// ResolveExternal, when non-nil, inspects a discovered release and returns
+	// external update instructions when this installation is managed by a
+	// package manager (Homebrew, Chocolatey, APT, DNF) or cannot self-update.
+	// Returning nil uses the normal in-app download and apply flow.
+	ResolveExternal func(rel *Release) *ExternalUpdate
+
+	// Translate optionally localizes built-in update UI strings. When nil, the
+	// UI falls back to ggui/i18n from the active environment (ggui.CurrentEnv).
+	Translate func(key string, args ...any) string
 
 	// OnLink handles link taps inside Markdown release notes and the full
 	// release notes action. Only validated https (and http when
@@ -110,20 +152,25 @@ type Controller struct {
 
 	updater *Updater
 
-	mu               sync.Mutex
-	post             func(func())
-	pending          []func()
-	draining         bool
-	quit             func()
-	relaunch         bool
-	silentInstall    bool
-	onLink           func(url string)
-	opSeq            uint64
-	cancelOp         context.CancelFunc
-	silentSeq        uint64
-	cancelSilent     context.CancelFunc
-	lastFailed       failedOp
-	retryAutoInstall bool
+	mu                   sync.Mutex
+	post                 func(func())
+	pending              []func()
+	draining             bool
+	quit                 func()
+	relaunch             bool
+	relaunchArgs         func() []string
+	silentInstall        bool
+	autoOpenOnBackground bool
+	beforeInstall        func(rel *Release, proceed func())
+	resolveExternal      func(rel *Release) *ExternalUpdate
+	translateFn          func(key string, args ...any) string
+	onLink               func(url string)
+	opSeq                uint64
+	cancelOp             context.CancelFunc
+	silentSeq            uint64
+	cancelSilent         context.CancelFunc
+	lastFailed           failedOp
+	retryAutoInstall     bool
 }
 
 // NewController creates a reactive UI Controller wrapping u.
@@ -143,23 +190,32 @@ func NewController(u *Updater, cfg ...ControllerConfig) *Controller {
 	if c.SilentInstall != nil {
 		silentInstall = *c.SilentInstall
 	}
+	autoOpenOnBackground := true
+	if c.AutoOpenOnBackground != nil {
+		autoOpenOnBackground = *c.AutoOpenOnBackground
+	}
 
 	return &Controller{
-		Open:          ggui.State(false),
-		Phase:         ggui.State(PhaseIdle),
-		Release:       ggui.State[*Release](nil),
-		Downloaded:    ggui.State[*DownloadedUpdate](nil),
-		Progress:      ggui.State(0.0),
-		ProgressText:  ggui.State(""),
-		ErrText:       ggui.State(""),
-		AutoCheck:     ggui.State(u.AutoCheckEnabled()),
-		ManualCheck:   ggui.State(false),
-		updater:       u,
-		post:          c.Post,
-		quit:          c.Quit,
-		relaunch:      relaunch,
-		silentInstall: silentInstall,
-		onLink:        c.OnLink,
+		Open:                 ggui.State(false),
+		Phase:                ggui.State(PhaseIdle),
+		Release:              ggui.State[*Release](nil),
+		Downloaded:           ggui.State[*DownloadedUpdate](nil),
+		Progress:             ggui.State(0.0),
+		ProgressText:         ggui.State(""),
+		ErrText:              ggui.State(""),
+		AutoCheck:            ggui.State(u.AutoCheckEnabled()),
+		ManualCheck:          ggui.State(false),
+		updater:              u,
+		post:                 c.Post,
+		quit:                 c.Quit,
+		relaunch:             relaunch,
+		relaunchArgs:         c.RelaunchArgs,
+		silentInstall:        silentInstall,
+		autoOpenOnBackground: autoOpenOnBackground,
+		beforeInstall:        c.BeforeInstall,
+		resolveExternal:      c.ResolveExternal,
+		translateFn:          c.Translate,
+		onLink:               c.OnLink,
 	}
 }
 
@@ -226,6 +282,29 @@ func (c *Controller) linkHandler() func(string) {
 	fn := c.onLink
 	c.mu.Unlock()
 	return fn
+}
+
+func (c *Controller) tr(key string, args ...any) string {
+	c.mu.Lock()
+	fn := c.translateFn
+	c.mu.Unlock()
+	if fn != nil {
+		return fn(key, args...)
+	}
+	return i18n.From(ggui.CurrentEnv()).S(key, args...)
+}
+
+func (c *Controller) externalUpdate(rel *Release) *ExternalUpdate {
+	if rel == nil {
+		return nil
+	}
+	c.mu.Lock()
+	fn := c.resolveExternal
+	c.mu.Unlock()
+	if fn == nil {
+		return nil
+	}
+	return fn(rel)
 }
 
 func (c *Controller) postUI(fn func()) {
@@ -482,7 +561,12 @@ func (c *Controller) presentBackgroundReleaseOnUI(rel *Release) {
 	c.ProgressText.Set("")
 	c.ErrText.Set("")
 	c.Phase.Set(PhaseAvailable)
-	c.Open.Set(true)
+	c.mu.Lock()
+	autoOpen := c.autoOpenOnBackground
+	c.mu.Unlock()
+	if autoOpen {
+		c.Open.Set(true)
+	}
 }
 
 // Download downloads and verifies the currently selected Release in the
@@ -503,6 +587,12 @@ func (c *Controller) startDownload(autoInstall bool) {
 	if rel == nil {
 		return
 	}
+	if ext := c.externalUpdate(rel); ext != nil {
+		if ext.OnAction != nil {
+			ext.OnAction()
+		}
+		return
+	}
 
 	seq, ctx := c.beginOp()
 	c.setFailedOp(failedNone, false)
@@ -510,7 +600,7 @@ func (c *Controller) startDownload(autoInstall bool) {
 	c.Downloaded.Set(nil)
 	c.ErrText.Set("")
 	c.Progress.Set(0)
-	c.ProgressText.Set("Starting download…")
+	c.ProgressText.Set(c.tr("Starting download…"))
 	c.Phase.Set(PhaseDownloading)
 	c.Open.Set(true)
 
@@ -518,7 +608,7 @@ func (c *Controller) startDownload(autoInstall bool) {
 	go func() {
 		const minUpdateInterval = 33 * time.Millisecond
 		var lastReport time.Time
-		var lastText string
+		var lastDone bool
 
 		onProgress := func(p DownloadProgress) {
 			if ctx.Err() != nil {
@@ -529,7 +619,13 @@ func (c *Controller) startDownload(autoInstall bool) {
 			if !done && !lastReport.IsZero() && now.Sub(lastReport) < minUpdateInterval {
 				return
 			}
+			if done && lastDone {
+				return
+			}
 			lastReport = now
+			if done {
+				lastDone = true
+			}
 
 			frac := p.Fraction
 			if frac < 0 {
@@ -537,18 +633,13 @@ func (c *Controller) startDownload(autoInstall bool) {
 			} else if frac > 1 {
 				frac = 1
 			}
-			text := formatProgressText(p)
-			if done && text == lastText {
-				return
-			}
-			lastText = text
 
 			c.postUI(func() {
 				if !c.isCurrentOp(seq) {
 					return
 				}
 				c.Progress.Set(frac)
-				c.ProgressText.Set(text)
+				c.ProgressText.Set(c.formatProgressText(p))
 			})
 		}
 
@@ -570,9 +661,9 @@ func (c *Controller) startDownload(autoInstall bool) {
 			c.setFailedOp(failedNone, false)
 			c.Progress.Set(1.0)
 			if upd.Verified {
-				c.ProgressText.Set("Signature verified.")
+				c.ProgressText.Set(c.tr("Signature verified."))
 			} else {
-				c.ProgressText.Set("Download complete.")
+				c.ProgressText.Set(c.tr("Download complete."))
 			}
 			c.Downloaded.Set(upd)
 			if autoInstall {
@@ -603,8 +694,37 @@ func (c *Controller) CancelDownload() {
 
 // Install hands the verified DownloadedUpdate to Updater.Apply in the
 // background, transitioning to PhaseInstalling and reporting any error in
-// PhaseError.
+// PhaseError. If ControllerConfig.BeforeInstall is set, it is invoked on the
+// UI goroutine first and must call proceed to continue installing.
 func (c *Controller) Install() {
+	if ggui.Peek(c.Phase) == PhaseInstalling {
+		return
+	}
+	upd := ggui.Peek(c.Downloaded)
+	if upd == nil {
+		return
+	}
+	c.mu.Lock()
+	before := c.beforeInstall
+	c.mu.Unlock()
+	if before != nil {
+		rel := ggui.Peek(c.Release)
+		if rel == nil {
+			cp := upd.Release
+			rel = &cp
+		}
+		var once sync.Once
+		before(rel, func() {
+			once.Do(func() {
+				c.applyDownloaded()
+			})
+		})
+		return
+	}
+	c.applyDownloaded()
+}
+
+func (c *Controller) applyDownloaded() {
 	if ggui.Peek(c.Phase) == PhaseInstalling {
 		return
 	}
@@ -615,11 +735,15 @@ func (c *Controller) Install() {
 
 	c.mu.Lock()
 	quit := c.quit
+	relaunchArgsFn := c.relaunchArgs
 	opts := ApplyOptions{
 		Relaunch: c.relaunch,
 		Silent:   c.silentInstall,
 	}
 	c.mu.Unlock()
+	if relaunchArgsFn != nil {
+		opts.RelaunchArgs = relaunchArgsFn()
+	}
 	if quit != nil {
 		opts.QuitFunc = func() {
 			c.postUI(quit)
@@ -730,17 +854,17 @@ func (c *Controller) Retry() {
 	}
 }
 
-func formatProgressText(p DownloadProgress) string {
+func (c *Controller) formatProgressText(p DownloadProgress) string {
 	if p.Total > 0 && p.Downloaded >= p.Total {
-		return "Verifying signature…"
+		return c.tr("Verifying signature…")
 	}
 	if p.Total > 0 {
 		return fmt.Sprintf("%s / %s", formatBytes(p.Downloaded), formatBytes(p.Total))
 	}
 	if p.Downloaded > 0 {
-		return fmt.Sprintf("Downloaded %s", formatBytes(p.Downloaded))
+		return c.tr("Downloaded %s", formatBytes(p.Downloaded))
 	}
-	return "Downloading…"
+	return c.tr("Downloading…")
 }
 
 func formatBytes(n int64) string {

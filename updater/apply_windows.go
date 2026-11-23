@@ -73,7 +73,7 @@ func applyWindowsInstaller(upd *DownloadedUpdate, targetExe string, opts ApplyOp
 	isSilent := hasWindowsSilentFlag(args)
 
 	if opts.Relaunch && isSilent {
-		spec, err := buildWindowsSilentRelaunchHelper(os.Getpid(), upd.FilePath, args, targetExe)
+		spec, err := buildWindowsSilentRelaunchHelperWithArgs(os.Getpid(), upd.FilePath, args, targetExe, opts.RelaunchArgs)
 		if err != nil {
 			return err
 		}
@@ -144,7 +144,7 @@ func applyWindowsPortable(ctx context.Context, upd *DownloadedUpdate, targetExe 
 	// Always spawn the detached helper before calling QuitFunc so process exit
 	// cannot race ahead of scheduling relaunch and delayed .old cleanup.
 	if relaunchTarget != "" || len(oldBackups) > 0 {
-		spec, specErr := buildWindowsPortableHelper(os.Getpid(), relaunchTarget, oldBackups)
+		spec, specErr := buildWindowsPortableHelperWithArgs(os.Getpid(), relaunchTarget, opts.RelaunchArgs, oldBackups)
 		if specErr != nil {
 			if opts.Relaunch {
 				return specErr

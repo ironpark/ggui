@@ -104,7 +104,23 @@ func TestUpdateKeygenSignVerify(t *testing.T) {
 		t.Error("verify succeeded on tampered file")
 	}
 
-	// 4. sign with custom --key-env
+	// 4. pubkey derives SUPublicEDKey from --key-file and env.
+	pubOut, err := runUpdateForTest(t, []string{"pubkey", "--key-file", keyFile}, nil)
+	if err != nil {
+		t.Fatalf("pubkey --key-file: %v", err)
+	}
+	if strings.TrimSpace(pubOut) != pub2 {
+		t.Errorf("pubkey --key-file = %q, want %q", strings.TrimSpace(pubOut), pub2)
+	}
+	pubOutEnv, err := runUpdateForTest(t, []string{"pubkey"}, map[string]string{"GGUI_UPDATE_PRIVATE_KEY": priv1})
+	if err != nil {
+		t.Fatalf("pubkey env: %v", err)
+	}
+	if strings.TrimSpace(pubOutEnv) != pub1 {
+		t.Errorf("pubkey env = %q, want %q", strings.TrimSpace(pubOutEnv), pub1)
+	}
+
+	// 5. sign with custom --key-env
 	if _, err := runUpdateForTest(t, []string{"sign", sample, "--key-env", "MY_SIGN_KEY"}, map[string]string{"MY_SIGN_KEY": priv1}); err != nil {
 		t.Fatalf("sign --key-env: %v", err)
 	}
@@ -270,6 +286,30 @@ func TestUpdateAppcast(t *testing.T) {
 	}
 	if len(vUpperFeed.Items) != 1 || vUpperFeed.Items[0].Version != "1.1.0" || vUpperFeed.Items[0].PhasedRolloutInterval != 1 {
 		t.Errorf("V1.1.0 feed item = %+v, want version=1.1.0 rollout=1", vUpperFeed.Items)
+	}
+
+	// SOURCE_DATE_EPOCH makes appcast pubDate deterministic.
+	epochOut := filepath.Join(root, "epoch.xml")
+	if _, err := runUpdateForTest(t, []string{
+		"appcast",
+		"--dir", dir11,
+		"--base-url", "https://example.com/releases/v1.1.0",
+		"--version", "1.1.0",
+		"--out", epochOut,
+		"--allow-unsigned",
+	}, map[string]string{"SOURCE_DATE_EPOCH": "1700000000"}); err != nil {
+		t.Fatalf("appcast SOURCE_DATE_EPOCH: %v", err)
+	}
+	epochData, err := os.ReadFile(epochOut)
+	if err != nil {
+		t.Fatal(err)
+	}
+	epochFeed, err := appcast.Parse(epochData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(epochFeed.Items) != 1 || epochFeed.Items[0].PubDate.Unix() != 1700000000 {
+		t.Errorf("SOURCE_DATE_EPOCH pubDate = %v, want unix 1700000000", epochFeed.Items)
 	}
 }
 

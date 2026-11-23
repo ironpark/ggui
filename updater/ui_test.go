@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -1286,5 +1287,149 @@ func TestControllerPendingPostFlushesOnUIThread(t *testing.T) {
 	})
 	if !slices.Equal(ggui.Peek(orderState), []int{1, 2}) {
 		t.Fatalf("pending callbacks ran in order %v; want [1 2]", ggui.Peek(orderState))
+	}
+}
+
+func TestControllerHooksExternalAndLocalization(t *testing.T) {
+	srv := newTestFeedServer(t, func(baseURL, sig, sha string, size int64) *Appcast {
+		return &Appcast{
+			Title: "HookApp",
+			Items: []Item{{
+				Title:        "Version 2.0.0",
+				Version:      "2.0.0",
+				ShortVersion: "2.0.0",
+				ReleaseNotes: "## Notes\n- Bug fixes",
+				Enclosures: []Enclosure{{
+					URL:         baseURL + "/update.zip",
+					Length:      size,
+					EdSignature: sig,
+					SHA256:      sha,
+					OS:          "macos",
+					Arch:        "arm64",
+				}},
+			}},
+		}
+	})
+
+	// 1. AutoOpenOnBackground=false + ResolveExternal + Translate.
+	dir1 := t.TempDir()
+	u1, err := New(Config{
+		FeedURL:           srv.server.URL + "/appcast.xml",
+		PublicKey:         srv.pubKey,
+		CurrentVersion:    "1.0.0",
+		AppID:             "com.example.hook1",
+		AppName:           "HookApp",
+		OS:                "macos",
+		Arch:              "arm64",
+		StateDir:          dir1,
+		CacheDir:          filepath.Join(dir1, "cache"),
+		AllowInsecureHTTP: true,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	autoOpen := false
+	extClicked := 0
+	ctrl1 := NewController(u1, ControllerConfig{
+		AutoOpenOnBackground: &autoOpen,
+		Translate: func(key string, args ...any) string {
+			if key == "Skip This Version" {
+				return "이 버전 건너뛰기"
+			}
+			if len(args) > 0 {
+				return fmt.Sprintf(key, args...)
+			}
+			return key
+		},
+		ResolveExternal: func(rel *Release) *ExternalUpdate {
+			return &ExternalUpdate{
+				Message:     "Managed by Homebrew.",
+				Command:     "brew upgrade --cask hookapp",
+				ActionLabel: "Copy brew command",
+				OnAction:    func() { extClicked++ },
+			}
+		},
+	})
+	p1 := ggui.ProbeBuilder(func() ggui.Widget {
+		return widget.Stack(widget.Box(), Dialog(ctrl1)).Expand()
+	}, ggui.Sz(640, 480))
+	defer p1.Close()
+	ctrl1.SetPost(p1.Post)
+	p1.Frame()
+
+	ctrl1.CheckSilent()
+	waitFor(t, p1, 3*time.Second, "silent update discovered without auto-opening", func() bool {
+		return ggui.Peek(ctrl1.Phase) == PhaseAvailable
+	})
+	if ggui.Peek(ctrl1.Open) {
+		t.Error("AutoOpenOnBackground=false still opened dialog")
+	}
+	ctrl1.Open.Set(true)
+	p1.Frame()
+	if _, ok := p1.Semantics().Find(ggui.RoleButton, "이 버전 건너뛰기"); !ok {
+		t.Errorf("translated Skip button not found in %s", p1.Semantics().String())
+	}
+	if _, ok := p1.Semantics().Find(ggui.RoleButton, "Copy brew command"); !ok {
+		t.Errorf("external action button not found in %s", p1.Semantics().String())
+	}
+	ctrl1.Download() // must delegate to external action rather than downloading
+	if extClicked != 1 {
+		t.Errorf("extClicked = %d, want 1", extClicked)
+	}
+
+	// 2. BeforeInstall intercepts Install and gates Apply until proceed() is called.
+	dir2 := t.TempDir()
+	applier := &uiTestApplier{}
+	u2, err := New(Config{
+		FeedURL:           srv.server.URL + "/appcast.xml",
+		PublicKey:         srv.pubKey,
+		CurrentVersion:    "1.0.0",
+		AppID:             "com.example.hook2",
+		AppName:           "HookApp",
+		OS:                "macos",
+		Arch:              "arm64",
+		StateDir:          dir2,
+		CacheDir:          filepath.Join(dir2, "cache"),
+		AllowInsecureHTTP: true,
+		Applier:           applier,
+	})
+	if err != nil {
+		t.Fatalf("New u2: %v", err)
+	}
+	var proceedFn func()
+	ctrl2 := NewController(u2, ControllerConfig{
+		RelaunchArgs: func() []string { return []string{"-data-dir", "/tmp/d"} },
+		BeforeInstall: func(rel *Release, proceed func()) {
+			proceedFn = proceed
+		},
+	})
+	p2 := ggui.ProbeBuilder(func() ggui.Widget {
+		return widget.Stack(widget.Box(), Dialog(ctrl2)).Expand()
+	}, ggui.Sz(640, 480))
+	defer p2.Close()
+	ctrl2.SetPost(p2.Post)
+	p2.Frame()
+
+	ctrl2.CheckNow()
+	waitFor(t, p2, 3*time.Second, "available", func() bool { return ggui.Peek(ctrl2.Phase) == PhaseAvailable })
+	ctrl2.Download()
+	waitFor(t, p2, 3*time.Second, "ready", func() bool { return ggui.Peek(ctrl2.Phase) == PhaseReadyToInstall })
+	ctrl2.Install()
+	p2.Frame()
+	if proceedFn == nil {
+		t.Fatal("BeforeInstall was not called")
+	}
+	calls, _, _ := applier.snapshot()
+	if calls != 0 || ggui.Peek(ctrl2.Phase) != PhaseReadyToInstall {
+		t.Fatalf("Apply ran before proceed(): calls=%d phase=%v", calls, ggui.Peek(ctrl2.Phase))
+	}
+	proceedFn()
+	waitFor(t, p2, 3*time.Second, "applied", func() bool {
+		n, _, _ := applier.snapshot()
+		return n == 1
+	})
+	_, _, gotOpts := applier.snapshot()
+	if !slices.Equal(gotOpts.RelaunchArgs, []string{"-data-dir", "/tmp/d"}) {
+		t.Errorf("RelaunchArgs = %v, want [-data-dir /tmp/d]", gotOpts.RelaunchArgs)
 	}
 }
