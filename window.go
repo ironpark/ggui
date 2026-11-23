@@ -170,7 +170,7 @@ type Window struct {
 	touches       map[ggwd.TouchID]Point // touches in progress, in logical pixels
 	ax            a11ybridge.Bridge
 	semWanted     atomic.Bool  // a caller of Semantics reads the tree
-	performs      atomic.Int32 // Perform calls not yet carried out, which need a tree
+	performs      atomic.Int32 // PerformAction calls not yet carried out, which need a tree
 	dragOver      bool
 	closeAsked    bool // a close the OnCloseRequest handlers have yet to answer
 	dragAt        Point
@@ -262,7 +262,7 @@ func newWindow(app *App, rt *reactive.Runtime, cfg Config, build Builder) *Windo
 // thread while the engine runs, from inside an event.
 func (w *Window) open() error {
 	w.start()
-	w.ax.Start(w.Perform, w.cfg.Accessibility)
+	w.ax.Start(w.PerformAction, w.cfg.Accessibility)
 	placements := w.restorePlacement(Screens())
 	o := w.cfg.options()
 	// Placed on its display before it is first shown, so it never shows on
@@ -523,7 +523,7 @@ func (w *Window) wakeFrame() {
 // to the UI goroutine.
 //
 // A window builds the tree only while something reads it: an assistive
-// technology, the inspector, a caller of Semantics, or a Perform waiting to
+// technology, the inspector, a caller of Semantics, or a PerformAction waiting to
 // be carried out. The first call to Semantics turns it on for good and asks
 // for a frame; until that frame, the tree returned is the last one built,
 // which is empty before any was.

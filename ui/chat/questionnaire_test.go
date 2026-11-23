@@ -103,7 +103,7 @@ func TestQuestionnaireChoiceActionsSelectAndToggle(t *testing.T) {
 		if !ok {
 			t.Fatalf("no checkbox %q:\n%s", name, p.Semantics())
 		}
-		p.Perform(n.ID, ggui.Action{Kind: kind})
+		p.PerformAction(n.ID, ggui.Action{Kind: kind})
 	}
 	values := func() []string { return ggui.Untrack(answers.Get)["two"].Values }
 	act("Gamma", ggui.ActionSelect)
@@ -122,7 +122,7 @@ func TestQuestionnaireChoiceActionsSelectAndToggle(t *testing.T) {
 	q.Active("one")
 	p.Frame()
 	off, _ := p.Semantics().Find(ggui.RoleRadio, "Off")
-	p.Perform(off.ID, ggui.Action{Kind: ggui.ActionPress})
+	p.PerformAction(off.ID, ggui.Action{Kind: ggui.ActionPress})
 	if got := ggui.Untrack(answers.Get)["one"].Values; len(got) != 0 {
 		t.Fatalf("pressing a disabled option chose %q", got)
 	}
@@ -155,7 +155,7 @@ func TestQuestionnaireButtonArrowsGoBackAndForth(t *testing.T) {
 		if !ok {
 			t.Fatalf("no %s button:\n%s", name, p.Semantics())
 		}
-		p.Perform(n.ID, ggui.Action{Kind: ggui.ActionFocus})
+		p.PerformAction(n.ID, ggui.Action{Kind: ggui.ActionFocus})
 	}
 	focusButton("Previous")
 	p.Type(ggui.Mods{}, ggui.KeyArrowLeft)

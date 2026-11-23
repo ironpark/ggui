@@ -150,7 +150,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 	shareDrawer := ui.Drawer(drawerOpen, widget.Column(
 		widget.Text("A drawer rises from the bottom edge, as tall as what it holds, with a grab handle on top."),
 		ui.Button("Close", func() { drawerOpen.Set(false) }).Outline(),
-	).Space(1.5).Stretch()).Title("Share").Description("Send this page to a teammate.").Handle(true)
+	).Space(1.5).Stretch()).Title("Share").Description("Send this page to a teammate.").HandleBar(true)
 	removeDialog := ui.AlertDialog(removeOpen, "Remove the row?", "A click beside this question will not dismiss it.").
 		Confirm("Remove", func() { ggui.Add(removed, 1) }).Destructive().Media(ui.Icon(icons.Alert))
 	sidebarCollapsed := ggui.State(false)

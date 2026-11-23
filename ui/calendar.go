@@ -673,7 +673,7 @@ func (c *CalendarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 		// Last, so the halo lies over the neighbouring days' fills.
 		if focus.Size.W > 0 {
-			controlFocusRing(dst, &c.Interactive, t, focus, t.RadiusSm, t.Ring, c.env.Motion(t.MotionFast))
+			FocusRing(dst, &c.Interactive, Ring{Theme: t, Rect: focus, Radius: t.RadiusSm, Color: t.Ring, Motion: c.env.Motion(t.MotionFast)})
 		}
 	})
 }

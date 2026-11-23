@@ -1209,7 +1209,7 @@ func TestPerformFocusesAndScrollsIntoView(t *testing.T) {
 	if !field.Offscreen {
 		t.Fatal("the field should start out of view")
 	}
-	p.Perform(field.ID, ggui.Action{Kind: ggui.ActionFocus})
+	p.PerformAction(field.ID, ggui.Action{Kind: ggui.ActionFocus})
 	if !p.Focused() {
 		t.Fatal("the field did not take focus")
 	}

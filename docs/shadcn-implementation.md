@@ -101,7 +101,7 @@ optional web prop.
 | Direction | Tabs, button/toggle groups, toggle glyph/label placement, sliders, calendar, pagination icons, sidebar labels/border and resizable panes honor `Directionality`. Code content deliberately stays LTR. |
 | Buttons and groups | `Button.Icon` / `TrailingIcon`; `ToggleOf`; `ButtonGroup` joins its children with squared inner corners and shared borders and takes `ButtonGroupText` / `ButtonGroupTextOf` and `ButtonGroupSeparator`, while text fields and input groups in it take the spare width and a `Select` joins as a button does; `ToggleGroup.Outline` / `Size` / `Spacing(0)`; `KbdGroup`. |
 | Fields | `Checkbox` / `Radio` / `Radios` / `Switch` / `Select` / `Button` / `Toggle` / `InputOTP` `.Invalid(v)` (all except `Select` also support `.BindInvalid(reader)`); `Switch.Small`; `Field.Horizontal` / `ControlFirst` / `Card` / `Errors` / `BindErrors`; `FieldCard(control, content).ControlFirst`, `FieldContent`, `FieldTitle`, `FieldDescription`; `FieldGroup`, `FieldSet(...).Legend / Description`, `FieldSeparator().Label`; `InputGroup.Top` / `Bottom` / `Multiline`; `Select.Placeholder` / `GroupBy` / `DisabledOption` / `Small`. |
-| Overlays | `PopupWidget.Side` / `AlignOffset` / `MatchAnchorWidth` / `FocusOnOpen`; `Dialog.Description` / `Footer` / `TopAt`; `Sheet.Description` / `Footer` / `Handle`; `AlertDialog.Small` / `Media`; `Popover`, `HoverCard` and `Tooltip` `.Side` / `Align` / `AlignOffset` over `widget.PopupSide`. |
+| Overlays | `PopupWidget.Side` / `AlignOffset` / `MatchAnchorWidth` / `FocusOnOpen`; `Dialog.Description` / `Footer` / `TopAt`; `Sheet.Description` / `Footer` / `HandleBar`; `AlertDialog.Small` / `Media`; `Popover`, `HoverCard` and `Tooltip` `.Side` / `Align` / `AlignOffset` over `widget.PopupSide`. |
 | Menus | `MenuLabel`, `MenuSub`, `MenuCheckbox`, `MenuRadioGroup`; `MenuItem.Icon` / `Inset` / `Destructive`; `CommandSeparator`, `CommandEntry.Icon`; menus draw in `Theme.Menu()`. |
 | Cards and feedback | `Card` sections (`CardMedia`, `CardHeader(...).Action`, `CardContent`, `CardFooter(...).Justify`), `Card.Small` / `OnTap`; toast types, `ToastMessage.Loading` / `Countdown`, `Toaster.Position` / `Update`; `AvatarGroup`, `Avatar.Small` / `Large` / `Badge` / `BadgeIcon`; `ItemGroup`, `ItemSeparator`, `Item.MediaIcon` / `Header` / `Footer` / `Muted` / `Small` / `OnTap`; `Empty.MediaIcon` / `Outline`; `Alert.Icon`; `Badge.Ghost` / `Link` / `Icon` / `OnTap`; `Progress.Label` / `ShowValue` / `FormatValue`; `Spinner.Color`. |
 | Data | `Calendar.Months(n)`, `CaptionDropdown`, `DropdownYears`, `MonthNames`; `DateRangePicker` with `FormatRange` / `OnRangeChange`; `Table.Footer` / `Caption`. |
@@ -139,7 +139,7 @@ See [forms](forms.md), [navigation](data-and-navigation.md), and
   standalone `Radio` is its own Tab stop.
 - `Drawer` sizes to its content (up to 96px short of the window) with rounded
   top corners and `MotionDrawer` (450ms) animation. Dragging works by default;
-  `.Handle(true)` draws the handle bar and `.CloseButton(true)` adds a close
+  `.HandleBar(true)` draws the handle bar and `.CloseButton(true)` adds a close
   button.
 - `Avatar` defaults to 32px, `Spinner` uses the theme's 16px `IconSize` in the
   inherited text color, and `Empty` has no border until `.Outline()`.

@@ -34,7 +34,7 @@ func TestMessageScrollerKeyboardScrollsAndClamps(t *testing.T) {
 	if !ok {
 		t.Fatalf("no group named Chat:\n%s", p.Semantics())
 	}
-	p.Perform(chatNode.ID, ggui.Action{Kind: ggui.ActionFocus})
+	p.PerformAction(chatNode.ID, ggui.Action{Kind: ggui.ActionFocus})
 	for _, step := range []struct {
 		key  ggui.KeyboardKey
 		want float64
@@ -121,7 +121,7 @@ func TestMessageScrollerEdgeThresholdAndVisibilityCallback(t *testing.T) {
 		t.Fatalf("OnVisibility ran again with nothing changed: %+v", seen)
 	}
 	chatNode, _ := p.Semantics().Find(ggui.RoleGroup, "Conversation")
-	p.Perform(chatNode.ID, ggui.Action{Kind: ggui.ActionFocus})
+	p.PerformAction(chatNode.ID, ggui.Action{Kind: ggui.ActionFocus})
 	p.Type(ggui.Mods{}, ggui.KeyArrowDown)
 	p.Frame() // visibility is measured where rows paint
 	if v := s.Visibility(); v.CanScrollStart {
@@ -150,7 +150,7 @@ func TestMessageScrollerRevealsARowScrolledIntoView(t *testing.T) {
 	if !ok {
 		t.Fatalf("row 1 is not in the tree:\n%s", p.Semantics())
 	}
-	p.Perform(row.ID, ggui.Action{Kind: ggui.ActionScrollIntoView})
+	p.PerformAction(row.ID, ggui.Action{Kind: ggui.ActionScrollIntoView})
 	p.Frame()
 	if got := s.Position(); got > 90 || got+200 < 170 {
 		t.Fatalf("revealing row 1 (90..170) left the transcript at %v", got)

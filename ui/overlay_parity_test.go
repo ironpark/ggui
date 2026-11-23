@@ -155,7 +155,7 @@ func TestDrawerIsAsTallAsItsContentUpToItsHeadroom(t *testing.T) {
 		t.Errorf("a drawer around 900px of content is %v tall, want the window less 96", r.Size.H)
 	}
 	// The handle is opt-in, and takes a strip of its own above the content.
-	handled := ui.Drawer(ggui.State(true), widget.Box().Height(100)).Name("Handled").CloseButton(false).Handle(true)
+	handled := ui.Drawer(ggui.State(true), widget.Box().Height(100)).Name("Handled").CloseButton(false).HandleBar(true)
 	openModal(t, handled, ggui.Sz(400, 600))
 	if r := handled.Rect(); r.Size.H != 144 {
 		t.Errorf("a drawer with its handle is %v tall, want 12 more than the 132 without", r.Size.H)

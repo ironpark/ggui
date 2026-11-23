@@ -670,6 +670,29 @@ func CurrentClipboard() runtime.Clipboard {
 // systemClipboard serves a clipboard use with no frame loop running.
 var systemClipboard = runtime.NativeClipboard()
 
+// SemanticsHost is the part of Host that reads and drives the accessibility
+// tree.
+type SemanticsHost interface {
+	// PerformAction carries out an accessibility action on a node.
+	PerformAction(id NodeID, act Action)
+	// Announce queues text for assistive technology to speak.
+	Announce(text string, politeness Politeness)
+	// Semantics returns the accessibility tree the last frame published.
+	Semantics() *SemTree
+}
+
+// NotificationHost is the part of Host that shows desktop notifications.
+type NotificationHost interface {
+	// Notify shows a desktop notification: the platform's under an App,
+	// recorded for Probe.Notifications under a Probe.
+	Notify(n Notification) error
+	// RemoveNotification withdraws the notification with id.
+	RemoveNotification(id string)
+	// OnNotification registers fn for clicks on the app's notifications;
+	// see App.OnNotification.
+	OnNotification(fn func(NotificationResponse))
+}
+
 // Host is what App and Probe have in common: the frame loop's surface for
 // code that should run the same under a window and under a test. Write
 // setup against it and hand either one in:
@@ -682,7 +705,11 @@ var systemClipboard = runtime.NativeClipboard()
 //	shortcuts(p)   // in a test, with p := ggui.ProbeBuilder(...)
 //
 // Setup is left out on purpose: it returns the concrete type for chaining.
+// SemanticsHost and NotificationHost name the accessibility and the
+// notification halves of the surface.
 type Host interface {
+	SemanticsHost
+	NotificationHost
 	// Post queues fn to run on the UI thread before the next frame's input;
 	// before the window opens, it waits for Setup and the first build.
 	Post(fn func())
@@ -704,20 +731,6 @@ type Host interface {
 	// Clipboard holds the text cut, copy and paste move: the system's under
 	// an App, a runtime.MemoryClipboard of the probe's own under a Probe.
 	Clipboard() runtime.Clipboard
-	// Perform carries out an accessibility action on a node.
-	Perform(id NodeID, act Action)
-	// Announce queues text for assistive technology to speak.
-	Announce(text string, politeness Politeness)
-	// Semantics returns the accessibility tree the last frame published.
-	Semantics() *SemTree
-	// Notify shows a desktop notification: the platform's under an App,
-	// recorded for Probe.Notifications under a Probe.
-	Notify(n Notification) error
-	// RemoveNotification withdraws the notification with id.
-	RemoveNotification(id string)
-	// OnNotification registers fn for clicks on the app's notifications;
-	// see App.OnNotification.
-	OnNotification(fn func(NotificationResponse))
 	// Close disposes everything the host built.
 	Close()
 }

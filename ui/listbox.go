@@ -210,7 +210,7 @@ func (r *listRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 		dst.FillRoundRect(rc, th.Radius, fade(th.Accent, amount))
 	}
 	dst.Clip(rc).Paint(r.box, rc)
-	controlFocusRing(dst, &r.Interactive, th, rc, th.Radius, th.Ring, r.motion)
+	FocusRing(dst, &r.Interactive, Ring{Theme: th, Rect: rc, Radius: th.Radius, Color: th.Ring, Motion: r.motion})
 	if l.nav.claim(r.key) {
 		dst.RequestFocus(r)
 	} else if chosen && l.reveal {

@@ -45,7 +45,7 @@ func newParityPreviews() func() []ggui.Widget {
 	)
 	code := ui.CodeBlock("package main\n\nimport \"fmt\"\n\nfunc main() {\n    fmt.Println(\"Hello, GGUI\")\n}\n").Header("main.go").Language("go").LineNumbers(true).LineStyles(map[int]ui.CodeLineStyle{3: ui.CodeLineHighlighted, 6: ui.CodeLineAdded})
 	drawerOpen := ggui.State(false)
-	drawer := ui.Drawer(drawerOpen, widget.Column(ui.Heading("Resizable drawer"), ui.Caption("Drag the handle to change the height or dismiss."), ui.Button("Done", func() { drawerOpen.Set(false) })).Gap(12)).SnapPoints(160, 280, 420).SnapPoint(1).Handle(true)
+	drawer := ui.Drawer(drawerOpen, widget.Column(ui.Heading("Resizable drawer"), ui.Caption("Drag the handle to change the height or dismiss."), ui.Button("Done", func() { drawerOpen.Set(false) })).Gap(12)).SnapPoints(160, 280, 420).SnapPoint(1).HandleBar(true)
 	return func() []ggui.Widget {
 		return []ggui.Widget{
 			preview("Popover", widget.Wrap(popover, sidePopover).Gap(8)),

@@ -57,7 +57,7 @@ func TestBubbleLinkPressesThroughSemanticsAndKeyboard(t *testing.T) {
 	if !ok {
 		t.Fatalf("Link did not describe a link:\n%s", p.Semantics())
 	}
-	p.Perform(node.ID, ggui.Action{Kind: ggui.ActionPress})
+	p.PerformAction(node.ID, ggui.Action{Kind: ggui.ActionPress})
 	p.Tap("Open docs")
 	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if opened != 3 {
@@ -76,7 +76,7 @@ func TestBubbleDisabledFollowsItsBindingAndIgnoresInput(t *testing.T) {
 	if !node.Disabled {
 		t.Fatal("bound-disabled bubble is not described as disabled")
 	}
-	p.Perform(node.ID, ggui.Action{Kind: ggui.ActionPress})
+	p.PerformAction(node.ID, ggui.Action{Kind: ggui.ActionPress})
 	p.Click(node.Rect.Center())
 	if pressed != 0 || b.Act(ggui.Action{Kind: ggui.ActionPress}) {
 		t.Fatalf("disabled bubble ran its action %d times", pressed)

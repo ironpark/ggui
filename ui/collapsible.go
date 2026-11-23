@@ -154,7 +154,7 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		// above it and keeps its input.
 		c.Hit(dst, header, c, ggui.CursorShapePointer)
 		dst.Paint(c.trigger, header)
-		controlFocusRing(dst, &c.Interactive, t, header, t.RadiusSm, t.Ring, c.env.Motion(t.MotionFast))
+		FocusRing(dst, &c.Interactive, Ring{Theme: t, Rect: header, Radius: t.RadiusSm, Color: t.Ring, Motion: c.env.Motion(t.MotionFast)})
 		paintDisclosure(dst, c.content, ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), r.Size.W, c.bodySize, c.progress, open)
 		return
 	}
@@ -169,7 +169,7 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	cx, cy := r.Origin.X+c.pad.Left+t.ControlSize*0.4, r.Origin.Y+c.headerH/2
 	paintIconAt(dst, c.env, icons.ChevronRight, ggui.Pt(cx, cy), t.IconSize, t.MutedFg, v*math.Pi/2)
 	dst.Paint(c.title, ggui.Rct(ggui.Pt(r.Origin.X+c.pad.Left+t.ControlSize+t.ControlGap, r.Origin.Y+c.pad.Top), c.titleSize))
-	controlFocusRing(dst, &c.Interactive, t, header, t.Radius, t.Ring, c.env.Motion(t.MotionFast))
+	FocusRing(dst, &c.Interactive, Ring{Theme: t, Rect: header, Radius: t.Radius, Color: t.Ring, Motion: c.env.Motion(t.MotionFast)})
 	paintDisclosure(dst, c.content, ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), r.Size.W, c.bodySize, c.progress, open)
 }
 

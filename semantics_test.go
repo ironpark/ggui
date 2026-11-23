@@ -439,7 +439,7 @@ func TestPerformDoesNotWaitForTheUIGoroutine(t *testing.T) {
 	a := New(Config{}, func() Widget { return sized(0, 0) })
 	done := make(chan struct{})
 	go func() {
-		a.Perform(NodeID{Rect: Rct(Pt(0, 0), Sz(10, 10))}, Action{Kind: ActionPress})
+		a.PerformAction(NodeID{Rect: Rct(Pt(0, 0), Sz(10, 10))}, Action{Kind: ActionPress})
 		close(done)
 	}()
 	<-done
@@ -486,7 +486,7 @@ func TestAXPressRingsTheWidget(t *testing.T) {
 	if !node.Actions.Has(ActionPress) {
 		t.Fatal("the button does not offer a press")
 	}
-	p.Perform(node.ID, Action{Kind: ActionPress})
+	p.PerformAction(node.ID, Action{Kind: ActionPress})
 	if w.rung != 1 {
 		t.Errorf("rung %d times, want 1", w.rung)
 	}
