@@ -22,40 +22,50 @@ import (
 	"github.com/ironpark/ggui/ui/icons"
 )
 
-// library is the comparable Set Set returns; the role map is built the
-// first time a role is resolved, so a program that never asks for the
-// set links none of these icons.
+// library is the comparable Set Set returns. The role table is built the
+// first time a role is resolved, inside Resolve and not at package
+// initialization, so a program that never asks for the set links none of
+// these icons, and each icon is parsed only when its role is drawn.
 type library struct{}
 
-var roles = sync.OnceValue(func() icons.Map {
-	return icons.Map{
-		icons.Check:          Check.SVG(),
-		icons.Close:          XMark.SVG(),
-		icons.ChevronDown:    ChevronDown.SVG(),
-		icons.ChevronUp:      ChevronUp.SVG(),
-		icons.ChevronLeft:    ChevronLeft.SVG(),
-		icons.ChevronRight:   ChevronRight.SVG(),
-		icons.Search:         MagnifyingGlass.SVG(),
-		icons.Alert:          ExclamationCircle.SVG(),
-		icons.Info:           InformationCircle.SVG(),
-		icons.Plus:           Plus.SVG(),
-		icons.Minus:          Minus.SVG(),
-		icons.Download:       ArrowDownTray.SVG(),
-		icons.File:           Document.SVG(),
-		icons.Sun:            Sun.SVG(),
-		icons.Moon:           Moon.SVG(),
-		icons.Grip:           Bars2.SVG(),
-		icons.Loader:         ArrowPath.SVG(),
-		icons.Undo:           ArrowUturnLeft.SVG(),
-		icons.Redo:           ArrowUturnRight.SVG(),
-		icons.MoreHorizontal: EllipsisHorizontal.SVG(),
-		icons.Copy:           DocumentDuplicate.SVG(),
-		icons.ArrowDown:      ArrowDown.SVG(),
-		icons.PanelLeft:      Bars3.SVG(),
-	}
-})
+var (
+	rolesOnce  sync.Once
+	roleGlyphs map[icons.Role]*icons.Glyph
+)
 
-func (library) Resolve(role icons.Role) *icons.SVG { return roles()[role] }
+func (library) Resolve(role icons.Role) *icons.SVG {
+	rolesOnce.Do(func() {
+		roleGlyphs = map[icons.Role]*icons.Glyph{
+			icons.Check:          Check,
+			icons.Close:          XMark,
+			icons.ChevronDown:    ChevronDown,
+			icons.ChevronUp:      ChevronUp,
+			icons.ChevronLeft:    ChevronLeft,
+			icons.ChevronRight:   ChevronRight,
+			icons.Search:         MagnifyingGlass,
+			icons.Alert:          ExclamationCircle,
+			icons.Info:           InformationCircle,
+			icons.Plus:           Plus,
+			icons.Minus:          Minus,
+			icons.Download:       ArrowDownTray,
+			icons.File:           Document,
+			icons.Sun:            Sun,
+			icons.Moon:           Moon,
+			icons.Grip:           Bars2,
+			icons.Loader:         ArrowPath,
+			icons.Undo:           ArrowUturnLeft,
+			icons.Redo:           ArrowUturnRight,
+			icons.MoreHorizontal: EllipsisHorizontal,
+			icons.Copy:           DocumentDuplicate,
+			icons.ArrowDown:      ArrowDown,
+			icons.PanelLeft:      Bars3,
+		}
+	})
+	if g := roleGlyphs[role]; g != nil {
+		return g.SVG()
+	}
+	return nil
+}
 
 // Set maps the roles the controls draw to Heroicons's icons, for
 // icons.SetKey in a theme or an Env.
