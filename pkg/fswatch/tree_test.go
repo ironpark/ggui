@@ -47,10 +47,13 @@ func told(t *testing.T, out <-chan []string, root string) {
 // settled waits until nothing more is told of what was done before: a
 // write and a change of its times may be told apart.
 func settled(out <-chan []string) {
+	quiet := time.NewTimer(500 * time.Millisecond)
+	defer quiet.Stop()
 	for {
 		select {
 		case <-out:
-		case <-time.After(500 * time.Millisecond):
+			quiet.Reset(500 * time.Millisecond)
+		case <-quiet.C:
 			return
 		}
 	}
