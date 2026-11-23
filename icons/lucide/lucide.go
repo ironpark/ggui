@@ -22,40 +22,50 @@ import (
 	"github.com/ironpark/ggui/ui/icons"
 )
 
-// library is the comparable Set Set returns; the role map is built the
-// first time a role is resolved, so a program that never asks for the
-// set links none of these icons.
+// library is the comparable Set Set returns. The role table is built the
+// first time a role is resolved, inside Resolve and not at package
+// initialization, so a program that never asks for the set links none of
+// these icons, and each icon is parsed only when its role is drawn.
 type library struct{}
 
-var roles = sync.OnceValue(func() icons.Map {
-	return icons.Map{
-		icons.Check:          Check.SVG(),
-		icons.Close:          X.SVG(),
-		icons.ChevronDown:    ChevronDown.SVG(),
-		icons.ChevronUp:      ChevronUp.SVG(),
-		icons.ChevronLeft:    ChevronLeft.SVG(),
-		icons.ChevronRight:   ChevronRight.SVG(),
-		icons.Search:         Search.SVG(),
-		icons.Alert:          CircleExclamationPoint.SVG(), // Lucide 1.73 renamed circle-alert to circle-exclamation-point.
-		icons.Info:           Info.SVG(),
-		icons.Plus:           Plus.SVG(),
-		icons.Minus:          Minus.SVG(),
-		icons.Download:       Download.SVG(),
-		icons.File:           File.SVG(),
-		icons.Sun:            Sun.SVG(),
-		icons.Moon:           Moon.SVG(),
-		icons.Grip:           GripVertical.SVG(),
-		icons.Loader:         LoaderCircle.SVG(),
-		icons.Undo:           Undo2.SVG(),
-		icons.Redo:           Redo2.SVG(),
-		icons.MoreHorizontal: Ellipsis.SVG(),
-		icons.Copy:           Copy.SVG(),
-		icons.ArrowDown:      ArrowDown.SVG(),
-		icons.PanelLeft:      PanelLeft.SVG(),
-	}
-})
+var (
+	rolesOnce  sync.Once
+	roleGlyphs map[icons.Role]*icons.Glyph
+)
 
-func (library) Resolve(role icons.Role) *icons.SVG { return roles()[role] }
+func (library) Resolve(role icons.Role) *icons.SVG {
+	rolesOnce.Do(func() {
+		roleGlyphs = map[icons.Role]*icons.Glyph{
+			icons.Check:          Check,
+			icons.Close:          X,
+			icons.ChevronDown:    ChevronDown,
+			icons.ChevronUp:      ChevronUp,
+			icons.ChevronLeft:    ChevronLeft,
+			icons.ChevronRight:   ChevronRight,
+			icons.Search:         Search,
+			icons.Alert:          CircleExclamationPoint, // Lucide 1.73 renamed circle-alert to circle-exclamation-point.
+			icons.Info:           Info,
+			icons.Plus:           Plus,
+			icons.Minus:          Minus,
+			icons.Download:       Download,
+			icons.File:           File,
+			icons.Sun:            Sun,
+			icons.Moon:           Moon,
+			icons.Grip:           GripVertical,
+			icons.Loader:         LoaderCircle,
+			icons.Undo:           Undo2,
+			icons.Redo:           Redo2,
+			icons.MoreHorizontal: Ellipsis,
+			icons.Copy:           Copy,
+			icons.ArrowDown:      ArrowDown,
+			icons.PanelLeft:      PanelLeft,
+		}
+	})
+	if g := roleGlyphs[role]; g != nil {
+		return g.SVG()
+	}
+	return nil
+}
 
 // Set maps the roles the controls draw to Lucide's icons, for
 // icons.SetKey in a theme or an Env.
