@@ -1466,8 +1466,14 @@ func TestLinuxUpdateHelpers(t *testing.T) {
 		prefix := t.TempDir()
 		targetExe := filepath.Join(prefix, "bin", "demo")
 		libs := locateLinuxBundledLibs(linuxStage, newBin, targetExe)
-		if len(libs) != 3 {
-			t.Fatalf("locateLinuxBundledLibs = %d, want 3 (%+v)", len(libs), libs)
+		wantLibs := 3
+		if runtime.GOOS == "windows" {
+			// Windows NTFS does not persist POSIX execute bits (0o111)
+			// extracted from tar.gz, so only the shared library (.so) matches.
+			wantLibs = 1
+		}
+		if len(libs) != wantLibs {
+			t.Fatalf("locateLinuxBundledLibs = %d, want %d (%+v)", len(libs), wantLibs, libs)
 		}
 	})
 }

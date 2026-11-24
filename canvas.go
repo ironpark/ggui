@@ -129,6 +129,50 @@ func (f *frameState) parentFor(h *hitRegion) int32 {
 	return f.cur.outer
 }
 
+// scopeOuter returns, as an index plus one, the region a child painted at r
+// on c is inside: the nearest region the widget painting it registered
+// itself that covers the child's clipped window Rect (or covers the
+// painting widget's own Rect, so a container whose region wraps it still
+// owns an overflowing child), else the region the painting widget is
+// inside. A sibling painted after an unrelated region of the same widget —
+// a custom row after a sidebar item, or a tab's page after its strip —
+// stays beside that region rather than inside it.
+func (f *frameState) scopeOuter(c *Canvas, r Rect) int32 {
+	if n := int32(len(f.hits)); f.cur.at > n || f.cur.outer > n {
+		// The list was emptied under a cursor into it, as a test that
+		// reuses a Canvas without beginning a paint does: start again.
+		f.cur = regionCursor{}
+	}
+	if f.cur.at == f.cur.outer {
+		return f.cur.outer
+	}
+	box := r
+	if c.clipped && !box.Empty() {
+		if clipped := box.Intersect(c.clip); !clipped.Empty() {
+			box = clipped
+		}
+	}
+	win := c.toWindow(box)
+	var parentRect Rect
+	if n := len(f.scopes); n > 0 {
+		parentRect = f.scopes[n-1].rect
+	}
+	for p := f.cur.at; p != f.cur.outer && p != 0; p = f.hits[p-1].parent {
+		q := &f.hits[p-1]
+		if q.space == c.space {
+			if covers(q.full, win) {
+				return p
+			}
+		} else if covers(q.full.Grow(1e-6), win) {
+			return p
+		}
+		if !parentRect.Empty() && covers(q.full, parentRect) {
+			return p
+		}
+	}
+	return f.cur.outer
+}
+
 // canvasPool holds the Canvases Clip hands out, made once and handed out
 // again from the next paint on: canvasIdx are those taken this one.
 type canvasPool struct {

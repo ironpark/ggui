@@ -130,3 +130,52 @@ func TestMenuHomeAndEndWhileOpen(t *testing.T) {
 		t.Fatalf("Home at %d, want 0", m.current)
 	}
 }
+
+// Hovering an interactive control inside a Tabs page must not bleed hover
+// onto the last tab trigger in the strip.
+func TestTabsContentHoverDoesNotBleedIntoLastTab(t *testing.T) {
+	t.Parallel()
+	tabs := Tabs(ggui.State(0),
+		Tab("First", Button("Inside", nil)),
+		Tab("Second", nil),
+	)
+	p := ggui.NewProbe(tabs, ggui.Sz(300, 200))
+	defer p.Close()
+
+	inside, ok := p.FindRole(ggui.RoleButton, "Inside")
+	if !ok {
+		t.Fatal("Inside button not found")
+	}
+	p.Move(inside.Center())
+	for range 3 {
+		p.Frame()
+	}
+	if tabs.hover != -1 {
+		t.Fatalf("tabs.hover = %d while hovering content button, want -1", tabs.hover)
+	}
+}
+
+// Hovering a SidebarCustom row under a collapsible SidebarSection must not
+// bleed hover onto the section heading.
+func TestSidebarCollapsibleSectionCustomDoesNotBleedHover(t *testing.T) {
+	t.Parallel()
+	bar := Sidebar(ggui.State("a"),
+		SidebarItem("a", "Alpha"),
+		SidebarSection("Foldable").Collapsible().Open(true),
+		SidebarCustom(Button("SectionCustom", nil)),
+	)
+	p := ggui.NewProbe(bar, ggui.Sz(300, 300))
+	defer p.Close()
+
+	btn, ok := p.FindRole(ggui.RoleButton, "SectionCustom")
+	if !ok {
+		t.Fatal("SectionCustom button not found")
+	}
+	p.Move(btn.Center())
+	for range 3 {
+		p.Frame()
+	}
+	if bar.hover != -1 {
+		t.Fatalf("bar.hover = %d while hovering SidebarCustom, want -1", bar.hover)
+	}
+}

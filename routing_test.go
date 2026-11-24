@@ -114,6 +114,62 @@ func TestAWidgetsOwnRegionsNestByWhatCoversWhat(t *testing.T) {
 	wantParents(t, &in, 0, 1, 0, 3, 0, 5)
 }
 
+func TestASiblingChildPaintedAfterARegionIsBesideIt(t *testing.T) {
+	t.Parallel()
+	// A widget that registers a region for one item and then paints a
+	// sibling child beside it (as a sidebar list paints a custom row after
+	// a standard item, or a tab strip paints its content below its labels):
+	// the sibling child is beside the earlier region, not inside it.
+	list := paintFunc(func(dst *Canvas, r Rect) {
+		row1 := Rct(Pt(0, 0), Sz(100, 30))
+		dst.HitPointer(row1, takesPointer{})
+		dst.Paint(onPointer(sized(16, 16), takesNothing), Rct(Pt(80, 7), Sz(16, 16)))
+		row2 := Rct(Pt(0, 34), Sz(100, 30))
+		dst.Paint(onPointer(sized(100, 30), takesNothing), row2)
+	})
+	var in inputState
+	paintFrame(&in, list, Sz(120, 100))
+	// row1 (0), row1's action inside row1 (1), row2's child beside row1 (0).
+	wantParents(t, &in, 0, 1, 0)
+
+	// A widget that registers its whole rect, then a sub-region (like a
+	// tree row's chevron), and then paints its content covering the row:
+	// the content is inside the row, not inside the sub-region.
+	treeRow := paintFunc(func(dst *Canvas, r Rect) {
+		dst.HitPointer(r, takesPointer{})
+		dst.HitPointer(Rct(r.Origin, Sz(20, r.Size.H)), takesPointer{})
+		dst.Paint(onPointer(sized(80, 20), takesNothing), r)
+	})
+	paintFrame(&in, treeRow, Sz(100, 30))
+	// row (0), chevron inside row (1), content inside row (1).
+	wantParents(t, &in, 0, 1, 1)
+
+	// A wrapper widget whose own region covers its Rect still owns an
+	// overflowing child painted directly past its edge.
+	overflow := paintFunc(func(dst *Canvas, r Rect) {
+		dst.HitPointer(r, takesPointer{})
+		dst.Paint(onPointer(sized(30, 30), takesNothing), Rct(Pt(50, 0), Sz(30, 30)))
+	})
+	paintFrame(&in, column(sizedWrap(overflow, Sz(20, 20))), Sz(100, 100))
+	wantParents(t, &in, 0, 1)
+}
+
+func sizedWrap(w Widget, sz Size) Widget {
+	return paintFuncSized{w: w, sz: sz}
+}
+
+type paintFuncSized struct {
+	w  Widget
+	sz Size
+}
+
+func (p paintFuncSized) Layout(c Constraints, env Env) Size {
+	p.w.Layout(Tight(p.sz), env)
+	return c.Constrain(p.sz)
+}
+
+func (p paintFuncSized) Paint(dst *Canvas, r Rect) { dst.Paint(p.w, r) }
+
 func TestMergedRegistrationsAreOneNode(t *testing.T) {
 	t.Parallel()
 	inner := onPointer(sized(20, 20), takesNothing)

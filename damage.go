@@ -47,9 +47,11 @@ const motionSlack = 4
 // most; past it they are painted as the one region around them all.
 const mostMotionRegions = 6
 
-// paintScope is a widget being painted: the bounds its subtree drew, and
-// the clock's marks when it started and those its children made.
+// paintScope is a widget being painted: its window Rect, the bounds its
+// subtree drew, and the clock's marks when it started and those its
+// children made.
 type paintScope struct {
+	rect        Rect // the widget's Rect in window coordinates
 	bounds      Rect
 	start, kids uint64
 	placed      bool         // drawn in window coordinates, not under a Transform or a shape clip
@@ -58,10 +60,14 @@ type paintScope struct {
 }
 
 // openScope begins a widget's scope at r. The regions the widget registers
-// are inside the last one the widget painting it registered.
+// are inside the nearest region the widget painting it registered that
+// covers r (or covers the painting widget itself, for an overflowing
+// child), else the region the painting widget is inside.
 func (f *frameState) openScope(c *Canvas, r Rect, marks uint64) {
-	f.scopes = append(f.scopes, paintScope{bounds: r, start: marks, placed: c.space == nil, cur: f.cur})
-	f.cur.outer = f.cur.at
+	outer := f.scopeOuter(c, r)
+	f.scopes = append(f.scopes, paintScope{rect: c.toWindow(r), bounds: r, start: marks, placed: c.space == nil, cur: f.cur})
+	f.cur.outer = outer
+	f.cur.at = outer
 }
 
 // closeScope ends the widget's scope: a widget that read the time itself

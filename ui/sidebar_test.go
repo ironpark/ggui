@@ -421,3 +421,58 @@ func TestSidebarRowsStandApart(t *testing.T) {
 		t.Fatalf("rows are %v apart, want a 32px row and a 4px gap", got)
 	}
 }
+
+// Hovering a SidebarCustom row must not bleed hover onto the preceding
+// SidebarItem or collapsible SidebarSection heading.
+func TestSidebarCustomDoesNotHoverPrecedingItem(t *testing.T) {
+	t.Parallel()
+	customClicks := 0
+	itemClicks := 0
+	bar := ui.Sidebar(ggui.State("a"),
+		ui.SidebarItem("a", "Alpha"),
+		ui.SidebarItem("b", "Beta").
+			OnTap(func() { itemClicks++ }).
+			Action(ui.ButtonOf(ui.Icon(icons.Plus), nil).Name("BetaAction")).ActionOnHover(),
+		ui.SidebarSeparator(),
+		ui.SidebarCustom(ui.Button("CustomRow", func() { customClicks++ })),
+		ui.SidebarSection("Foldable").Collapsible().Open(true),
+		ui.SidebarCustom(ui.Button("SectionCustom", nil)),
+	)
+	p := ggui.NewProbe(bar, ggui.Sz(300, 400))
+	defer p.Close()
+
+	beta, ok := p.FindRole(ggui.RoleTab, "Beta")
+	if !ok {
+		beta, ok = p.FindRole(ggui.RoleButton, "Beta")
+	}
+	if !ok {
+		t.Fatal("Beta item not found")
+	}
+	custom, ok := p.FindRole(ggui.RoleButton, "CustomRow")
+	if !ok {
+		t.Fatal("CustomRow button not found")
+	}
+
+	// Hovering Beta itself reveals its hover-only action.
+	p.Move(beta.Center())
+	p.Frame()
+	if _, ok := p.FindRole(ggui.RoleButton, "BetaAction"); !ok {
+		t.Fatal("BetaAction did not appear while hovering Beta")
+	}
+
+	// Moving onto the sibling SidebarCustom row must clear Beta's hover and
+	// must NOT treat CustomRow as a child of Beta.
+	p.Move(custom.Center())
+	for range 3 {
+		p.Frame()
+	}
+	if _, ok := p.FindRole(ggui.RoleButton, "BetaAction"); ok {
+		t.Fatal("BetaAction stayed visible while hovering sibling SidebarCustom")
+	}
+
+	// Clicking the custom row triggers only the custom button, not Beta.
+	p.Click(custom.Center())
+	if customClicks != 1 || itemClicks != 0 {
+		t.Fatalf("clicks: custom=%d item=%d, want custom=1 item=0", customClicks, itemClicks)
+	}
+}
