@@ -892,7 +892,9 @@ func TestSVGTwoWidgetsSharingOneController(t *testing.T) {
 	defer p.Close()
 	p.RenderTo(target)
 
-	p.Frame()
+	// Advance, not Frame: it pins the probe clock first, so the playhead
+	// anchors at that time and not at the wall time a slow Frame starts at.
+	p.Advance(0)
 	p.Advance(500 * time.Millisecond)
 
 	// Shared playhead advances once per frame (no double-advance!).
