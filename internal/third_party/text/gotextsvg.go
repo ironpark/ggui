@@ -22,7 +22,7 @@ import (
 	"golang.org/x/image/math/fixed"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggfx/svg"
+	"github.com/ironpark/svgx"
 )
 
 // svgGlyphData is an OpenType SVG glyph description: the SVG document and its
@@ -63,7 +63,7 @@ func svgToRGBA(glyph *svgGlyphData, sizeInPixels float64, subpixelOffset fixed.P
 	w++
 	h++
 
-	doc, err := svg.Parse(bytes.NewReader(glyph.source))
+	doc, err := svgx.Parse(bytes.NewReader(glyph.source))
 	if err != nil {
 		return nil
 	}
@@ -75,12 +75,12 @@ func svgToRGBA(glyph *svgGlyphData, sizeInPixels float64, subpixelOffset fixed.P
 	// (point - viewBoxMin) * (emSizeInPixels / viewBoxSize).
 	sx := sizeInPixels / float64(glyph.viewBox.Width)
 	sy := sizeInPixels / float64(glyph.viewBox.Height)
-	var g ggfx.GeoM
-	g.Translate(-float64(glyph.viewBox.MinX), -float64(glyph.viewBox.MinY))
-	g.Scale(sx, sy)
-	g.Translate(fixed26_6ToFloat64(-glyphBounds.Min.X+subpixelOffset.X), fixed26_6ToFloat64(-glyphBounds.Min.Y+subpixelOffset.Y))
+	var m svgx.Matrix
+	m.Translate(-float64(glyph.viewBox.MinX), -float64(glyph.viewBox.MinY))
+	m.Scale(sx, sy)
+	m.Translate(fixed26_6ToFloat64(-glyphBounds.Min.X+subpixelOffset.X), fixed26_6ToFloat64(-glyphBounds.Min.Y+subpixelOffset.Y))
 
 	dst := alloc(w, h)
-	doc.Draw(dst, g)
+	_ = doc.Draw(dst, m, &svgx.DrawOptions{Static: true})
 	return dst
 }

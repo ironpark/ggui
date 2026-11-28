@@ -11,28 +11,28 @@ import (
 	"time"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggfx/svg"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/property"
+	"github.com/ironpark/svgx"
 )
 
 // ParseSVG parses an SVG document from XML bytes, rejecting documents without
 // a finite positive viewBox.
-func ParseSVG(data []byte) (*svg.Document, error) {
-	doc, err := svg.Parse(bytes.NewReader(data))
+func ParseSVG(data []byte) (*svgx.Document, error) {
+	doc, err := svgx.Parse(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("ggui: parse SVG: %w", err)
 	}
-	x, y, w, h := doc.ViewBox()
-	if w <= 0 || h <= 0 || math.IsNaN(x+y+w+h) || math.IsInf(x+y+w+h, 0) {
+	vb := doc.ViewBox()
+	if vb.W <= 0 || vb.H <= 0 || math.IsNaN(vb.X+vb.Y+vb.W+vb.H) || math.IsInf(vb.X+vb.Y+vb.W+vb.H, 0) {
 		return nil, errors.New("ggui: parse SVG: finite positive viewBox required")
 	}
 	return doc, nil
 }
 
 // LoadSVGFile reads and parses an SVG document from path.
-func LoadSVGFile(path string) (*svg.Document, error) {
+func LoadSVGFile(path string) (*svgx.Document, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("ggui: load SVG: %w", err)
@@ -52,21 +52,21 @@ const (
 // lives here when no SVGController is attached; surface ALWAYS lives here so
 // multiple widgets sharing one SVGController render safely at different sizes.
 type svgSlotState struct {
-	doc        *svg.Document
+	doc        *svgx.Document
 	ph         *svgPlayhead
 	surface    *svgSurface
-	overrides  svg.Overrides
+	overrides  svgx.Overrides
 	nodesRev   uint64
 	firedEpoch uint64
 }
 
 var svgSlot = ggui.NewSlot[*svgSlotState]("svg state")
 
-// SVGWidget renders an svg.Document with optional SMIL/CSS animation playback
+// SVGWidget renders an svgx.Document with optional SMIL/CSS animation playback
 // and programmatic per-node control via SVGController. Build one with SVG.
 type SVGWidget struct {
 	props  property.Owner
-	doc    *svg.Document
+	doc    *svgx.Document
 	width  float64
 	height float64
 	fit    ggui.ImageFit
@@ -100,14 +100,14 @@ type SVGWidget struct {
 	slot *svgSlotState
 
 	// Optional test override for documents whose Timeline/Animated cannot yet
-	// be populated by stubbed ggfx/svg backends. Nil in production.
-	testTimeline *svg.Timeline
+	// be populated by stubbed svgx backends. Nil in production.
+	testTimeline *svgx.Timeline
 }
 
 // SVG creates a widget displaying doc. A nil doc lays out to zero (or its
 // explicit Size) and paints nothing. Animated documents auto-play by default
 // unless AutoPlay(false) is set.
-func SVG(doc *svg.Document) *SVGWidget {
+func SVG(doc *svgx.Document) *SVGWidget {
 	return &SVGWidget{
 		doc:   doc,
 		id:    reactive.AutoID(),
@@ -328,19 +328,19 @@ func (w *SVGWidget) natural() ggui.Size {
 	if w.doc == nil {
 		return ggui.Size{}
 	}
-	_, _, vw, vh := w.doc.ViewBox()
-	if vw <= 0 || vh <= 0 || math.IsNaN(vw+vh) || math.IsInf(vw+vh, 0) {
+	vb := w.doc.ViewBox()
+	if vb.W <= 0 || vb.H <= 0 || math.IsNaN(vb.W+vb.H) || math.IsInf(vb.W+vb.H, 0) {
 		return ggui.Size{}
 	}
-	return ggui.Sz(vw, vh)
+	return ggui.Sz(vb.W, vb.H)
 }
 
-func (w *SVGWidget) timeline() svg.Timeline {
+func (w *SVGWidget) timeline() svgx.Timeline {
 	if w.testTimeline != nil {
 		return *w.testTimeline
 	}
 	if w.doc == nil {
-		return svg.Timeline{}
+		return svgx.Timeline{}
 	}
 	return w.doc.Timeline()
 }
@@ -430,7 +430,7 @@ func (w *SVGWidget) retainSlot(dst *ggui.Canvas, r ggui.Rect) {
 // playhead returns the playhead this paint moves, the controller's or the
 // slot's own, started on first use: playing at once when it auto-plays
 // and nothing drives its time.
-func (w *SVGWidget) playhead(tl svg.Timeline) *svgPlayhead {
+func (w *SVGWidget) playhead(tl svgx.Timeline) *svgPlayhead {
 	var ph *svgPlayhead
 	if w.ctrl != nil {
 		// Mark controller mounted without recording in Layout.
@@ -466,7 +466,7 @@ func (w *SVGWidget) playhead(tl svg.Timeline) *svgPlayhead {
 // advancePlayhead advances or evaluates ph for this frame: it sets it to
 // the bound time or progress, rests it where reduced motion asks, or moves
 // it on by the time played.
-func (w *SVGWidget) advancePlayhead(ph *svgPlayhead, tl svg.Timeline, now time.Time) {
+func (w *SVGWidget) advancePlayhead(ph *svgPlayhead, tl svgx.Timeline, now time.Time) {
 	switch {
 	case w.drive != svgDriveNone && (w.ctrl == nil || !w.ctrl.releasedBound):
 		if w.drive == svgDriveTime {
@@ -489,7 +489,7 @@ func (w *SVGWidget) advancePlayhead(ph *svgPlayhead, tl svg.Timeline, now time.T
 // restReduced rests ph where reduced motion holds it: at ReducedMotionAt
 // when set, else, when it was playing, at the start of an endless run or
 // at the end a finite one plays toward, which completes the run.
-func (w *SVGWidget) restReduced(ph *svgPlayhead, tl svg.Timeline) {
+func (w *SVGWidget) restReduced(ph *svgPlayhead, tl svgx.Timeline) {
 	ph.anchor = time.Time{}
 	wasPlaying := ph.playing
 	if w.reducedAtSet {
@@ -519,7 +519,7 @@ func (w *SVGWidget) restReduced(ph *svgPlayhead, tl svg.Timeline) {
 // stepPlaying moves a playing ph on by the frame time since its anchor,
 // quantized to MaxFPS and scaled by Speed, and paces the next frame. A
 // timeline with nothing to play stops it.
-func (w *SVGWidget) stepPlaying(ph *svgPlayhead, tl svg.Timeline, now time.Time) {
+func (w *SVGWidget) stepPlaying(ph *svgPlayhead, tl svgx.Timeline, now time.Time) {
 	if tl.Span <= 0 && !tl.Infinite {
 		ph.playing = false
 		ph.anchor = time.Time{}
@@ -588,12 +588,12 @@ func (w *SVGWidget) paintFrame(dst *ggui.Canvas, r ggui.Rect, frame svgFrame) {
 		return
 	}
 
-	vx, vy, vw, vh := w.doc.ViewBox()
-	var geoM ggfx.GeoM
-	geoM.Translate(-vx, -vy)
-	geoM.Scale(float64(pw)/vw, float64(phPx)/vh)
+	vb := w.doc.ViewBox()
+	var m svgx.Matrix
+	m.Translate(-vb.X, -vb.Y)
+	m.Scale(float64(pw)/vb.W, float64(phPx)/vb.H)
 
-	img := w.texture(pw, phPx, geoM, frame)
+	img := w.texture(pw, phPx, m, frame)
 	if img == nil {
 		return
 	}
@@ -606,9 +606,9 @@ func (w *SVGWidget) paintFrame(dst *ggui.Canvas, r ggui.Rect, frame svgFrame) {
 	runtime.KeepAlive(w.doc)
 }
 
-// texture returns frame rasterized pw by phPx pixels through geoM: from
+// texture returns frame rasterized pw by phPx pixels through m: from
 // the shared cache for a static document, else in the slot's own surface.
-func (w *SVGWidget) texture(pw, phPx int, geoM ggfx.GeoM, frame svgFrame) *ggfx.Image {
+func (w *SVGWidget) texture(pw, phPx int, m svgx.Matrix, frame svgFrame) *ggfx.Image {
 	isStatic := !w.animated() && !frame.overrides
 	if isStatic {
 		var colKey uint32
@@ -618,7 +618,7 @@ func (w *SVGWidget) texture(pw, phPx int, geoM ggfx.GeoM, frame svgFrame) *ggfx.
 		if w.slot.surface != nil {
 			w.slot.surface.releaseTexture()
 		}
-		img, _ := svgTextures.getStatic(w.doc, pw, phPx, colKey, frame.color, geoM)
+		img, _ := svgTextures.getStatic(w.doc, pw, phPx, colKey, frame.color, m)
 		return img
 	}
 	if w.slot.surface == nil {
@@ -632,12 +632,12 @@ func (w *SVGWidget) texture(pw, phPx int, geoM ggfx.GeoM, frame svgFrame) *ggfx.
 		color: packRGBA8(frame.color),
 		nodes: w.slot.nodesRev,
 	}
-	opts := svg.DrawOptions{
+	opts := svgx.DrawOptions{
 		Time:         frame.t,
 		CurrentColor: frame.color,
 		Overrides:    w.slot.overrides,
 	}
-	return w.slot.surface.render(key, geoM, &opts)
+	return w.slot.surface.render(key, m, &opts)
 }
 
 func (w *SVGWidget) deliverDone(ph *svgPlayhead) func() {

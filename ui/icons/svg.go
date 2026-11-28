@@ -13,9 +13,9 @@ import (
 	"weak"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggfx/svg"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/gem"
+	"github.com/ironpark/svgx"
 )
 
 // SVG is a parsed monochrome SVG. Its alpha coverage is tinted at draw time,
@@ -24,7 +24,7 @@ import (
 // A shared SVG retains at most eight device-resolution rasterizations, and
 // every SVG's together at most 32 MB, the least recently drawn let go first.
 type SVG struct {
-	doc        *svg.Document
+	doc        *svgx.Document
 	cache      []*raster // under rasters.mu, least recently drawn first
 	cleanupSet bool      // under rasters.mu; runtime.AddCleanup registered
 }
@@ -187,7 +187,7 @@ func (s *SVG) upload(size int) *ggfx.Image {
 // Parse compiles SVG paths once without creating GPU resources.
 func Parse(data []byte) (*SVG, error) {
 	source := strings.ReplaceAll(string(data), "currentColor", "#ffffff")
-	doc, err := svg.Parse(strings.NewReader(source))
+	doc, err := svgx.Parse(strings.NewReader(source))
 	if err != nil {
 		return nil, fmt.Errorf("icons: parse SVG: %w", err)
 	}
@@ -195,9 +195,9 @@ func Parse(data []byte) (*SVG, error) {
 }
 
 // checked is doc as an icon, which needs a box to be fitted by.
-func checked(doc *svg.Document) (*SVG, error) {
-	x, y, w, h := doc.ViewBox()
-	if w <= 0 || h <= 0 || math.IsNaN(w+h+x+y) || math.IsInf(w+h+x+y, 0) {
+func checked(doc *svgx.Document) (*SVG, error) {
+	vb := doc.ViewBox()
+	if vb.W <= 0 || vb.H <= 0 || math.IsNaN(vb.W+vb.H+vb.X+vb.Y) || math.IsInf(vb.W+vb.H+vb.X+vb.Y, 0) {
 		return nil, fmt.Errorf("icons: SVG needs a finite positive viewBox")
 	}
 	return &SVG{doc: doc}, nil
@@ -212,7 +212,7 @@ func (s *SVG) MarshalBinary() ([]byte, error) { return s.doc.MarshalBinary() }
 // ParseBinary is the SVG that MarshalBinary wrote as data. It draws as the
 // one it was written from does, and costs none of the reading of the source.
 func ParseBinary(data []byte) (*SVG, error) {
-	doc := new(svg.Document)
+	doc := new(svgx.Document)
 	if err := doc.UnmarshalBinary(data); err != nil {
 		return nil, fmt.Errorf("icons: %w", err)
 	}
@@ -248,13 +248,13 @@ func (s *SVG) draw(img *image.RGBA) {
 // colors it: only its alpha is the icon.
 func (s *SVG) drawCoverage(img *image.RGBA) {
 	size := img.Rect.Dx()
-	x, y, w, h := s.doc.ViewBox()
-	scale := float64(size) / max(w, h)
-	var g ggfx.GeoM
-	g.Translate(-x, -y)
-	g.Scale(scale, scale)
-	g.Translate((float64(size)-w*scale)/2, (float64(size)-h*scale)/2)
-	s.doc.Draw(img, g)
+	vb := s.doc.ViewBox()
+	scale := float64(size) / max(vb.W, vb.H)
+	var m svgx.Matrix
+	m.Translate(-vb.X, -vb.Y)
+	m.Scale(scale, scale)
+	m.Translate((float64(size)-vb.W*scale)/2, (float64(size)-vb.H*scale)/2)
+	_ = s.doc.Draw(img, m, &svgx.DrawOptions{Static: true})
 }
 
 // Image is the icon drawn size pixels square, in white over clear: a mask

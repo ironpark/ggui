@@ -5,10 +5,10 @@ import (
 	"math"
 	"time"
 
-	"github.com/ironpark/ggfx/svg"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/gem"
 	"github.com/ironpark/ggui/property"
+	"github.com/ironpark/svgx"
 )
 
 // SVGController drives playback and per-node programmatic overrides for one or
@@ -24,8 +24,8 @@ import (
 // re-measurement.
 type SVGController struct {
 	props property.Owner
-	doc   *svg.Document
-	tl    svg.Timeline
+	doc   *svgx.Document
+	tl    svgx.Timeline
 
 	attached        bool
 	releasedBound   bool // true once a transport method took playhead from BindTime/BindProgress
@@ -38,7 +38,7 @@ type SVGController struct {
 }
 
 // attach binds doc and its summarized timeline to c on Paint.
-func (c *SVGController) attach(doc *svg.Document, tl svg.Timeline) {
+func (c *SVGController) attach(doc *svgx.Document, tl svgx.Timeline) {
 	if c.doc != nil && c.doc != doc {
 		c.ph = svgPlayhead{dir: 1}
 		c.releasedBound = false
@@ -194,7 +194,7 @@ func (c *SVGController) Node(id string) *SVGNode {
 	n := &SVGNode{
 		ctrl:  c,
 		id:    id,
-		pivot: svg.PivotBox(0.5, 0.5),
+		pivot: svgx.PivotBox(0.5, 0.5),
 	}
 	c.nodes[id] = n
 	return n
@@ -219,7 +219,7 @@ func (c *SVGController) ResetNodes() {
 // resolveInto resolves all node properties and reactive bindings against env
 // into *dst, bumping *rev only when a resolved NodeOverride actually changes.
 // It reports whether *dst contains any active overrides.
-func (c *SVGController) resolveInto(dst *svg.Overrides, rev *uint64, env ggui.Env) bool {
+func (c *SVGController) resolveInto(dst *svgx.Overrides, rev *uint64, env ggui.Env) bool {
 	if len(c.nodes) == 0 {
 		if len(*dst) > 0 {
 			clear(*dst)
@@ -262,7 +262,7 @@ func (c *SVGController) resolveInto(dst *svg.Overrides, rev *uint64, env ggui.En
 // setOverride writes node id's resolved override into *dst: a zero one is
 // deleted, any other stored when it differs, the map made on first use.
 // It reports whether *dst changed.
-func (c *SVGController) setOverride(dst *svg.Overrides, id string, ov svg.NodeOverride) bool {
+func (c *SVGController) setOverride(dst *svgx.Overrides, id string, ov svgx.NodeOverride) bool {
 	if ov.IsZero() {
 		if _, existed := (*dst)[id]; !existed {
 			return false
@@ -271,7 +271,7 @@ func (c *SVGController) setOverride(dst *svg.Overrides, id string, ov svg.NodeOv
 		return true
 	}
 	if *dst == nil {
-		*dst = make(svg.Overrides, len(c.nodes))
+		*dst = make(svgx.Overrides, len(c.nodes))
 	}
 	if prev, ok := (*dst)[id]; ok && ov.Equal(prev) {
 		return false
@@ -309,7 +309,7 @@ type SVGNode struct {
 	scaleXY      property.Value[ggui.Point]
 
 	hasPivot bool
-	pivot    svg.Pivot
+	pivot    svgx.Pivot
 
 	hasOpacity bool
 	opacity    property.Value[float64]
@@ -435,7 +435,7 @@ func (n *SVGNode) BindScaleXY(r ggui.Readable[ggui.Point]) *SVGNode {
 // Origin sets the transform origin as fractions of the node's local bounding
 // box. The default is (0.5, 0.5), the center.
 func (n *SVGNode) Origin(fx, fy float64) *SVGNode {
-	p := svg.PivotBox(fx, fy)
+	p := svgx.PivotBox(fx, fy)
 	if !n.hasPivot || !n.pivot.Equal(p) {
 		n.hasPivot = true
 		n.pivot = p
@@ -447,7 +447,7 @@ func (n *SVGNode) Origin(fx, fy float64) *SVGNode {
 // OriginAt sets the transform origin to an explicit point (x, y) in the node's
 // local user space.
 func (n *SVGNode) OriginAt(x, y float64) *SVGNode {
-	p := svg.PivotAt(x, y)
+	p := svgx.PivotAt(x, y)
 	if !n.hasPivot || !n.pivot.Equal(p) {
 		n.hasPivot = true
 		n.pivot = p
@@ -503,7 +503,7 @@ func (n *SVGNode) BindVisible(r ggui.Readable[bool]) *SVGNode {
 }
 
 // Fill overrides the node's fill color. A nil color disables the fill
-// (svg.NoPaint). EnvColor values are resolved during Paint.
+// (svgx.NoPaint). EnvColor values are resolved during Paint.
 func (n *SVGNode) Fill(c color.Color) *SVGNode {
 	changed := !n.hasFill
 	n.hasFill = true
@@ -538,7 +538,7 @@ func (n *SVGNode) ClearFill() *SVGNode {
 }
 
 // Stroke overrides the node's stroke color. A nil color disables the stroke
-// (svg.NoPaint). EnvColor values are resolved during Paint.
+// (svgx.NoPaint). EnvColor values are resolved during Paint.
 func (n *SVGNode) Stroke(c color.Color) *SVGNode {
 	changed := !n.hasStroke
 	n.hasStroke = true
@@ -678,7 +678,7 @@ func (n *SVGNode) resetFields() bool {
 	n.scaleUniform.Set(0)
 	n.scaleXY.Set(ggui.Point{})
 	n.hasPivot = false
-	n.pivot = svg.PivotBox(0.5, 0.5)
+	n.pivot = svgx.PivotBox(0.5, 0.5)
 	n.hasOpacity = false
 	n.opacity.Set(0)
 	n.hasVisible = false
@@ -697,8 +697,8 @@ func (n *SVGNode) resetFields() bool {
 }
 
 // resolve evaluates all configured literals and bound readers against env and
-// returns the corresponding svg.NodeOverride.
-func (n *SVGNode) resolve(env ggui.Env) svg.NodeOverride {
+// returns the corresponding svgx.NodeOverride.
+func (n *SVGNode) resolve(env ggui.Env) svgx.NodeOverride {
 	ov := n.transform()
 	if n.hasOpacity {
 		ov = ov.Opacity(n.opacity.Get())
@@ -731,8 +731,8 @@ func (n *SVGNode) resolve(env ggui.Env) svg.NodeOverride {
 
 // transform returns the override that moves the node: its configured
 // translation, rotation and scale, about its pivot.
-func (n *SVGNode) transform() svg.NodeOverride {
-	var ov svg.NodeOverride
+func (n *SVGNode) transform() svgx.NodeOverride {
+	var ov svgx.NodeOverride
 	if n.hasOffset {
 		p := n.offset.Get()
 		ov = ov.Translate(p.X, p.Y)
@@ -767,10 +767,10 @@ func resolveSVGColor(c color.Color, env ggui.Env) color.Color {
 	return c
 }
 
-func toSVGPaint(c color.Color, env ggui.Env) svg.Paint {
+func toSVGPaint(c color.Color, env ggui.Env) svgx.Paint {
 	c = resolveSVGColor(c, env)
 	if c == nil {
-		return svg.NoPaint()
+		return svgx.NoPaint()
 	}
-	return svg.ColorPaint(c)
+	return svgx.ColorPaint(c)
 }

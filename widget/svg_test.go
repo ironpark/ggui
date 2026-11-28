@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggfx/svg"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/framestats"
+	"github.com/ironpark/svgx"
 )
 
 const testRectSVG = `<svg viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">` +
@@ -36,7 +36,7 @@ const testSMILSVG = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/sv
 	`<animate attributeName="x" from="0" to="80" dur="1s" fill="freeze"/>` +
 	`</rect></svg>`
 
-func mustParseSVG(t testing.TB, src string) *svg.Document {
+func mustParseSVG(t testing.TB, src string) *svgx.Document {
 	t.Helper()
 	doc, err := ParseSVG([]byte(src))
 	if err != nil {
@@ -114,9 +114,9 @@ func TestParseSVGAndLoadSVGFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseSVG valid: %v", err)
 	}
-	x, y, w, h := doc.ViewBox()
-	if x != 0 || y != 0 || w != 200 || h != 100 {
-		t.Fatalf("ViewBox = (%v,%v,%v,%v), want (0,0,200,100)", x, y, w, h)
+	vb := doc.ViewBox()
+	if vb.X != 0 || vb.Y != 0 || vb.W != 200 || vb.H != 100 {
+		t.Fatalf("ViewBox = (%v,%v,%v,%v), want (0,0,200,100)", vb.X, vb.Y, vb.W, vb.H)
 	}
 
 	for _, bad := range []string{
@@ -145,8 +145,8 @@ func TestParseSVGAndLoadSVGFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadSVGFile valid: %v", err)
 	}
-	if _, _, lw, lh := loaded.ViewBox(); lw != 200 || lh != 100 {
-		t.Fatalf("loaded ViewBox = %vx%v, want 200x100", lw, lh)
+	if vb := loaded.ViewBox(); vb.W != 200 || vb.H != 100 {
+		t.Fatalf("loaded ViewBox = %vx%v, want 200x100", vb.W, vb.H)
 	}
 
 	if _, err := LoadSVGFile(filepath.Join(dir, "missing.svg")); !errors.Is(err, fs.ErrNotExist) || !strings.HasPrefix(err.Error(), "ggui: load SVG: ") {
@@ -225,7 +225,7 @@ func TestSVGAltSemantics(t *testing.T) {
 func TestSVGAutoPlayDefaultAndDisable(t *testing.T) {
 	t.Parallel()
 	doc := mustParseSVG(t, testRectSVG)
-	tl := &svg.Timeline{Span: time.Second, End: time.Second}
+	tl := &svgx.Timeline{Span: time.Second, End: time.Second}
 
 	// Animated document auto-plays by default.
 	var c1 SVGController
@@ -261,7 +261,7 @@ func TestSVGAutoPlayDefaultAndDisable(t *testing.T) {
 func TestSVGControllerTransportLoopAlternateSpeedAndOnDone(t *testing.T) {
 	t.Parallel()
 	doc := mustParseSVG(t, testRectSVG)
-	tl := &svg.Timeline{Span: time.Second, End: time.Second}
+	tl := &svgx.Timeline{Span: time.Second, End: time.Second}
 
 	// Zero-value controller defaults before attach.
 	var ctrl SVGController
@@ -395,7 +395,7 @@ func TestSVGControllerTransportLoopAlternateSpeedAndOnDone(t *testing.T) {
 func TestSVGLoopAlternateAndSpeed(t *testing.T) {
 	t.Parallel()
 	doc := mustParseSVG(t, testRectSVG)
-	tl := &svg.Timeline{Span: time.Second, End: time.Second}
+	tl := &svgx.Timeline{Span: time.Second, End: time.Second}
 
 	// Loop(2) + Alternate(true) + Speed(2): 2 passes at 2x = 1s wall time,
 	// ends at t=0 after ping-ponging 0 -> 1s -> 0.
@@ -456,7 +456,7 @@ func TestSVGLoopAlternateAndSpeed(t *testing.T) {
 func TestSVGBindTimeProgressAndControllerTakeover(t *testing.T) {
 	t.Parallel()
 	doc := mustParseSVG(t, testRectSVG)
-	tl := &svg.Timeline{Span: 2 * time.Second, End: 2 * time.Second}
+	tl := &svgx.Timeline{Span: 2 * time.Second, End: 2 * time.Second}
 
 	tSig := ggui.State(300 * time.Millisecond)
 	var ctrl SVGController
@@ -512,7 +512,7 @@ func TestSVGBindTimeProgressAndControllerTakeover(t *testing.T) {
 func TestSVGOffscreenPauseAndResume(t *testing.T) {
 	t.Parallel()
 	doc := mustParseSVG(t, testRectSVG)
-	tl := &svg.Timeline{Span: 10 * time.Second, End: 10 * time.Second}
+	tl := &svgx.Timeline{Span: 10 * time.Second, End: 10 * time.Second}
 
 	var ctrl SVGController
 	w := SVG(doc).Controller(&ctrl)
@@ -566,7 +566,7 @@ func TestSVGReducedMotionAndReducedMotionAt(t *testing.T) {
 	var cFinite SVGController
 	done := 0
 	wFinite := SVG(doc).Controller(&cFinite).OnDone(func() { done++ })
-	wFinite.testTimeline = &svg.Timeline{Span: 2 * time.Second, End: 2 * time.Second}
+	wFinite.testTimeline = &svgx.Timeline{Span: 2 * time.Second, End: 2 * time.Second}
 	p1 := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, wFinite), ggui.Sz(100, 100))
 	defer p1.Close()
 	p1.Frame()
@@ -585,7 +585,7 @@ func TestSVGReducedMotionAndReducedMotionAt(t *testing.T) {
 	var cInf SVGController
 	infDone := 0
 	wInf := SVG(doc).Controller(&cInf).OnDone(func() { infDone++ })
-	wInf.testTimeline = &svg.Timeline{Span: 2 * time.Second, Infinite: true, Loop: 2 * time.Second}
+	wInf.testTimeline = &svgx.Timeline{Span: 2 * time.Second, Infinite: true, Loop: 2 * time.Second}
 	p2 := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, wInf), ggui.Sz(100, 100))
 	defer p2.Close()
 	p2.Frame()
@@ -600,7 +600,7 @@ func TestSVGReducedMotionAndReducedMotionAt(t *testing.T) {
 	var cAt SVGController
 	atDone := 0
 	wAt := SVG(doc).Controller(&cAt).ReducedMotionAt(750 * time.Millisecond).OnDone(func() { atDone++ })
-	wAt.testTimeline = &svg.Timeline{Span: 2 * time.Second, End: 2 * time.Second}
+	wAt.testTimeline = &svgx.Timeline{Span: 2 * time.Second, End: 2 * time.Second}
 	p3 := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, wAt), ggui.Sz(100, 100))
 	defer p3.Close()
 	p3.Frame()
@@ -619,7 +619,7 @@ func TestSVGReducedMotionAndReducedMotionAt(t *testing.T) {
 	var cAtInf SVGController
 	atInfDone := 0
 	wAtInf := SVG(doc).Controller(&cAtInf).ReducedMotionAt(750 * time.Millisecond).OnDone(func() { atInfDone++ })
-	wAtInf.testTimeline = &svg.Timeline{Span: 2 * time.Second, Infinite: true, Loop: 2 * time.Second}
+	wAtInf.testTimeline = &svgx.Timeline{Span: 2 * time.Second, Infinite: true, Loop: 2 * time.Second}
 	p4 := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, wAtInf), ggui.Sz(100, 100))
 	defer p4.Close()
 	p4.Frame()
@@ -633,7 +633,7 @@ func TestSVGReducedMotionAndReducedMotionAt(t *testing.T) {
 func TestSVGMaxFPSPacing(t *testing.T) {
 	t.Parallel()
 	doc := mustParseSVG(t, testRectSVG)
-	tl := &svg.Timeline{Span: 10 * time.Second, End: 10 * time.Second}
+	tl := &svgx.Timeline{Span: 10 * time.Second, End: 10 * time.Second}
 
 	// Pin clock to an exact multiple of 100ms (10 FPS step).
 	now := time.Unix(1000, 0)
@@ -759,7 +759,7 @@ func TestSVGNodeOverridesBindingsAndZeroLayoutRemeasure(t *testing.T) {
 		t.Fatalf("surface did not re-rasterize on node changes")
 	}
 
-	// Verify typed-nil color.Color safely maps to svg.NoPaint without panicking.
+	// Verify typed-nil color.Color safely maps to svgx.NoPaint without panicking.
 	var typedNil *color.RGBA
 	node.Fill(typedNil).Stroke(nil)
 	p.Frame()
@@ -826,7 +826,7 @@ func TestSVGRebuildSurvivalViaRetain(t *testing.T) {
 	t.Parallel()
 	doc1 := mustParseSVG(t, testRectSVG)
 	doc2 := mustParseSVG(t, testSquareSVG)
-	tl := &svg.Timeline{Span: 5 * time.Second, End: 5 * time.Second}
+	tl := &svgx.Timeline{Span: 5 * time.Second, End: 5 * time.Second}
 
 	curDoc := ggui.State(doc1)
 	bump := ggui.State(0)
@@ -877,7 +877,7 @@ func TestSVGRebuildSurvivalViaRetain(t *testing.T) {
 func TestSVGTwoWidgetsSharingOneController(t *testing.T) {
 	t.Parallel()
 	doc := mustParseSVG(t, testSquareSVG)
-	tl := &svg.Timeline{Span: 4 * time.Second, End: 4 * time.Second}
+	tl := &svgx.Timeline{Span: 4 * time.Second, End: 4 * time.Second}
 
 	var ctrl SVGController
 	ctrl.Node("sq").Opacity(0.75)
@@ -957,7 +957,7 @@ func TestSVGVramAccountingAndLRUEviction(t *testing.T) {
 	d2 := mustParseSVG(t, testSquareSVG)
 	d3 := mustParseSVG(t, testSquareSVG)
 
-	drawStatic := func(d *svg.Document) {
+	drawStatic := func(d *svgx.Document) {
 		p := ggui.NewProbe(&loosely{w: SVG(d).Size(32, 32)}, ggui.Sz(64, 64))
 		p.RenderTo(target)
 		p.Frame()
@@ -1012,7 +1012,7 @@ func TestSVGEndToEndSMILPlayback(t *testing.T) {
 	t.Parallel()
 	doc := mustParseSVG(t, testSMILSVG)
 	if !doc.Animated() {
-		t.Skip("ggfx/svg animation backend not yet integrated (doc.Animated() == false)")
+		t.Skip("svgx animation backend not yet integrated (doc.Animated() == false)")
 	}
 	var ctrl SVGController
 	w := SVG(doc).Size(100, 100).Controller(&ctrl)
@@ -1132,22 +1132,22 @@ func TestSVGCurrentColorDynamicInvalidation(t *testing.T) {
 	surf.onRaster = func(buf *image.RGBA) {
 		surfPix = buf.RGBAAt(20, 20)
 	}
-	var geoM ggfx.GeoM
-	geoM.Scale(40.0/100.0, 40.0/100.0)
-	ov := svg.Overrides{"sq": svg.NodeOverride{}.Fill(svg.CurrentColorPaint())}
+	var m svgx.Matrix
+	m.Scale(40.0/100.0, 40.0/100.0)
+	ov := svgx.Overrides{"sq": svgx.NodeOverride{}.Fill(svgx.CurrentColorPaint())}
 
 	surf.render(
 		svgKey{doc: sqDoc, w: 40, h: 40, color: packRGBA8(red), nodes: 1},
-		geoM,
-		&svg.DrawOptions{CurrentColor: red, Overrides: ov},
+		m,
+		&svgx.DrawOptions{CurrentColor: red, Overrides: ov},
 	)
 	if surfPix != red {
 		t.Fatalf("CurrentColorPaint red pixel = %v, want %v", surfPix, red)
 	}
 	surf.render(
 		svgKey{doc: sqDoc, w: 40, h: 40, color: packRGBA8(blue), nodes: 1},
-		geoM,
-		&svg.DrawOptions{CurrentColor: blue, Overrides: ov},
+		m,
+		&svgx.DrawOptions{CurrentColor: blue, Overrides: ov},
 	)
 	if surf.rasterCount != 2 {
 		t.Fatalf("CurrentColorPaint color change rasterCount = %d, want 2", surf.rasterCount)
@@ -1161,7 +1161,7 @@ func TestSVGCurrentColorDynamicInvalidation(t *testing.T) {
 func TestSVGSharedControllerOnDoneNotSwallowed(t *testing.T) {
 	t.Parallel()
 	doc := mustParseSVG(t, testSquareSVG)
-	tl := &svg.Timeline{Span: time.Second, End: time.Second}
+	tl := &svgx.Timeline{Span: time.Second, End: time.Second}
 
 	var ctrl SVGController
 	doneB := 0
@@ -1207,8 +1207,8 @@ func TestSVGControllerDocSwitchResetsPlayhead(t *testing.T) {
 	t.Parallel()
 	doc1 := mustParseSVG(t, testRectSVG)
 	doc2 := mustParseSVG(t, testSquareSVG)
-	tl1 := &svg.Timeline{Span: time.Second, End: time.Second}
-	tl2 := &svg.Timeline{Span: 2 * time.Second, End: 2 * time.Second}
+	tl1 := &svgx.Timeline{Span: time.Second, End: time.Second}
+	tl2 := &svgx.Timeline{Span: 2 * time.Second, End: 2 * time.Second}
 
 	var ctrl SVGController
 	curDoc := ggui.State(doc1)
@@ -1278,9 +1278,9 @@ func TestSVGNonAnimatedWithTimeUsesStaticCache(t *testing.T) {
 		t.Fatalf("non-animated SVG with Time() allocated private dynamic surface: w1=%v w2=%v",
 			w1.slot.surface, w2.slot.surface)
 	}
-	var geoM ggfx.GeoM
-	geoM.Scale(40.0/100.0, 40.0/100.0)
-	if img, hit := svgTextures.getStatic(doc, 40, 40, 0, color.Black, geoM); img == nil || !hit {
+	var m svgx.Matrix
+	m.Scale(40.0/100.0, 40.0/100.0)
+	if img, hit := svgTextures.getStatic(doc, 40, 40, 0, color.Black, m); img == nil || !hit {
 		t.Fatalf("expected shared static cache hit for non-animated SVG with Time(): img=%v hit=%v", img, hit)
 	}
 }

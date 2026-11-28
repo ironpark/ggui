@@ -15,7 +15,7 @@ import (
 )
 
 // The program is Go that gofmt leaves as it is, a main package that
-// imports ggfx and its svg package, drawing at the size asked for.
+// imports svgx, drawing at the size asked for.
 func TestSource(t *testing.T) {
 	src := Source(512)
 	f, err := parser.ParseFile(token.NewFileSet(), "main.go", src, parser.ParseComments)
@@ -30,7 +30,7 @@ func TestSource(t *testing.T) {
 		p, _ := strconv.Unquote(im.Path.Value)
 		imports = append(imports, p)
 	}
-	for _, want := range []string{ggfxModule, svgPackage, "image/png"} {
+	for _, want := range []string{svgxModule, "image/png"} {
 		if !slices.Contains(imports, want) {
 			t.Errorf("imports %v, without %s", imports, want)
 		}
@@ -70,35 +70,35 @@ func TestVirtualDir(t *testing.T) {
 // What the go command says when the program does not build becomes what
 // to do about it.
 func TestBuildFailure(t *testing.T) {
-	pinned := gotool.Module{Path: ggfxModule, Version: "v0.0.0-20260923170703-65f546a3c956"}
-	replaced := gotool.Module{Path: ggfxModule, Version: "v0.0.0-20261116205814-f8d41f33e4c7", Replace: &gotool.Module{Path: "../ggfx"}}
+	pinned := gotool.Module{Path: svgxModule, Version: "v0.1.0"}
+	replaced := gotool.Module{Path: svgxModule, Version: "v0.1.1", Replace: &gotool.Module{Path: "../svgx"}}
 	for _, tc := range []struct {
-		name   string
-		ggfx   gotool.Module
-		output string
-		want   []string
+		name    string
+		svgxMod gotool.Module
+		output  string
+		want    []string
 	}{
-		{"no svg package, readonly", pinned,
-			"ggui_svgicon/main.go:14:2: cannot find module providing package github.com/ironpark/ggfx/svg: import lookup disabled by -mod=readonly\n",
-			[]string{"app.icon art/icon.svg is an SVG", "(v0.0.0-20260923170703-65f546a3c956) is older than that package", "go get github.com/ironpark/ggui@latest", "1024×1024 PNG"}},
-		{"no svg package, replaced", replaced,
-			"ggui_svgicon/main.go:14:2: no required module provides package github.com/ironpark/ggfx/svg; to add it:\n\tgo get github.com/ironpark/ggfx/svg\n",
-			[]string{"(../ggfx) is older"}},
-		{"no svg package in the version", pinned,
-			"ggui_svgicon/main.go:14:2: module github.com/ironpark/ggfx@v0.0.0-20260923170703-65f546a3c956 found, but does not contain package github.com/ironpark/ggfx/svg\n",
-			[]string{"is older than that package"}},
+		{"no svgx package, readonly", pinned,
+			"ggui_svgicon/main.go:13:2: cannot find module providing package github.com/ironpark/svgx: import lookup disabled by -mod=readonly\n",
+			[]string{"app.icon art/icon.svg is an SVG", "(v0.1.0) does not provide that package", "go get github.com/ironpark/ggui@latest", "1024×1024 PNG"}},
+		{"no svgx package, replaced", replaced,
+			"ggui_svgicon/main.go:13:2: no required module provides package github.com/ironpark/svgx; to add it:\n\tgo get github.com/ironpark/svgx\n",
+			[]string{"(../svgx) does not provide"}},
+		{"no svgx package in the version", pinned,
+			"ggui_svgicon/main.go:13:2: module github.com/ironpark/svgx@v0.1.0 found, but does not contain package github.com/ironpark/svgx\n",
+			[]string{"does not provide that package"}},
 		{"go.sum", pinned,
-			"ggui_svgicon/main.go:14:2: missing go.sum entry for module providing package github.com/ironpark/ggfx/svg (imported by hello/ggui_svgicon); to add:\n\tgo get hello/ggui_svgicon\n",
-			[]string{"go.sum lacks", "go mod download github.com/ironpark/ggfx", "missing go.sum entry"}},
+			"ggui_svgicon/main.go:13:2: missing go.sum entry for module providing package github.com/ironpark/svgx (imported by hello/ggui_svgicon); to add:\n\tgo get hello/ggui_svgicon\n",
+			[]string{"go.sum lacks", "go mod download github.com/ironpark/svgx", "missing go.sum entry"}},
 		{"another API", pinned,
-			"# hello/ggui_svgicon1\nggui_svgicon1\\main.go:41:7: doc.Draw undefined (type *svg.Document has no field or method Draw)\n",
+			"# hello/ggui_svgicon1\nggui_svgicon1\\main.go:41:7: doc.Draw undefined (type *svgx.Document has no field or method Draw)\n",
 			[]string{"not one this ggui draws with", "update ggui and the ggui command together", "doc.Draw undefined"}},
 		{"anything else", pinned,
 			"go: updates to go.mod needed; to update it:\n\tgo mod tidy\n",
-			[]string{"building the program that draws it with the project's ggfx failed", "go mod tidy"}},
+			[]string{"building the program that draws it with the project's svgx failed", "go mod tidy"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			msg := buildFailure("art/icon.svg", tc.ggfx, tc.output).Error()
+			msg := buildFailure("art/icon.svg", tc.svgxMod, tc.output).Error()
 			for _, w := range tc.want {
 				if !strings.Contains(msg, w) {
 					t.Errorf("%q\nlacks %q", msg, w)

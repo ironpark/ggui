@@ -15,7 +15,7 @@ omitted. Minimal ChromaCheck color-glyph fixtures in `testdata/` (see
 
 - Renders glyph images and vector paths against `github.com/ironpark/ggfx`
   instead of Ebiten, storing monochrome glyph masks as alpha-only images and
-  drawing SVG glyphs through `ggfx/svg`.
+  drawing SVG glyphs through `svgx`.
 - Supports on-demand font file reading (`NewGoTextFaceSourceAt`), metrics-only
   sources, and lazy fallback faces (`LazyFace`) backed by `fontfile.go`,
   `lazy.go`, and `fallback.go`.

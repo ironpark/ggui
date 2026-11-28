@@ -46,7 +46,7 @@ content := ggui.Provide(icons.SetKey, customSet,
 ```
 
 SVG files are trusted local, monochrome assets, using the static SVG subset
-that `ggfx/svg` draws (paths, shapes, strokes, fills, transforms, clip paths,
+that `svgx` draws (paths, shapes, strokes, fills, transforms, clip paths,
 masks). `currentColor` is
 supported. Other source colors become alpha coverage too; use `widget.Image` for
 multicolor artwork. Color inherits from text styling, then theme foreground,

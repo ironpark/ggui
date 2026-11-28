@@ -4,8 +4,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/ironpark/ggfx/svg"
 	"github.com/ironpark/ggui/gem"
+	"github.com/ironpark/svgx"
 )
 
 // svgPlayhead tracks playback state for either an SVGController (shared by all
@@ -59,7 +59,7 @@ func (p *svgPlayhead) markVisible(now time.Time) {
 
 // advance steps p forward or backward by dt >= 0 according to tl, loop and
 // alternate. It reports true when a finite run reaches its end.
-func (p *svgPlayhead) advance(dt time.Duration, tl svg.Timeline, loop int, alternate bool) (finished bool) {
+func (p *svgPlayhead) advance(dt time.Duration, tl svgx.Timeline, loop int, alternate bool) (finished bool) {
 	if dt <= 0 {
 		return false
 	}
@@ -114,7 +114,7 @@ type svgRun struct {
 // advanceAuthored steps p by dt over an authored infinite timeline: on and
 // on, round its loop, when moving forward, or back to a stop at 0, when it
 // reports true.
-func (p *svgPlayhead) advanceAuthored(dt time.Duration, tl svg.Timeline) bool {
+func (p *svgPlayhead) advanceAuthored(dt time.Duration, tl svgx.Timeline) bool {
 	if p.dir > 0 {
 		p.pos += dt
 		if tl.Loop > 0 && p.pos >= tl.LoopStart {
@@ -215,7 +215,7 @@ func (p *svgPlayhead) turn(run svgRun) {
 }
 
 // evalTime returns the document timestamp corresponding to p's current position.
-func (p *svgPlayhead) evalTime(tl svg.Timeline) time.Duration {
+func (p *svgPlayhead) evalTime(tl svgx.Timeline) time.Duration {
 	t := max(p.pos, 0)
 	if tl.Infinite && tl.Loop > 0 && t >= tl.LoopStart {
 		t = tl.LoopStart + (t-tl.LoopStart)%tl.Loop

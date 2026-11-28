@@ -1,13 +1,12 @@
 // Package svgicon draws an SVG app.icon as the 1024×1024 PNG the icon
-// pipeline takes, with the SVG renderer of the project's own ggfx.
+// pipeline takes, with the project's own svgx.
 //
-// The command does not link ggfx: its svg package brings the graphics
-// stack along and would tie the command to ggfx's versions. Every ggui
-// project has ggfx in its module graph already, as ggui requires it, so
-// the drawing is done by a small program built in the project's module,
-// which resolves ggfx at the version the app is built with. Its source is
-// given to the go command as an overlay, in a directory of the module
-// that exists only for the go command, so nothing is written into the
+// The command does not link svgx directly so it does not tie the command to
+// svgx's versions. Every ggui project has svgx in its module graph already, as
+// ggui requires it, so the drawing is done by a small program built in the
+// project's module, which resolves svgx at the version the app is built with.
+// Its source is given to the go command as an overlay, in a directory of the
+// module that exists only for the go command, so nothing is written into the
 // project.
 package svgicon
 
@@ -30,10 +29,7 @@ import (
 // Size is the width and height of the PNG drawn, the largest an icon has.
 const Size = 1024
 
-const (
-	ggfxModule = "github.com/ironpark/ggfx"
-	svgPackage = ggfxModule + "/svg"
-)
+const svgxModule = "github.com/ironpark/svgx"
 
 // Is reports whether path names an SVG file, by its extension.
 func Is(path string) bool {
@@ -70,8 +66,7 @@ import (
 	"math"
 	"os"
 
-	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggfx/svg"
+	"github.com/ironpark/svgx"
 )
 
 const size = SIZE
@@ -88,23 +83,25 @@ func draw(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	doc, err := svg.Parse(f)
+	doc, err := svgx.Parse(f)
 	f.Close()
 	if err != nil {
 		return err
 	}
-	x, y, w, h := doc.ViewBox()
-	if !(w > 0 && h > 0) {
+	vb := doc.ViewBox()
+	if !(vb.W > 0 && vb.H > 0) {
 		return errors.New("it has no size: give the svg element a square viewBox, such as viewBox=\"0 0 1024 1024\"")
 	}
-	if math.Abs(w-h) > 1e-6*math.Max(w, h) {
-		return fmt.Errorf("its viewBox is %g×%g; an icon must be square", w, h)
+	if math.Abs(vb.W-vb.H) > 1e-6*math.Max(vb.W, vb.H) {
+		return fmt.Errorf("its viewBox is %g×%g; an icon must be square", vb.W, vb.H)
 	}
-	var m ggfx.GeoM
-	m.Translate(-x, -y)
-	m.Scale(size/w, size/h)
+	var m svgx.Matrix
+	m.Translate(-vb.X, -vb.Y)
+	m.Scale(size/vb.W, size/vb.H)
 	img := image.NewRGBA(image.Rect(0, 0, size, size))
-	doc.Draw(img, m)
+	if err := doc.Draw(img, m, &svgx.DrawOptions{Static: true}); err != nil {
+		return err
+	}
 	out, err := os.Create(dst)
 	if err != nil {
 		return err
@@ -122,7 +119,7 @@ func Draw(ctx context.Context, o Options) error {
 	if _, err := os.Stat(o.SVG); err != nil {
 		return err
 	}
-	ggfx, err := projectGGFX(ctx, o)
+	svgxMod, err := projectSVGX(ctx, o)
 	if err != nil {
 		return err
 	}
@@ -131,29 +128,29 @@ func Draw(ctx context.Context, o Options) error {
 		return err
 	}
 	defer os.RemoveAll(tmp)
-	exe, err := buildDrawer(ctx, o, tmp, ggfx)
+	exe, err := buildDrawer(ctx, o, tmp, svgxMod)
 	if err != nil {
 		return err
 	}
 	return runDrawer(ctx, o, exe)
 }
 
-// projectGGFX returns the ggfx module of the project's module, or says
+// projectSVGX returns the svgx module of the project's module, or says
 // why an SVG icon cannot be drawn without it.
-func projectGGFX(ctx context.Context, o Options) (gotool.Module, error) {
-	mods, err := gotool.Modules(ctx, o.Dir, ggfxModule)
+func projectSVGX(ctx context.Context, o Options) (gotool.Module, error) {
+	mods, err := gotool.Modules(ctx, o.Dir, svgxModule)
 	if err != nil {
 		return gotool.Module{}, err
 	}
 	if len(mods) != 1 || mods[0].Error != nil {
-		return gotool.Module{}, fmt.Errorf("app.icon %s is an SVG, which ggui draws with the ggfx of the project's module, and the module does not require %s: an SVG icon needs a ggui project; or export the icon as a %d×%d PNG and name that", o.Name, ggfxModule, Size, Size)
+		return gotool.Module{}, fmt.Errorf("app.icon %s is an SVG, which ggui draws with the svgx of the project's module, and the module does not require %s: an SVG icon needs a ggui project; or export the icon as a %d×%d PNG and name that", o.Name, svgxModule, Size, Size)
 	}
 	return mods[0], nil
 }
 
 // buildDrawer writes the drawing program and its overlay into tmp and
 // builds it for the host, returning the program's path.
-func buildDrawer(ctx context.Context, o Options, tmp string, ggfx gotool.Module) (string, error) {
+func buildDrawer(ctx context.Context, o Options, tmp string, svgxMod gotool.Module) (string, error) {
 	src := filepath.Join(tmp, "main.go")
 	if err := os.WriteFile(src, Source(Size), 0o644); err != nil {
 		return "", err
@@ -198,7 +195,7 @@ func buildDrawer(ctx context.Context, o Options, tmp string, ggfx gotool.Module)
 	if err := gotool.Build(ctx, bo); err != nil {
 		var be *gotool.BuildError
 		if errors.As(err, &be) && ctx.Err() == nil {
-			return "", buildFailure(o.Name, ggfx, string(be.Output))
+			return "", buildFailure(o.Name, svgxMod, string(be.Output))
 		}
 		return "", err
 	}
@@ -237,38 +234,37 @@ func virtualDir(dir string) (string, error) {
 }
 
 var (
-	// noSVGPackage is the go command finding no svg package in the ggfx
-	// the project requires, however the module mode words it.
-	noSVGPackage = regexp.MustCompile(`(?m)package ` + regexp.QuoteMeta(svgPackage) + `(?:[:;]|$)`)
+	// noSVGPackage is the go command finding no svgx package in the module
+	// graph the project requires, however the module mode words it.
+	noSVGPackage = regexp.MustCompile(`(?m)package ` + regexp.QuoteMeta(svgxModule) + `(?:[:;]|$)`)
 	// helperError is the compiler reporting an error in the program.
 	helperError = regexp.MustCompile(`(?m)^ggui_svgicon\d*[/\\]main\.go:\d+:\d+: `)
 )
 
 // buildFailure says why the drawing program did not build, from what the
 // go command printed.
-func buildFailure(name string, ggfx gotool.Module, output string) error {
-	version := ggfx.Version
-	if r := ggfx.Replace; r != nil {
+func buildFailure(name string, svgxMod gotool.Module, output string) error {
+	version := svgxMod.Version
+	if r := svgxMod.Replace; r != nil {
 		version = r.Path
 		if r.Version != "" {
 			version += "@" + r.Version
 		}
 	}
 	if version == "" {
-		version = ggfx.Dir // a module of the workspace
+		version = svgxMod.Dir // a module of the workspace
 	}
 	switch {
 	case strings.Contains(output, "missing go.sum entry"):
 		// The go command's advice, go get of the program, names a
 		// package that exists only for this build.
-		return fmt.Errorf("app.icon %s is an SVG, and the project's go.sum lacks the checksums of what drawing it with %s takes; go mod download %s adds them, or go mod tidy once the app imports a ggui package:\n%s", name, svgPackage, ggfxModule, strings.TrimSpace(output))
+		return fmt.Errorf("app.icon %s is an SVG, and the project's go.sum lacks the checksums of what drawing it with %s takes; go mod download %s adds them, or go mod tidy once the app imports a ggui package:\n%s", name, svgxModule, svgxModule, strings.TrimSpace(output))
 	case noSVGPackage.MatchString(output):
-		// The module is required, so the package is what it lacks.
-		return fmt.Errorf("app.icon %s is an SVG, which ggui draws with the svg package of the project's ggfx, and the project's %s (%s) is older than that package: update ggui, which brings a later ggfx (go get github.com/ironpark/ggui@latest), or export the icon as a %d×%d PNG and name that", name, ggfxModule, version, Size, Size)
+		return fmt.Errorf("app.icon %s is an SVG, which ggui draws with the project's svgx, and the project's %s (%s) does not provide that package: update ggui (go get github.com/ironpark/ggui@latest), or export the icon as a %d×%d PNG and name that", name, svgxModule, version, Size, Size)
 	case helperError.MatchString(output):
-		// The program itself did not compile: the svg package is there,
+		// The program itself did not compile: svgx is there,
 		// with an API other than this ggui knows.
-		return fmt.Errorf("app.icon %s is an SVG, and the svg package of the project's %s %s is not one this ggui draws with; update ggui and the ggui command together, or export the icon as a %d×%d PNG and name that:\n%s", name, ggfxModule, version, Size, Size, strings.TrimSpace(output))
+		return fmt.Errorf("app.icon %s is an SVG, and the project's %s %s is not one this ggui draws with; update ggui and the ggui command together, or export the icon as a %d×%d PNG and name that:\n%s", name, svgxModule, version, Size, Size, strings.TrimSpace(output))
 	}
-	return fmt.Errorf("app.icon %s is an SVG, and building the program that draws it with the project's ggfx failed:\n%s", name, strings.TrimSpace(output))
+	return fmt.Errorf("app.icon %s is an SVG, and building the program that draws it with the project's svgx failed:\n%s", name, strings.TrimSpace(output))
 }

@@ -931,7 +931,7 @@ func (b *builder) reportMacOS(ctx context.Context, sg *macos.Signer, app string,
 
 // icon returns the PNG the icons are made from, "" for none: app.icon
 // itself, or for an SVG the PNG drawn from it in dir by the project's
-// ggfx.
+// svgx.
 func (b *builder) icon(ctx context.Context, dir string) (string, error) {
 	path := b.proj.Path(b.proj.Config.App.Icon)
 	if path == "" || !svgicon.Is(path) {
@@ -941,7 +941,7 @@ func (b *builder) icon(ctx context.Context, dir string) (string, error) {
 	log := ui.Stderr
 	name := filepath.Base(path)
 	size := fmt.Sprintf("%d×%d", svgicon.Size, svgicon.Size)
-	return out, step(ctx, "Drawing "+name+" at "+size+" with the project's ggfx", "Drew "+name+" at "+size, func() error {
+	return out, step(ctx, "Drawing "+name+" at "+size+" with the project's svgx", "Drew "+name+" at "+size, func() error {
 		return svgicon.Draw(ctx, svgicon.Options{
 			Dir: b.proj.Root, SVG: path, Name: b.proj.Config.App.Icon, Out: out,
 			Logf: func(format string, args ...any) { log.Println(log.Dim(fmt.Sprintf(format, args...))) },

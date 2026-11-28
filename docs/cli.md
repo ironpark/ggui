@@ -509,7 +509,7 @@ rounded square, or add the shadow: the artwork has its own shape. Without
 `icon_inset`, a build whose icon has opaque pixels near the edges says so.
 
 The icon is a PNG or an SVG. An `.svg` `app.icon` is drawn at 1024×1024
-when the build starts, by the `svg` package of the ggfx in the project's
+when the build starts, by [svgx](https://github.com/ironpark/svgx) in the project's
 own module graph, at the version the app builds with: the ggui command
 carries no SVG renderer of its own. The document's viewBox (or, without
 one, its width and height) is scaled to fill the canvas, on
@@ -521,10 +521,10 @@ project, built for the machine running the build whatever `--target` is,
 and with `-mod=readonly`, so `go.mod` and `go.sum` are left as they are.
 That takes:
 
-- a ggui project: a module that requires `github.com/ironpark/ggfx`,
+- a ggui project: a module that requires `github.com/ironpark/svgx`,
   which requiring ggui does, `// indirect` or not;
-- a ggfx with the `svg` package, from October 2026 on; an older one is
-  named in the error, and updating ggui brings a later one;
+- an svgx version compatible with the ggui command; updating ggui and the
+  ggui command together keeps them aligned;
 - an SVG the package can draw: paths, shapes, groups, `use`, transforms,
   gradients, opacity, clip paths, masks and markers, but not `filter`,
   `image` or text. What it refuses is said with the file's name.
@@ -1256,7 +1256,7 @@ base = "/hello/"
 | `name` | the main package directory's name | The name people see: the `.app` name, its menu title, `Name.exe` and the page title. |
 | `id` | made from the import path, such as `com.github.alice.hello` | The reverse-DNS bundle identifier. macOS keys settings, permissions and the Dock to it, so set it once and keep it. The Windows manifest names the program by it too, and on Linux it names the desktop entry, the icons and the AppStream component, and is the window class. |
 | `version` | `"0.1.0"` | One to three numbers: `CFBundleShortVersionString` and `CFBundleVersion`, and the Windows file and product version, for which each is at most 65535. |
-| `icon` | none | A square PNG, ideally 1024×1024, for the macOS and Windows icons, or an SVG with a square viewBox, which the build draws at 1024×1024 with the project's ggfx; see [The macOS bundle](#the-macos-bundle). See `macos.icon_inset` for the margin a macOS icon has. |
+| `icon` | none | A square PNG, ideally 1024×1024, for the macOS and Windows icons, or an SVG with a square viewBox, which the build draws at 1024×1024 with the project's svgx; see [The macOS bundle](#the-macos-bundle). See `macos.icon_inset` for the margin a macOS icon has. |
 | `package` | `"."` | The main package's directory. A package given on the command line replaces it. |
 
 ### [build]

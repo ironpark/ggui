@@ -20,7 +20,7 @@ const circleSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
 </svg>
 `
 
-// An SVG app.icon is drawn by the ggfx of a ggui project's module, at
+// An SVG app.icon is drawn by the svgx of a ggui project's module, at
 // 1024×1024 on transparency, and made into the program's icon, with
 // nothing left in the project.
 func TestSVGIcon(t *testing.T) {
@@ -110,9 +110,9 @@ func TestSVGIcon(t *testing.T) {
 	}
 }
 
-// A module that does not require ggfx is told an SVG icon needs a ggui
+// A module that does not require svgx is told an SVG icon needs a ggui
 // project, without building anything.
-func TestSVGIconWithoutGGFX(t *testing.T) {
+func TestSVGIconWithoutSVGX(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs the go command")
 	}
@@ -121,7 +121,7 @@ func TestSVGIconWithoutGGFX(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "icon.svg"), []byte(circleSVG), 0o644)
 	os.WriteFile(filepath.Join(dir, config.FileName), []byte("[app]\nname = \"Tiny\"\nid = \"com.example.tiny\"\nicon = \"icon.svg\"\n"), 0o644)
 	_, code, said := buildWindows(t, dir)
-	if code == 0 || !strings.Contains(said, "does not require github.com/ironpark/ggfx: an SVG icon needs a ggui project") {
+	if code == 0 || !strings.Contains(said, "does not require github.com/ironpark/svgx: an SVG icon needs a ggui project") {
 		t.Errorf("exit %d: %s", code, said)
 	}
 }

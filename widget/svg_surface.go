@@ -10,9 +10,9 @@ import (
 	"weak"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggfx/svg"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/gem"
+	"github.com/ironpark/svgx"
 )
 
 const (
@@ -25,7 +25,7 @@ const (
 	svgCacheBudget = 64 << 20
 
 	// svgMaxDocVariants is the maximum number of cached static rasters kept
-	// for a single svg.Document across sizes and colors.
+	// for a single svgx.Document across sizes and colors.
 	svgMaxDocVariants = 8
 
 	// svgMostScratch is the largest pooled CPU RGBA buffer kept between
@@ -59,7 +59,7 @@ func releaseSVGScratch(img *image.RGBA) {
 
 // svgKey identifies the exact rasterized frame held in a private svgSurface.
 type svgKey struct {
-	doc   *svg.Document
+	doc   *svgx.Document
 	w, h  int32
 	t     time.Duration
 	color uint32
@@ -68,7 +68,7 @@ type svgKey struct {
 
 // staticKey identifies a shared static raster in svgTextures.
 type staticKey struct {
-	doc   weak.Pointer[svg.Document]
+	doc   weak.Pointer[svgx.Document]
 	w, h  int32
 	color uint32
 }
@@ -94,8 +94,8 @@ type svgTexturePool struct {
 	bytes       int64
 	budget      int64 // svgCacheBudget when <= 0; tests may lower it
 	statics     map[staticKey]*svgLRUEntry
-	byDoc       map[weak.Pointer[svg.Document]][]*svgLRUEntry
-	docCleanups map[weak.Pointer[svg.Document]]struct{}
+	byDoc       map[weak.Pointer[svgx.Document]][]*svgLRUEntry
+	docCleanups map[weak.Pointer[svgx.Document]]struct{}
 }
 
 func (p *svgTexturePool) unlinkLocked(e *svgLRUEntry) {
@@ -194,7 +194,7 @@ func (p *svgTexturePool) trimLocked(keep *svgLRUEntry) {
 	}
 }
 
-func (p *svgTexturePool) sweepDoc(wp weak.Pointer[svg.Document]) {
+func (p *svgTexturePool) sweepDoc(wp weak.Pointer[svgx.Document]) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	list := p.byDoc[wp]
@@ -218,7 +218,7 @@ func (p *svgTexturePool) drain() {
 
 // getStatic returns a cached GPU texture for a static SVG render, rasterizing
 // and inserting it on a miss. The bool reports whether it was a cache hit.
-func (p *svgTexturePool) getStatic(doc *svg.Document, w, h int, colKey uint32, col color.Color, geoM ggfx.GeoM) (*ggfx.Image, bool) {
+func (p *svgTexturePool) getStatic(doc *svgx.Document, w, h int, colKey uint32, col color.Color, m svgx.Matrix) (*ggfx.Image, bool) {
 	wp := weak.Make(doc)
 	sk := staticKey{doc: wp, w: int32(w), h: int32(h), color: colKey}
 
@@ -234,11 +234,7 @@ func (p *svgTexturePool) getStatic(doc *svg.Document, w, h int, colKey uint32, c
 
 	buf := svgScratchRGBA(w, h)
 	defer releaseSVGScratch(buf)
-	var opts *svg.DrawOptions
-	if col != nil {
-		opts = &svg.DrawOptions{CurrentColor: col}
-	}
-	doc.DrawWith(buf, geoM, opts)
+	_ = doc.Draw(buf, m, &svgx.DrawOptions{Static: true, CurrentColor: col})
 	img := ggui.UploadTexture(buf, ggfx.PixelFormatRGBA)
 
 	p.mu.Lock()
@@ -252,15 +248,15 @@ func (p *svgTexturePool) getStatic(doc *svg.Document, w, h int, colKey uint32, c
 	}
 	if p.statics == nil {
 		p.statics = make(map[staticKey]*svgLRUEntry)
-		p.byDoc = make(map[weak.Pointer[svg.Document]][]*svgLRUEntry)
-		p.docCleanups = make(map[weak.Pointer[svg.Document]]struct{})
+		p.byDoc = make(map[weak.Pointer[svgx.Document]][]*svgLRUEntry)
+		p.docCleanups = make(map[weak.Pointer[svgx.Document]]struct{})
 	}
 	for list := p.byDoc[wp]; len(list) >= svgMaxDocVariants; list = p.byDoc[wp] {
 		p.freeLocked(list[0])
 	}
 	if _, has := p.docCleanups[wp]; !has {
 		p.docCleanups[wp] = struct{}{}
-		runtime.AddCleanup(doc, func(dead weak.Pointer[svg.Document]) {
+		runtime.AddCleanup(doc, func(dead weak.Pointer[svgx.Document]) {
 			svgTextures.sweepDoc(dead)
 		}, wp)
 	}
@@ -279,12 +275,12 @@ func (p *svgTexturePool) getStatic(doc *svg.Document, w, h int, colKey uint32, c
 	return img, false
 }
 
-// svgSurfaceHandle holds the GPU texture and svg.Renderer owned by one
+// svgSurfaceHandle holds the GPU texture and svgx.Renderer owned by one
 // svgSurface. It is separated from svgSurface so runtime.AddCleanup on
 // svgSurface can release it idempotently without keeping svgSurface alive.
 type svgSurfaceHandle struct {
-	doc      *svg.Document
-	renderer *svg.Renderer
+	doc      *svgx.Document
+	renderer *svgx.Renderer
 	entry    *svgLRUEntry
 	w, h     int32
 	key      svgKey
@@ -319,7 +315,7 @@ func (h *svgSurfaceHandle) releaseTexture() {
 	svgTextures.mu.Unlock()
 }
 
-// svgSurface is a per-widget reusable GPU surface and svg.Renderer for
+// svgSurface is a per-widget reusable GPU surface and svgx.Renderer for
 // animated or programmatically overridden SVGs. It updates its unmanaged
 // texture in place via WritePixels when the size is unchanged.
 type svgSurface struct {
@@ -328,7 +324,7 @@ type svgSurface struct {
 	onRaster    func(*image.RGBA) // optional test hook called with each rasterized buffer
 }
 
-func newSVGSurface(doc *svg.Document) *svgSurface {
+func newSVGSurface(doc *svgx.Document) *svgSurface {
 	h := &svgSurfaceHandle{
 		doc:      doc,
 		renderer: doc.NewRenderer(),
@@ -348,7 +344,7 @@ func (s *svgSurface) releaseTexture() {
 
 // render returns the surface's GPU image for key, re-rasterizing and uploading
 // pixels only on a key mismatch or after an LRU eviction.
-func (s *svgSurface) render(key svgKey, geoM ggfx.GeoM, opts *svg.DrawOptions) *ggfx.Image {
+func (s *svgSurface) render(key svgKey, m svgx.Matrix, opts *svgx.DrawOptions) *ggfx.Image {
 	h := s.h
 	svgTextures.mu.Lock()
 	if !h.released && h.entry != nil && h.hasKey && h.key == key {
@@ -364,7 +360,7 @@ func (s *svgSurface) render(key svgKey, geoM ggfx.GeoM, opts *svg.DrawOptions) *
 	buf := svgScratchRGBA(w, ht)
 	defer releaseSVGScratch(buf)
 	s.rasterCount++
-	h.renderer.Draw(buf, geoM, opts)
+	_ = h.renderer.Draw(buf, m, opts)
 	if s.onRaster != nil {
 		s.onRaster(buf)
 	}

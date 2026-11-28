@@ -435,7 +435,7 @@ func checkIcon(r *Report, path string) {
 	if svgicon.Is(path) {
 		// Drawing it takes a compile; the build does that, and says
 		// what it cannot draw.
-		r.ok("icon", fmt.Sprintf("%s, an SVG, which ggui build draws at %d×%d with the project's ggfx", path, svgicon.Size, svgicon.Size))
+		r.ok("icon", fmt.Sprintf("%s, an SVG, which ggui build draws at %d×%d with the project's svgx", path, svgicon.Size, svgicon.Size))
 		return
 	}
 	cfg, err := png.DecodeConfig(bytes.NewReader(data))

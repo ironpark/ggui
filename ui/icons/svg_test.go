@@ -218,7 +218,7 @@ func TestAnIconsLinesFollowItsSize(t *testing.T) {
 }
 
 // Regression test pinning icons.Parse alpha output for a currentColor icon
-// containing both filled and stroked shapes so ggfx/svg currentColor support
+// containing both filled and stroked shapes so svgx currentColor support
 // never alters icon alpha coverage.
 func TestParseCurrentColorAlphaRegression(t *testing.T) {
 	t.Parallel()
