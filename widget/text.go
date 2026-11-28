@@ -488,6 +488,9 @@ func (t *TextWidget) layoutLines(maxW float64, env ggui.Env, scale float64) {
 		t.wrapped = key
 		t.glyphFace = nil // the lines' glyphs are of the lines before
 		t.lines = textlayout.Wrap(key.value, face, gem.Pick(t.wrap, key.maxW, 0)*scale)
+		if len(t.lines) == 0 {
+			t.glyphs = nil
+		}
 		if n := int(key.maxLines); n > 0 && len(t.lines) > n {
 			t.lines = t.lines[:n]
 			t.lines[n-1] = textlayout.Ellipsize(t.lines[n-1], face, key.maxW*scale, true)
@@ -612,6 +615,10 @@ func (t *TextWidget) drawLine(dst *ggfx.Image, i int, line string, face text.Fac
 	if t.glyphFace != plain || len(t.glyphs) != len(t.lines) {
 		for j := range t.glyphs {
 			t.glyphs[j] = t.glyphs[j][:0]
+		}
+		if len(t.lines) < len(t.glyphs) {
+			// Release tail slice headers so shrinking text does not pin old line glyph arrays.
+			clear(t.glyphs[len(t.lines):])
 		}
 		t.glyphs = slices.Grow(t.glyphs[:0], len(t.lines))[:len(t.lines)]
 		for j := range t.glyphs {

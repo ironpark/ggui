@@ -162,3 +162,36 @@ func TestOverrideChangesTokensForASubtreeAndKeepsItsLayoutCached(t *testing.T) {
 		t.Fatalf("an unchanged override laid its cached subtree out %d more times", layouts-before)
 	}
 }
+
+func TestOverrideCachesDerivedThemeAcrossLayouts(t *testing.T) {
+	preserveEnv(t)
+	brand := color.NRGBA{0x25, 0x63, 0xeb, 0xff}
+	overrides := 0
+	var seen *theme.Theme
+	child := ggui.FromFuncs(func(c ggui.Constraints, env ggui.Env) ggui.Size {
+		seen = theme.Of(env)
+		return c.Constrain(ggui.Sz(10, 10))
+	}, func(*ggui.Canvas, ggui.Rect) {})
+	tree := theme.Override(func(th *theme.Theme) {
+		overrides++
+		th.Primary = brand
+	}, child)
+	env := theme.Default().Apply(ggui.Env{})
+	c := ggui.Loose(ggui.Sz(40, 40))
+	tree.Layout(c, env)
+	first := seen
+	if overrides != 1 || first == nil || first.Primary != color.Color(brand) {
+		t.Fatalf("initial override count=%d theme=%v", overrides, first)
+	}
+	tree.Layout(c, env)
+	tree.Layout(c, env)
+	if overrides != 1 || seen != first {
+		t.Fatalf("repeated layout under same theme ran override %d times (same ptr=%v)", overrides, seen == first)
+	}
+	// Switching parent theme must recompute the override.
+	darkEnv := theme.Dark().Apply(ggui.Env{})
+	tree.Layout(c, darkEnv)
+	if overrides != 2 || seen == first || seen.Bg != theme.Dark().Bg {
+		t.Fatalf("parent theme switch did not recompute override: count=%d bg=%v", overrides, seen.Bg)
+	}
+}

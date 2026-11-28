@@ -275,3 +275,84 @@ func TestEqualColorHandlesEnvColorAndTypedNilAndEnvMemoNonComparable(t *testing.
 		t.Fatalf("updating an existing envMemo key rotated generations (prev=%d)", len(m.prev))
 	}
 }
+
+func TestIsHashableFastPathsAndStructCheckFields(t *testing.T) {
+	// Common env value types must hit the reflection-free fast path.
+	cw := Cached(sized(1, 1))
+	es := EditorStyle{Muted: color.Black, Selection: color.White}
+	ss := ScrollStyle{Color: color.Black, HoverColor: color.White, Thickness: 6}
+	sh := ShadowStyle{Color: color.Black, Blur: 4}
+	for _, tc := range []struct {
+		name string
+		val  any
+	}{
+		{"CachedWidget", cw},
+		{"EditorStyle", es},
+		{"ScrollStyle", ss},
+		{"ShadowStyle", sh},
+	} {
+		if !isHashable(tc.val) {
+			t.Fatalf("%s reported non-hashable", tc.name)
+		}
+		if allocs := testing.AllocsPerRun(100, func() {
+			if !isHashable(tc.val) {
+				t.Fatal("unexpected non-hashable")
+			}
+		}); allocs != 0 {
+			t.Fatalf("isHashable(%s) allocated %v times, want 0", tc.name, allocs)
+		}
+	}
+
+	// Structs with interface fields must inspect only non-safe fields and detect
+	// unhashable dynamic values without panicking.
+	type customStyle struct {
+		A int
+		B string
+		C color.Color
+		D any
+	}
+	okVal := customStyle{A: 1, B: "x", C: color.Black, D: 42}
+	badVal := customStyle{A: 1, B: "x", C: color.Black, D: []int{1}}
+	if !isHashable(okVal) {
+		t.Fatal("hashable customStyle reported false")
+	}
+	if isHashable(badVal) {
+		t.Fatal("unhashable customStyle (slice in interface) reported true")
+	}
+	if allocs := testing.AllocsPerRun(100, func() {
+		if !isHashable(okVal) {
+			t.Fatal("unexpected false")
+		}
+	}); allocs > 1 {
+		t.Fatalf("isHashable(customStyle) allocated %v times, want <= 1", allocs)
+	}
+}
+
+func TestCachedWidgetRecordSteadyStateZeroAlloc(t *testing.T) {
+	s1 := State(1)
+	s2 := State(2)
+	s3 := State(3)
+	child := FromFuncs(func(c Constraints, _ Env) Size {
+		// Read the same sources multiple times per layout, as widgets do.
+		_ = s1.Get() + s2.Get() + s1.Get() + s3.Get() + s2.Get()
+		return c.Constrain(Sz(10, 10))
+	}, func(*Canvas, Rect) {})
+	cw := Cached(child)
+	c := Loose(Sz(100, 100))
+	env := Env{}
+	cw.Layout(c, env)
+	if len(cw.sources) != 3 {
+		t.Fatalf("deduplicated sources = %d, want 3", len(cw.sources))
+	}
+	// Trigger re-layouts with changing state values; steady-state record + dedupe
+	// should not reallocate c.sources or c.prev.
+	i := 0
+	allocs := testing.AllocsPerRun(50, func() {
+		i++
+		s1.Set(i)
+		cw.Layout(c, env)
+	})
+	if allocs != 0 {
+		t.Fatalf("steady-state CachedWidget re-layout allocated %v times, want 0", allocs)
+	}
+}

@@ -15,7 +15,9 @@
 package text
 
 import (
+	"cmp"
 	"math"
+	"slices"
 	"sync"
 )
 
@@ -23,12 +25,12 @@ const infTick = math.MaxInt64
 
 // maxAge is how many ticks, frames, an entry may go unused before a cache
 // lets it go however few entries it has, and sweepEvery how often, in
-// ticks, a cache that adds an entry looks for those. A window draws a few
-// frames a second at rest, tens while working, so an entry goes after
-// minutes of use without it, or about an hour at rest.
+// ticks, a cache checks for aged entries. A window draws tens of frames a
+// second while active, so an entry goes after ~20 seconds of active use
+// without it, or several minutes at rest.
 const (
-	maxAge     = 3600
-	sweepEvery = 600
+	maxAge     = 1200
+	sweepEvery = 300
 )
 
 type cacheValue[Value any] struct {
@@ -58,6 +60,10 @@ type cache[Key comparable, Value any] struct {
 	// hit costs nothing.
 	own func(Key) Key
 
+	// onEvict, when set, is called outside c.m for each value removed from
+	// the cache during aging, LRU eviction, or clear.
+	onEvict func(Value)
+
 	m sync.Mutex
 }
 
@@ -67,16 +73,31 @@ func newCache[Key comparable, Value any](softLimit int) *cache[Key, Value] {
 	}
 }
 
+func (c *cache[Key, Value]) hardLimit() int {
+	return max(2*c.softLimit, c.softLimit+64)
+}
+
 func (c *cache[Key, Value]) getOrCreate(key Key, create func() (Value, bool)) Value {
 	n := currentTick()
 
 	c.m.Lock()
-	defer c.m.Unlock()
+	var evicted []Value
 
 	e, ok := c.values[key]
 	if ok {
 		e.atime = n
-		return e.value
+		if n-c.swept >= sweepEvery {
+			evicted = c.sweepAgedLocked(n, evicted)
+		}
+		val := e.value
+		onEvict := c.onEvict
+		c.m.Unlock()
+		if onEvict != nil {
+			for _, v := range evicted {
+				onEvict(v)
+			}
+		}
+		return val
 	}
 
 	if c.values == nil {
@@ -100,31 +121,104 @@ func (c *cache[Key, Value]) getOrCreate(key Key, create func() (Value, bool)) Va
 	// shows the same strings for hours, and those it showed once, a
 	// conversation scrolled past, a file closed, are kept for nothing.
 	if n-c.swept >= sweepEvery {
-		c.swept = n
-		for key, e := range c.values {
-			if e.atime < n-maxAge {
-				delete(c.values, key)
+		evicted = c.sweepAgedLocked(n, evicted)
+	}
+
+	// Clean up old entries once past the soft limit.
+	if c.atime < n && len(c.values) > c.softLimit {
+		for k, v := range c.values {
+			// 60 is an arbitrary number.
+			if v.atime >= n-60 {
+				continue
 			}
+			if c.onEvict != nil {
+				evicted = append(evicted, v.value)
+			}
+			delete(c.values, k)
 		}
 	}
 
-	// Clean up old entries.
-	if c.atime < n {
-		// If the number of values exceeds the soft limits, old values are removed.
-		// Even after cleaning up the cache, the number of values might still exceed the soft limit,
-		// but this is fine.
-		if len(c.values) > c.softLimit {
-			for key, e := range c.values {
-				// 60 is an arbitrary number.
-				if e.atime >= n-60 {
-					continue
-				}
-				delete(c.values, key)
-			}
-		}
+	// Enforce a hard LRU cap so rapid bursts (e.g. scrolling through many CJK
+	// glyphs within 60 frames) cannot grow the cache unboundedly. Never evict
+	// entries accessed on the current or immediately preceding tick (n-1) or
+	// non-expirable entries, so in-flight GPU frames keep their glyph textures.
+	if limit := c.hardLimit(); len(c.values) > limit {
+		evicted = c.evictLRULocked(n, evicted)
 	}
 
 	c.atime = n
+	val := e.value
+	onEvict := c.onEvict
+	c.m.Unlock()
 
-	return e.value
+	if onEvict != nil {
+		for _, v := range evicted {
+			onEvict(v)
+		}
+	}
+	return val
+}
+
+func (c *cache[Key, Value]) sweepAgedLocked(n int64, evicted []Value) []Value {
+	c.swept = n
+	for k, v := range c.values {
+		if v.atime < n-maxAge {
+			if c.onEvict != nil {
+				evicted = append(evicted, v.value)
+			}
+			delete(c.values, k)
+		}
+	}
+	return evicted
+}
+
+func (c *cache[Key, Value]) evictLRULocked(n int64, evicted []Value) []Value {
+	type victim struct {
+		key   Key
+		atime int64
+	}
+	candidates := make([]victim, 0, len(c.values))
+	for k, v := range c.values {
+		if v.atime < n-1 {
+			candidates = append(candidates, victim{key: k, atime: v.atime})
+		}
+	}
+	need := len(c.values) - c.softLimit
+	if need <= 0 || len(candidates) == 0 {
+		return evicted
+	}
+	slices.SortFunc(candidates, func(a, b victim) int {
+		return cmp.Compare(a.atime, b.atime)
+	})
+	if need > len(candidates) {
+		need = len(candidates)
+	}
+	for _, cand := range candidates[:need] {
+		if v, ok := c.values[cand.key]; ok {
+			if c.onEvict != nil {
+				evicted = append(evicted, v.value)
+			}
+			delete(c.values, cand.key)
+		}
+	}
+	return evicted
+}
+
+func (c *cache[Key, Value]) clear() {
+	c.m.Lock()
+	onEvict := c.onEvict
+	var evicted []Value
+	if onEvict != nil && len(c.values) > 0 {
+		evicted = make([]Value, 0, len(c.values))
+		for _, v := range c.values {
+			evicted = append(evicted, v.value)
+		}
+	}
+	clear(c.values)
+	c.m.Unlock()
+	if onEvict != nil {
+		for _, v := range evicted {
+			onEvict(v)
+		}
+	}
 }

@@ -219,43 +219,71 @@ func (c *glyphImageCaches) getOrCreate(face *GoTextFace, key goTextGlyphImageCac
 	return c.cacheForFace(face, currentTick()).getOrCreate(key, create)
 }
 
+func deallocateGlyphImage(img *ggfx.Image) {
+	if img != nil {
+		img.Deallocate()
+	}
+}
+
 // cacheForFace returns the cache for the size of the given face, creating it if necessary.
 // n is the current tick, which is the criterion of the staleness of the caches.
 func (c *glyphImageCaches) cacheForFace(face *GoTextFace, n int64) *cache[goTextGlyphImageCacheKey, *ggfx.Image] {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	var evicted []*cache[goTextGlyphImageCacheKey, *ggfx.Image]
 
 	if e, ok := c.caches[face.Size]; ok {
 		e.atime = n
-		return e.cache
+		if n-c.atime >= sweepEvery {
+			c.atime = n
+			for size, ent := range c.caches {
+				if size == face.Size {
+					continue
+				}
+				if ent.atime < n-maxAge {
+					evicted = append(evicted, ent.cache)
+					delete(c.caches, size)
+				}
+			}
+		}
+		res := e.cache
+		c.mu.Unlock()
+		for _, ec := range evicted {
+			ec.clear()
+		}
+		return res
 	}
 
 	if c.caches == nil {
 		c.caches = map[float64]*glyphImageCacheEntry{}
 	}
+	gc := newCache[goTextGlyphImageCacheKey, *ggfx.Image](128 * glyphVariationCount(face))
+	gc.onEvict = deallocateGlyphImage
 	e := &glyphImageCacheEntry{
-		cache: newCache[goTextGlyphImageCacheKey, *ggfx.Image](128 * glyphVariationCount(face)),
+		cache: gc,
 		atime: n,
 	}
 	c.caches[face.Size] = e
 
-	// Clean up old caches. The glyph images in a removed cache are released by GC.
+	// Clean up old caches, explicitly deallocating evicted glyph textures so
+	// GPU atlas pages can reclaim space immediately without waiting for GC.
 	if c.atime < n {
-		// If the number of the caches exceeds the soft limit, old caches are removed.
-		// Even after cleaning up the caches, the number of the caches might still exceed the soft limit,
-		// but this is fine.
 		if len(c.caches) > glyphImageCachesSoftLimit {
-			for size, e := range c.caches {
-				// 60 is an arbitrary number.
-				if e.atime >= n-60 {
+			for size, ent := range c.caches {
+				if size == face.Size || ent.atime >= n-60 {
 					continue
 				}
+				evicted = append(evicted, ent.cache)
 				delete(c.caches, size)
 			}
 		}
 	}
 
 	c.atime = n
+	c.mu.Unlock()
+
+	for _, ec := range evicted {
+		ec.clear()
+	}
 
 	return e.cache
 }

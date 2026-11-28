@@ -25,3 +25,67 @@ func TestACacheLetsGoOfWhatItHasNotUsedForLong(t *testing.T) {
 		}
 	}
 }
+
+func TestCacheHardLRUCapAndOnEvict(t *testing.T) {
+	c := newCache[int, int](16)
+	start := currentTick()
+	t.Cleanup(func() { tick.Store(start) })
+
+	var evicted []int
+	c.onEvict = func(v int) { evicted = append(evicted, v) }
+
+	// Populate across multiple recent ticks (all within 60 ticks so the soft pass keeps them)
+	// until past hardLimit().
+	c.getOrCreate(-1, func() (int, bool) { return -1, false }) // non-expirable
+	limit := c.hardLimit()
+	for i := range limit + 10 {
+		if i%8 == 0 {
+			AdvanceTick()
+		}
+		v := i
+		c.getOrCreate(v, func() (int, bool) { return v, true })
+	}
+
+	if len(c.values) > limit {
+		t.Fatalf("cache exceeded hardLimit %d: got %d", limit, len(c.values))
+	}
+	if _, ok := c.values[-1]; !ok {
+		t.Fatal("non-expirable entry was evicted")
+	}
+	if len(evicted) == 0 {
+		t.Fatal("expected onEvict to be invoked during LRU eviction")
+	}
+
+	// Evicted entries must be older ones (e.g. key 0), while the newest must remain.
+	if _, ok := c.values[0]; ok {
+		t.Fatal("oldest entry 0 should have been evicted by LRU cap")
+	}
+	if _, ok := c.values[limit+9]; !ok {
+		t.Fatal("newest entry should remain in cache")
+	}
+}
+
+func TestCacheSweepsStaleEntriesOnHit(t *testing.T) {
+	c := newCache[string, int](512)
+	start := currentTick()
+	t.Cleanup(func() { tick.Store(start) })
+
+	evictedCount := 0
+	c.onEvict = func(int) { evictedCount++ }
+
+	c.getOrCreate("stale", func() (int, bool) { return 1, true })
+	c.getOrCreate("hot", func() (int, bool) { return 2, true })
+
+	// Advance past maxAge + sweepEvery with ONLY cache hits (no new keys inserted).
+	for range maxAge + sweepEvery {
+		AdvanceTick()
+		c.getOrCreate("hot", func() (int, bool) { t.Fatal("unexpected miss"); return 0, true })
+	}
+
+	if _, ok := c.values["stale"]; ok {
+		t.Fatal("stale entry was not swept during cache hits")
+	}
+	if evictedCount != 1 {
+		t.Fatalf("evictedCount = %d, want 1", evictedCount)
+	}
+}

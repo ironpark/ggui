@@ -74,6 +74,17 @@ func (t *Theme) Apply(env ggui.Env) ggui.Env {
 		*p = Theme{}
 		scratch.Put(p)
 	}
+	return applyThemeEnv(env, applied)
+}
+
+// applyResolved applies an already-resolved, immutable *Theme to env without
+// borrowing or copying a scratch Theme.
+func (t *Theme) applyResolved(env ggui.Env) ggui.Env {
+	env = env.With(key, t)
+	return applyThemeEnv(env, Of(env))
+}
+
+func applyThemeEnv(env ggui.Env, applied *Theme) ggui.Env {
 	return env.WithText(applied.Text).
 		With(TitleKey, applied.Title).With(HeadingKey, applied.Heading).With(LabelKey, applied.Label).
 		With(CaptionKey, applied.Caption).With(MonoKey, applied.Mono).
@@ -93,7 +104,7 @@ func Use() *Theme { return Of(ggui.UseEnv()) }
 // values, and matches the windows' title bars to it.
 func Set(t *Theme) {
 	resolved := t.Resolve()
-	ggui.SetEnv(resolved.Apply(ggui.Untrack(ggui.UseEnv).WithTextReplaced(resolved.Text)))
+	ggui.SetEnv(resolved.applyResolved(ggui.Untrack(ggui.UseEnv).WithTextReplaced(resolved.Text)))
 	ggui.SetAppearance(appearanceOf(resolved.Bg))
 }
 
@@ -181,9 +192,15 @@ func With(t *Theme, child ggui.Widget) *ggui.EnvWidget {
 //
 //	theme.Override(func(t *theme.Theme) { t.Primary = brand }, form)
 func Override(fn func(*Theme), child ggui.Widget) *ggui.EnvWidget {
+	var from, derived *Theme
 	return ggui.WithEnv(func(env ggui.Env) ggui.Env {
-		t := From(env)
-		fn(t)
-		return t.Apply(env)
+		cur := Of(env)
+		if cur != from || derived == nil {
+			t := cur.Clone()
+			fn(t)
+			t.resolveInPlace()
+			from, derived = cur, t
+		}
+		return derived.applyResolved(env)
 	}, child)
 }

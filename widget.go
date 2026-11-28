@@ -501,6 +501,9 @@ type CachedWidget struct {
 	// a Layout inside that measurement called Invalidate; see stale.
 	measuring bool
 	again     bool
+	// recordFn caches the bound c.record method value so Layout does not
+	// allocate a closure on every measurement pass.
+	recordFn func(reactive.LayoutSource, uint64)
 }
 
 // mostLateKids is how many caches laid out after a cache measured, as a
@@ -563,8 +566,11 @@ func (c *CachedWidget) Layout(cs Constraints, env Env) Size {
 	clear(c.kids)
 	c.sources, c.kids = c.sources[:0], c.kids[:0]
 	clear(c.kidIdx)
+	if c.recordFn == nil {
+		c.recordFn = c.record
+	}
 	c.measuring = true
-	reactive.Measure(c.record, func() { c.size = c.child.Layout(cs, env.With(cacheOwner, c)) })
+	reactive.Measure(c.recordFn, func() { c.size = c.child.Layout(cs, env.With(cacheOwner, c)) })
 	c.measuring = false
 	c.sources = dedupeReads(c.sources)
 	c.kids = slices.Clip(c.kids)
@@ -631,11 +637,22 @@ func (c *CachedWidget) Baseline() (float64, bool) { return BaselineOf(c.child) }
 // as the reactive core's recorder for the duration of a measurement, saving
 // and restoring the previous one so that nested caches nest correctly.
 func (c *CachedWidget) record(src reactive.LayoutSource, version uint64) {
-	// A widget reports a source at the start of its layout and again at
-	// its end: the second replaces the first.
-	if n := len(c.sources); n > 0 && c.sources[n-1].src == src {
+	// Most widgets read only a small set of reactive sources, often repeatedly
+	// within a single layout pass. Updating an existing entry in place avoids
+	// growing c.sources with duplicate reads and eliminates the grow-then-shrink
+	// allocation churn in dedupeReads.
+	n := len(c.sources)
+	if n > 0 && c.sources[n-1].src == src {
 		c.sources[n-1].version = version
 		return
+	}
+	if n <= mostScannedReads {
+		for i := n - 2; i >= 0; i-- {
+			if c.sources[i].src == src {
+				c.sources[i].version = version
+				return
+			}
+		}
 	}
 	c.sources = append(c.sources, sourceRead{src, version})
 }
@@ -670,35 +687,17 @@ var readsSeen = sync.Pool{New: func() any { return map[reactive.LayoutSource]int
 func dedupeReads(reads []sourceRead) []sourceRead {
 	var n int
 	if len(reads) <= mostScannedReads {
-		n = dedupeByScan(reads)
+		// record already deduplicated in place while len <= mostScannedReads.
+		n = len(reads)
 	} else {
 		n = dedupeByMap(reads)
 	}
 	clear(reads[n:])
 	reads = reads[:n]
-	if cap(reads) > 2*n+4 {
+	if cap(reads) > 4*n+16 {
 		return slices.Clone(reads)
 	}
 	return reads
-}
-
-// dedupeByScan moves each source in reads once to the front, at the
-// version it was read last, comparing every read with those kept, and
-// returns how many it kept.
-func dedupeByScan(reads []sourceRead) int {
-	n := 0
-scan:
-	for _, r := range reads {
-		for j := range n {
-			if reads[j].src == r.src {
-				reads[j].version = r.version
-				continue scan
-			}
-		}
-		reads[n] = r
-		n++
-	}
-	return n
 }
 
 // dedupeByMap is dedupeByScan for many reads, finding those kept in a map.

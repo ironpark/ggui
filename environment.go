@@ -817,9 +817,16 @@ func isHashable(val any) bool {
 		uint, uint8, uint16, uint32, uint64, uintptr,
 		float32, float64, complex64, complex128,
 		string, time.Duration, TextDirection,
-		color.RGBA, color.NRGBA, color.Gray, envLastDerived:
+		color.RGBA, color.NRGBA, color.Gray, envLastDerived,
+		*CachedWidget:
 		return true
 	case TextStyle:
+		return isHashable(v.Color)
+	case EditorStyle:
+		return isHashable(v.Muted) && isHashable(v.Selection)
+	case ScrollStyle:
+		return isHashable(v.Color) && isHashable(v.HoverColor)
+	case ShadowStyle:
 		return isHashable(v.Color)
 	}
 	t := reflect.TypeOf(val)
@@ -833,6 +840,11 @@ func isHashable(val any) bool {
 }
 
 var safeComparableTypes sync.Map // reflect.Type -> bool
+
+// structCheckFields maps a comparable struct reflect.Type that is NOT unconditionally
+// safeComparableType to the indices of fields that need per-value inspection (e.g.
+// interface fields or nested structs containing interfaces).
+var structCheckFields sync.Map // reflect.Type -> []int
 
 func safeComparableType(t reflect.Type) bool {
 	if t == nil {
@@ -853,8 +865,8 @@ func safeComparableType(t reflect.Type) bool {
 		safe = safeComparableType(t.Elem())
 	case reflect.Struct:
 		safe = true
-		for field := range t.Fields() {
-			if !safeComparableType(field.Type) {
+		for i := range t.NumField() {
+			if !safeComparableType(t.Field(i).Type) {
 				safe = false
 				break
 			}
@@ -862,6 +874,20 @@ func safeComparableType(t reflect.Type) bool {
 	}
 	safeComparableTypes.Store(t, safe)
 	return safe
+}
+
+func checkFieldsForStruct(t reflect.Type) []int {
+	if v, ok := structCheckFields.Load(t); ok {
+		return v.([]int)
+	}
+	var idxs []int
+	for i := range t.NumField() {
+		if !safeComparableType(t.Field(i).Type) {
+			idxs = append(idxs, i)
+		}
+	}
+	structCheckFields.Store(t, idxs)
+	return idxs
 }
 
 func isHashableValue(v reflect.Value) bool {
@@ -916,8 +942,8 @@ func hashableStruct(v reflect.Value) bool {
 	if safeComparableType(t) {
 		return true
 	}
-	for _, field := range v.Fields() {
-		if !isHashableValue(field) {
+	for _, i := range checkFieldsForStruct(t) {
+		if !isHashableValue(v.Field(i)) {
 			return false
 		}
 	}
