@@ -63,7 +63,7 @@ func NewMultiFace(faces ...Face) (*MultiFace, error) {
 	}
 
 	m := &MultiFace{
-		splitTextCache: newCache[string, []textChunk](32),
+		splitTextCache: newCache[string, []textChunk](512),
 	}
 	m.splitTextCache.own = strings.Clone
 	m.faces = make([]Face, len(faces))

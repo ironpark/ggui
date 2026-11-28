@@ -89,3 +89,40 @@ func TestCacheSweepsStaleEntriesOnHit(t *testing.T) {
 		t.Fatalf("evictedCount = %d, want 1", evictedCount)
 	}
 }
+
+func TestCacheHardLRUSameTickSkipsRepeatedRescan(t *testing.T) {
+	c := newCache[int, int](16)
+	start := currentTick()
+	t.Cleanup(func() { tick.Store(start) })
+
+	limit := c.hardLimit()
+	// Fill past hardLimit within a single tick so no entry is eligible (< n-1).
+	for i := range limit + 20 {
+		v := i
+		c.getOrCreate(v, func() (int, bool) { return v, true })
+	}
+	if c.evictExhausted != currentTick() {
+		t.Fatalf("evictExhausted = %d, want current tick %d", c.evictExhausted, currentTick())
+	}
+
+	// Subsequent misses on the same tick must not allocate candidate slices.
+	nextKey := limit + 100
+	allocs := testing.AllocsPerRun(50, func() {
+		k := nextKey
+		nextKey++
+		c.getOrCreate(k, func() (int, bool) { return k, true })
+	})
+	// Only the cacheValue struct (and occasional map bucket growth) may allocate;
+	// previously evictLRULocked allocated a full O(len(c.values)) slice every miss.
+	if allocs > 3 {
+		t.Fatalf("same-tick misses past hardLimit allocated %v times/op, want <= 3", allocs)
+	}
+
+	// Advancing two ticks makes prior entries eligible again and brings len <= softLimit.
+	AdvanceTick()
+	AdvanceTick()
+	c.getOrCreate(-99, func() (int, bool) { return -99, true })
+	if len(c.values) > c.softLimit {
+		t.Fatalf("after advancing 2 ticks len(c.values) = %d, want <= %d", len(c.values), c.softLimit)
+	}
+}

@@ -40,6 +40,11 @@ type cacheValue[Value any] struct {
 	atime int64
 }
 
+type cacheVictim[Key comparable] struct {
+	key   Key
+	atime int64
+}
+
 type cache[Key comparable, Value any] struct {
 	// softLimit indicates the soft limit of the number of values in the cache.
 	softLimit int
@@ -51,6 +56,16 @@ type cache[Key comparable, Value any] struct {
 
 	// swept is when entries were last looked over for age (see maxAge).
 	swept int64
+
+	// evictExhausted records a tick n on which evictLRULocked already evicted
+	// every entry with atime < n-1. Because no entry's atime can fall below
+	// n-1 while the tick stays at n, re-running evictLRULocked during the same
+	// tick would only rescan the map and find zero victims.
+	evictExhausted int64
+
+	// evictBuf is reused across evictLRULocked calls to avoid per-eviction
+	// slice allocations.
+	evictBuf []cacheVictim[Key]
 
 	// own, when set, returns a key that shares no memory with the one
 	// asked for. A key holding a substring keeps the whole string it was
@@ -69,7 +84,8 @@ type cache[Key comparable, Value any] struct {
 
 func newCache[Key comparable, Value any](softLimit int) *cache[Key, Value] {
 	return &cache[Key, Value]{
-		softLimit: softLimit,
+		softLimit:      softLimit,
+		evictExhausted: -1,
 	}
 }
 
@@ -142,7 +158,7 @@ func (c *cache[Key, Value]) getOrCreate(key Key, create func() (Value, bool)) Va
 	// glyphs within 60 frames) cannot grow the cache unboundedly. Never evict
 	// entries accessed on the current or immediately preceding tick (n-1) or
 	// non-expirable entries, so in-flight GPU frames keep their glyph textures.
-	if limit := c.hardLimit(); len(c.values) > limit {
+	if limit := c.hardLimit(); len(c.values) > limit && c.evictExhausted != n {
 		evicted = c.evictLRULocked(n, evicted)
 	}
 
@@ -173,33 +189,46 @@ func (c *cache[Key, Value]) sweepAgedLocked(n int64, evicted []Value) []Value {
 }
 
 func (c *cache[Key, Value]) evictLRULocked(n int64, evicted []Value) []Value {
-	type victim struct {
-		key   Key
-		atime int64
-	}
-	candidates := make([]victim, 0, len(c.values))
-	for k, v := range c.values {
-		if v.atime < n-1 {
-			candidates = append(candidates, victim{key: k, atime: v.atime})
-		}
-	}
 	need := len(c.values) - c.softLimit
-	if need <= 0 || len(candidates) == 0 {
+	if need <= 0 {
 		return evicted
 	}
-	slices.SortFunc(candidates, func(a, b victim) int {
-		return cmp.Compare(a.atime, b.atime)
-	})
-	if need > len(candidates) {
-		need = len(candidates)
-	}
-	for _, cand := range candidates[:need] {
-		if v, ok := c.values[cand.key]; ok {
-			if c.onEvict != nil {
-				evicted = append(evicted, v.value)
-			}
-			delete(c.values, cand.key)
+	candidates := c.evictBuf[:0]
+	for k, v := range c.values {
+		if v.atime < n-1 {
+			candidates = append(candidates, cacheVictim[Key]{key: k, atime: v.atime})
 		}
+	}
+	if len(candidates) <= need {
+		// Every evictable entry will be removed (or none exist); no further
+		// entries can become < n-1 until the tick advances.
+		c.evictExhausted = n
+		for _, cand := range candidates {
+			if v, ok := c.values[cand.key]; ok {
+				if c.onEvict != nil {
+					evicted = append(evicted, v.value)
+				}
+				delete(c.values, cand.key)
+			}
+		}
+	} else {
+		slices.SortFunc(candidates, func(a, b cacheVictim[Key]) int {
+			return cmp.Compare(a.atime, b.atime)
+		})
+		for _, cand := range candidates[:need] {
+			if v, ok := c.values[cand.key]; ok {
+				if c.onEvict != nil {
+					evicted = append(evicted, v.value)
+				}
+				delete(c.values, cand.key)
+			}
+		}
+	}
+	clear(candidates)
+	if cap(candidates) > 2*c.hardLimit() {
+		c.evictBuf = nil
+	} else {
+		c.evictBuf = candidates[:0]
 	}
 	return evicted
 }
