@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui/cmd/ggui/internal/gosrc"
-	"github.com/ironpark/ggui/pkg/fswatch"
+	"github.com/ironpark/fswatch"
 )
 
 // Change is what the watcher found.

@@ -32,7 +32,7 @@ concurrency:
 jobs:
   # lib is the library and everything built on it in this repository but
   # the command: the root module, the examples, fonts and icon modules,
-  # and cmd/ggviewer. cmd is the ggui command and pkg/fswatch, whose
+  # and cmd/ggviewer. cmd is the ggui command, whose
   # tests build an app against this checkout, so a change to the library
   # runs them too.
   changes:
@@ -57,12 +57,11 @@ jobs:
             lib:
               - '**'
               - '!cmd/ggui/**'
-              - '!pkg/fswatch/**'
               - '!.github/**'
               - '!**.md'
               - '!assets/demos/**'
             cmd:
-              - '{cmd/ggui,pkg/fswatch}/**'
+              - 'cmd/ggui/**'
               - '!**.md'
             ci:
               - '{.github/**,internal/tools/**,Taskfile.yml}'
@@ -91,19 +90,17 @@ jobs:
             icons/lucide/go.sum
             icons/tabler/go.sum
             cmd/ggui/go.sum
-            pkg/fswatch/go.sum
       # docs/examples/sqlite, fonts/notoemoji and the icon libraries under icons
       # are modules of their own that
       # require a published ggui; the workspace makes them build against
       # this checkout instead. cmd/ggui, the ggui command, is a module of
       # its own so its dependencies stay out of ggui's; it imports no ggui,
       # but its tests build an app against this checkout, and are run by
-      # the command job. pkg/fswatch, the file watcher, is a module of its
-      # own the command requires. The developer's own go.work, which also points at ../ggfx, is not
+      # the command job. The developer's own go.work, which also points at ../ggfx, is not
       # committed.
       - name: Workspace
         run: |
-          go work init . ./docs/examples/sqlite ./fonts/notoemoji ./icons/heroicons ./icons/lucide ./icons/tabler ./cmd/ggui ./pkg/fswatch
+          go work init . ./docs/examples/sqlite ./fonts/notoemoji ./icons/heroicons ./icons/lucide ./icons/tabler ./cmd/ggui
       # The Ubuntu image has DejaVu Sans but no font for Korean, which the
       # system font fallback is tested with. Mesa supplies a surfaceless EGL
       # context for the offscreen text rendering tests.
@@ -144,30 +141,26 @@ jobs:
           cache-dependency-path: |
             go.sum
             cmd/ggui/go.sum
-            pkg/fswatch/go.sum
       - name: Workspace
-        run: go work init . ./cmd/ggui ./pkg/fswatch
+        run: go work init . ./cmd/ggui
       - name: Test
-        run: go test ./cmd/ggui/... ./pkg/fswatch/...
+        run: go test ./cmd/ggui/...
       # The ggui command's watcher once more, scanning without the
-      # system's notifications, and fswatch, where cgo is the default,
-      # without cgo: on macOS FSEvents calls back into Go on a thread of its
-      # own, which purego's fakecgo then makes possible. fswatch's own tests
-      # run each case both notified and polling.
+      # system's notifications, and, where cgo is the default, without
+      # cgo: on macOS FSEvents calls back into Go on a thread of its own,
+      # which purego's fakecgo then makes possible. The watcher under it,
+      # github.com/ironpark/fswatch, is tested in its own repository.
       - name: Test the watcher by polling and without cgo
         shell: bash
         run: |
           GGUI_WATCH=poll go test ./cmd/ggui/internal/watch/... ./cmd/ggui/internal/dev/...
-          CGO_ENABLED=0 go test ./pkg/fswatch/... ./cmd/ggui/internal/watch/...
-      # pkg/fswatch and cmd/ggui do not import root ggui and must remain
+          CGO_ENABLED=0 go test ./cmd/ggui/internal/watch/...
+      # cmd/ggui does not import root ggui and must remain
       # self-contained for standalone builds (such as go install) without a
       # go.work file.
-      - name: Verify standalone modules (GOWORK=off)
+      - name: Verify the standalone module (GOWORK=off)
         shell: bash
         run: |
-          GOWORK=off go -C pkg/fswatch build ./...
-          GOWORK=off go -C pkg/fswatch vet ./...
-          GOWORK=off go -C pkg/fswatch test -run='^$' ./...
           GOWORK=off go -C cmd/ggui build ./...
           GOWORK=off go -C cmd/ggui vet ./...
           GOWORK=off go -C cmd/ggui test -run='^$' ./...
@@ -188,20 +181,18 @@ jobs:
           cache-dependency-path: |
             go.sum
             cmd/ggui/go.sum
-            pkg/fswatch/go.sum
       - name: Workspace
-        run: go work init . ./cmd/ggui ./pkg/fswatch
+        run: go work init . ./cmd/ggui
       - name: Install test fonts and Mesa
         if: needs.changes.outputs.lib == 'true'
         run: sudo apt-get update && sudo apt-get install -y fonts-nanum libegl1 libegl-mesa0 libgl1 libgl1-mesa-dri
       - name: Test with the race detector
         if: needs.changes.outputs.lib == 'true'
         run: go test -race ./...
-      - name: Test fswatch and command with the race detector
+      - name: Test the command with the race detector
         if: needs.changes.outputs.cmd == 'true'
         shell: bash
         run: |
-          go -C pkg/fswatch test -race ./...
           go -C cmd/ggui test -race ./...
 
   # The viewer and docs/examples/counter with the remote backend, end to end, on
@@ -266,7 +257,6 @@ jobs:
           cache-dependency-path: |
             go.sum
             cmd/ggui/go.sum
-            pkg/fswatch/go.sum
       - name: Build an app's packages
         run: |
           go -C cmd/ggui build -o "$RUNNER_TEMP/ggui" .
@@ -331,7 +321,6 @@ jobs:
           cache-dependency-path: |
             go.sum
             cmd/ggui/go.sum
-            pkg/fswatch/go.sum
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.17.1
@@ -498,7 +487,7 @@ jobs:
         platform: [linux/amd64, darwin/arm64, windows/amd64, windows/arm64]
     runs-on: ubuntu-latest
     env:
-      PKGS: ./... ./docs/examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/... ./cmd/ggui/... ./pkg/fswatch/...
+      PKGS: ./... ./docs/examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/... ./cmd/ggui/...
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -507,10 +496,9 @@ jobs:
           cache-dependency-path: |
             go.sum
             cmd/ggui/go.sum
-            pkg/fswatch/go.sum
       - name: Workspace
         run: |
-          go work init . ./docs/examples/sqlite ./fonts/notoemoji ./icons/heroicons ./icons/lucide ./icons/tabler ./cmd/ggui ./pkg/fswatch
+          go work init . ./docs/examples/sqlite ./fonts/notoemoji ./icons/heroicons ./icons/lucide ./icons/tabler ./cmd/ggui
           echo "GOOS=${PLATFORM%/*}" >> "$GITHUB_ENV"
           echo "GOARCH=${PLATFORM#*/}" >> "$GITHUB_ENV"
         env:
@@ -530,7 +518,7 @@ jobs:
           if [ "$GOOS" = windows ]; then
             go vet -unsafeptr=false ./...
             go vet -unsafeptr=false -tags ggui_inspector .
-            go vet ./cmd/ggui/... ./pkg/fswatch/...
+            go vet ./cmd/ggui/...
           else
             go vet $PKGS
             go vet -tags ggui_inspector .
@@ -538,9 +526,9 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.cache/staticcheck
-          key: staticcheck-${{ matrix.platform }}-${{ hashFiles('go.sum', 'cmd/ggui/go.sum', 'pkg/fswatch/go.sum') }}-${{ github.sha }}
+          key: staticcheck-${{ matrix.platform }}-${{ hashFiles('go.sum', 'cmd/ggui/go.sum') }}-${{ github.sha }}
           restore-keys: |
-            staticcheck-${{ matrix.platform }}-${{ hashFiles('go.sum', 'cmd/ggui/go.sum', 'pkg/fswatch/go.sum') }}-
+            staticcheck-${{ matrix.platform }}-${{ hashFiles('go.sum', 'cmd/ggui/go.sum') }}-
             staticcheck-${{ matrix.platform }}-
       - name: staticcheck
         run: |
