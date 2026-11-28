@@ -21,8 +21,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ironpark/ggui/cmd/ggui/internal/gosrc"
 	"github.com/ironpark/fswatch"
+	"github.com/ironpark/ggui/cmd/ggui/internal/gosrc"
 )
 
 // Change is what the watcher found.
