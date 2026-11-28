@@ -75,9 +75,19 @@ type Ignore struct {
 // NewIgnore returns the rules, with dirs and all below them ignored.
 func NewIgnore(dirs ...string) *Ignore {
 	return &Ignore{
-		git:   fswatch.NewIgnore(fswatch.IgnoreConfig{Patterns: []string{".git"}, Dirs: dirs, Git: true, Fallback: []string{"node_modules"}}),
-		names: fswatch.NewIgnore(fswatch.IgnoreConfig{Patterns: fswatch.DefaultPatterns, Dirs: dirs}),
+		git:   mustIgnore(fswatch.IgnoreOptions{Patterns: []string{".git"}, Dirs: dirs, Git: true, Fallback: []string{"node_modules"}}),
+		names: mustIgnore(fswatch.IgnoreOptions{Defaults: true, Dirs: dirs}),
 	}
+}
+
+// mustIgnore is fswatch.NewIgnore for the rules above, whose patterns are
+// constants: the only error is a pattern that does not parse.
+func mustIgnore(o fswatch.IgnoreOptions) *fswatch.Ignore {
+	ig, err := fswatch.NewIgnore(o)
+	if err != nil {
+		panic(err)
+	}
+	return ig
 }
 
 // Reset forgets git's answers, for when a .gitignore changed.
@@ -101,11 +111,11 @@ func (ig *Ignore) Filter(paths []string) []bool {
 	if ig == nil {
 		return make([]bool, len(paths))
 	}
-	return ig.git.Filter(paths)
+	return ig.git.IgnoredAll(paths)
 }
 
 func (ig *Ignore) entry(path string, isDir bool) bool {
-	return ig != nil && ig.names.Match(path, isDir)
+	return ig != nil && ig.names.Ignore(path, isDir)
 }
 
 // Options configure a Watcher.
@@ -152,12 +162,12 @@ func New(paths []string, o Options) *Watcher {
 		w.tracef("polling, as %s asks", PollEnv)
 	}
 	w.fs = fswatch.New(fswatch.Options{
-		Ignore: o.Ignore.entry,
+		Ignore: fswatch.IgnoreFunc(o.Ignore.entry),
 		Content: fswatch.Content{
 			Match: isGo,
-			Sum: func(_ string, src []byte) []byte {
+			Sum: func(_ string, src []byte) string {
 				s := gosrc.Fingerprint(src)
-				return s[:]
+				return string(s[:])
 			},
 		},
 		Settle:   o.Settle,
@@ -400,7 +410,11 @@ func (s *runState) take(ctx context.Context, b fswatch.Batch) {
 // scanNow has fswatch scan at once and returns what Run would send next,
 // which then no longer waits to be sent: Sync's answer.
 func (s *runState) scanNow(ctx context.Context) Change {
-	s.take(ctx, s.w.fs.Sync(ctx))
+	// An error is ctx ending before the scan did: fswatch keeps what was
+	// waiting, and Run is about to stop.
+	if b, err := s.w.fs.Sync(ctx); err == nil {
+		s.take(ctx, b)
+	}
 	var c Change
 	if s.outbox != nil {
 		c, s.outbox = *s.outbox, nil

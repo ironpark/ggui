@@ -321,14 +321,18 @@ func TestClassifyWaitsOutATruncatedSave(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 		done <- writeRetry(path, []byte(src+"// A comment.\n"))
 	}()
-	real, cosmetic, _, _ := w.classify(w.fs.Sync(context.Background()))
+	batch, err := w.fs.Sync(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	real, cosmetic, _, _ := w.classify(batch)
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
 	if len(real) > 0 || !slices.Equal(cosmetic, []string{path}) {
 		t.Errorf("real %v, cosmetic %v: want the comment's edit cosmetic", real, cosmetic)
 	}
-	if b := w.fs.Sync(context.Background()); len(b.Changes) > 0 {
+	if b, _ := w.fs.Sync(context.Background()); len(b.Changes) > 0 {
 		t.Errorf("the next scan judges the file again: %v", b.Changes)
 	}
 }
